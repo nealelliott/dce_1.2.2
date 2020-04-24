@@ -1,0 +1,433 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: err1,v $
+# Revision 1.1.11.1  1996/10/17  18:19:39  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:50:30  damon]
+#
+# Revision 1.1.4.4  1993/01/11  18:26:29  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  16:59:20  htf]
+# 
+# Revision 1.1.4.3  1992/10/28  16:12:25  jaffe
+# 	Transarc delta: jess-ot5320-fix-fs-low-testhome 1.1
+# 	  Selected comments:
+# 	    The fs and low test shell scripts have the following if statement
+# 	    if [ "$TESTTOP" = "`pwd`" ]
+# 	    then
+# 	    UTIL_DIR=../util
+# 	    testhome=$TESTTOP
+# 	    else
+# 	    UTIL_DIR=$TESTTOP/util
+# 	    testhome=$TESTTOP/$testSuiteType
+# 	    fi
+# 	    The problem is that variable testSuiteType is not defined at this time.
+# 	    Change the variable 'testSuiteType' to 'fs'.
+# 	[1992/10/27  18:09:16  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/28  18:10:54  jaffe
+# 	Transarc delta: rajesh-clean-fs-tests 1.6
+# 	  Selected comments:
+# 	    To remove make, clean options from fs tests
+# 	    Remove references to sys command by using fsSetSysName
+# 	    Make the scripts modular, structured.
+# 	    The variable names are changed to follow coding standards.
+# 	    Apply modification mentioned in revision 1.2 to 2 missed test file
+# 	    err1 and err2.
+# 	    See above.
+# 	    Some bug fixes, and revision of tests err1 and err2. Introduction of
+# 	    a common functions ProcessResult to analyse the result.
+# 	    See above.
+# 	    Further changes to some utility functions.
+# 	    Added error test err2 to the Makefile
+# 	[1992/08/28  12:08:40  jaffe]
+# 
+# Revision 1.1.2.3  1992/05/29  22:57:35  mason
+# 	Transarc delta: fred-3754-change-script-name 1.1
+# 	  Selected comments:
+# 	    To clean up a number of defects with the tests.  In addition to defect
+# 	    3754, the changes also fix defects 3750 and 3748.
+# 	    Fixed setting of TESTTOP variable.
+# 	[1992/05/28  22:04:13  mason]
+# 
+# Revision 1.1.2.2  1992/05/21  12:37:45  jaffe
+# 	Transarc delta: fred-2980-and-2981-fix-sys 1.1
+# 	  Selected comments:
+# 	    To fix reported defects indicating files could not be found.  Added two
+# 	    shell scripts, one to issue the correct command to get the system type
+# 	    (either AFS or DFS), and a second to generate a file from a string.
+# 	    Change variable sys to dfs_fsSysName and use fsSetSysName shell script.
+# 	Transarc delta: fred-merge-tests 1.1
+# 	   Selected comments:
+# 	    Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	    the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	    should be looking at the same test code.
+# 	    Changes to facilitate merge of local DFS test code with the OSF's.
+# 	Transarc delta: fred-remove-sys 1.1
+# 	  Selected comments:
+# 	    To remove dependency on the AFS sys command in the test scripts.
+# 	    To remove dependency on AFS sys command.
+# 	Transarc delta: rajesh-fs-err1-update 1.1
+# 	  Files modified:
+# 	    fs: err1
+# 	  Selected comments:
+# 	    To remove errors and typos in err1 test script.
+# 	    The script treated creation of files due to output redirection
+# 	    as an error when the input file to the cat command was non existent or
+# 	    was a directory. And there was some typos.
+# 
+# 	$TALog: err1,v $
+# 	Revision 4.17  1994/11/01  22:22:53  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r4.16 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	[1992/05/20  18:22:33  jaffe]
+# 
+# $EndLog$
+#
+: #############################################################################
+: #  Copyright (C) 1990, 1992 Transarc Corporation - All rights reserved      #
+: #############################################################################
+
+: # This script tests various error conditions when using Unix commands from
+: # the shell. The errors involve invalid operations (nonexistent files,
+: # cd to a file, cp to a directory, etc).
+
+: # Usage: sh -i err1
+
+: # On most BSD Unix systems, you must run this script via 'sh -i' in order
+: # to prevent errors from terminating the script. The ': #' at the beginning
+: # of comment lines in this script is needed when you do this.
+
+: # All standard error messages have been turned off to the extent possible,
+: # but most systems will still print some error messages during execution of
+: # this script.
+
+: # I cannot imagine why anyone would want to run multiple copies of this
+: # script simultaneously, but if you do want to do it you must run them in
+: # separate directories.
+
+: #############################################################################
+
+: #
+: # PrintUsage() -
+: #   Prints the usage message for this script.
+
+PrintUsage()
+{
+echo "$programName tests Unix error conditions"
+echo "Usage: $programName"
+}
+
+: #
+: # Initialise some variables. UTIL_DIR is the directory containing 
+: # the script fs_FunctionsScript with common functions.
+: #
+
+TESTTOP=${TESTTOP:="`pwd`"}
+
+if [ "$TESTTOP" = "`pwd`" ]
+then
+	UTIL_DIR=../util
+	testhome=$TESTTOP
+else
+	UTIL_DIR=$TESTTOP/util
+	testhome=$TESTTOP/fs
+fi
+
+. $UTIL_DIR/fs_FunctionsScript
+. $UTIL_DIR/fs_SetSysVar
+createFileCmd="$UTIL_DIR/fs_GenerateFile"
+
+trap '
+	chmod 777 abc xyz XYZ
+	rm -rf abc xyz XYZ
+	echo "$programName killed" | tee -a $logFile
+	exit $scriptErrorExit
+' 2 3 15
+
+: #
+: # Initialise setup variables
+: #
+
+fs_InitSetup fs
+
+: #
+: # Parse the command line
+: #
+
+while [ "$1" != "" ]
+do 
+	case $1 in 
+	help|-help) PrintUsage
+				exit $successExit
+				;;
+
+	*)          echo "ERROR $testSuiteType/$programName: invalid argument \"$1\"" | tee -a $logFile
+				exit $scriptErrExit
+				;;
+	esac
+done
+
+: #
+: # Start test
+: #
+
+echo "$programName (invalid) starting in $currentDir"  | tee -a $logFile 
+echo "Host `hostname` ($fs_sysName)"  | tee -a $logFile
+date  | tee -a $logFile
+
+fs_DetermineFSType
+
+originalUMask=`umask`
+umask 022
+
+: #
+: # Part 1. Invalid Operations on a non-existent file
+: #
+
+echo "1. Invalid operations on a non-existent file" | tee -a $logFile
+rm -f XYZ xyz
+rm -rf XYZ xyz
+: # file xyz does not exist; XYZ does not exist
+
+cat xyz > XYZ 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E1 "cat non-existent-file succeeded" $FALSE -log $logFile 
+rm XYZ
+
+cat < xyz > XYZ 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E2 "cat < non-existent-file succeeded" $FALSE -log $logFile 
+
+[ -f XYZ ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E3 "cat < non-existent-file succeeded > XYZ created file XYZ" $FALSE -log $logFile 
+
+#
+# cd into <dir-with-mode-bits-000> generates a signal killing the process. Hence
+# handle that signal.
+#
+
+trap ' echo "Handle signal ' 2 3
+cd xyz 2> /dev/null  
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E4 "cd <non-existent-directory> returned zero exit status" $FALSE -log $logFile
+
+[ `pwd` = $currentDir ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E5 "cd xyz (non-existent-directory) changed directory to `pwd` from $currentDir" $FALSE -log $logFile -execOnError "cd $currentDir"
+
+#
+# Set signal handler to its default.
+#
+
+trap 2 3
+
+chgrp 10 xyz 2> /dev/null  
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E6 "chgrp 10 <non-existent-file> succeeded" $FALSE -log $logFile
+
+[ -f xyz ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E7 "chgrp <non-existent-file> produced file xyz" $FALSE -log $logFile -execOnError "rm -f xyz"
+
+chmod 10 xyz 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E8 "chgrp 10 <non-existent-file> succeeded" $FALSE -log $logFile
+
+[ -f xyz ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E9 "chgrp <non-existent-file> produced file" $FALSE -log $logFile -execOnError "rm -f xyz"
+
+chown 10 xyz 2> /dev/null  
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E10 "chown 10 <non-existent-file> succeeded" $FALSE -log $logFile
+
+[ -f xyz ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E12 "chown <non-existent-file> produced file" $FALSE -log $logFile -execOnError "rm -f xyz"
+
+cp xyz XYZ 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E13 "cp <non-existent-file> <destination> returned zero exit status" $FALSE -log $logFile
+
+[ -f XYZ ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E14 "cp <non-existent-file> <destination> produced succeeded" $FALSE -log $logFile -execOnError "rm -f XYZ"
+
+./xyz 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E15 "executing <non-existent-file> succeeded" $FALSE -log $logFile
+
+ln xyz XYZ 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E16 "ln <non-existent-file> <target-file> returned zero exit status" $FALSE -log $logFile
+
+[ -f XYZ ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E17 "ln <non-existent-file> <target-file> created target-file" $FALSE -log $logFile -execOnError "rm -f XYZ"
+
+ls xyz > XYZ 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E18 "ls <non-existent-file> returned zero exit status" $FALSE -log $logFile
+
+mv xyz XYZ 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E19 "mv <non-existent-file> <target-file> returned zero exit status" $FALSE -log $logFile
+
+[ -f XYZ ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E20 "mv <non-existent-file> <target-file> created target-file" $FALSE -log $logFile -execOnError "rm -f XYZ"
+
+rm xyz 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E21 "rm <non-existent-file> returned zero exit status" $FALSE -log $logFile
+
+rmdir xyz 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E22 "rm <non-existent-directory> returned zero exit status" $FALSE -log $logFile
+
+
+: #
+: # Part 2. Invalid Operations on an existing file
+: #
+
+echo "2. Invalid operations on an existing file" | tee -a $logFile
+
+date > xyz
+chmod 666 xyz
+date > abc
+date >> abc
+
+: # file xyz is a file with Unix mode 666, abc is a file, XYZ does not exist
+
+cd xyz 2> /dev/null  
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E30 "cd <file> returned zero exit status" $FALSE -log $logFile
+
+[ `pwd` = $currentDir ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E31 "cd xyz (non-existent-directory) changed directory to `pwd` from $currentDir" $FALSE -log $logFile -execOnError "cd $currentDir"
+
+date > xyz/XYZ 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E32 "date > <file/non-existent-directory> returned zero exit status" $FALSE -log $logFile 
+
+[ -d xyz ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E33 "date > <file/non-existent-directory> converted file xyz into a directory" $FALSE -log $logFile 
+
+[ -f xyz/XYZ ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E33 "date > <file/non-existent-directory> created xyz/XYZ" $FALSE -log $logFile 
+
+./xyz 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E34 "exec of a non-executable file succeeded" $FALSE -log $logFile 
+
+mkdir xyz 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E35 "mkdir <existing-file> returned zero exit status" $FALSE -log $logFile 
+
+[ -d xyz ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E36 "mkdir <existing-file> converted file into a directory" $FALSE -log $logFile -execOnError "rmdir xyz 2> /dev/null; date > xyz; chmod 66 xyz"
+
+rmdir xyz
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E37 "rmdir <existing-file> returned zero exit status" $FALSE -log $logFile 
+
+[ ! -f xyz ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E38 "rmdir <existing-file> deleted the file" FALSE -log $logFile 
+
+ln abc xyz 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E39 "ln <existing-file> <existing file> returned zero exit status" FALSE -log $logFile 
+
+diff abc xyz > /dev/null 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E40 "ln >existing file> <existing file> created the link" $FALSE -log $logFile 
+
+rm -f xyz
+date > xyz
+chmod 666 xyz
+ln -s abc xyz 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E41 "ln -s <existing-file> <existing-file> returned zero exit status" $FALSE -log $logFile 
+
+diff abc xyz > /dev/null 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E42 "ln -s <exxisting-file> <existing-file> created the symlink" $FALSE -log $logFile 
+
+: #
+: # Part 3. Invalid operations on an existing directory.
+: #
+
+echo "3. Invalid operations on an existing directory" | tee -a $logFile
+
+rm -f xyz
+mkdir xyz
+date > abc
+cp abc xyz
+
+: # xyz is a directory, abc and xyz/abc are files, XYZ does not exist
+
+cp xyz XYZ 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E90 "cp <directory> <non-exestent-target> returned zero exit status" $FALSE -log $logFile 
+
+[ -f XYZ ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E91 "cp <directory> <non-existent-target> produced target file" $FALSE -log $logFile -execOnError "rm -f XYZ"
+
+./xyz 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E92 "exec of a directory succeedded" $FALSE -log $logFile 
+
+mkdir xyz 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E93 "mkdir <existent-directory> returned zero exit status" $FALSE -log $logFile 
+
+rm xyz 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E94 "rm <directory> returned zero exit status" $FALSE -log $logFile 
+
+[ ! -d xyz ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E95 "rm <directory> removed directory" $FALSE -log $logFile -execOnError "mkdir xyz"
+
+[ ! -f xyz/abc ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E96 "rm <directory> removed file in the directory" $FALSE -log $logFile -execOnError "date > xyz/abc"
+
+rm -f xyz 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E97 "rm -f <directory> returned zero exit status" $FALSE -log $logFile 
+
+[ ! -d xyz ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E98 "rm -f <directory> removed directory" $FALSE -log $logFile -execOnError "mkdir xyz"
+
+[ ! -f xyz/abc ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E99 "rm -f <directory> removed file in the directory" $FALSE -log $logFile -execOnError "date > xyz/abc"
+
+rmdir xyz 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E100 "rmdir <non-empty-directory> returned zero exit status" $FALSE -log $logFile 
+
+[ ! -d xyz ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E101 "rmdir <non-empty-directory> removed directory" $FALSE -log $logFile -execOnError "mkdir xyz; date > xyz/abc"
+
+[ ! -f xyz/abc ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E102 "rmdir <non-empty-directory> removed file in directory" $FALSE -log $logFile -execOnError "date > xyz/abc"
+
+rm -rf xyz
+mkdir xyz
+cp abc xyz
+
+cat abc > xyz 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E103 "cat <file> > <directory> returned zero exit status" $FALSE -log $logFile 
+
+[ ! -d xyz ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E104 "cat <file> > <directory> removed directory" $FALSE -log $logFile  -execOnError "mkdir xyz; cp abc xyz" 
+
+[ ! -f xyz/abc ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E105 "cat <file> > <directory> removed file in directory"  $FALSE -log $logFile -execOnError "cp abc xyz"
+
+rm -rf xyz
+
+mkdir xyz
+cp abc xyz
+
+cat abc >> xyz 2> /dev/null
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E106 "cat <file> >> <directory> returned zero exit status" $FALSE -log $logFile 
+
+[ ! -d xyz ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E107 "cat <file> >> <directory> removed directory" $FALSE -log $logFile  -execOnError "mkdir xyz; cp abc xyz" 
+
+[ ! -f xyz/abc ]
+ProcessResult $testSuiteType $programName $? $PASS_EQ_NONZERO E108 "cat <file> >> <directory> removed file in directory"  $FALSE -log $logFile -execOnError "cp abc xyz"
+
+rm -f abc XYZ
+rm -rf xyz
+
+: #############################################################################
+
+chmod 777 abc xyz XYZ
+rm -rf abc xyz XYZ
+
+( 	echo "$testSuiteType/$programName returning $errorCount in $currentDir"
+	date 
+) | tee -a $logFile
+
+umask $originalUMask
+
+exit $errorCount
+
+
+

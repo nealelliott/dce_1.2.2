@@ -1,0 +1,155 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: vops.test,v $
+# Revision 1.1.11.1  1996/10/02  17:45:25  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:36:37  damon]
+#
+# $EndLog$
+#
+#/* Copyright (C) 1995, 1994 Transarc Corporation - All rights reserved. */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/vnops/vops.test,v 1.1.11.1 1996/10/02 17:45:25 damon Exp $
+
+vops 1
+
+# vnode tests
+
+open_device 1 4096 1024 1000
+create_aggregate
+
+exist_vol yyy 777,,888 170
+
+echo create
+
+root_vnode
+vn_create foo
+check_code 0
+
+echo rdwr (write)
+
+vn_write 0 100 3
+
+echo setattr (chmod)
+
+vn_chmod 746
+check_code 0
+
+echo getattr (stat)
+
+vn_stat
+
+echo setattr (chown)
+
+set_uid 0
+vn_chown 300
+check_code 0
+vn_stat
+set_uid 300
+
+echo setattr (truncate)
+
+vn_trunc 50				# frag to inline
+check_code 0
+vn_trunc 75				# up: inline to inline
+check_code 0
+vn_write 10000 10			# make it blocked
+check_code 0
+vn_trunc 3000				# blocked to frag
+check_code 0
+vn_trunc 1000				# frag to frag
+check_code 0
+vn_trunc 2000				# up: frag to frag
+check_code 0
+vn_trunc 10000				# up: frag to block
+check_code 0
+vn_trunc 10				# block to inline
+check_code 0
+vn_trunc 100000				# up: inline to block
+check_code 0
+vn_trunc 0				# down: block to empty
+check_code 0
+vn_trunc 50				# up: empty to inline
+check_code 0
+vn_trunc 0				# down: inline to empty
+check_code 0
+vn_trunc 500				# up: empty to frag
+check_code 0
+vn_trunc 0				# down: frag to empty
+check_code 0
+vn_stat
+
+echo setattr (utimes)
+
+vn_utimes mtime 4,5
+check_code 0
+vn_stat
+
+echo access
+
+vn_access 0200
+check_code 0
+set_uid 100
+vn_access 0200
+check_code 13
+set_gid 400
+vn_access 0200
+check_code 0
+set_uid 100				# return to default
+
+echo create -- exclusive and nonexclusive
+
+root_vnode
+vn_create baz
+check_code 0
+vn_write 0 100 4
+root_vnode
+vn_create baz
+check_code 17
+root_vnode
+vn_create baz nonexclusive
+check_code 0
+vn_stat
+
+echo remove
+
+root_vnode
+vn_remove baz
+check_code 0
+
+echo mkdir
+
+root_vnode
+vn_mkdir gorp
+check_code 0
+
+echo rmdir
+
+root_vnode
+vn_rmdir gorp
+check_code 0
+
+echo link
+
+root_vnode
+vn_link foo mung
+check_code 0
+vn_stat
+root_vnode
+vn_remove foo
+check_code 0
+root_vnode
+vn_lookup mung
+check_code 0
+vn_stat
+
+release_vnode
+unmount_vol
+check_code 0
+
+check_device
+end

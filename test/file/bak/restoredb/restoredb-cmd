@@ -1,0 +1,508 @@
+#
+# ID: $Id: restoredb-cmd,v 1.5 1995/12/06 15:24:25 hyer Exp $
+#
+# COMPONENT_NAME: bak
+#
+# The following functions list may not be complete.
+# Functions defined by/via macros may not be included.
+#
+# FUNCTIONS:
+#
+#
+# ORIGINS: Transarc Corp.
+#
+# (C) COPYRIGHT Transarc Corp. 1994
+# All Rights Reserved
+# Licensed Materials - Property of Transarc
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+#
+# HISTORY
+# $TALog: restoredb-cmd,v $
+# Revision 1.5  1995/12/06  15:24:25  hyer
+# The backup test scripts were not working. Most of the tests either
+# failed or never ran. Made significant changes to all scripts to make
+# them work:
+#
+# Added function CATCHEXEC that does the same thing as catch "exec ..."
+# but also displays each command and the response as well as any error codes
+# that are returned from the exec.
+#
+# Added a loop in is_butc_ready to wait up to 200 seconds for the butc
+# process to start, sleeping 10 seconds between checks.
+#
+# Changed the expected command output to match the messages generated
+# by the current version of the code.
+#
+# Added sleeps around some of the tape I/O commands to keep them from
+# failing because the device wasn't ready.
+#
+# Added chmod ogu+rwx commands after each fts crmount to give the test
+# scripts access to the test filesets
+#
+#
+# [from r1.3 by delta hyer-7109-backup-test-changes, r1.1]
+#
+# Revision 1.4  1995/11/29  17:13:10  hyer
+# Delta for changes made to the backup scripts to get the backup tests running.
+# Several changes were made to get the tests to run:
+#
+# 1. A loop was added to is_butc_ready to retry the status command
+#    every 10 seconds, and time out after 200 seconds. The tests were
+#    not being run because it can take over 1 minute for butc to start.
+#
+# 2. The directory permissions needed to be changed to allow R/W access
+#    on the test filesets after they were created with fts crmount.
+#
+# 3. The error checking code in restore_disk and restore_ft, and dump
+#    was reworked to make sure that the success or failure of the
+#    operation was detected during the test.
+#
+# 4. The calls to "fts dump" and "fts restore" were returing error status
+#    even though the operation succeeded. Changed the script to read the
+#    response from the command to decide whether or not the command worked.
+#
+# 5. Added a EXEC routine that calls exec, but prints out each command and
+#    the response.
+#
+# 6. Several other minor changes were made to address verious problems
+#    with how the scripts were checking the success or failure of the
+#    tests. The tests have run successfully start to finish on
+#    Solaris with the changes reflected in this delta.
+#
+# see above
+# [from r1.3 by delta hyer_7109_fixes_to_backup_test_scripts, r1.1]
+#
+# Revision 1.3  1994/01/10  18:27:38  davecarr
+# Upgraded tests to work with expect-5.1.3.  Also moved some configuration
+# dependencies from savedb-cmd to generic.exp.  In the process, some
+# variables had "sa_" prepended to them to indicate that they are used only
+# for the savedb tests.
+#
+# Removed the prefix dbr_ from some variables (backup_dir, bkdb_file1 and
+# bkdb_file2) that I thought were only used by restoredb tests but actually
+# are used by savedb tests also.
+# [from r1.2 by delta davecarr-db4737-bak-savedb-tests, r1.2]
+#
+# Revision 1.2  1994/01/07  18:02:37  davecarr
+# Upgraded tests to work with expect-5.1.3.  Also moved some configuration
+# dependencies from restoredb-cmd to generic.exp.  In the process, some
+# variables had "dbr_" prepended to them to indicate that they are used only
+# for the restoredb tests.
+#
+# Upgraded to work with expect-5.1.3.  Some variables had "dbr_" prepended to
+# them to indicate that they are used only for the restoredb tests.
+# [from r1.1 by delta davecarr-db4736-bak-restoredb-tests, r1.2]
+#
+# Revision 1.1  1993/11/24  18:44:49  davecarr
+#    This the first pass at automating tests for the bak restoredb command.  They
+# work with expect-4.3.  They will need to be updated to work with expect,
+# version 5.
+#
+# Initial checkin.  Works with expect-4.3.
+# [added by delta davecarr-db4736-bak-restoredb-tests, r1.1]
+#
+#
+setup
+1.  Determine all machines in cell that are running bakserver.
+    A.  rpccp show group /.:/subsys/dce/dfs/bak
+    
+        group members:
+    
+          /.../mandos.dce.transarc.com/hosts/dewitt/self
+          /.../mandos.dce.transarc.com/hosts/saratoga/self
+          /.../mandos.dce.transarc.com/hosts/paradox/self
+    B.  Now do a bos status to find out which of these machines are actually
+        running the bakserver.  (Regardless, remember to delete all db files
+        from all machines (step 3 below)).
+
+?2.  Save current bkdb.DB0 and bkdb.DBSYS1 on one (all?) machine(s) in cell.
+3.  Stop all bakservers, delete all db files on all machines and start all
+    bakservers.
+4.  Add some db info: dump schedules, fileset families, host/tcid info.
+5.  save all db info for later checking. 
+6.  savedb
+
+pre
+1.  verifydb should pass.
+2.  butc should be running.
+3.  savedb tape should be in tape drive.
+
+post
+1.  verifydb should pass.
+2.  butc should be running.
+
+cleanup
+1.  stop all bakservers.
+2.  delete al db files from all machines.
+3.  restore dbfiles from 'this' machine.
+4.  start all bakservers.
+5.  start a bak session and do a verifydb (and maybe some basic sanity
+    checking).
+
+=============================================================================
+
+CMD-SETUP
+    trap {cleanup_restoredb 4;exit} SIGINT
+
+    #
+    # cleanup_restoredb
+    #
+    proc cleanup_restoredb {arg} {
+        global dbr_fileset
+        global bak_id
+        global butc_id
+        global bak_host
+        global butc_host
+        global dbr_server
+        global dbr_aggr
+        global bakserverlist
+        global backup_dir
+        global bkdb_file1
+        global bkdb_file2
+
+        case $arg {
+            0 {
+                set todo_list {J}
+            }
+            1 {
+                set todo_list {D J}
+            }
+            2 {
+                set todo_list {A B C D E F G J}
+            }
+            3 {
+                set todo_list {H A B C D E F G J}
+            }
+            4 {
+                set todo_list {H I A B C D E F G J}
+            }
+        }
+        set manual 0
+        foreach entry $todo_list {
+            set new_error 0
+            case $entry {
+                A {
+                    if ![stop_bakservers_p $bakserverlist] {
+                        send_user "Couldn't stop all bakservers.\n"
+                        set new_error 1
+                    }
+                }
+                B {
+                    if ![del_db_all_machines_p $bakserverlist] {
+                        set new_error 1
+                    }
+                }
+                C {
+                    if [CATCHEXEC "/bin/mv\
+                                    $backup_dir/restoredb-cmd/$bkdb_file1\
+                                    $backup_dir/restoredb-cmd/$bkdb_file2\
+                                    $backup_dir" tmp] {
+                        send_user "\nCouldn't move backup database files.\n"
+                        send_user "\n$tmp\n"
+                        set new_error 1
+                    }
+                }
+                D {
+                    if [CATCHEXEC "/bin/rmdir\
+                                    $backup_dir/restoredb-cmd" tmp] {
+                        send_user "\n$tmp\n"
+                        send_user "\nCouldn't remove backup database"
+                        send_user " temporary directory.\n"
+                        set new_error 1
+                    }
+                }
+                E {
+                    if ![start_bakservers_p $bakserverlist] {
+                        send_user "Couldn't start all bakservers.\n"
+                        set new_error 1
+                    }
+                }
+                F {
+                    set new_bak_id [run_bak $bak_host]
+                    if $new_bak_id==-1 {
+                        send_user "bak couldn't start.\n"
+                        set new_error 1
+                    }
+                }
+                G {
+                    if ![verifydb_p $new_bak_id] {
+                        set new_error 1
+                    }
+                }
+                H {
+                    quit_bak $bak_id $bak_host
+                }
+                I {
+                    quit_butc $butc_id $butc_host
+                }
+		J {
+		    restore_tapeconfig
+		}
+            }
+            if $new_error {
+                send_user "===========Possible manual cleanup"
+                send_user " required===========\n"
+                set manual 1
+            }
+        }
+        if $manual {
+            send_user "\nCAUTION.  "
+            send_user "Cleanup of the restoredb command had problems.\n"
+            send_user "Check back through this log file for lines like:\n"
+            send_user "\n===========Possible manual cleanup"
+            send_user " required===========\n\n"
+            send_user "This indicates areas that you might want to check"
+            send_user " manually to see if things are as expected.\n"
+
+        }
+        return
+    }
+#=================================start of setup=============================
+    # save host information, and setup. Assume TapeConfig is ok
+    if -1==[save_tapeconfig] {
+	send_user "\n Danger - TapeConfig could not be saved\n"
+	continue
+    }
+    if -1==[add_tapeconfig_entry $butc_tape_size $butc_file_mark_size \
+		$butc_device $dbr_butc_tcid0] {
+	send_user "\n Danger - TapeConfig entry could not be added\n"
+	cleanup_restoredb 0
+	continue
+    }
+    if -1==[add_tapeconfig_entry $butc_tape_size $butc_file_mark_size \
+		$butc_device $dbr_butc_tcid1] {
+	send_user "\n Danger - TapeConfig entry could not be added\n"
+	cleanup_restoredb 0
+	continue
+    }
+    if -1==[add_tapeconfig_entry $butc_tape_size $butc_file_mark_size \
+		$butc_device $dbr_butc_tcid2] {
+	send_user "\n Danger - TapeConfig entry could not be added\n"
+	cleanup_restoredb 0
+	continue
+    }
+    # Determine all machines in cell that can run bakserver.
+    if [CATCHEXEC "/opt/dcelocal/bin/rpccp show group $RPCGROUP" tmp] {
+        send_user "\n$tmp\n"
+        send_user "Problems in restoredb command setup.  Aborting.\n"
+        cleanup_restoredb 0
+        continue
+    }
+    set tmp2 [split $tmp "\n"]
+    set machinelist ""
+    foreach entry $tmp2 {
+        if [string length $entry]==[expr [string last /self $entry]+5] {
+            # entry has the form "/.../<cell-name>/<host-name>/self"
+            # add <host-name> to machinelist
+            set tmp3 [split $entry "/"]
+            lappend machinelist [lindex $tmp3 [expr [llength $tmp3]-2]]
+        }
+    }
+    if [llength machinelist]==0 {
+        send_user "\nNo machines in cell capable of running bakserver.\n"
+        send_user "Problems in restoredb command setup.  Aborting.\n"
+        cleanup_restoredb 0
+        continue
+    }
+    # Now see which of these machines is in fact running the bakserver.
+    set bakserverlist ""
+    foreach entry $machinelist {
+        CATCHEXEC "/opt/dcelocal/bin/bos status /.:/hosts/$entry $BAKSERVER"\
+              tmp
+        if [string match "*currently running normally*" $tmp] {
+            lappend bakserverlist $entry
+        }
+    }
+    # Check to be sure all bakservers are running.  If not, abort.
+    if [string compare $machinelist $bakserverlist] {
+        send_user "\nSome bakservers are not running.\n"
+        send_user "Machines that can run bakserver:      $machinelist\n"
+        send_user "Machines that are running bakserver:  $bakserverlist\n"
+        cleanup_restoredb 0
+        continue
+    }
+
+    # Now save the dbfiles on our current machine (this assumes the machine
+    # we are on is running the bakserver!), stop all bakservers, delete
+    # db files on each machine and start all bakservers.
+
+    if [CATCHEXEC "hostname" this_machine] {
+        send_user "\nCouldn't find name of this machine?\n"
+        cleanup_restoredb 0
+        continue
+    }
+     
+    set this_machine [lindex [split $this_machine .] 0]
+    if -1==[lsearch $bakserverlist $this_machine] {
+        send_user "\n$this_machine (this machine) is not in: $bakserverlist\n"
+        cleanup_restoredb 0
+        continue
+    }
+    # Just in case not previously cleaned up.
+    CATCHEXEC "/bin/rm -rf $backup_dir/restoredb-cmd"
+    if [CATCHEXEC "/bin/mkdir $backup_dir/restoredb-cmd" tmp] {
+        send_user "\nCouldn't create directory $backup_dir/restoredb-cmd\n"
+        send_user "\n$tmp\n"
+        cleanup_restoredb 0
+        continue
+    }
+    if [CATCHEXEC "/bin/cp $backup_dir/$bkdb_file1 $backup_dir/$bkdb_file2\
+                    $backup_dir/restoredb-cmd" tmp] {
+        send_user "\nCouldn't copy backup database files to a safe place.\n"
+        send_user "\n$tmp\n"
+        cleanup_restoredb 1
+        continue
+    }
+
+    if ![expr "[stop_bakservers_p $bakserverlist] &&\
+               [del_db_all_machines_p $bakserverlist]&&\
+               [start_bakservers_p $bakserverlist]"] {
+        send_user "Problems in restoredb command setup. Aborting.\n"
+        # This a bit problematic since cleanup_restoredb 2 does these three
+        # things, but it will flag as errors the functions that fail.
+        cleanup_restoredb 2
+        continue
+    }
+
+    # REDO BELOW COMMENT FOR RESTOREDB
+    #    Now that we have saved the checksums for some files, go ahead and
+    # start bak and butc, add the appropriate ftfamily and ftentry into the
+    # database, add full dump level (if none exists) and dump all filesets
+    # on $dbr_aggr.
+    #    Note that starting butc is done after all the database
+    # manipulations to insure that the tcid is in the database.
+    #    Clearly this is a simple scenario.  Later it may be necessary to
+    # do more involved dumps but for now this ensures that the tests are
+    # automatic since we can dump and restore from the same tape.
+
+    set bak_id [run_bak $bak_host]
+    if $bak_id==-1 {
+        send_user "Wasn't able to start bak.\n"
+        send_user "Aborting restoredb command testing.\n"
+        cleanup_restoredb 2
+        continue
+    }
+
+    # Now add the database information needed for restoredb testing.
+    set tmp_list [list "$dbr_server $dbr_butc_tcid0"]
+    if ![add_host_info_p $bak_id $tmp_list] {
+        send_user "Problem adding host/tcid entry.\n"
+        send_user "Aborting restoredb command testing.\n"
+        cleanup_restoredb 3
+        continue
+    }
+
+    set tmp_list [list "$dbr_fileset" "$dbr_server $dbr_aggr .*"]
+    if ![add_fileset_families_p $bak_id $tmp_list] {
+        send_user "Problem adding fileset family entry.\n"
+        send_user "Aborting restoredb command testing.\n"
+        cleanup_restoredb 3
+        continue
+    }
+
+    set tmp_list\
+         [list "/${dbr_fileset}_full"\
+               "/${dbr_fileset}_full/incr1"\
+               "/${dbr_fileset}_full/incr1/incr11"\
+               "/${dbr_fileset}_full/incr2"]
+    if ![add_dump_schedule_p $bak_id $tmp_list] {
+        send_user "Problem adding dump schedules.\n"
+        send_user "Aborting restoredb command testing.\n"
+        cleanup_restoredb 3
+        continue
+    }
+
+    # Now save all the info from lshosts, lsfamilies and lsdumps
+    # for checking against the restoredb info.
+    if {[string match -1 [set lshosts_savedb [save_host_info $bak_id]]] ||\
+        [string match -1 [set lsftfamilies_savedb\
+                             [save_fileset_families $bak_id]]] ||\
+        [string match -1 [set lsdumps_savedb [save_dump_schedule $bak_id]]]} {
+        send_user "\nCouldn't save the necessary db info.\n"
+        send_user "Aborting restoredb command testing.\n"
+        cleanup_restoredb 3
+        continue
+    }
+
+    # Now start butc
+    set butc_id [run_butc $butc_host $dbr_butc_tcid0]
+    if $butc_id==-1 {
+        send_user "Wasn't able to start butc.\n"
+        send_user "Aborting restoredb command testing.\n"
+        cleanup_restoredb 3
+        continue
+    }
+    if ![is_butc_ready_p $bak_id $dbr_butc_tcid0] {
+        send_user "Problem with butc.\n"
+        send_user "Aborting restoredb command testing.\n"
+        # or perhaps just cleanup_restoredb 3?
+        cleanup_restoredb 4
+        continue
+    }
+    
+    # Now go ahead and do the savedb.  Assume that the tape at $tcid can be
+    # overwritten.
+    if [Label_tape $bak_id $butc_id "" "" $dbr_butc_tcid0] {
+        send_user "Could not label tape as NULL.\n"
+        send_user "Aborting restoredb command testing.\n"
+        cleanup_restoredb 4
+        continue
+    }
+
+    send -i $bak_id "savedb $dbr_butc_tcid0\r"
+    expect {
+        -i $bak_id $prompt {
+        }
+    }
+    expect {
+        -i $butc_id "Hit return when done\r\n" {
+           send -i $butc_id "\r"
+        }
+        -i $butc_id default {
+            send_user "Aborting restoredb command testing.\n"
+            cleanup_restoredb 4
+        }
+    }
+    job_done_p $bak_id
+    expect {
+        -i $butc_id "Database dump completed\r\n" {
+        }
+        -i $butc_id default {
+            send_user "Aborting restoredb command testing.\n"
+            cleanup_restoredb 4
+        }
+    }
+
+    # Now we should be in okay shape for executing the tests.
+
+CMD-PRE
+
+    if ![expr [verifydb_p $bak_id]&&[is_butc_ready_p $bak_id $dbr_butc_tcid0]] {
+        send_user "Command preconditions failed.\n"
+        send_user "Aborting restoredb command testing.\n"
+        cleanup_restoredb 4
+        continue
+    }
+    # Check to be sure savedb tape is in tape drive.
+    if ![string match "bak_db_dump.1"\
+                      [lindex [Read_label $bak_id $butc_id $dbr_butc_tcid0] 0]] {
+        send_user "Command preconditions failed.\n"
+        send_user "Aborting restoredb command testing.\n"
+        cleanup_restoredb 4
+        continue
+    }
+
+CMD-POST
+
+    if ![verifydb_p $bak_id] {
+        send_user "Command postconditions failed.\n"
+        send_user "Aborting restoredb command testing.\n"
+        cleanup_restoredb 4
+        continue
+    }
+
+CMD-CLEANUP
+
+    cleanup_restoredb 4

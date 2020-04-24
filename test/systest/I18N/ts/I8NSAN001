@@ -1,0 +1,136 @@
+#!/opt/dcelocal/bin/dcecp
+#
+# FILE: I8NSAN001
+#
+# USAGE:
+#
+# DESCRIPTION:
+#      This test will test the I18N support in CDS.
+#
+# PREREQUISITS:
+#      A DCE cell configuration and OS support to work on
+#      arbitrary codesets.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+# Check that TET_ROOT has been defined.
+
+   if {([catch {set TET_ROOT $env(TET_ROOT)}]) ||
+       ([string length $env(TET_ROOT)] == 0)} {
+       puts stderr "$argv0: TET_ROOT is not defined."
+       exit
+   }
+
+# source file with test setup variables
+
+   source $TET_ROOT/system/I18N/lib/test_setup.tcl
+
+#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# PROCEDURE NAME: I18N_cds_001
+#
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+proc I18N_cds_001 {} {
+   global TET_ROOT LOCALE_NAME MESSAGE_CAT LOCALE_DATAFILE
+
+#  Test purpose common routines
+   source $TET_ROOT/system/I18N/lib/test_common.tcl
+   set procname [lindex [info level 0] 0]
+
+# Read data from file and create directories
+   create_dirobj_entries
+   tet_infoline Created name space entries.
+
+   tet_infoline $procname finished.
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# PROCEDURE NAME: I18N_cds_002
+#	This procedure create directories and objects and 
+#	displays, then checks their ACLS.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+proc I18N_cds_002 {} {
+   global TET_ROOT
+
+   source $TET_ROOT/system/I18N/lib/test_common.tcl
+
+   set procname [lindex [info level 0] 0]
+
+# Create objects and check the ACLs
+  acl_test
+  tet_infoline Checked ACLS on objects created.
+  tet_infoline Test case $procname finished.
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# PROCEDURE NAME: I18N_cds_003
+#	This procedure creates a CDS replica. Then creates 
+#	several directories and tries to replica them in the
+#	newly created clearinghouse.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+proc I18N_cds_003 {} {
+   global TET_ROOT
+
+   source $TET_ROOT/system/I18N/lib/test_common.tcl
+   set procname [lindex [info level 0] 0]
+   
+# Create clearinghouse 
+  createCH_and_replicas
+  tet_infoline Created a clearinghouse and directory replicas.
+  tet_infoline Test case $procname finished.
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# PROCEDURE NAME: I18N_begin
+#	This procedure login the user as cell_admin.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+proc I18N_begin {} {
+   global TET_ROOT CELL_ADMIN CELL_PW LOCALE_NAME MESSAGE_CAT
+
+   source $TET_ROOT/system/I18N/lib/test_common.tcl
+   set procname [lindex [info level 0] 0]
+
+# Login as cell_admin
+   if { [run_cmd {login $CELL_ADMIN -password $CELL_PW}] != 0 } {
+      tet_infoline Test Failed: It could not login as cell_admin.
+      tet_result FAIL
+   }
+   tet_infoline Logged in as cell_admin.
+
+# Set LANG and NLSPATH for the test
+   set_locale $LOCALE_NAME $MESSAGE_CAT
+   tet_infoline LANG and NLSPATH have been set.
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# PROCEDURE NAME: I18N_end
+#	This procedure logs the user out.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+proc I18N_end {} {
+   global TET_ROOT LANG NLSPATH
+
+   source $TET_ROOT/system/I18N/lib/test_common.tcl
+
+#logout
+   if { [run_cmd {logout}] != 0 } {
+      tet_infoline User was unable to logout.
+   }
+
+# Return LANG and NLSPATH to the original values
+   reset_locale
+   tet_infoline LANG and NLSPATH were set back to the original values.   
+}
+
+# List of procedures for TET to run
+
+set iclist "ic1 ic2 ic3 "
+set ic1 "I18N_cds_001"
+set ic2 "I18N_cds_002"
+set ic3 "I18N_cds_003"
+set tet_startup I18N_begin
+set tet_cleanup I18N_end
+
+# Source the TET main script into our script. The TET main
+# script is what will do the actual function calling.
+source $TET_ROOT/lib/tcl/tcm.tcl

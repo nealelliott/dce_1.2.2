@@ -1,0 +1,278 @@
+#!/bin/sh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: test4,v $
+# Revision 1.1.10.1  1996/10/17  18:30:29  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:55:19  damon]
+#
+# Revision 1.1.4.5  1993/01/11  18:36:03  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:19:06  htf]
+# 
+# Revision 1.1.4.4  1992/10/28  18:15:07  jaffe
+# 	Transarc delta: fred-ot5472-use-testhome-variable 1.1
+# 	  Selected comments:
+# 	    Fixed the fs and low tests to correctly use TESTTOP.  We were setting a
+# 	    variable, testhome, as the location for the test scripts and executables,
+# 	    but we did not use it to execute C programs.
+# 	    (I checked out some scripts which did not need this change.)
+# 	    No changes made.
+# 	Transarc delta: jess-ot5320-fix-fs-low-testhome 1.1
+# 	  Selected comments:
+# 	    The fs and low test shell scripts have the following if statement
+# 	    if [ "$TESTTOP" = "`pwd`" ]
+# 	    then
+# 	    UTIL_DIR=../util
+# 	    testhome=$TESTTOP
+# 	    else
+# 	    UTIL_DIR=$TESTTOP/util
+# 	    testhome=$TESTTOP/$testSuiteType
+# 	    fi
+# 	    The problem is that variable testSuiteType is not defined at this time.
+# 	    See above.
+# 	[1992/10/28  14:55:08  jaffe]
+# 
+# Revision 1.1.4.3  1992/09/25  17:31:31  jaffe
+# 	Transarc delta: jess-ot5196-low-test-err-redirection 1.1
+# 	  Selected comments:
+# 	    Redirect stderr to stdout from running programs of low/tests
+# 	    same
+# 	[1992/09/24  12:51:55  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/28  18:17:54  jaffe
+# 	Transarc delta: rajesh-clean-low-tests 1.5
+# 	  Selected comments:
+# 	    To remove make and clean options from the low test suite. To change
+# 	    the scripts to use common shell functions. To create a file
+# 	    fs_functionsScript with the common shell functions in the util
+# 	    directory.
+# 	    To change the scripts to use common shell functions from
+# 	    util/fs_functionsScript instead of inline code.
+# 	    Modify scripts to follow coding standards, simplify the code, increase
+# 	    readability etc.
+# 	    No changes yet
+# 	    More of above.
+# 	    Modify the tests to give them a simpler logical structure, modularity,
+# 	    readability ( one command per line) and to change then to use the
+# 	    common function created earlier.
+# 	    See above.
+# 	    Modification of rtest1 and rtest2 to use the utility functions
+# 	    correctly.
+# 	[1992/08/28  12:35:53  jaffe]
+# 
+# Revision 1.1.2.3  1992/05/29  23:00:40  mason
+# 	Transarc delta: fred-3754-change-script-name 1.1
+# 	  Selected comments:
+# 	    To clean up a number of defects with the tests.  In addition to defect
+# 	    3754, the changes also fix defects 3750 and 3748.
+# 	    Fixed setting of TESTTOP variable.
+# 	[1992/05/29  13:13:46  mason]
+# 
+# Revision 1.1.2.2  1992/05/21  12:50:55  jaffe
+# 	Transarc delta: fred-merge-tests 1.1
+# 	  Selected comments:
+# 	    Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	    the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	    should be looking at the same test code.
+# 	    Changes to facilitate merge of local DFS test code with the OSF's.
+# 	Transarc delta: fred-remove-sys 1.1
+# 	  Selected comments:
+# 	    To remove dependency on the AFS sys command in the test scripts.
+# 	    To remove dependency on AFS sys command.
+# 	[1992/05/20  20:58:25  jaffe]
+# 
+# $EndLog$
+###############################################################################
+#    Copyright (C) 1990, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This script runs a C program which tests filesystem performance.
+
+# Usage:        test4 make|run|clean
+# Default is    test4 run
+###############################################################################
+#
+# PrintUsage() -
+#   Prints the usage message for this script.
+
+PrintUsage()
+{
+    echo "$programName filesystem performance test"
+    echo "Usage: $programName make|run|clean"; 
+}
+
+#
+# MakeProgram() -
+#   To compile the program
+
+MakeProgram()
+{
+
+    (
+        echo "$programName make" ; 
+        date 
+    ) | tee -a $logFile
+
+    if [ -n "$testhome" ]
+    then
+        cd $testhome
+        if [ `pwd` != $currentDir ]
+        then 
+            cp $cProgramName.c $currentDir; 
+            if [ -f $cProgramName ]
+            then 
+                cp $cProgramName $currentDir
+            fi
+        fi
+        cd $currentDir
+    fi
+    if [ ! -f $cProgramName.c ]
+    then 
+        echo "$programName: cannot find C program" | tee -a $logFile; 
+        exit $scriptErrorExit
+    fi
+
+    if [ ! -f $cProgramName ]
+    then
+#
+# We should not need to supply the system type a -D flag to the compiler.
+# The compiler should automatically determine it.
+#
+#      if echo $fs_sysName | grep -s '^rs'; then arg=_AIX
+#      elif echo $fs_sysName | grep -s '^hp'; then arg=HP
+#      elif echo $fs_sysName | grep -s '^pmax'; then arg=MIPS
+#      elif echo $fs_sysName | grep -s '^next'; then arg=NEXT
+#      elif echo $fs_sysName | grep -s '^rt'; then arg=RT
+#      elif echo $fs_sysName | grep -s '^sun3'; then arg=SUN3
+#      elif echo $fs_sysName | grep -s '^sun4'; then arg=SPARC
+#      elif echo $fs_sysName | grep -s '^vax'; then arg=VAX
+#      else echo "$programName: don't recognize system type $fs_sysName" | tee -a $logFile; exit 2
+#      fi
+#      cc -g -D$arg $cProgramName.c -o $cProgramName; exit $?
+ 
+        cc -g $cProgramName.c -o $cProgramName; exit $?
+    fi
+}
+
+
+#
+# CleanProgram() -
+#   To remove files and directories created by this test.
+#
+
+CleanProgram()
+{
+    (
+        echo "$programName clean" ; 
+        date 
+    ) | tee -a $logFile
+    rm -f $cProgramName $programName.out
+    if [ -n "$testhome" ]
+    then
+        cd $testhome
+        if [ `pwd` != $currentDir -a -f $cProgramName.c ] 
+        then 
+            rm -f $currentDir/$cProgramName.c
+        fi
+        cd $currentDir
+    fi
+}
+
+
+#
+# Initialise some variables. UTIL_DIR is the directory containing 
+# the script fs_FunctionsScript with common functions.
+#
+
+TESTTOP=${TESTTOP:="`pwd`"}
+
+if [ "$TESTTOP" = "`pwd`" ]
+then
+    UTIL_DIR=../util
+    testhome=$TESTTOP
+else
+    UTIL_DIR=$TESTTOP/util
+    testhome=$TESTTOP/low
+fi
+
+. $UTIL_DIR/fs_FunctionsScript
+
+trap '
+     rm -f $programName.out
+     echo "$programName killed; returning 2" | tee -a $logFile; exit 2
+     ' 2 3 15
+
+fs_InitSetup low
+
+#
+# Set default values
+#
+
+successExit=0
+testErrorExit=1
+scriptErrorExit=2
+
+#
+# Parse the command line
+#
+
+while [ "$1" != "" ]
+do 
+    case $1 in 
+        make|-make) 
+                    MakeProgram
+                    exit $successExit;
+                    ;;
+
+        clean|-clean) 
+                    CleanProgram
+                    exit $successExit;
+                    ;;
+
+        help|-help) PrintUsage;
+                    exit $successExit;
+                    ;;
+
+
+        *)          echo "ERROR $testSuiteType/$programName: invalid argument \"$1\"" | tee -a $logFile; 
+                    exit $scriptErrExit
+                    ;;
+    esac
+done
+
+fs_CheckBinaryExistence $cProgramName
+
+#
+# Start test
+#
+
+(
+    echo "$programName (Ted) starting in $currentDir"; 
+    echo "Host `hostname` ($fs_sysName)"; 
+    date
+) | tee -a $logFile
+
+fs_DetermineFSType
+./$cProgramName > $programName.out 2>&1
+errorCount=$?
+cat $programName.out | tee -a $logFile
+
+###############################################################################
+
+rm -f $programName.out
+
+(
+    echo ""; 
+    echo "$testSuiteType/$programName returning $errorCount in $currentDir"; 
+    date
+) | tee -a $logFile
+
+exit $errorCount
+
+###############################################################################

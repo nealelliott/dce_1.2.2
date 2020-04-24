@@ -1,0 +1,298 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: repadm.idl,v $
+ * Revision 1.1.8.3  1996/03/09  23:28:11  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:39  marty]
+ *
+ * Revision 1.1.8.2  1995/12/08  17:32:51  root
+ * 	Submit OSF/DCE 1.2.1
+ * 
+ * 	HP revision /main/HPDCE02/2  1995/08/02  20:04 UTC  aha
+ * 	CHFts15825: dced pe_site update thread does not rebind
+ * 
+ * 	HP revision /main/HPDCE02/aha_mothra8/1  1995/08/02  18:39 UTC  aha
+ * 	CHFts15825: dced pe_site update thread doesn't rebind;
+ * 	 add new API sec_rgy_rep_admin_info_any() that can bind to any working replica
+ * 
+ * 	HP revision /main/HPDCE02/1  1995/05/15  21:03 UTC  greg
+ * 	Create SEC_migrate_merge mainline from SEC_migrate and HPDCE02.
+ * 	[1995/04/22  13:35 UTC  greg  /main/SEC_migrate_merge/1]
+ * 
+ * 	Add prototypes for sw_version API routines.
+ * 	[1995/02/22  19:56 UTC  greg  /main/SEC_migrate/2]
+ * 
+ * 	Merge .../greg_sec_migrate/LATEST --> .../SEC_migrate/LATEST.
+ * 	[1995/02/11  22:14 UTC  greg  /main/SEC_migrate/1]
+ * 
+ * 	Add API routines to support real
+ * 	software versioning.
+ * 
+ * 	[1995/02/06  06:15 UTC  greg  /main/greg_sec_migrate/1]
+ * 
+ * Revision 1.1.4.1  1994/06/17  18:42:21  devsrc
+ * 	cr10872 - fix copyright
+ * 	[1994/06/17  18:09:01  devsrc]
+ * 
+ * Revision 1.1.2.2  1993/01/29  19:45:38  burati
+ * 	Initial revision
+ * 	[1993/01/14  23:17:00  burati]
+ * 
+ * $EndLog$
+ */
+
+/*
+ * Copyright (c) Hewlett-Packard Company 1992, 1993
+ * Unpublished work. All Rights Reserved.
+ *
+ *  NAME:
+ *      repadm.idl
+ *
+ *  FACILITY:
+ *      Security
+ *
+ *  ABSTRACT:
+ *      Registry server administration operations, client agent.
+ */
+
+[
+    local
+]
+interface sec_rgy_rep_admin {
+
+    import  "dce/rgynbase.idl";
+    import  "dce/binding.idl";
+    import  "dce/rplbase.idl";
+
+    /*
+     *  s e c _ r g y _ r e p _ a d m i n  _ s t o p 
+     *
+     *  Stop the replica identified by this handle.
+     */
+    void sec_rgy_rep_admin_stop (
+        [in]    sec_rgy_handle_t    context,
+        [out]   error_status_t      *status
+    );
+
+    /*
+     *  s e c _ r g y _ r e p _ a d m i n _ m a i n t
+     *
+     *  Put replica in or out of maintenance mode.
+     */
+    void sec_rgy_rep_admin_maint(
+        [in]    sec_rgy_handle_t    context,
+        [in]    boolean32           in_maintenance,
+        [out]   error_status_t      *status
+    );
+
+    /*
+     *  s e c _ r g y _ r e p _ a d m i n _ m k e y
+     *
+     *  Change the master key and re-encrypt the database
+     */
+    void sec_rgy_rep_admin_mkey(
+        [in]    sec_rgy_handle_t    context,
+        [out]   error_status_t      *status
+    );
+
+
+    /*
+     *  s e c _ r g y _ r e p _ a d m i n _ i n f o
+     *
+     *  Get basic information about a replica such
+     *  as its state, uuid, latest update sequence
+     *  number and timestamp, and whether it is the master.
+     *  Also get the replica's information about the master's 
+     *  uuid and the sequence number when the master was 
+     *  designated.
+     */
+    void sec_rgy_rep_admin_info(
+        [in]    sec_rgy_handle_t    context,
+        [out]   rs_replica_info_t   *rep_info,
+        [out]   error_status_t      *status
+    );
+    
+
+    /*
+     *  s e c _ r g y _ r e p _ a d m i n _ i n f o _ a n y
+     *
+     *  Get basic information about a replica such
+     *  as its state, uuid, latest update sequence
+     *  number and timestamp, and whether it is the master.
+     *  Also get the replica's information about the master's 
+     *  uuid and the sequence number when the master was 
+     *  designated.
+     *
+     *  Unlike sec_rgy_rep_admin_info(), bind to any working
+     *  replica.
+     */
+    void sec_rgy_rep_admin_info_any(
+        [in]    sec_rgy_handle_t    context,
+        [out]   rs_replica_info_t   *rep_info,
+        [out]   error_status_t      *status
+    );
+    
+
+    /*
+     *  s e c _ r g y _ r e p _ a d m i n _ i n f o _ v e r s
+     *
+     * New DCE 1.1 warranty patch routine.
+     *
+     * This is a replacement for the older sec_rgy_rep_admin_info_full()
+     * API call.  The current_sw_vers and sw_vers_info [out]
+     * parameters supercede the information in rep_info->sw_rev and 
+     * rep_info->compat_sw_rev.
+     *
+     * The num_sw_vers [out] parameter is a count of the number
+     * of elements in the array pointed to by the sw_vers_info [out] 
+     * parameter.
+     *
+     * The sw_vers_info [out] parameter is a pointer to an array of
+     * numeric-to-printstring software version mappings.  The array itself
+     * is allocated as a contiguous block, therefore it is only
+     * necessary to free the pointer to that array when finished
+     * (free(*sw_vers_info);).  Individual array elements themselves
+     * should not be freed, nor should any sub-fields within those 
+     * individual elements be freed.
+     *
+     * The current_sw_vers_offset [out] parameter is an index into the 
+     * sw_vers_info array.  It identifies element containing the
+     * software version at which the replica is currently operating.
+     */
+    void sec_rgy_rep_admin_info_vers (
+        [in]    sec_rgy_handle_t           context,
+        [out]   rs_replica_info_t          *rep_info,
+        [out]   rs_replica_twr_vec_p_t     *rep_twrs,
+        [out]   rs_replica_twr_vec_p_t     *master_twrs,
+        [out]   unsigned32                 *num_sw_vers,
+        [out]   rs_replica_sw_vers_info_t  **sw_vers_info,
+        [out]   unsigned32                 *current_sw_vers_offset,
+        [out]   error_status_t             *status
+    );
+
+    /*
+     *  s e c _ r g y _ r e p _ a d m i n _ i n f o _ f u l l
+     *
+     * This call is superceded by sec_rgy_rep_admin_info_vers(),
+     * but is maintained so that old admin clients can link
+     * shared with a newer libdce.
+     *
+     *  Get complete information about a replica such
+     *  as its state, uuid, protocol towers, latest
+     *  update sequence number and timestamp, and whether 
+     *  it is the master.  
+     *  Also get the replica's information about the master's 
+     *  uuid, protocol towers, and the sequence number when 
+     *  the master was designated.
+     */
+    void sec_rgy_rep_admin_info_full(
+        [in]    sec_rgy_handle_t    context,
+        [out]   rs_replica_info_t       *rep_info,
+        [out]   rs_replica_twr_vec_p_t  *rep_twrs,
+        [out]   rs_replica_twr_vec_p_t  *master_twrs,
+        [out]   error_status_t          *status
+    );
+    
+    /*
+     *  s e c _ r g y _ r e p _ a d m i n _ d e s t r o y
+     *
+     *  a drastic operation which tells a replica
+     *  to destroy its database and exit
+     */
+    void sec_rgy_rep_admin_destroy(
+        [in]    sec_rgy_handle_t    context,
+        [out]   error_status_t      *status
+    );
+
+    /*
+     *  s e c _ r g y _ r e p _ a d m i n _ i n i t _ r e p l i c a
+     *
+     *  (re-)initialize the slave identified by "rep_id"
+     *
+     *  master-only operation.
+     */
+    void sec_rgy_rep_admin_init_replica(
+        [in]    sec_rgy_handle_t    context,
+        [in]    uuid_p_t            rep_id,
+        [out]   error_status_t      *status
+    );
+
+    /*
+     *  s e c _ r g y _ r e p _ a d m i n _ c h a n g e _ m a s t e r
+     *
+     *  change the master to "new_master_id".
+     *  The master gracefully passes its
+     *  replica list state and propq to
+     *  the new master.
+     *
+     *  master-only operation.
+     */
+    void sec_rgy_rep_admin_change_master(
+        [in]    sec_rgy_handle_t    context,
+        [in]    uuid_p_t            new_master_id,
+        [out]   error_status_t      *status
+    );
+
+    /* 
+     *  s e c _ r g y _ r e p _ a d m i n _ b e c o m e _ m a s t e r
+     *
+     *  a drastic operation to make a slave
+     *  become the master because the master
+     *  has died.  
+     *  Normally the rs_rep_admin_change_master 
+     *  operation is used to designate a new 
+     *  master; this operation can cause updates 
+     *  to be lost.
+     */
+    void sec_rgy_rep_admin_become_master(
+        [in]    sec_rgy_handle_t    context,
+        [out]   error_status_t      *status
+    );
+
+    /*
+     *  s e c _ r g y _ r e p _ a d m i n _ b e c o m e _ s l a v e
+     *
+     *  a drastic operation to make a replica
+     *  which thinks it's the master become a
+     *  slave.
+     */
+    void sec_rgy_rep_admin_become_slave(
+        [in]    sec_rgy_handle_t    context,
+        [out]   error_status_t      *status
+    );
+
+    /*
+     *  s e c _ r g y _ r e p _ a d m i n _ s e t _ s w _ v e r s
+     *
+     * Set the cell-wide software version.
+     *
+     *  master-only operation.
+     */
+    void  sec_rgy_rep_admin_set_sw_vers(
+        [in]   sec_rgy_handle_t    context,
+        [in]   unsigned32          sw_rev,
+        [out]  error_status_t      *status
+    );
+
+    /*
+     *  s e c _ r g y _ r e p _ a d m i n _ g e t _ s w _ v e r s
+     *
+     * Retrieve a replica'a supported software version info.
+     *
+     */
+    void  sec_rgy_rep_admin_get_sw_vers(
+	[in]    sec_rgy_handle_t           context,
+	[out]   unsigned32                 *num_sw_vers,
+	[out]   rs_replica_sw_vers_info_t  **sw_vers_info,
+	[out]   unsigned32                 *current_sw_vers_offset,
+	[out]   error_status_t             *status
+    );
+}
+

@@ -1,0 +1,337 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rs_pgo.idl,v $
+ * Revision 1.1.56.2  1996/03/09  23:28:30  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:58  marty]
+ *
+ * Revision 1.1.56.1  1995/12/08  17:34:42  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:55:29  root]
+ * 
+ * Revision 1.1.54.1  1993/10/05  22:30:54  mccann
+ * 	CR8651 64 bit porting changes
+ * 	[1993/10/04  19:12:10  mccann]
+ * 
+ * Revision 1.1.4.2  1993/08/04  13:36:41  cuti
+ * 	Insert dce/ in front of imported file name
+ * 	[1993/08/03  20:50:29  cuti]
+ * 
+ * Revision 1.1.2.2  1992/12/29  13:31:00  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:17:28  zeliff]
+ * 
+ * Revision 1.1  1992/01/19  14:55:03  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+
+/*  rs_pgo.idl V=10 08/22/91 //littl/prgy/src/idl
+**
+** Copyright (c) Hewlett-Packard Company 1991
+** Unpublished work. All Rights Reserved.
+**
+*/
+/*
+ *                  Name Management
+ * 
+ */
+
+[
+    /* V1 format UUID: 4c8782803000.0d.00.02.87.14.00.00.00 */
+    uuid(4C878280-3000-0000-0D00-028714000000),
+    version(1)
+]
+
+interface rs_pgo
+
+{
+    import "dce/rsbase.idl";
+
+
+    /*
+     * r s _ p g o _ a d d 
+     *
+     * add a person, group or organization item to the database. domain specifies
+     * the name domain of the operation. the name field of item is the key. 
+     *
+     * Errors: 
+     *  Not Authorized 
+     *  Object already exists 
+     */
+    void rs_pgo_add (
+        [in]        handle_t            h,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      pgo_name,
+        [in]        sec_rgy_pgo_item_t  *pgo_item,
+        [out]       rs_cache_data_t     *cache_info,
+        [out]       error_status_t      *status
+    );
+
+    /*
+     * r s _ p g o _ d e l e t e 
+     *
+     * deletes a person, group or organization item from the database. 
+     *
+     * Errors: 
+     *  Not Authorized 
+     */
+    void rs_pgo_delete (
+        [in]        handle_t            h,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      pgo_name,
+        [out]       rs_cache_data_t     *cache_info,
+        [out]       error_status_t      *status
+    );
+
+    /*
+     * r s _ p g o _ r e p l a c e 
+     *
+     * replaces a person, group or organization item from the database.  The name
+     * field identifies the item to be modified. The uuid field cannot be
+     * changed, an explicit delete and add must occur effect this change. 
+     *
+     * Errors: 
+     *  Not Authorized 
+     *  Object not found 
+     *  UUID mapping changed 
+     */
+    void rs_pgo_replace (
+        [in]        handle_t            h,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      pgo_name,
+        [in]        sec_rgy_pgo_item_t  *pgo_item,
+        [out]       rs_cache_data_t     *cache_info,
+        [out]       error_status_t      *status
+    );
+
+    /*
+     * r s _ p g o _ r e n a m e 
+     *
+     * Rename a pgo object. 
+     */
+    void rs_pgo_rename (
+        [in]        handle_t            h,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      old_name,
+        [in]        sec_rgy_name_t      new_name,
+        [out]       rs_cache_data_t     *cache_info,
+        [out]       error_status_t      *status
+    );
+
+    /*
+     * Q U E R I E S 
+     *
+     * Several private datatypes are used by these functions.  These types
+     * serve to optimize data transmission and to minimize the size of stubs.
+     * Results are encapsulated in a union and only transmitted if the query
+     * was successful.  Stub size is lessened by mapping the various types of
+     * queries into a single operation that takes a union for the input query
+     *key.
+     */
+
+    /*
+     * r s _ p g o _ q u e r y _ t
+     *
+     * this type is the union tag to identify the query key.
+     */
+    typedef enum {
+        rs_pgo_query_name, 
+        rs_pgo_query_id, 
+        rs_pgo_query_unix_num, 
+        rs_pgo_query_next, 
+        rs_pgo_query_none
+    } rs_pgo_query_t;
+
+    typedef struct {
+        uuid_t          id;
+        sec_rgy_name_t  scope;
+    } rs_pgo_id_key_t;
+
+    typedef struct {
+        signed32        unix_num;
+        sec_rgy_name_t  scope;
+    } rs_pgo_unix_num_key_t;
+
+    typedef union switch (rs_pgo_query_t query) tagged_union {
+        case rs_pgo_query_name:
+            sec_rgy_name_t              name;
+
+        case rs_pgo_query_id:
+            rs_pgo_id_key_t             id_key;
+
+        case rs_pgo_query_unix_num:
+            rs_pgo_unix_num_key_t       unix_num_key;
+
+        case rs_pgo_query_next:
+            sec_rgy_name_t              scope;
+
+        default:
+            ;                       /* empty branch of union */
+
+    } rs_pgo_query_key_t;
+
+    typedef struct {
+        sec_rgy_name_t      name;
+        sec_rgy_pgo_item_t  item;
+    } rs_pgo_result_t;
+
+    typedef union switch (signed32 status) tagged_union {
+        case error_status_ok:
+            rs_pgo_result_t     result;
+
+        default:
+            ;                       /* empty branch of union */
+
+    } rs_pgo_query_result_t;
+
+    /*
+     * r s _ p g o _ g e t 
+     *
+     * This is the actual query operation.  It takes a domain specifier and a key
+     * and yields an appropriate item.  It also take a rgy_cursor_t which is a
+     * cursor into the database.  This cursor contains an opaque handle that
+     * identifies a position to the server, a location specification that
+     * makes sure that these database positions are always interpreted by the
+     * same server (they are meaningless across servers), and a valid flag
+     * which when set indicates that searches should begin at the beginning of
+     * the database. The allow_aliases flag should be set to true if any alias
+     * is acceptable for this query - if the distinguished item for the key is
+     * desired, then this flag should be set to false. 
+     *
+     * Errors: 
+     *  Object not found 
+     *  No more entries
+     *  Is an alias
+     */
+    [idempotent] void rs_pgo_get (
+        [in]        handle_t                h,
+        [in]        sec_rgy_domain_t        name_domain,
+        [in]        rs_pgo_query_key_t      *key,
+        [in]        boolean32               allow_aliases,
+        [in, out]   sec_rgy_cursor_t        *item_cursor,
+        [out]       rs_cache_data_t         *cache_info,
+        [out]       rs_pgo_query_result_t   *result
+    );
+
+    /*
+     * r s _ p g o _ k e y _ t r a n s f e r 
+     *
+     * K E Y   T R A N S F E R S 
+     *
+     * Convert one key format into another - many operations on pgo items really
+     * only need to convert from names to ids or unix numbers. 
+     *
+     *T his transfer function takes the desired result key as input and yields
+     * that query key if possible. 
+     *
+     *
+     * Errors 
+     *  Object not found
+     */
+
+    [idempotent] void rs_pgo_key_transfer (
+        [in]        handle_t            h,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        rs_pgo_query_t      requested_result_type,
+        [in, out]   rs_pgo_query_key_t  *key,
+        [out]       rs_cache_data_t     *cache_info,
+        [out]       error_status_t      *status
+    );
+
+
+    /* GROUP AND ORGANIZATION MEMBERSHIP MANAGEMENT */
+
+    /*
+     * r s _ p g o _ a d d _ m e m b e r 
+     *
+     * add a member to the membership list for a group or organization.  An error
+     * is returned if this operation is performed on the person domain. 
+     *
+     * Errors: 
+     *  Not Authorized 
+     *  No such group 
+     *  Bad Domain
+     */
+    void rs_pgo_add_member (
+        [in]        handle_t            h,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      go_name,
+        [in]        sec_rgy_name_t      person_name,
+        [out]       rs_cache_data_t     *cache_info,
+        [out]       error_status_t      *status
+    ); 
+
+    /*
+     * r s _ p g o _ d e l e t e _ m e m b e r 
+     *
+     * delete a member from the membership list for a group or organization.  An
+     * error is returned if this operation is performed on the person domain.
+     * Any accounts held by this person with the specified group or
+     * organization are also deleted. 
+     *
+     * Errors: 
+     *  Not Authorized 
+     *  No such group 
+     *  Person not member 
+     *  Bad domain 
+     */
+    void rs_pgo_delete_member (
+        [in]        handle_t            h,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      go_name,
+        [in]        sec_rgy_name_t      person_name,
+        [out]       rs_cache_data_t     *cache_info,
+        [out]       error_status_t      *status
+    );
+
+    /*
+     * r s _ p g o _ i s _ m e m b e r 
+     *
+     * Predicate will return true32 if the person is a member of the named group
+     * or org. 
+     *
+     * Errors: 
+     *  Object not found  - group or org does not exist 
+     */
+    [idempotent] boolean32 rs_pgo_is_member (
+        [in]        handle_t            h,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      go_name,
+        [in]        sec_rgy_name_t      person_name,
+        [out]       rs_cache_data_t     *cache_info,
+        [out]       error_status_t      *status
+    );
+
+    /*
+     * r s _ p g o _ g e t _ m e m b e r s 
+     *
+     * return the membership list for a group or organization. 
+     *
+     * Errors: 
+     *  No such group 
+     */
+    [idempotent] void rs_pgo_get_members (
+        [in]        handle_t                h,
+        [in]        sec_rgy_domain_t        name_domain,
+        [in]        sec_rgy_name_t          go_name,
+        [in, out]   sec_rgy_cursor_t        *member_cursor,
+        [in]        signed32                max_members,
+        [out, length_is(*number_supplied), size_is(max_members)] 
+                    sec_rgy_member_t        member_list[],
+        [out]       signed32                *number_supplied,
+        [out]       signed32                *number_members,
+        [out]       rs_cache_data_t         *cache_info,
+        [out]       error_status_t          *status
+    );
+}

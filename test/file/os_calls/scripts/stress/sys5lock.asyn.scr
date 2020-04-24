@@ -1,0 +1,296 @@
+*
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* sys5lock.asyn.scr --
+*    This script tests system v locking using asynchrounous grant.
+*
+
+* 
+* USAGE: ./file_test -l /.:/dfs_test/a    (for hub)
+*        ./file_test -c /.:/dfs_test/a    (for two spokes)
+* Note: 
+*      1. Before running the script you have to create a cds directory
+*         /.:/dfs_test/a or whataver object in the naming space.
+*      2. It is really upto the tester (user) who can make different
+*         testing scenarios by start hub and spokes from different
+*         places (from a DFS or from LOCAL path, or form another machine).
+*      3. There are one hub and two spokes involved in the test.
+*         They could be under same client or
+*         they could be running from at most two machines.  
+*      4. Check with Mike Kazar's syscall checklist "system v locking".
+*      5. Make sure that you have read and write perms for the working dir.
+*      6. set the sleep time below. If sleep time is 15ms then the server will
+*         always favor the process which run in the server machine the other
+*         process may starving and the test eventully fails.
+*
+
+*
+* Scenario 1: 
+
+* 
+* Scenario 2: 
+
+*
+!* Include config file.
+include config
+
+set sleepTime 2000
+set wakeUpTimer 15
+* Repeat 100 may cause comm failure (stress point).
+set repeatTimes 10
+
+* 
+* This procedure will grab the lock and releases it repeatly.
+*
+set asynGrantLock_Proc1 proc END_PROC
+  echo
+  echo **** Asyn grant locking on entire file test. ****
+  open $file64k @O_WRONLY 0777 fileId
+
+  sync_join "async_grant_lock" $timeout
+
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+  echo P1 gets the lock on whole file.
+
+  sync_join "stress_get_lock" $timeout
+  
+  echo P1 releases and gets the lock repeatly 1s.
+  echo Be patient: no message printed since it will hurt the timing.
+  loop x 1 1 $repeatTimes
+      set setExclusiveLock fs_flock @F_UNLCK @SEEK_SET 0 0
+      fcntl @fileId @F_SETLK setExclusiveLock
+      sleep $sleepTime
+      set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 0
+      fcntl @fileId @F_SETLKW setExclusiveLock
+  endloop
+* Final release of the lock
+  set setExclusiveLock fs_flock @F_UNLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+
+  sync_join "finish_asyn_grant_lock" $timeout
+
+  close @fileId
+  echo End test procedure P1.
+  echo
+END_PROC
+
+* 
+* This procedure will try to grab the lock and release it repeatly.
+*
+set asynGrantLock_Proc2 proc END_PROC
+  echo
+  echo **** Asyn grant locking on entire file test. ****
+  open $file64k @O_WRONLY 0777 fileId
+
+  sync_join "async_grant_lock" $timeout
+
+  sync_join "stress_get_lock" $timeout
+
+  echo P2 gets and releases the lock repeatly 10s of ms.
+  echo Be patient: no message printed since it will hurt the timing.
+  loop x 1 1 $repeatTimes
+      set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 0
+      fcntl @fileId @F_SETLKW setExclusiveLock
+      sleep $sleepTime
+      set setExclusiveLock fs_flock @F_UNLCK @SEEK_SET 0 0
+      fcntl @fileId @F_SETLK setExclusiveLock
+  endloop
+
+  sync_join "finish_asyn_grant_lock" $timeout
+
+  close @fileId
+  echo End test procedure P2.
+  echo
+END_PROC
+
+* 
+* This procedure will grab the lock and sleep there.
+*
+set asynGrantInterrupt_Proc1 proc END_PROC
+  echo
+  echo **** Asyn grant interruptable locking test. ****
+  open $file64k @O_WRONLY 0777 fileId
+
+  sync_join "async_grant_lock_sleep" $timeout
+
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+
+  echo P1 gets the lock on whole file.
+
+  sync_join "stress_get_lock_sleep" $timeout
+  
+* Adjust the time elapsed by timeout for the sync_join command.
+
+  sync_join "finish_asyn_grant_lock_sleep" $timeout
+
+  set setExclusiveLock fs_flock @F_UNLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+
+  set setExclusiveLock fs_flock @F_RDLCK @SEEK_SET 0 0
+  fcntl @fileId @F_GETLK setExclusiveLock
+  if ( @setExclusiveLock.l_type != @F_UNLCK ) {
+    echo FAILED: The file should be unlocked, detected by P1
+  }
+  close @fileId
+
+  sync_join "finish_interruptability_test" $timeout
+
+  echo End test procedure P1.
+  echo
+END_PROC
+
+* 
+* This procedure will try lcok the whole file while another process holds the
+* the lock and sleeps there. This will test two things, one is the client
+* trying to get lock does sleep there, another is that the sleeping process
+* on async lock grant is interruptable.
+*
+set asynGrantInterrupt_Proc2 proc END_PROC
+  echo
+  echo **** Asyn grant interruptable locking test. ****
+  open $file64k @O_WRONLY 0777 fileId
+
+  set timerHandler proc ENDSIG_PROC
+    echo P2 received timeout signal.
+  ENDSIG_PROC
+
+  if ( $ITL_SystemType == solaris || $ITL_SystemType == aix ) {
+    sigaction @SIGALRM timerHandler 0
+  }
+  else {
+    sigaction @SIGALRM timerHandler @SV_INTERRUPT
+  }
+
+  sync_join "async_grant_lock_sleep" $timeout
+
+* P1 gets the lock during the time
+
+  sync_join "stress_get_lock_sleep" $timeout
+
+* We have a bug db3689 if FAILED here.
+* sleep 30000
+
+  set setExclusiveLock fs_flock @F_RDLCK @SEEK_SET 0 0
+  fcntl @fileId @F_GETLK setExclusiveLock
+  if ( @setExclusiveLock.l_type != @F_WRLCK ) {
+    echo FAILED: The file should be locked by now, detected by P2
+  }
+
+  alarm $wakeUpTimer
+
+  verifyStatus false
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLKW setExclusiveLock
+  if ( @ITL_Status != @EINTR ) {
+    echo error = @ITL_Status
+    echo FAILED: The return stattus is not EINTR. --P2
+  }
+  else {
+    echo P2 wake up by a signal aught.
+  }
+  verifyStatus true
+
+  sync_join "finish_asyn_grant_lock_sleep" $timeout
+
+
+  sync_join "finish_interruptability_test" $timeout
+
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+
+  close @fileId
+  echo End test procedure P2.
+  echo
+END_PROC
+
+***********************************************************************
+!* Check if there are two spokes.
+if ($ITL_nspokes != 2) {
+  error Need exactly 2 test clients to run this test.
+  echo Test FAILED.
+  quit
+}
+
+!* Test async grant interruptable locking.
+*  Test the lock when one process locks a file and sleeps on that try to
+*  let another process to set lock with wiat. The sleep process will be
+*  waked up by a timer.
+*
+
+rexec_async $ITL_spoke[0] asynGrantInterrupt_Proc1 result[0] p1AsyncId
+rexec_async $ITL_spoke[1] asynGrantInterrupt_Proc2 result[1] p2AsyncId
+
+sync_create "async_grant_lock_sleep" 2  $timeout
+sync_release "async_grant_lock_sleep"
+
+sync_create "stress_get_lock_sleep" 2  $timeout
+sync_release "stress_get_lock_sleep" 
+
+* Use timeout to adjust.
+sync_create "finish_asyn_grant_lock_sleep" 2  $timeout
+sync_release "finish_asyn_grant_lock_sleep" 
+
+sync_create "finish_interruptability_test" 2  $timeout
+sync_release "finish_interruptability_test"
+
+async_join $p1AsyncId $timeout
+if ( $result[0] != 0 ) {
+  echo Spoke1 has a failure for hollowing lock testing.
+}
+async_join $p2AsyncId $timeout
+if ( $result[1] != 0 ) {
+  echo Spoke2 has a failure for hollowing lock testing.
+}
+
+
+!* Test async grant lock stress.
+!* Repeat $repeatTimes.
+*  The stress gets and releases the lock repeatly while the client also
+*  try to get it with wait and to release it repeatly.
+*
+
+rexec_async $ITL_spoke[0] asynGrantLock_Proc1 result[0] p1AsyncId
+rexec_async $ITL_spoke[1] asynGrantLock_Proc2 result[1] p2AsyncId
+
+sync_create "async_grant_lock" 2  $timeout
+sync_release "async_grant_lock"
+
+sync_create "stress_get_lock" 2  $timeout
+sync_release "stress_get_lock" 
+
+* Adjust the time by the timeout for sync_create command.
+
+sync_create "finish_asyn_grant_lock" 2  $timeout
+sync_release "finish_asyn_grant_lock" 
+
+async_join $p1AsyncId $timeout
+if ( $result[0] != 0 ) {
+  echo Spoke1 has a failure for async grant lock testing.
+}
+async_join $p2AsyncId $timeout
+if ( $result[1] != 0 ) {
+  echo Spoke2 has a failure for asyn grant lock testing.
+}
+
+echo Hub done.

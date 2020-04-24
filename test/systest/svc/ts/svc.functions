@@ -1,0 +1,777 @@
+#!/bin/ksh
+# 
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: svc.functions,v $
+# Revision 1.1.5.2  1996/03/11  02:48:44  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:09:30  marty]
+#
+# Revision 1.1.5.1  1995/12/11  22:48:40  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/jrr_1.2_mothra/1  1995/11/30  20:39 UTC  bell_d
+# 	Update paths, set DCELOGDIR
+# 	[1995/12/11  22:22:57  root]
+# 
+# Revision 1.1.2.6  1994/09/08  18:59:33  hester
+# 	activate all core components; remove unused ones; fix dbg level
+# 	[1994/09/08  16:39:45  hester]
+# 
+# Revision 1.1.2.5  1994/07/28  18:52:41  hester
+# 	porting fix, redirect grep output
+# 	[1994/07/28  18:17:12  hester]
+# 
+# 	added svr4 porting changes from a. ohara
+# 	[1994/07/22  19:06:20  hester]
+# 
+# Revision 1.1.2.4  1994/07/26  20:34:59  hester
+# 	fixed spec of DBG routing as per CR 10639, saved rcfile
+# 	with SAVE_LOGS, sent unwanted output to /dev/null
+# 	[1994/07/22  18:37:51  hester]
+# 
+# Revision 1.1.2.3  1994/07/12  21:22:58  hester
+# 	updates to use dce_shutdown, remove rc.dts, add log saving
+# 	[1994/07/12  16:32:57  hester]
+# 
+# Revision 1.1.2.2  1994/06/17  18:46:24  devsrc
+# 	cr10872 - fix copyright
+# 	[1994/06/17  18:38:20  devsrc]
+# 
+# Revision 1.1.2.1  1994/05/18  21:12:38  hester
+# 	initial version for svc cfg systests
+# 	[1994/05/13  20:17:31  hester]
+# 
+# $EndLog$
+# 
+
+#====================================
+# List of Functions in svc.functions:
+#
+#    create_component_routing_files
+#    create_debug_routing_file
+#    add_svc_rfile_to_rc_file
+#    add_svc_deflt_to_rc_file
+#    add_svc_dashw_to_rc_file 
+#    add_svc_sever_to_rc_file
+#    add_svc_dbgenv_to_rc_file
+#    add_svc_dbgfil_to_rc_file
+#    restore_rc_file
+#    restore_routing_file
+#    cleanup_log_and_routing_files
+#    check_rc_file
+#    set_daemons_running
+#    verify_logs
+#    check_msg
+#    check_log_dir
+#    check_dbg_file
+#    shutdown_dce
+#    startup_dce
+
+#===============================================================================
+# Function:	create_component_routing_files test_dir
+# Purpose:	Setup routing.<component> files with different routings for 
+#		each component's svc messages in test file directory
+#===============================================================================
+create_component_routing_files() {
+
+TEST=$1
+
+for comp in ${COMPS} ; do
+	COMP_FILE="${SVC_TSTFILDIR}/${TEST}/routing.${comp}"
+	if [ -f ${COMP_FILE} ] ; then
+		tet_infoline " "
+		tet_infoline "${COMP_FILE} already exists, "
+		tet_infoline "    moving to ${COMP_FILE}.old"
+		mv ${COMP_FILE} ${COMP_FILE}.old
+	else
+		if [ ! -d ${SVC_TSTFILDIR}/${TEST} ] ; then
+			tet_infoline " "
+			tet_infoline "Creating ${SVC_TSTFILDIR}/${TEST}"
+			mkdir -p ${SVC_TSTFILDIR}/${TEST}
+		fi
+		touch ${COMP_FILE}
+	fi
+ 
+	tet_infoline " "
+	for type in FATAL ERROR WARNING NOTICE NOTICE_VERBOSE ; do
+		LOG_FILE="${SVC_TSTLOGDIR}/${TEST}/${comp}.${type}"
+
+		tet_infoline "Adding ${type}:FILE:${LOG_FILE}..."
+		tet_infoline "	to ${COMP_FILE}"
+		# Use log rolloing in REL test
+		if [ ${TEST} = "REL_TEST" ] ; then
+		    echo "${type}:FILE.5.100:${LOG_FILE}" >> ${COMP_FILE}
+		else
+		    echo "${type}:FILE:${LOG_FILE}" >> ${COMP_FILE}
+		fi
+	done
+done
+}
+
+#===============================================================================
+# Function:	create_debug_routing_file test_dir
+# Purpose:	Setup default routing file with debug routing only 
+#		use different routings for each component's level 2 
+#		debug messages 
+#===============================================================================
+create_debug_routing_file() {
+
+TEST=$1
+
+# check for pre-existing routing file
+if [ -f ${DEFAULT_ROUTE_FILE} ] ; then
+        tet_infoline " "
+        tet_infoline "${DEFAULT_ROUTE_FILE} already exists, "
+        tet_infoline "    moving to ${DEFAULT_ROUTE_FILE}.pre-test"
+        mv ${DEFAULT_ROUTE_FILE} ${DEFAULT_ROUTE_FILE}.pre-test
+else
+        if [ ! -d ${DEFAULT_ROUTE_DIR} ] ; then
+                tet_infoline " "
+                tet_infoline "Creating ${DEFAULT_ROUTE_DIR}"
+                mkdir -p ${DEFAULT_ROUTE_DIR}
+        fi
+fi
+
+integer i=0
+for comp in ${COMPS} ; do
+	
+	LOG_FILE="${SVC_TSTLOGDIR}/${TEST}/${comp}"
+	svc_comp=${SVC_COMPS[$i]}
+
+	tet_infoline "Adding ${svc_comp}:general.2:FILE:${LOG_FILE}..."
+	tet_infoline "	to ${DEFAULT_ROUTE_FILE}"
+	echo "${svc_comp}:general.2:FILE:${LOG_FILE}" >> ${DEFAULT_ROUTE_FILE}
+
+	i=i+1
+done
+}
+
+#===============================================================================
+# Function:	add_svc_rfile_to_rc_file
+# Purpose:	Modify /etc/rc.dce to set serviceability routing file env
+#		vars before starting each DCE daemon
+#===============================================================================
+add_svc_rfile_to_rc_file() {
+
+
+cp -p ${RC_FILE} ${RC_NEW}
+
+# Find lines that start daemons and precede them with routing
+# file specification
+
+integer i=0
+for comp in ${COMPS} ; do
+	COMP_FILE=${SVC_TSTFILDIR}/ROUTE_FILE/routing.${comp}
+	tet_infoline "Updating ${RC_FILE} with DCE_SVC_ROUTING_FILE for ${comp}"
+	case "$SYSTYPE" in
+        SNISVR4|svr4v3)
+        	dbg_comp=${DBG_COMPS[$i]}
+        	sed "s:start \$$dbg_comp.*:DCE_SVC_ROUTING_FILE=${COMP_FILE} \\
+        	export DCE_SVC_ROUTING_FILE \\
+         	&:" ${RC_NEW} > ${RC_TEMP}
+        	i=i+1
+        	;;
+        *)
+		sed "s:^daemonrunning \$DCELOCAL/bin/${comp}:DCE_SVC_ROUTING_FILE=${COMP_FILE} \\
+export DCE_SVC_ROUTING_FILE \\
+daemonrunning \$DCELOCAL/bin/${comp}:" ${RC_NEW} > ${RC_TEMP}
+        	;;
+	esac
+
+
+	mv ${RC_TEMP} ${RC_NEW}
+done
+
+tet_infoline "Moving ${RC_FILE} to ${RC_FILE}.orig"
+mv ${RC_FILE} ${RC_FILE}.orig
+mv ${RC_NEW} ${RC_FILE}
+chmod +x ${RC_FILE}
+tet_infoline "${RC_FILE} has been updated."
+
+}
+
+#===============================================================================
+# Function:	add_svc_dashw_to_rc_file
+# Purpose:	Modify /etc/rc.dce to set serviceability routing using -w
+#		flag when starting each DCE daemon
+#===============================================================================
+add_svc_dashw_to_rc_file() {
+
+cp -p ${RC_FILE} ${RC_NEW}
+
+# Find lines that start daemons and change them with routing
+# info for NOTICE msgs using -w
+type=NOTICE
+integer i=0
+
+
+for comp in ${COMPS} ; do
+	LOG_FILE="${SVC_TSTLOGDIR}/DASH-W/${comp}.${type}"
+	tet_infoline "Updating ${RC_FILE} with -w for ${comp}"
+        case "$SYSTYPE" in
+                SNISVR4|svr4v3)
+                dbg_comp=${COMPSUP[$i]}
+                sed "s@start \$$dbg_comp.*@& -w NOTICE:FILE:${LOG_FILE}@" ${RC_NEW} > ${RC_TEMP}
+                i=i+1
+                ;;
+        *)
+		sed "s@^daemonrunning \$DCELOCAL/bin/${comp}.*@& -w NOTICE:FILE:${LOG_FILE}@" ${RC_NEW} > ${RC_TEMP}
+                ;;
+esac
+
+
+	mv ${RC_TEMP} ${RC_NEW}
+done
+
+tet_infoline "Moving ${RC_FILE} to ${RC_FILE}.orig"
+mv ${RC_FILE} ${RC_FILE}.orig
+mv ${RC_NEW} ${RC_FILE}
+chmod +x ${RC_FILE}
+tet_infoline "${RC_FILE} has been updated."
+
+}
+
+#===============================================================================
+# Function:	add_svc_deflt_to_rc_file test_dir
+# Purpose:	Modify /etc/rc.dce to set up default serviceability routing file
+#		(/opt/dcelocal/var/svc/routing) with component/test routing 
+#		before starting each DCE daemon
+#===============================================================================
+add_svc_deflt_to_rc_file() {
+TEST=$1
+
+cp -p ${RC_FILE} ${RC_NEW}
+
+# check for pre-existing routing file
+if [ -f ${DEFAULT_ROUTE_FILE} ] ; then
+	tet_infoline " "
+	tet_infoline "${DEFAULT_ROUTE_FILE} already exists, "
+	tet_infoline "    moving to ${DEFAULT_ROUTE_FILE}.pre-test"
+	mv ${DEFAULT_ROUTE_FILE} ${DEFAULT_ROUTE_FILE}.pre-test
+else
+	if [ ! -d ${DEFAULT_ROUTE_DIR} ] ; then
+		tet_infoline " "
+		tet_infoline "Creating ${DEFAULT_ROUTE_DIR}"
+		mkdir -p ${DEFAULT_ROUTE_DIR}
+	fi
+fi
+
+# Find lines that start daemons and precede them with copying
+# component routing file into default routing file
+
+integer i=0
+for comp in ${COMPS} ; do
+
+	COMP_FILE="${SVC_TSTFILDIR}/${TEST}/routing.${comp}"
+	tet_infoline "Updating ${RC_FILE} to copy routing.${comp} to ${DEFAULT_ROUTE_FILE}"
+case "$SYSTYPE" in
+        SNISVR4|svr4v3)
+                dbg_comp=${DBG_COMPS[$i]}
+                sed "s:start \$$dbg_comp.*:cp ${COMP_FILE} ${DEFAULT_ROUTE_FILE} \\
+		&:"  ${RC_NEW} > ${RC_TEMP}
+                i=i+1
+                ;;
+        *)
+		sed "s:^daemonrunning \$DCELOCAL/bin/${comp}:cp ${COMP_FILE} ${DEFAULT_ROUTE_FILE} \\
+daemonrunning \$DCELOCAL/bin/${comp}:" ${RC_NEW} > ${RC_TEMP}
+                ;;
+esac
+
+
+	mv ${RC_TEMP} ${RC_NEW}
+done
+
+tet_infoline "Moving ${RC_FILE} to ${RC_FILE}.orig"
+mv ${RC_FILE} ${RC_FILE}.orig
+mv ${RC_NEW} ${RC_FILE}
+chmod +x ${RC_FILE}
+tet_infoline "${RC_FILE} has been updated."
+
+}
+
+#===============================================================================
+# Function:	add_svc_sever_to_rc_file
+# Purpose:	Modify /etc/rc.dce to set SVC_<severity> routing 
+#		info before starting each DCE daemon
+#===============================================================================
+add_svc_sever_to_rc_file() {
+
+cp -p ${RC_FILE} ${RC_NEW}
+
+# Find lines that start daemons and precede them with 
+# setting routing files based on severities
+
+integer i=0
+for comp in ${COMPS} ; do
+    for type in FATAL ERROR WARNING NOTICE NOTICE_VERBOSE ; do
+	LOG_FILE="${SVC_TSTLOGDIR}/SEVER/${comp}.${type}"
+	tet_infoline "Updating ${RC_FILE} to set SVC_${type} to ${LOG_FILE}"
+        case "$SYSTYPE" in
+                SNISVR4|svr4v3)
+                dbg_comp=${DBG_COMPS[$i]}
+                sed "s@start \$$dbg_comp.*@SVC_${type}=FILE:${LOG_FILE} \\
+                export SVC_${type} \\
+                &@" ${RC_NEW} > ${RC_TEMP}
+                ;;
+        *)
+		sed "s@^daemonrunning \$DCELOCAL/bin/${comp}@SVC_${type}=FILE:${LOG_FILE} \\
+export SVC_${type} \\
+&@" ${RC_NEW} > ${RC_TEMP}
+                ;;
+        esac
+	mv ${RC_TEMP} ${RC_NEW}
+    done
+    i=i+1
+done
+
+tet_infoline "Moving ${RC_FILE} to ${RC_FILE}.orig"
+mv ${RC_FILE} ${RC_FILE}.orig
+mv ${RC_NEW} ${RC_FILE}
+chmod +x ${RC_FILE}
+tet_infoline "${RC_FILE} has been updated."
+
+}
+
+#===============================================================================
+# Function:	add_svc_dbgenv_to_rc_file
+# Purpose:	Modify /etc/rc.dce to set SVC_<comp>_DBG routing 
+#		info before starting each DCE daemon
+#===============================================================================
+add_svc_dbgenv_to_rc_file() {
+
+cp -p ${RC_FILE} ${RC_NEW}
+
+# Find lines that start daemons and precede them with 
+# setting routing files based on debug level
+# Use array of component names that correspond to daemons
+
+integer i=0
+for comp in ${COMPS} ; do
+	LOG_FILE="${SVC_TSTLOGDIR}/DBGENV/${comp}"
+	svc_comp=${SVC_COMPS[$i]}
+	DBG_SPEC="${svc_comp}:*.2:FILE:${LOG_FILE}"
+	dbg_comp=${DBG_COMPS[$i]}
+	tet_infoline "Updating ${RC_FILE} to set SVC_${dbg_comp}_DBG to ${DBG_SPEC}"
+	case "$SYSTYPE" in
+        SNISVR4|svr4v3)
+                sed "s@start \$$dbg_comp.*@SVC_${dbg_comp}_DBG=${DBG_SPEC} \\
+		export SVC_${dbg_comp}_DBG \\
+                &@" ${RC_NEW} > ${RC_TEMP}
+                ;;
+        *)
+		sed "s@^daemonrunning \$DCELOCAL/bin/${comp}@SVC_${dbg_comp}_DBG=${DBG_SPEC} \\
+export SVC_${dbg_comp}_DBG \\
+&@" ${RC_NEW} > ${RC_TEMP}
+	    	;;
+	esac
+
+	mv ${RC_TEMP} ${RC_NEW}
+	i=i+1
+done
+
+tet_infoline "Moving ${RC_FILE} to ${RC_FILE}.orig"
+mv ${RC_FILE} ${RC_FILE}.orig
+mv ${RC_NEW} ${RC_FILE}
+chmod +x ${RC_FILE}
+tet_infoline "${RC_FILE} has been updated."
+
+}
+
+#===============================================================================
+# Function:     restore_routing_file
+# Purpose:      Restore original /opt/dcelocal/var/svc/routing file without test mods
+#===============================================================================
+restore_routing_file() {
+
+   if [ -f ${DEFAULT_ROUTE_FILE}.pre-test ] ; then
+	tet_infoline "Moving ${DEFAULT_ROUTE_FILE}.pre-test to ${DEFAULT_ROUTE_FILE}"
+	mv ${DEFAULT_ROUTE_FILE}.pre-test ${DEFAULT_ROUTE_FILE}
+   else
+	tet_infoline "Can't find pre-existing routing file..."
+	tet_infoline " Removing ${DEFAULT_ROUTE_FILE}"
+	rm -f ${DEFAULT_ROUTE_FILE}
+   fi
+
+}
+
+#===============================================================================
+# Function:     restore_rc_file
+# Purpose:      Restore original /etc/rc.dce file without svc  mods
+#===============================================================================
+restore_rc_file() {
+
+	if [ $SAVE_LOGS = yes ]; then
+		tet_infoline "Saving ${RC_FILE} in ${RC_FILE}.svctest"
+		mv ${RC_FILE} ${RC_FILE}.svctest
+	fi
+	tet_infoline "Moving ${RC_FILE}.orig to ${RC_FILE}"
+	mv ${RC_FILE}.orig ${RC_FILE}
+
+}
+
+#===============================================================================
+# Function:	check_log_dir test_dir
+# Purpose:	Create log dir for test if it doesn't exist; clean if it does
+#===============================================================================
+check_log_dir() {
+
+TEST=$1
+	LOG_DIR=${SVC_TSTLOGDIR}/${TEST}
+	if [ ! -d ${LOG_DIR} ] ; then
+	   tet_infoline "Creating ${LOG_DIR}"
+	   mkdir -p ${LOG_DIR}
+	else
+	  tet_infoline "${LOG_DIR} exists"
+	  for comp in ${COMPS} ; do
+	    for type in FATAL ERROR WARNING NOTICE NOTICE_VERBOSE ; do
+		LOG_FILE=${LOG_DIR}/${comp}.${type}
+		if [ ${TEST} = "DBGENV" -o ${TEST} = "DBGFIL" ] ; then
+		   LOG_FILE=${LOG_DIR}/${comp}
+		fi
+		if [ -f ${LOG_FILE} ] ; then
+		  tet_infoline "${LOG_FILE} exists..."
+		  tet_infoline "  Moving to ${LOG_FILE}.old "
+		  mv -f ${LOG_FILE} ${LOG_FILE}.old
+		fi
+	    done
+	  done
+	fi
+
+}	
+
+#===============================================================================
+# Function:	check_rc_file
+# Purpose:	Make sure no previous routing info already in /etc/rc.dce
+#===============================================================================
+check_rc_file() {
+
+	grep -i svc ${RC_FILE} > /dev/null 2>&1
+	if [ $? -eq 0 ]
+	  then
+	     tet_infoline "SETUP ERROR: ${RC_FILE} already has routing info,"
+	     tet_infoline "  Rerun test with clean rc file ... exiting"
+	     return 1
+	  else
+	     tet_infoline "${RC_FILE} OK - no previous routing info"
+	     return 0
+	fi 
+}
+
+#===============================================================================
+# Function:	cleanup_log_and_routing_files test_dir
+# Purpose:	Remove svc routing files that test created and log files that 
+#		servers left after this test
+#===============================================================================
+cleanup_log_and_routing_files() {
+
+TEST=$1
+
+tet_infoline "Cleaning up log and routing files in ${TEST} dirs."
+for comp in ${COMPS} ; do
+	 
+	# Remove routing file
+	COMP_FILE="${SVC_TSTFILDIR}/${TEST}/routing.${comp}"
+	rm -f ${COMP_FILE}
+
+	for type in FATAL ERROR WARNING NOTICE NOTICE_VERBOSE ; do
+	    LOG_FILE=${SVC_TSTLOGDIR}/${TEST}/${comp}.${type}
+	    rm -f ${LOG_FILE}
+	done
+done
+
+}
+
+#===============================================================================
+# Function:	shutdown_dce
+# Purpose:	run DCE shutdown program and verify results 
+#===============================================================================
+shutdown_dce() {
+
+# Bring down DCE daemons running with SVC
+# (loop a few times, check for all daemons getting killed)
+
+tet_infoline "Shutting down DCE daemons with ${CLEAN_FILE}"
+
+case "$SYSTYPE" in
+        SNISVR4|svr4v3)
+		set -x
+		${CLEAN_FILE}
+		return 0
+		;;
+	*)
+
+        COUNT=0
+        while [ "${COUNT}" -lt "${CLEAN_WAIT}" ]
+        do
+                rm -f ${CLEAN_TEMP}
+                ${CLEAN_FILE} > ${CLEAN_TEMP} 2>&1
+                if [ ! -s ${CLEAN_TEMP} ] ; then
+                        break 
+                else
+                        COUNT=`expr ${COUNT} + 1`
+                fi
+        done
+
+        if [ "${COUNT}" -eq "${CLEAN_WAIT}" ] ; then
+                tet_infoline "Problem with running ${CLEAN_FILE}"
+		echo "Problem with running ${CLEAN_FILE}: "
+		tet_infoline "Resorting to kill -9 to stop DCE daemons"
+		for comp in ${COMPS} ; do
+     		   set_daemons_running ${comp} > /dev/null 2>&1
+		   for daemon in $RUNNING; do
+    			PID=`get_pid $daemon`
+			kill -9 $PID > /dev/null 2>&1
+		   done
+		done
+
+                cat ${CLEAN_TEMP}
+		return 1
+	else
+		tet_infoline "Successfully stopped all DCE daemons with ${CLEAN_FILE}"
+		return 0
+        fi
+	;;
+esac
+
+}
+	
+#===============================================================================
+# Function:	startup_dce
+# Purpose:	start up the dce daemons that are configured to run on this
+#		machine
+#===============================================================================
+startup_dce() {
+
+startup_failed=no
+
+case "$SYSTYPE" in
+     SNISVR4|svr4v3)
+             set -x
+             ${RC_FILE} start
+             return 0
+             ;;
+     *)
+        ${RC_FILE} > ${RC_OUT} 2> ${RC_ERR}
+        if [ -s ${RC_ERR} ] ; then
+                #Make sure it wasn't just messages about creds and dced
+                sed '/DCED listening/'d ${RC_ERR} > ${RC_ERR}.new
+                sed '/No currently established network identity/'d ${RC_ERR}.new > ${RC_ERR}
+                rm -f ${RC_ERR}.new
+                if [ -s ${RC_ERR} ] ; then
+                   tet_infoline "**** STARTUP_DCE ERROR ****"
+                   tet_infoline "Problem with starting DCE using ${RC_FILE}"
+                   echo "Problem with starting DCE using ${RC_FILE}"
+                   cat ${RC_ERR}
+                   startup_failed=yes
+                fi
+        fi
+        ;;
+esac
+}
+ 
+#===============================================================================
+# Function:	check_msg message 
+# Purpose:	Check that message exists in logfile, fail if not
+#===============================================================================
+check_msg() {
+
+MESSAGE=$1
+	grep "${MESSAGE}" ${LOG_FILE} > /dev/null 2>&1	
+	if [ $? -ne 0 ] ; then
+	    tet_infoline "FAILURE: Message:"
+	    tet_infoline "   ${MESSAGE}"
+	    tet_infoline "   missing from $LOG_FILE"
+	    fail=1
+	else
+	    tet_infoline "Message:  ${MESSAGE}"
+	    tet_infoline "   SUCCESSfully recorded in $LOG_FILE"
+	fi
+
+}
+
+#===============================================================================
+# Function:     check_dbg_file
+# Purpose:      Check that $DBG_FILE exists, fail if not
+#===============================================================================
+check_dbg_file() {
+
+	if [ -f ${DBG_FILE} ] ; then
+		tet_infoline "$DBG_FILE SUCCESSfully created"
+	else   
+		tet_infoline "FAILURE: $DBG_FILE not created"
+		fail=1
+	fi   
+}
+	
+#===============================================================================
+# Function:	set_daemons_running component
+# Purpose:	Look in /etc/rc.dce to see which daemons for this component
+#		are configured to run
+#===============================================================================
+set_daemons_running() {
+
+COMPONENT=$1
+
+case "$SYSTYPE" in
+        SNISVR4|svr4v3)
+                RUNNING=$(grep $COMPONENT /etc/default/dce)
+                ;;
+        *)
+  		RUNNING=$(grep "^daemonrunning \$DCELOCAL/bin/${COMPONENT}" /etc/rc.dce  | sed "s:daemonrunning\ \$DCELOCAL/bin/::" | awk '{print $1}')
+		;;
+esac
+
+  tet_infoline "According to $RC_FILE, the following DCE $COMPONENT daemons"
+  tet_infoline "  are configured to run on this machine:"
+  tet_infoline "$RUNNING"
+
+}
+
+#===============================================================================
+# Function:	verify_logs test_dir
+# Purpose:	Check that log files specified by test were created and
+#		servers registered startup appropriately 
+#===============================================================================
+verify_logs() {
+
+# This is where we determine if the test fails, based on whether or
+# not the logs were created according to the test specification
+# and contain the appropriate server startup messages 
+
+TEST=$1
+
+tet_infoline "Verifying logs in ${SVC_TSTLOGDIR}/${TEST}"
+
+for comp in ${COMPS} ; do
+
+#   First determine which daemons are actually running (or configured
+#   to run in /etc/rc.dce) for each component so we can check for 
+#   appropriate messages
+
+     set_daemons_running ${comp}
+
+	for type in FATAL ERROR WARNING NOTICE NOTICE_VERBOSE ; do
+	 LOG_FILE=${SVC_TSTLOGDIR}/${TEST}/${comp}.${type}
+
+	 # Don't do any checking unless at least one daemon is
+	 # running for this component
+	 if [ ${#RUNNING} -ne 0 ]; then
+
+	    if [ ! -f ${LOG_FILE} ] ; then
+	      if [ $type = "NOTICE" ] ; then
+		tet_infoline "FAILURE: $LOG_FILE not created"
+		fail=1
+	      fi
+
+	    else   #logfile exists
+
+	      tet_infoline "$LOG_FILE SUCCESSfully created"
+	      if [ $type = "NOTICE" ] ; then
+
+	      # NOTICE file should exist with startup msg 
+	      # This will be PASS/FAIL criteria
+
+
+        	case "${comp}" in
+
+                   cds)	for daemon in $RUNNING; do
+			   case "${daemon}" in
+			     cdsd)   check_msg "CDS server starting.";; 
+			     cdsadv) check_msg "CDS Advertiser Starting.";;
+			   esac
+			done
+			;;
+                   dced) check_msg "DCED is listening." 
+			;;
+                   sec)	for daemon in $RUNNING; do
+			   case "${daemon}" in
+			     secd) check_msg "Startup completed";; 
+			   esac
+			done
+			;;
+		# For dts only dtsd has SVC code points, and it should
+		# always be running
+                   dtsd) check_msg "Startup completed";; 
+        	esac
+
+	      fi  #type = NOTICE
+	    fi   #logfile exists
+	 fi  #not RUNNING
+
+	done # for type 
+done # for component 
+
+}
+
+
+#===============================================================================
+# Function:	verify_debug_logs test_dir
+# Purpose:	Check that deubg log files specified by test were created and
+#		debug msgs registered appropriately 
+#===============================================================================
+verify_debug_logs() {
+
+# This is where we determine if the test fails, based on whether or
+# not the logs were created according to the test specification
+# and contain the appropriate debug messages 
+
+TEST=$1
+
+tet_infoline "Verifying debug logs in ${SVC_TSTLOGDIR}/${TEST}"
+
+for comp in ${COMPS} ; do
+
+#   First determine if any daemons are actually running (or configured
+#   to run in /etc/rc.dce) for each component so we can check for 
+#   debug logs only if that daemon is running
+
+        set_daemons_running ${comp}
+
+	DBG_FILE=${SVC_TSTLOGDIR}/${TEST}/${comp}
+
+	 # Don't do any checking unless at least one daemon is
+	 # running for this component
+	 if [ ${#RUNNING} -ne 0 ]; then
+
+		check_dbg_file
+
+	 fi 
+
+done # for component 
+
+}
+
+get_pid() {
+
+PROG=$1
+
+host_platform=`uname 2>/dev/null`        #Local host platform type
+case $host_platform in
+    HP-UX)
+        export PSARGS="-eaf"
+	pid=`ps $PSARGS | grep $PROG | grep -v grep | awk '{ print \$2 }'`
+        ;;
+    AIX)
+        export PSARGS="ax"
+	pid=`ps $PSARGS | grep $PROG | grep -v grep | awk '{ print \$1 }'`
+        ;;
+    OSF1)
+        export PSARGS="ax"
+	pid=`ps $PSARGS | grep $PROG | grep -v grep | awk '{ print \$1 }'`
+        ;;
+    *)  echo "ERROR: Platform type of `uname -n` not recognized.  "
+	tet_infoline "ERROR: Platform type of `uname -n` not recognized."
+	tet_infoline "... Can't get pid"
+        return -1
+        ;;
+    esac
+
+echo $pid
+
+}

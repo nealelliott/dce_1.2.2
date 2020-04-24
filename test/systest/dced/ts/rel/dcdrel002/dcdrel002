@@ -1,0 +1,152 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: dcdrel002,v $
+# Revision 1.1.4.2  1996/03/11  02:38:25  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:05:21  marty]
+#
+# Revision 1.1.4.1  1995/12/11  21:55:39  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/jrr_1.2_mothra/1  1995/11/30  20:12 UTC  bell_d
+# 	Debugged version
+# 	[1995/12/11  20:55:37  root]
+# 
+# Revision 1.1.2.2  1994/09/30  21:57:09  fadden
+# 	No changes.
+# 	[1994/09/30  21:53:04  fadden]
+# 
+# Revision 1.1.2.1  1994/07/27  19:26:28  fadden
+# 	Initial version
+# 	[1994/07/26  23:54:26  fadden]
+# 
+# $EndLog$
+#
+#   TEST_NAME: dcdrel002
+#
+#   COMPONENT_NAME: dce.systest
+#
+#   FUNCTIONS: See ./dcdrel.functions
+#
+#   FILES: 
+#	  
+#        
+#      
+#     
+#
+#   REQUIREMENTS:
+#      Threads, rpc, cds, security 
+#
+#   RESTRICTIONS:
+#      None
+#
+#   DESCRIPTION:
+#	This is the shell script for the dcdrel002 test case.  It does the
+#	following:
+#           1) TBD
+################################################################################
+
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="dcdrel002"
+testlist="$ic1"
+
+startup ()
+{
+	# INITIALIZE VARIABLES
+	CLIENT_MACHINES=${CLIENT_MACHINES:-$(dcecp -c "directory list -dir -simple /.:/hosts")}
+	(( $? )) && { del_test_purp $testlist; return; }
+	export CLIENT_MACHINES
+
+#CLIENT_MACHINES=${CLIENT_MACHINES:-`uname -n`}
+#export CLIENT_MACHINES
+
+        EXEC_DIR="/tmp/dced/dcdrel002"
+        CURRDIR=$(/bin/pwd)
+        export EXEC_DIR CURRDIR
+
+	tet_infoline "startup ... STTMPDIR: ${STTMPDIR}"
+	echo "startup ... STTMPDIR: ${STTMPDIR}"
+
+        export TCDIR="$TET_ROOT/dced/ts/rel"
+        tet_infoline "test case dir is ${TCDIR}"
+	echo "test case dir is ${TCDIR}"
+
+	export BINDIR="$TET_ROOT/dced/ts/dcdrel002"
+
+	export LOCAL_HOST=`hostname`
+
+	tet_infoline "TEST MACHINES: ${CLIENT_MACHINES}"
+	echo "TEST MACHINES: ${CLIENT_MACHINES}"
+
+        HOSTLIST=""
+	ping_hosts
+
+        if [ -n "${HOSTLIST}" ];then
+            for RHOST in ${HOSTLIST}; do
+                if [ "${RHOST}" != `uname -n` ]; then
+                    ${RSH_COMM} ${RHOST} "cd ${BINDIR}; \
+                        if [ ! -d ${EXEC_DIR} ];then mkdir -p ${EXEC_DIR};fi ; \
+                        cp dcdrel002_client dcdrel002_server dcdrel002.tcl ${EXEC_DIR};"
+                else
+                    if [ ! -d ${EXEC_DIR} ];then mkdir -p ${EXEC_DIR};fi
+			cp dcdrel002_client dcdrel002_server dcdrel002.tcl ${EXEC_DIR}
+                fi
+            done
+	fi
+	RC=0
+
+}
+
+dcdrel002 ()
+{
+
+	start_rel002 
+        tet_infoline "Attempted to start a dcdrel002 test script on each node"
+	echo "Completed starting test scripts on all nodes"
+
+	wait_for_done
+        tet_infoline "Test scripts done on all nodes"
+
+	check_results_002 ${STTMPDIR}/dcdrel002.results
+        tet_infoline "Completed processing log files"
+	echo "Completed processing log files"
+
+  	if [[ -s ${STTMPDIR}/dcdrel002.results ]] 
+  	then
+      		tet_result FAIL
+      		tet_infoline "Summary results were as follows:"
+      		infofile "${STTMPDIR}/dcdrel002.results" "results: "
+  	else
+      		tet_result PASS
+  	fi
+}
+
+cleanup ()
+{
+        for RHOST in ${HOSTLIST}; do
+            if [ "${RHOST}" = $(uname -n) ]; then
+               tet_infoline "NOT removing ${STTMPDIR}/dcdrel*"
+#              rm ${STTMPDIR}/dcdrel*
+            else
+                ${RSH_COMM} ${RHOST} "rm ${STTMPDIR}/dcdrel*"
+            fi
+        done
+	return
+}
+
+# tcc will fail if these files don't exist and get sourced
+# so there is no need to check that this happens
+
+. $TET_ROOT/profile.dcest
+. $TET_ROOT/dced/ts/common_functions
+. $TET_ROOT/dced/ts/dcdrel.functions
+. $TCM

@@ -1,0 +1,748 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dcecdsrep.functions,v $
+# Revision 1.1.2.2  1996/03/09  20:50:43  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:28:46  marty]
+#
+# Revision 1.1.2.1  1995/12/11  21:57:02  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:55 UTC  bell_d
+# 	Many changes by others
+# 	[1995/12/11  20:56:50  root]
+# 
+# Revision 1.1.4.3  1993/08/27  18:08:34  giza
+# 	bug fixes in authorization & timing
+# 	[1993/08/27  18:05:11  giza]
+# 
+# Revision 1.1.4.2  1993/07/09  11:27:13  root
+# 	Initial King Kong branch
+# 	[1993/07/09  11:26:46  root]
+# 
+# Revision 1.1.2.2  1993/04/23  14:41:30  giza
+# 	new test addition
+# 	[1993/04/22  18:38:49  giza]
+# 
+# $EndLog$
+# Function:	getServer() returns the ip hostname of the CDS server and the
+#               CDS client for the cell.
+getServer()
+{
+        (( $CDS_TRACE > 2 )) && {
+                infoLine "********************* $0 *********************"
+                set -x
+        }
+
+        trap 'trapSig 40' INT KILL TERM QUIT
+
+        integer status=0 n=0 pid=0
+        export CDSCLIENT="`/bin/hostname`"
+
+        # let's get the name of the CDS server that we will use
+        #
+        infoLine "********************* Getting CDS server name and address for DCE cell $(getcellname)  *********************"
+        taddr=`cdscp show cell /.: | awk -F= '{
+	        if (i > 0 && NR == 9) {
+		        printf("%s\n", $2)
+		        i--
+	        }
+	        if (NR == 7)
+		        if ($2 == "   Master  ")
+			        i++
+	        }' | awk -F: '{ printf("%s\n", $2) }'`
+
+        if [[ $taddr != "" ]]
+	then
+	        ipaddr=${taddr%%\[*}
+	else
+	        infoLine "$0:cdscp show cell /.: failed! check operation of this cell."
+                status=40
+	fi
+
+	tmp=`ypmatch ${taddr%%\[*} hosts.byaddr` 1>/dev/null 2>&1
+        status=$?
+	if (( ! $status ))
+        then
+                CDSSERVER=`print $tmp | awk '{ printf("%s\n", $2) }'`
+        else
+		tmp=`awk -v foo=${taddr%%\[*} '{ if (match($1,foo)&&(length(foo)==length($1))) { print $2; exit; } }' /etc/hosts`
+                status=$?
+	        (( $status )) && {
+		        infoLine "$0:hostname for $ipaddr unobtainable from DNS, NIS or $hosts database"
+                        status=40
+		}
+	        CDSSERVER=${tmp%%\.*}
+	fi
+        return $status
+}
+
+# Funtion:      parseCmdLine() parses command line arguments for test run options
+#
+parseCmdLine()
+{
+
+        trap 'trapSig 40' INT KILL TERM QUIT
+
+        integer n=0 i=0
+
+        set -- `getopt c:D:d:i:m:r:R:O:o:a:T:t:v: $@` >>$SPOOLFILE 2>&1
+        if (( $? ))
+        then
+		usage
+                exit 1
+        fi
+
+        while :;
+        do
+                case $1 in
+
+                        -c)     CHECK="$2"
+                                shift 2
+                                ;;
+
+                        -D)     NDIR="$2"
+                                shift 2
+                                ;;
+
+                        -d)     DIR_BASENAME="$2"
+                                shift 2
+                                ;;
+
+                        -i)     ITERATIONS="$2"
+                                shift 2
+                                ;;
+
+                        -m)     MASTER_CH="$2"
+                                shift 2
+                                ;;
+
+                        -r)     REPLICA_CH_BASE="$2"
+                                shift 2
+                                ;;
+
+                        -R)     RETRYS="$2"
+                                shift 2
+                                ;;
+
+                        -O)     NOBJ="$2"
+                                shift 2
+                                ;;
+
+                        -o)     OBJ_BASENAME="$2"
+                                shift 2
+                                ;;
+
+                        -a)     print $2 | awk -F, '{ 
+                                                        for ( i=1; i<=NF; i++ ) printf("%s\n", $i)  }' |\
+                                                 awk -F= '{ 
+                                                        for ( i=1; i<=NF; i++ ) printf("%s\n", $i)  }' > /tmp/cdsrep.attr
+
+                                for ele in `while read -r line; do print $line; done < /tmp/cdsrep.attr`
+                                do
+                                        (( $n <= $i )) && 
+                                                ATTR_NAME[$n]=$ele
+
+                                        (( $n > $i )) && {
+                                                ATTR_VALUE[$i]=$ele
+                                                i=n
+                                                n=n-1
+                                        }
+                                        n=n+1
+                                done
+
+                                export NATTR=`wc -l </tmp/cdsrep.attr`/2
+
+                                (( $NATTR%2 )) &&
+                                        usage
+                                shift 2
+                                ;;
+
+                        -T)     CDS_TRACE="$2"
+                                shift 2
+                                ;;
+
+                        -t)     NMIN="$2"
+                                shift 2
+                                ;;
+
+                        -v)     VFLAG="$2"
+                                shift 2
+                                ;;
+
+                        --)     shift
+                                break
+                                ;;
+
+                esac
+        done
+}
+
+
+# Function:	checkCDS( entity, [cell|clearinghouse|directory|object] ) See CDS Control Program
+#               (cdscp) man page for details.
+#
+#		checks validity of object, directory, or cell specified by $1
+checkCDS()
+{
+	(( $CDS_TRACE > 2 )) && {
+                infoLine "********************* $0 *********************"
+		set -x
+        }
+        
+        trap 'trapSig 40' INT KILL TERM QUIT
+
+	integer status=0
+
+        (( ! $CHECK )) &&
+                return $status
+
+        case $1 in
+
+           cell )
+
+                (( $VFLAG > 3 )) &&
+                        print "Checking cell $2" 1>>$CDSCPLOG 2>&1
+                cdscp show $1 $2 1>>$CDSCPLOG 2>&1
+                (( $? )) && {
+                        print "$0:cdscp show $1 $2 failed!" 1>>$CDSCPLOG 2>&1
+                        status=40
+                }
+                status=0
+                ;;
+
+           clearinghouse )
+
+                (( $VFLAG > 3 )) &&
+                        print "Checking clearinghouse $2" 1>>$CDSCPLOG 2>&1
+                cdscp show $1 $2 1>>$CDSCPLOG 2>&1
+                (( $? )) && {
+                        print "$0:cdscp show $1 $2 failed!" 1>>$CDSCPLOG 2>&1
+                        status=40
+                }
+                status=0
+                ;;
+                
+           directory )
+
+                (( $VFLAG > 3 )) &&
+                        print "Checking directory $2" 1>>$CDSCPLOG 2>&1
+                cdscp show $1 $2 1>>$CDSCPLOG 2>&1
+                (( $? )) && {
+                        print "$0:cdscp show $1 $2 failed!" 1>>$CDSCPLOG 2>&1
+                        status=40
+                }
+                status=0
+                ;;
+
+           object )
+
+                (( $VFLAG > 3 )) &&
+                        print "Checking object $2" 1>>$CDSCPLOG 2>&1
+                cdscp show $1 $2 1>>$CDSCPLOG 2>&1
+                (( $? )) && {
+                        print "$0:cdscp show $1 $2 failed!" 1>>$CDSCPLOG 2>&1
+                        status=40
+                }
+                status=0
+                ;;
+        esac
+        return $status
+}
+
+
+# Function:     delRepDir ()
+#               delete replica clearinghouses.
+delRepCH()
+{
+        (( $CDS_TRACE > 3 )) && {
+                infoLine "********************* $0 *********************"
+                set -x
+        }
+
+        trap '' INT KILL TERM QUIT
+
+        integer status=0
+
+        fillTables
+
+        infoLine "Deleting replica clearinghouse $REPLICA_CH"
+        
+        checkCDS clearinghouse $REPLICA_CH
+        status=$?
+        (( ! $status )) && {
+                if [[ "$CDSSERVER" = "$CDSCLIENT" ]]
+                then
+                        cdscp delete clearinghouse $REPLICA_CH 1>>$CDSCPLOG 2>&1
+                else
+			if [[ `uname` = "HP-UX" ]]
+			then
+                        	remsh $CDSSERVER -n "/tet/tools/su.dce cell_admin -p -dce- -c 'cdscp delete clearinghouse $REPLICA_CH'" 1>>$CDSCPLOG 2>&1
+			else
+                        	rsh $CDSSERVER  "/tet/tools/su.dce cell_admin -p -dce- -c 'cdscp delete clearinghouse $REPLICA_CH'" 1>>$CDSCPLOG 2>&1
+			fi
+
+                fi
+
+                (( $? )) && {
+                        infoLine "$0: WARNING: Unable to delete replica clearinghouse $REPLICA_CH, manual cleanup required!"
+                        list
+                        status=40
+                }
+        }
+        
+        cdscp set directory /.: to skulk 1>>$CDSCPLOG 2>&1
+        return $status
+}
+        
+        
+# Function:     delObj ()
+#               delete CDS objects.
+delObj()
+{
+        (( $CDS_TRACE > 3 )) && {
+                infoLine "********************* $0 *********************"
+                set -x
+        }
+        
+        trap '' INT KILL TERM QUIT
+        
+        integer i=0 j=0 status=0
+        last=""
+        
+        fillTables
+
+        infoLine "Deleting ${#CDS_OBJECT[*]} object entries for each directory."
+        
+        while (( $i < ${#CDS_DIRECTORY[*]} && ! $status ))
+        do
+                j=0
+                while (( $j < ${#CDS_OBJECT[*]} && ! $status ))
+                do
+                        checkCDS object ${CDS_DIRECTORY[$i]}/${CDS_OBJECT[$j]}
+                        status=$?
+                        (( ! $status )) && {
+                                cdscp delete object ${CDS_DIRECTORY[$i]}/${CDS_OBJECT[$j]} 1>>$CDSCPLOG 2>&1
+                                (( $? )) && {
+                                        infoLine "$0: WARNING: Unable to delete $last, manual cleanup required!"
+                                        list
+                                        status=41
+                                }
+                        }
+                        last=${CDS_DIRECTORY[$i]}/${CDS_OBJECT[$j]}
+                        j=j+1
+                done
+                i=i+1
+        done
+        return $status
+}
+        
+# Function:     delDir ()
+#               delete CDS directories.
+delDir()
+{
+        (( $CDS_TRACE > 3 )) && {
+                infoLine "********************* $0 *********************"
+                set -x
+        }
+        
+        trap '' INT KILL TERM QUIT
+        
+        integer i=0 status=0
+        last=""
+        
+        fillTables
+
+        infoLine "Deleting ${#CDS_DIRECTORY[*]} directory entries"
+        
+        while (( $i < ${#CDS_DIRECTORY[*]} && ! $status ))
+        do
+                checkCDS directory ${CDS_DIRECTORY[$i]}
+                status=$?
+                (( ! $status )) && {
+                        cdscp delete directory ${CDS_DIRECTORY[$i]} 1>>$CDSCPLOG 2>&1
+                        (( $? )) && {
+                                infoLine "$0: WARNING: Unable to delete $last, manual cleanup required!"
+                                list
+                                status=41
+                        }
+                }
+                last=${CDS_DIRECTORY[$i]}
+                i=i+1
+        done
+        return $status
+}
+        
+# Function:     list ()
+#               get CDS info.
+list()
+{
+        (( $CDS_TRACE > 3 )) &&
+                set -x
+        
+        cdscp list clear /.:/*
+        cdscp list dir /.:/*
+        [[ "$1" != "" ]] &&
+                cdscp list obj $1/*
+}
+                
+# Function:	modCH( action, clearinghouse, type )
+#		creates or deletes a clearinghouse
+modCH()
+{
+	(( $CDS_TRACE > 2 )) && {
+                infoLine "********************* $0 *********************"
+		set -x
+        }
+
+        trap 'trapSig 40' INT KILL TERM QUIT
+
+	integer status=0
+
+        (( $VFLAG > 3 )) &&
+        	infoLine "${1%e}ing $3 clearinghouse $2"
+	if [[ "$CDSSERVER" = "$CDSCLIENT" ]]
+	then
+		cdscp $1 clearinghouse $2 1>>$CDSCPLOG 2>&1
+	else
+		if [[ `uname` = "HP-UX" ]]
+		then
+			remsh $CDSSERVER -n "/tet/tools/su.dce cell_admin -p -dce- -c 'cdscp $1 clearinghouse $2'" 1>>$CDSCPLOG 2>&1
+		else
+			rsh $CDSSERVER  "/tet/tools/su.dce cell_admin -p -dce- -c 'cdscp $1 clearinghouse $2'" 1>>$CDSCPLOG 2>&1
+		fi
+	fi
+
+        (( $? )) && {
+        	infoLine "$0:Unable to $1 $3 clearinghouse $2"
+                status=40
+        }
+
+        # we have to keep track of the "cleared" clearinghouse just in case we
+        # incur an exception and have to run cleanUp()
+        if [[ "$1" = "clear" ]]
+        then
+                print $2 > $DATADIR/cleared
+           else
+                [[ -r $DATADIR/cleared ]] &&
+                        rm $DATADIR/cleared
+        fi
+
+        return $status
+                
+}
+
+
+# Function:	modDir( action, directory path )
+#		creates or deletes directory
+modDir()
+{
+	(( $CDS_TRACE > 2 )) && {
+                infoLine "********************* $0 *********************"
+		set -x
+        }
+
+        trap 'trapSig 40' INT KILL TERM QUIT
+
+	integer status=0
+
+        (( $VFLAG > 2 )) &&
+                infoLine "${1%e}ing directory $2"
+        cdscp $1 directory $2 1>>$CDSCPLOG 2>&1
+        (( $? )) && {
+                infoLine "$0:Unable to $1 directory $2"
+                status=40
+        }
+        return $status
+}
+
+
+# Function:	modObj( action, object path, attribute, value )
+#		creates or deletes object specified by $2, or adds 
+#               attribute/value pairs to objects.
+modObj()
+{
+	(( $CDS_TRACE > 2 )) && {
+                infoLine "********************* $0 *********************"
+		set -x
+        }
+
+        trap 'trapSig 40' INT KILL TERM QUIT
+
+        integer status=0
+
+        case $1 in
+
+           "create"|"delete" )
+                (( $VFLAG > 3 )) &&
+                        infoLine "${1%e}ing object $2"
+                cdscp $1 object $2 1>>$CDSCPLOG 2>&1 &
+                (( $? )) && {
+                        infoLine "$0:Unable to $1 object $2"
+                        status=40
+                }
+                ;;
+
+           "add" )
+                (( $VFLAG > 3 )) &&
+                        infoLine "$1ing attribute $3, value $4 to $2"
+                # whatever you do, don't remove the spaces between the "$3 = $4"
+                cdscp $1 object $2 $3 = $4 1>>$CDSCPLOG 2>&1
+                (( $? )) && {
+                        infoLine "$0:Unable to add attribute $3 value $4 to $2"
+                        status=40
+                }
+                ;;
+        esac
+        return $status
+}
+
+
+# Function:	modRep( action, directory, clearinghouse )
+#		creates or deletes a directory replica specified by $2 
+#               in clearinghouse specified by $3
+modRep()
+{
+	(( $CDS_TRACE > 2 )) && {
+                infoLine "********************* $0 *********************"
+		set -x
+        }
+
+        trap 'trapSig 40' INT KILL TERM QUIT
+
+        integer status=0
+
+        (( $VFLAG > 1 )) &&
+                infoLine "${1%e}ing a replica of directory $2 in clearinghouse $3"
+        cdscp $1 replica $2 clearinghouse $3 1>>$CDSCPLOG 2>&1
+        (( $? )) && {
+                infoLine "$0:Unable to $1 a replica of $2 in clearinghouse $3"
+                status=40
+        }
+        return $status
+}
+
+
+# Function:	skulk()
+# 		Sets the CDS directory specified by $1 to skulk.  Minor skulk failures
+#               are not considered fatal, but may incur other side effects and will be
+#               considered as a warning
+skulk()
+{
+	(( $CDS_TRACE > 2 )) && {
+                infoLine "********************* $0 *********************"
+		set -x
+        }
+
+        trap 'trapSig 40' INT KILL TERM QUIT
+
+        integer status=0 s_status=0
+
+        (( $VFLAG > 2 )) &&
+        	infoLine "Skulking directory $1"
+	cdscp set directory $1 to skulk 1>>$CDSCPLOG 2>&1
+        (( $? )) && {
+                status=40
+        	infoLine "$0:Unable to skulk $1"
+                checkCDS directory $1
+        }
+        return $status
+}
+
+
+# Function:	getObjAttr(clearinghouse, noiterate, nattributes)
+#		Read attribute from object in specified clearinghouse to verify value
+#		NOTE: all show commands for objects do NOT use wildcards since the
+#		enumeration of the attributes is not guaranteed to come from the cdscp
+#		preferred clearinghouse
+getObjAttr()
+{
+
+	(( $CDS_TRACE > 2 )) && {
+                infoLine "********************* $0 *********************"
+		set -x
+        }
+
+        trap '' INT KILL TERM QUIT
+
+        integer i=0 j=0 n=0 t=0 found=0 status=0 _ndir=1 _nobj=1 _nattr=$3
+
+        fillTables
+
+        (( ! $2 )) && {
+                _ndir=${#CDS_DIRECTORY[*]}
+                _nobj=${#CDS_OBJECT[*]}
+        }
+
+        # Let's do it!
+        #
+        (( $VFLAG > 1 )) &&
+        	infoLine "Setting preferred clearinghouse to $1"
+	cdscp set cdscp preferred clearinghouse $1 1>>$CDSCPLOG 2>&1
+        (( $? )) &&
+                infoLine "$0:Unable to set preferred clearinghouse to $1, results cannot be guaranteed"
+        trap 'trapSig 40' INT KILL TERM QUIT
+
+        (( $VFLAG > 1 )) &&
+                infoLine "Getting $_nattr attributes from $_nobj objects in $_ndir directories."
+        while (( $i < $_ndir ))
+        do
+                j=0
+                while (( $j < $_nobj ))
+                do
+                        n=0 t=0
+                        while (( $n < $_nattr ))
+                        do
+                                (( $VFLAG > 3 )) &&
+        				infoLine "Checking object ${CDS_DIRECTORY[$i]}/${CDS_OBJECT[$j]} attribute ${ATTR_NAME[$n]} for assigned value of ${ATTR_VALUE[$n]}"
+
+				set -A value `cdscp show object ${CDS_DIRECTORY[$i]}/${CDS_OBJECT[$j]} ${ATTR_NAME[$n]} 2>&1 | grep = | awk '{printf("%s\n%s\n", $1, $3)}'`
+
+			        (( ! $status )) && {
+                                        while (( $t < ${#value[*]} ))
+                                        do
+                                                if [[ ${value[$t]} != ${ATTR_NAME[$n]} ]]
+                                                then
+                                                        t=t+2
+                                                else
+                			        	if [[ ${value[$(($t+1))]} = ${ATTR_VALUE[$n]} ]]
+                                                        then
+                                                                found=1
+                                                                break
+                                                        else
+                                                                t=t+2
+                                                        fi
+                                                fi
+                                        done
+                                        (( ! found )) && {
+		        		        infoLine "$0:Attribute ${ATTR_NAME[$n]} unexpected value from clearinghouse $1"
+			        		infoLine "$0:Expected ${ATTR_VALUE[$n]}, received ${value[$n]}"
+			                        status=status+1
+                                        }
+			        }
+                                n=n+1
+                        done
+                        j=j+1
+                done
+                i=i+1
+        done
+
+        # set preferred clearinghouse back to the master
+        #
+        trap '' INT KILL TERM QUIT
+        (( $VFLAG > 2 )) &&
+        	infoLine "Setting preferred clearinghouse back to master clearinghouse $1"
+	cdscp set cdscp preferred clearinghouse $MASTER_CH 1>>$CDSCPLOG 2>&1
+        (( $? )) &&
+                infoLine "$0:Unable to set preferred clearinghouse back to $1, results are undefined"
+        trap 'trapSig 40' INT KILL TERM QUIT
+        return $status
+}
+
+
+# Function:	trapSig( signal )
+#               wrapper for cleanUp to detect user signal
+trapSig()
+{
+        (( $CDS_TRACE > 2 )) && {
+                infoLine "********************* $0 *********************"
+                set -x
+        }
+
+	print $1 >$DATADIR/usersig
+        cleanUp $1
+        tet_abandon $1
+}
+
+
+# Function:	infoLine( text )
+#               wrapper for tet_infoline to allow verbosity setting
+infoLine()
+{
+        if (( $VFLAG ))
+        then
+                print "$1"
+                tet_infoline "$1"
+        else
+                tet_infoline "$1"
+        fi
+}
+
+
+# Function:	fillTables()
+#               to read dynamic test data for each iteration of the test
+fillTables()
+{
+        (( $CDS_TRACE > 2 )) && {
+                infoLine "********************* $0 *********************"
+                set -x
+        }
+
+        trap 'trapSig 40' INT KILL TERM QUIT
+
+        integer i=0 n=0
+        set -A CDS_DIRECTORY
+        set -A CDS_OBJECT
+        set -A ATTR_NAME
+        set -A ATTR_VALUE
+
+        # kludge for TET because it does everything in a subshell we lose our data.
+        #
+        [[ -r $DATADIR/cdsDirs ]] && {
+                for ele in `while read -r line; do print $line; done < $DATADIR/cdsDirs`
+                do
+                        CDS_DIRECTORY[$i]=$ele
+                        i=i+1
+                done
+        }
+
+        [[ -r $DATADIR/cdsObjs ]] && {
+                i=0
+                for ele in `while read -r line; do print $line; done < $DATADIR/cdsObjs`
+                do
+                        CDS_OBJECT[$i]=$ele
+                        i=i+1
+                done
+        }
+
+        [[ -r $DATADIR/cdsAttrs ]] && {
+                i=0 n=0
+                for ele in `while read -r line; do print $line; done < $DATADIR/cdsAttrs`
+                do
+                        (( $n <= $i )) && 
+                                ATTR_NAME[$n]=$ele
+
+                        (( $n > $i )) && {
+                                ATTR_VALUE[$i]=$ele
+                                i=n
+                                n=n-1
+                        }
+                        n=n+1
+                done
+        }
+}
+
+
+# Function:	roundUp( integer )
+#               for timed iterations, rounds integers to nearest division of 10
+roundUp()
+{
+        (( $CDS_TRACE > 2 )) && {
+                infoLine "********************* $0 *********************"
+                set -x
+        }
+
+        trap 'trapSig 40' INT KILL TERM QUIT
+
+        integer n=$1
+
+        (( $(($n % 10)) >= 5 )) &&
+                n=n+5
+
+        Ot=$(( ($n-($n%10))/10 ))
+}

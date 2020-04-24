@@ -1,0 +1,187 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for 
+# the full copyright text.
+#
+# HISTORY
+# $Log: test2,v $
+# Revision 1.1.6.1  1996/10/17  18:24:12  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:52:17  damon]
+#
+# Revision 1.1.2.2  1994/08/22  16:16:39  maunsell_c
+# 	added rf=$? in a few cases where it got left out
+# 	[1994/08/22  16:15:10  maunsell_c]
+# 
+# 	enhance for better functional coverage
+# 	[1994/08/10  19:20:06  maunsell_c]
+# 
+# Revision 1.1.2.1  1994/07/28  17:38:49  mckeen
+# 	Initial Revision
+# 	[1994/07/28  14:10:39  mckeen]
+# 
+# $EndLog$
+
+###############################################################################
+# This test is applicable to DFS/NFS exporter.
+# The script tests dfsgwd
+###############################################################################
+#
+# if not run via the runtests script use
+#         test2 >test2.log 2>&1
+# to log test data
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+rc=0
+ty=dfsgwd
+PSARGS=${PSARGS:--e}                    # use "ps -e"  #PORT#
+HEADING=`ps ${PSARGS} | head -1`        # generating region info from
+where=`expr "$HEADING" : "\(.* PID \)"` # ps output to find where to
+PIDEND=`expr length "$where"`           # get process id from
+PIDSTART=`expr $PIDEND - 5`             # PIDSTART = start of field
+CUT_LINE="cut -c${PIDSTART}-${PIDEND}"  # PIDEND = end of field
+
+###############################################################################
+echo ""
+echo "RUNNING dfsgwd SERVER on $hn."
+echo "========================================================================="
+date
+echo ""
+###############################################################################
+echo ""
+echo "dfsgwd -junk"
+dfsgwd -junk
+rf=$?
+if test $rf -eq 0
+   then echo "worked ($rf) ($p: E1)"
+   rc=`expr rc + 1`
+fi
+
+echo ""
+echo "dfsgwd -service "
+dfsgwd -service 
+rf=$?
+if test $rf -eq 0
+   then echo "worked ($rf) ($p: E2)"
+   rc=`expr $rc + 1`
+fi
+
+echo ""
+echo "dfsgwd -file "
+dfsgwd -file
+rf=$?
+if test $rf -eq 0
+   then echo "worked ($rf) ($p: E3)"
+   rc=`expr $rc + 1`
+fi
+
+# will startup using default service
+echo ""
+echo "dfsgwd -service junk &"
+dfsgwd -service junk &
+rf=$?
+if test $rf -ne 0
+   then echo "failed ($rf) ($p: E4)"
+   rc=`expr $rc + 1`
+fi
+
+PID=`ps -e | grep "dfsgwd" | ${CUT_LINE}`
+if [ -x "$PID" ]
+   then echo "dfsgwd process not running"
+        echo "test aborting... "
+        rc=`expr $rc + 1`
+        exit $rc
+fi
+
+# already got one running, this one shouldn't start
+echo ""
+echo "dfsgwd -service junk &"
+dfsgwd -service junk &
+rf=$?
+if test $rf -ne 0
+   then echo "worked ($rf) ($p: E5)"
+   rc=`expr $rc + 1`
+fi
+
+echo ""
+echo "kill dfsgwd process $PID"
+kill $PID
+if [ $? -ne 0 ]
+   then echo "kill $PID failed ($rf) $p: E6)"
+        rc=`expr $rc + 1`
+fi
+sleep 10
+
+touch /opt/dcelocal/var/dfs/adm/JunkLog
+chmod -w /opt/dcelocal/var/dfs/adm/JunkLog
+echo ""
+echo "/opt/dcelocal/bin/dfsgwd -file /opt/dcelocal/var/dfs/adm/JunkLog -verbose &"
+/opt/dcelocal/bin/dfsgwd -file /opt/dcelocal/var/dfs/adm/JunkLog -verbose &
+rf=$?
+if test $rf -ne 0
+   then echo "failed ($rf) ($p: E7)"
+   rc=`expr $rc + 1`
+fi
+sleep 10
+
+PID=`ps -e | grep dfsgwd | ${CUT_LINE}`
+if [ -x "$PID" ]
+   then echo "dfsgwd process not running"
+        echo "test aborting... "
+        rc=`expr $rc + 1`
+        exit $rc
+fi
+
+echo ""
+echo "kill dfsgwd process $PID"
+kill $PID
+if [ $? -ne 0 ]
+   then echo "kill $PID failed ($rf) $p: E8)"
+        rc=`expr $rc + 1`
+fi
+sleep 10
+
+echo ""
+echo "/opt/dcelocal/bin/dfsgwd -service dlog  -file /opt/dcelocal/var/dfs/adm/DrasLog -verbose &"
+/opt/dcelocal/bin/dfsgwd -service dlog -file /opt/dcelocal/var/dfs/adm/DrasLog -verbose &
+rf=$?
+if test $rf -ne 0
+   then echo "failed ($rf) ($p: E9)"
+   rc=`expr $rc + 1`
+fi
+sleep 10
+
+PID=`ps -e | grep dfsgwd | ${CUT_LINE}`
+if [ -x "$PID" ]
+   then echo "dfsgwd process not running"
+        echo "test aborting... "
+        rc=`expr $rc + 1`
+        exit $rc
+fi
+sleep 10
+
+echo ""
+echo "kill dfsgwd process $PID"
+kill $PID
+if [ $? -ne 0 ]
+   then echo "kill $PID failed ($rf) $p: E10)"
+        rc=`expr $rc + 1`
+fi
+sleep 10
+########################################
+
+echo ""
+echo "Done at `date`."
+echo ""
+if [ $rc -eq  0 ]
+then
+   echo "$ty/$p PASSED"
+else
+   echo "$ty/$p FAILED $rc errors"
+fi
+exit $rc

@@ -1,0 +1,192 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: CRASH_README,v $
+# Revision 1.1.11.1  1996/10/17  18:37:53  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:58:29  damon]
+#
+# Revision 1.1.6.1  1994/02/04  20:48:04  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:25:53  devsrc]
+# 
+# Revision 1.1.4.1  1994/01/28  20:44:47  annie
+# 	expand OSF copyright
+# 	[1994/01/28  20:42:55  annie]
+# 
+# Revision 1.1.2.2  1993/01/28  21:38:12  shl
+# 	Transarc delta: comer-ot6740-link-lfs-and-dfs-zlc-lists 1.3
+# 	  Selected comments:
+# 	    This delta links the LFS ZLC list with the DFS ZLC handler.  Now, the
+# 	    attach code queries the filest for ZLC files.  Each returned vnode is
+# 	    passed to the DFS ZLC handler.  If the fileset is replicated, the
+# 	    vnode waits 105 minutes to give the file exporter time to get going
+# 	    and to give the replication mechanism time to get going.  If not, the
+# 	    vnode is kept on the DFS ZLC list but no tokens are requested until
+# 	    the TSR recovery period is over.  If the PX is never started, the
+# 	    vnodes will time out after 15 minutes.
+# 	    The code to query a fileset for ZLC files was implemented as a new VOL
+# 	    op (VOL_GETZLC).  The ability to tell whether a fileset is replicated
+# 	    was implemented by adding a bit to the volume states structure that is
+# 	    maintained by fts addsite and rmsite.
+# 	    Describes tests.
+# 	    Wasn't handling the case where -notsr was set.
+# 	    Cleaned up the interface a bit so that it would react when the
+# 	    PX comes out of TSR recovery.  Also, a file from a replicated
+# 	    fileset waits 90 minutes from the end of TSR recovery.
+# 	    Updated testing procedure.
+# 	[1993/01/27  23:41:32  shl]
+# 
+# $EndLog$
+
+INTRODUCTION:
+
+The DFS ZLC code also works with the LFS ZLC code to support token
+state recovery for zero-linkcount files after a crash.  Because this
+involves a crash, the testing is done manually.  Like the other TSR
+tests, it requires a two machine cell.
+
+Before outlining the test, a description of what happens on reboot is
+in order.  When a fileset is attached, the attach code calls (through
+a VOL op) file system code that returns vnodes from the file system's
+ZLC list (which is currently only provided by Episide).  The attach
+code calls the DFS ZLC handler routine for each of these vnodes.
+The DFS ZLC code is called in one of two different ways depending on
+whether or not the fileset is replicated.  If the fileset is
+replicated, the vnode needs to be held for 90 minutes (after the TSR
+period is over) so that the replication mechanism can have time to get
+tokens on it.  Otherwise, the vnode needs to be held until the TSR
+recovery period is over (if someone doesn't grab a token on it).  
+
+It might be the case that the file exporter will never be started so
+there is no need for token state recovery and no "end" of the recovery
+period.  Because of this, the vnodes marked as "save until TSR" will
+time out after 15 minutes.  This means that if the file exporter is to
+be started, it must be started within 15 minutes of the export or the
+vnode will be lost.
+
+TESTING:
+
+To tell if a RW fileset things it's replicated, do
+
+	fts lsft -fileset <fileset>
+
+and look at the states field.  If the VOL_IS_REPLICATED flag
+is set (currently 0x8000000), the fileset thinks it's
+replicated.
+
+Setup:
+
+Create an LFS fileset on machine A and make a mountpoint for it.
+
+Test 1:  Recover token state
+
+Machine A:
+	Check quota on fileset, remember (quota1)
+	Create large file in fileset
+	Sum file, remember (sum1)
+	Check quota on fileset, remember (quota2)
+
+Machine B:
+	Open file for read (e.g. exec 3< file)
+
+Machine A:
+	Remove file
+
+<< reboot machine A from debugger >>
+
+Machine A:
+	Restart
+	Check quota on fileset, should be quota2
+
+Machine B:
+	Wait for TSR to complete
+	sum from file descriptor (sum <&3), sum should be sum1.
+	Close file (exec 3<&-)
+
+Machine A:
+	Wait for 15 minutes to be up or delete random file
+	Check quota on fileset, should be quota1 (file reclaimed)
+
+Test 2: Reclaim of file ("wait-for-TSR")
+
+Machine A:
+	Check quota on fileset, remember (quota1)
+	Create large file in fileset
+	Check quota on fileset, remember (quota2)
+
+Machine B:
+	Open file for read (e.g. exec 3< file)
+
+Machine A:
+	Remove file
+
+<< reboot machine A from debugger >>
+
+Machine A:
+	Restart
+	Check quota on fileset, should be quota2
+	Wait for TSR recovery period to end
+	Check quota on fileset, should be quota1 (file reclaimed)
+
+Test 3: Reclaim of file (replicated fileset)
+
+Make fileset replicated (fts setrepinfo, fts addsite)
+
+Machine A:
+	Check quota on fileset, remember (quota1)
+	Create large file in fileset
+	Check quota on fileset, remember (quota2)
+
+Machine B:
+	Open file for read (e.g. exec 3< file)
+
+Machine A:
+	Remove file
+
+<< reboot machine A from debugger >>
+
+Machine B:
+	Close file
+
+Machine A:
+	Restart
+	Check quota on fileset, should be quota2
+	Wait for TSR recovery period to end
+	Check quota on fileset, should be quota2 (file not reclaimed)
+	Wait 105 minutes or check ZLC list in the debugger
+
+Test 4: Wait for timeout
+
+Machine A:
+	Check quota on fileset, remember (quota1)
+	Create large file in fileset
+	Check quota on fileset, remember (quota2)
+
+Machine B:
+	Open file for read (e.g. exec 3< file)
+
+Machine A:
+	Remove file
+
+<< reboot machine A from debugger >>
+
+Machine B:
+	Close file
+
+Machine A:
+	Restart servers but don't start FX
+	Check quota on fileset, should be quota2
+	Wait for 15 minutes
+	Check quota on fileset, should be quota1 (file reclaimed)
+
+
+	
+
+
+
+	

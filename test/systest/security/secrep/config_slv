@@ -1,0 +1,85 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: config_slv,v $
+# Revision 1.1.2.2  1996/03/09  20:51:57  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:38  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:09  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  18:55 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  19:51 UTC  bissen
+# 	 merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:53 UTC  gordon_l
+# 	Fixed for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  17:17 UTC  gordon_l
+# 	Fixes for change_master/become_master.
+# 	[1995/12/11  22:22:21  root]
+# 
+# Revision 1.1.2.4  1993/08/11  13:24:24  sekhar
+# 	Removed extraneous break stmnt
+# 	[1993/08/11  13:11:58  sekhar]
+# 
+# Revision 1.1.2.3  1993/08/03  20:59:04  sekhar
+# 	Modified to take a replica name and set SEC_REPLICA
+# 	[1993/08/03  20:58:40  sekhar]
+# 
+# Revision 1.1.2.2  1993/08/02  17:40:01  sekhar
+# 	Replication system test. Initial version
+# 	[1993/08/02  17:29:08  sekhar]
+# 
+# $EndLog$
+#
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#    This script configures a security slave on the host on which it is
+#    invoked. 
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+if [ -z "${CONFIG_SLV_DEFINED}" ] ; then
+
+CONFIG_SLV_DEFINED=1
+
+. $PHOME/profile
+. $PHOME/replog
+
+logf=$LOGS_DIR/`hostname`/dce_config_log
+statf=$LOGS_DIR/`hostname`/dce_config_stat
+rm -f $logf $statf
+osnm=`uname`
+export KEYSEED=12345
+export SEC_REPLICA="$1"
+replog_msg "Configuring replica on `hostname` (replica name = $SEC_REPLICA) " > $logf
+case $osnm in
+    HP-UX|AIX) $DCE_CONFIG >> $logf <<- EOF
+		2
+		2
+		$CELLADMIN
+		$CELLPW
+		8
+		$CELLPW
+		98
+		99
+	EOF
+	;;
+    *)  replog_error "Unknown OS ( $osnm ) "
+	;;
+esac
+
+replog_msg "DCE Config of security slave completed" > $statf
+
+fi

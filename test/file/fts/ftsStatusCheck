@@ -1,0 +1,119 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+
+###############################################################################
+#    Copyright (C) 1995, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+#
+#  This file contains a utility function for checking return codes
+#  from the DFS fts commands.  It is intended to be used by the fts
+#  tests suite.  It is sourced into the appropriate scripts.
+#
+
+#
+#  dfs_ftsCheckResult()
+#
+#  This function verifies the return code of an fts command.  It works
+#  on both LFS and UFS file systems.
+#
+#  Arguments:
+#	$1 - status to compare against
+#	$2 - flag to indicate if a 0 status means the test passed.
+#	$3 - flag to indicate if the test is expected to work on UFS, LFS
+#	     or both.
+#	$4 - test program name
+#	$5 - test case number
+#	$6 - error counter, incremented if status is failure.
+#
+dfs_ftsCheckResult()
+{
+    ftsTestResult="Passed"
+
+    #
+    #  Check to see what comparison to do.  The opposite comparison is
+    #  done, since we assume the test passes and only need to change to
+    #  failure if this is NOT the case.
+    #
+    if [ $2 -eq $DFS_PASS_EQ_ZERO ]
+    then
+	if [ $1 -ne 0 ]
+	then
+	    if [ "$3" = "$DFS_WORKS_ON_BOTH" -o "$3" = "$dfs_FileSysType" ]
+	    then
+		ftsTestResult="Failed"
+	    fi
+	fi
+    else
+	if [ $1 -eq 0 ]
+	then
+	    if [ "$3" = "$DFS_WORKS_ON_BOTH" -o "$3" = "$dfs_FileSysType" ]
+	    then
+		ftsTestResult="Failed"
+	    fi
+	fi
+    fi
+
+    if [ "$ftsTestResult" = "Failed" ]
+    then
+#
+#  OK, to get the value of the error counter variable, $6, we
+#  need to evaluate it twice; once to get the variable name, and
+#  once to get its value.  I found no other way to do this, then
+#  what you see here.  Maybe I'm missing something, but this works.
+#  1. Create a variable that is the value of argument $6 with a
+#     $ in front of it.
+#  2. Evaluate that variable to get the value of the variable that
+#     was passed as argument $6.
+#
+      	errCounterVar=`echo "\$ $6" | tr -d " "`
+	localErrorCount=`eval "echo $errCounterVar"`
+	eval $6=`expr $localErrorCount + 1`
+        echo "$4: Test case, $5: $ftsTestResult"
+    else 
+        echo "$ftsTestResult"
+    fi
+
+}
+
+getUserId()
+{
+    t=`klist | grep "^[ 	]*Principal"`
+    testuser=`echo $t | cut -f3 -d' '`
+    testuid=`echo $t | cut -f2 -d' ' | cut -f1 -d-`
+    testuid=`bc << EOF
+ib=16
+$testuid
+EOF`
+}
+
+# Set the protections on fileset root dir
+#
+# setFsetRootProt(fsetRootDir, ownerId, error, cleanup)
+#
+setFsetRootProt()
+{
+ 	fsetRootDir=$1
+	ownerId=$2
+	error=$3
+	clean=$4
+
+	perm=0777
+
+	chown $ownerId $fsetRootDir; rf=$?
+	if test $rf -ne 0 
+	then 
+		echo "- chown $ownerId $fsetRootDir failed (errno $rf); $p ABORTING ($p: $error)"
+	        rc=`expr $rc + 1`; cleanup
+	fi
+
+	chmod $perm $fsetRootDir; rf=$?
+	if test $rf -ne 0 
+	then 
+		echo "- chmod $perm $fsetRootDir failed (errno $rf); $p ABORTING ($p: $error)"
+        	rc=`expr $rc + 1`; cleanup
+	fi
+}

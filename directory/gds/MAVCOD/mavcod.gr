@@ -1,0 +1,322 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: mavcod.gr,v $
+ * Revision 1.1.10.2  1996/03/09  23:12:25  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:29:36  marty]
+ *
+ * Revision 1.1.10.1  1995/12/08  15:08:37  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  14:48:47  root]
+ * 
+ * Revision 1.1.8.1  1994/02/22  15:36:59  marrek
+ * 	Code drop for dce1.1.
+ * 	[1994/02/08  09:02:00  marrek]
+ * 
+ * Revision 1.1.6.2  1993/08/11  13:53:19  marrek
+ * 	July 1993 code drop.
+ * 	[1993/07/29  11:05:25  marrek]
+ * 
+ * Revision 1.1.4.3  1992/12/31  17:10:56  bbelch
+ * 	Embedding copyright notice
+ * 	[1992/12/31  12:54:02  bbelch]
+ * 
+ * Revision 1.1.4.2  1992/11/27  17:54:57  marrek
+ * 	November 1992 code drop
+ * 	[1992/11/26  11:22:17  marrek]
+ * 
+ * Revision 1.1.2.3  1992/06/01  20:20:55  zeliff
+ * 	New version of file from GDS drop
+ * 	[1992/05/28  18:22:11  zeliff]
+ * 
+ * Revision 1.1.2.2  1992/04/09  20:05:36  jim
+ * 	Changes for AIX 3.2 compiler.  Do not define malloc or string
+ * 	functions locally.
+ * 	[1992/04/09  19:18:13  jim]
+ * 
+ * $EndLog$
+ */
+
+/* ****************************************************************** */
+/*                                                                    */
+/*   COPYRIGHT  (C)  1990 BY SIEMENS NIXDORF INFORMATIONSSYSTEME AG   */
+/*                           AND INRIA                                */
+/*   All rights reserved                                              */
+/*                                                                    */
+/*   This software is furnished under licence and may be used only    */
+/*   in accordance with the terms of that licence and with the        */
+/*   inclusion of the above copyright notice.                         */
+/*   This software may not be provided or otherwise made available    */
+/*   to, or used by, any other person. No title to or ownership of    */
+/*   the software is hereby  transferred.                             */
+/*                                                                    */
+/* ****************************************************************** */
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "mavcod.h"
+
+#if !defined(lint) && defined(GDS_RCS_ID)
+static char mavcod_gr_rcsid[] = "@(#)$RCSfile: mavcod.gr,v $ $Revision: 1.1.10.2 $ $Date: 1996/03/09 23:12:25 $";
+#endif
+int linenum = 1;
+%}
+
+%start prog
+
+%union {
+	char * var;
+	int num;
+	struct tags ta;
+	struct element el;
+	struct struct_element sel;
+	struct options op;
+	}
+
+%token <var> IDENT NUMERIC
+%token SEQUENCE SET CHOICE TYPE COMPONENTS
+%token UNIVERSAL APPLICATION PRIVATE EXTERNAL ALLOCATE
+%token IMPLICIT OPTIONAL DEFAULT VAR VALUE INITVAR
+%token INTEGER IGNORE OF NULLITEM COPY OBJECT ID REAL
+%token INDEXED BY UP TO ANY BOOLEAN CHARS FLAGS
+%token BIT STRING OCTET ENUMERATED ENCRYPTED DEFINED
+%token NString PString TString VTString ViString IA5String GrString GeString
+%token NChars PChars TChars VTChars ViChars IA5Chars GrChars GeChars
+%token GeTime UnTime ObDesc
+%token DEFINITIONS EXPLICIT TAGS IMPORTS EXPORTS xBEGIN END FROM
+%type <num> Tagdefault implicit mode
+%type <ta>  tag_definition modeval
+%type <el>  element_body simple_type structure choice array
+%type <el>  structure_head array_head valued_type valued_type_type
+%type <op>  optionalflag
+%type <var> ident_or_numeric
+%type <sel> structure_element
+%start prog
+
+%%
+
+prog: module_start Exports Imports proglist END
+
+module_start: IDENT DEFINITIONS Tagdefault ':' ':' '=' xBEGIN
+	{module_start($1,$3);}
+
+Tagdefault: EXPLICIT TAGS	{$$=F_IMPLICIT;}
+	| IMPLICIT TAGS		{$$=F_EXPLICIT;}
+	| empty			{$$=F_UNDEF;}
+
+Exports: EXPORTS  exported ';'
+	| empty
+
+exported: export_list | empty 
+
+export_list: export_one | 
+	export_one ',' export_list
+
+export_one: IDENT {export_item($1);}
+
+Imports: IMPORTS SymbolsImported ';' | empty
+
+SymbolsImported: SymbolsFromModuleList | empty
+
+SymbolsFromModuleList:
+	SymbolsFromModule |
+	SymbolsFromModule SymbolsFromModuleList
+
+SymbolsFromModule:
+	importlist FROM IDENT {close_import_module($3);}
+
+importlist: import_item | import_item ',' importlist
+
+import_item: IDENT { import_item($1);}
+
+proglist: empty | progitem proglist
+
+progitem: type_declaration
+	| error
+	{stxerr("unexpected declaration",(char*)0); /*yyerrok; yyclearin;*/}
+
+type_declaration: IDENT ':' ':' '=' {open_stack($1);} 
+	type_decl_body {close_type($1);}
+
+type_decl_body: 
+	tag_definition element_body
+	{declare_element((char *)0, $1, $2, option_always);}
+	| element_body
+	{declare_element((char*)0, tags_unspec, $1, option_always);}
+
+structure_element : 
+	  IDENT tag_definition element_body
+	{$$.id = $1; $$.tag = $2; $$.el = $3;}
+	| tag_definition element_body
+	{$$.id = (char *) 0; $$.tag = $1; $$.el = $2;}
+	| IDENT element_body
+	{$$.id = $1; $$.tag = tags_unspec; $$.el = $2;}
+	| element_body
+	{$$.id = (char *) 0; $$.tag = tags_unspec; $$.el = $1;}
+
+
+element_body :
+	  simple_type	{$$ = $1; add_element();}
+	| valued_type   {$$ = $1;}
+	| structure	{$$ = $1;}
+	| choice	{$$ = $1;}
+	| array		{$$ = $1;}
+
+structure : structure_head { open_stack($1.st); } 
+	structure_list_or_empty { close_stack(); $$ = $1;}
+
+structure_head : SET '{' 
+	{$$.t = T_SET; $$.st = "SET";}
+	| SEQUENCE '{' 
+	{$$.t = T_SEQUENCE; $$.st = "SEQUENCE";}
+
+structure_list_or_empty: structure_list '}' | '}'
+
+structure_list : struct_list_item 
+	| structure_list ',' struct_list_item
+	
+struct_list_item:
+	structure_element optionalflag
+	{declare_element($1.id, $1.tag, $1.el, $2);}
+	| 
+	structure_element
+	{declare_element($1.id, $1.tag, $1.el, option_always);}
+	|
+	error
+	{stxerr("incorrect list element",(char *)0);
+	declare_element((char *)0,tags_unspec,element_error,option_always);}
+
+optionalflag: DEFAULT '{' ident_or_numeric '}' 
+	{$$.t = O_DEFAULT; $$.n = $3;}
+	| OPTIONAL
+	{$$.t = O_OPTION; $$.n = (char*)0;}
+
+choice : CHOICE '{' {open_stack("CHOICE");} choice_list '}' 
+	{close_stack(); $$.t = T_CHOICE; $$.st = "CHOICE";}
+
+choice_list: choice_element | choice_list ',' choice_element
+
+choice_element: structure_element 
+	{declare_element($1.id, $1.tag, $1.el, option_always);}
+	| error
+	{stxerr("incorrect choice element",(char *)0); /*yyerrok; yyclearin;*/}
+
+array : array_head {open_stack($1.st);} 
+	array_element {close_stack(); $$ = $1;}
+
+array_element : 
+	  IDENT tag_definition element_body
+	{ declare_element($1, $2, $3, option_always);}
+	| tag_definition element_body
+	{ declare_element((char *) 0, $1, $2, option_always);}
+	| element_body
+	{ declare_element((char *) 0, tags_unspec, $1, option_always);}
+	| error
+	{stxerr("incorrect array element",(char *)0); /*yyerrok; yyclearin;*/
+	declare_element((char *)0, tags_unspec, 
+	element_error, option_always);}
+
+array_head: SEQUENCE OF 
+	{ $$.t = T_SEQUENCE_OF; $$.st = "SEQUENCE OF";}
+	| SET OF	
+	{ $$.t = T_SET_OF; $$.st = "SET OF";}
+
+
+simple_type: 
+	  NULLITEM { $$.t = T_NULL; $$.st = "NULL"; }
+	| IGNORE { $$.t = T_IGNORE; $$.st = "NULL";/*AF*/ }
+	| BOOLEAN	
+	{ $$.t = T_BOOLEAN; $$.st = "BOOLEAN"; }
+	| REAL
+	{ $$.t = T_REAL; $$.st = "REAL"; }
+	| OCTET STRING
+	{ $$.t = T_OCTETS; $$.st = "OCTET STRING"; }
+	| OBJECT ID	
+	{ $$.t = T_OID;	$$.st = "OBJECT ID"; }
+	| ObDesc {$$.t = T_OCTETS; $$.st = "ObjectDescriptor"; }
+	| EXTERNAL 
+	{$$.t = T_EXTERNAL; $$.st = "EXTERNAL"; }
+	| NString {$$.t = T_OCTETS; $$.st = "NumericString"; }
+	| PString {$$.t = T_OCTETS; $$.st = "PrintableString"; }
+	| TString {$$.t = T_OCTETS; $$.st = "T61String"; }
+	| VTString {$$.t = T_OCTETS; $$.st = "NumericString"; }
+	| ViString {$$.t = T_OCTETS; $$.st = "VisibleString"; }
+	| IA5String {$$.t = T_OCTETS; $$.st = "IA5String"; }
+	| GrString {$$.t = T_OCTETS; $$.st = "GraphicString"; }
+	| GeString {$$.t = T_OCTETS; $$.st = "GeneralString"; }
+	| UnTime {$$.t = T_OCTETS; $$.st = "UTCTime"; }
+	| GeTime {$$.t = T_OCTETS; $$.st = "GeneralizedTime"; /*AF erg.*/}
+	| IDENT {$$.t = T_EXTERN; $$.st = $1; }
+	| ANY DEFINED BY IDENT {$$.t = T_ANYDEF; $$.st = $4; } 
+	| ANY { $$.t = T_ANY; $$.st = "ANY"; }
+	| COPY { $$.t = T_COPY; $$.st = "COPY";/*AF COPY erg.*/ }
+	| COMPONENTS OF IDENT {$$.t = T_COMP; $$.st = $3; }
+
+valued_type:
+	valued_type_type '{' {open_stack("I_or_B-S");}
+	valuelist '}' { close_stack(); $$ = $1;}
+	| valued_type_type { add_element(); $$ = $1;}
+
+valued_type_type:
+	  INTEGER
+	{ $$.t = T_INTEGER; $$.st = "INTEGER"; }
+	| ENUMERATED
+	{ $$.t = T_ENUMERATED; $$.st = "ENUMERATED"; }
+	| BIT STRING
+	{ $$.t = T_BITS; $$.st = "BIT STRING"; }
+	| FLAGS  /*AF FLAGS erg.*/ 
+	{ $$.t = T_FLAGS; $$.st = "FLAGS"; }
+
+valuelist : simplevalue | valuelist ',' simplevalue
+
+simplevalue : IDENT '(' ident_or_numeric ')'
+	{declare_item_value($1,$3);}
+	| error
+	{stxerr("bad integer value",(char *)0); /*yyerrok; yyclearin;*/}
+
+ident_or_numeric: IDENT { $$ = $1;}
+	| NUMERIC { $$ = $1;}
+	| error
+	 {stxerr("bad identifier",(char *)0); /*yyerrok; yyclearin;*/ $$ = "???";}
+
+
+tag_definition: '[' modeval ']' implicit
+	{
+		$$.m = $2.m;
+		$$.n = $2.n;
+		$$.i = $4;
+	}
+
+modeval: mode NUMERIC
+	{	$$.m = $1;
+		$$.n = atoi($2);
+		free($2);
+	}
+	|	error
+	{
+	$$.m = C_UNSPEC; $$.n = 0;
+	stxerr("Bad ASN.1 identification",(char*)0); /*yyerrok; yyclearin;*/
+	}
+
+mode: 		UNIVERSAL	{$$ = C_UNIVERSAL;}
+	|	APPLICATION	{$$ = C_APPLICATION;}
+	|	PRIVATE		{$$ = C_PRIVATE;}
+	|	empty		{$$ = C_CONTEXT;}
+
+implicit:
+	IMPLICIT	{$$ = F_IMPLICIT;}
+	| EXPLICIT	{$$ = F_EXPLICIT;}
+	| empty		{$$ = F_UNDEF;}
+
+empty:;
+%%
+#include "lex.yy.c"

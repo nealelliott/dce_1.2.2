@@ -1,0 +1,518 @@
+<HTML>
+<HEAD>
+<TITLE>Queue Manager Infrastructure</TITLE>
+</HEAD>
+<!-- $Header: /project/dce/mos/release/mos-961203/doc/webpages/dd/RCS/dd-inf.html,v 1.7 1996/11/26 17:22:10 bowe Exp $ -->
+<BODY>
+<H1 ALIGN=CENTER>Queue Manager Infrastructure</H1>
+<P ALIGN=CENTER>
+John Bowe, <A HREF="mailto:bowe@osf.org">bowe@osf.org</A>
+<BR>
+<EM>15-September-1996</EM>
+</P>
+
+<P>
+<HR> <!-- __________________________________________________ -->
+<P>
+This document is organized into sections on
+<A HREF="#data">Data Structures</A>,
+<A HREF="#ops-ov">Operations At a Glance</A>,
+and
+<A HREF="#ops-det">Some Implementation Details</A>.
+<P>
+For convenience matching IDL files are available
+<UL>
+  <LI> <A HREF="mostypes.idl">mostypes.idl</A>
+  <LI> <A HREF="mos_base.idl">mos_base.idl</A>
+  <LI> <A HREF="mos_mgmt.idl">mos_mgmt.idl</A>
+  <LI> <A HREF="mos_q.idl">mos_q.idl</A>
+  <LI> <A HREF="mos_convert.idl">mos_convert.idl</A>
+</UL>
+
+<P>
+<HR> <!-- __________________________________________________ -->
+<P>
+<H2><A NAME="data">Data Structures</A></H2>
+
+There will be two IDL files that define the "publicly visible"
+data structures and constants.
+One is for API users,
+and one for direct queue manager users
+(ie, for the API to use).
+The latter also uses the former.
+<P>
+Also included are data structures that may be written to a backing store.
+An IDL file is used to generate the encoding and decoding functions.
+<P>
+Structures used internally by the q-mgr need not be defined here and
+may differ, depending on implementation.
+Internally-used structures will probably be defined for
+efficiency of the q-mgr, not elegance of external interface.
+<P>
+The names of attributes and operations here are not necessarily
+those of the actual IDL file.
+<P>
+There will be some "support" structured defined for the RPCs,
+such as lists of some of the structures defined below.
+(A "list" is simply a count (unsigned32)
+and an array of the structure of interest,
+<CODE>[ptr,size_is(count)] my_struct_t *list;</CODE>.)
+These need no be defined in this document,
+though they will be defined in the IDL file.
+
+<H3>Attributes</H3>
+
+<H4>Queue Attributes</H4>
+The following are attributes of each <EM>queue</EM>.
+<P>
+
+<TABLE BORDER>
+<TR> <TH> Attribute	<TH> Type	<TH> Description
+
+<TR>	<TD> id
+	<TD> uuid_t
+	<TD> UUID of this queue
+<TR>	<TD> name
+	<TD> string
+	<TD> name of the queue - either simple string (for queue name under
+	    "junction") or full CDS name for where to try to export.
+<TR>	<TD> annotation
+	<TD> string
+	<TD> uninterpreted annotation string
+<TR>	<TD> aliases
+	<TD> array of strings
+	<TD> alternate names of this queue
+<TR>	<TD> len
+	<TD> unsigned32
+	<TD> number of items currently available in queue
+<TR>	<TD> max_len
+	<TD> unsigned32
+	<TD> max items allowed in queue
+<TR>	<TD> flags
+	<TD> unsigned32
+	<TD> various bit flags (persistence, etc.)
+<TR>	<TD> empty_timeout
+	<TD> utc_t
+	<TD> time of "empty inactivity" before deleting queue
+<TR>	<TD> last_activity
+	<TD> utc_t
+	<TD> time of last activity
+<TR>	<TD> create_time
+	<TD> utc_t
+	<TD> time of queue creation
+</TABLE>
+
+<P>
+<H4>Message Attributes</H4>
+The following are attributes of each <EM>message</EM> (or <EM>queue item</EM>).
+<P>
+
+<TABLE BORDER>
+<TR> <TH> Attribute	<TH> Type	<TH> Description
+<TR> <TD> id	<TD> string
+	<TD> UUID of this item in the queue
+	(this is also used as a key for storing the items to a backing store)
+<TR> <TD> datatype	<TD> uuid_t
+	<TD> semantically identifies the message, and allows recipient to
+		determine how do decode the message
+<TR> <TD> msgtype	<TD> enum (data, ack, etc.)
+	<TD> data, ack, etc.
+<TR> <TD> notice	<TD> unsigned32
+	<TD> bitmask of options for notices to send
+	    (upon dequeue, expiration, exception, none)
+<TR> <TD> sender	<TD> sec_id_pa_t
+	<TD> PAC of the principal who sent the message
+<TR> <TD> persistence	<TD> enum
+	<TD> persistence behavior
+<TR> <TD> flags	<TD> unsigned32
+	<TD> various bit flags (protection, etc.)
+<TR> <TD> priority	<TD> unsigned32
+	<TD> priority of the item
+<TR> <TD> time_enqueued	<TD> utc_t
+	<TD> when message was enqueued by q-mgr
+<TR> <TD> expire_time	<TD> utc_t
+	<TD> when this message will expire
+<TR> <TD> valid_time	<TD> utc_t
+	<TD> when this message will be available for dequeue
+<TR> <TD> reply_queue	<TD> string
+	<TD> name of queue for replies
+</TABLE>
+
+
+<H3>Filtering Masks for Selection Criteria</H3>
+<P>
+A structure is defined for the mask used to specify selection criteria.
+A mask is a typed-structure with a triplet of:
+datatype (int, uuid_t, utc_t, string),
+relation (equal, less than, etc.),
+and a value.
+Selection is based on an array of these masks.
+
+
+<H3>A Message</H3>
+
+A message is very simple, as far as the system is concerned.
+It is simply a pointer to an array of bytes (idl type <CODE>byte</CODE>)
+and the length of the array.
+
+<P>
+<!--HR--> <!-- __________________________________________________ -->
+<!--NewPage-->
+
+<H2><A NAME="ops">Operations At a Glance</A></H2>
+All calls take a binding handle as an <EM>in</EM> parameter,
+and error_status_t as <EM>out</EM>.
+
+<H3>Management (Queue Manager) Operations</H3>
+
+These may also be thought of as operations on a <EM>queue manager</EM>
+as opposed to a queue itself.
+<P>
+
+<TABLE BORDER>
+<TR>	<TH> Operation
+	<TH> Description
+	<TH> Parameters
+
+<TR>	<TD> mos_mgmt_create_queue
+	<TD> create a new queue
+	<TD> In: name, queue attributes, flags
+	  <BR>
+	    Out: UUID of new queue
+
+<TR>	<TD> mos_mgmt_get_id_list
+	<TD> get list of queues IDs
+	<TD> In: -
+	  <BR>
+	    Out: array of queue UUIDs
+<TR>	<TD> mos_mgmt_get_name_list
+	<TD> get list of queues names
+	<TD> In: -
+	  <BR>
+	    Out: array of queue names
+<TR>	<TD> mos_mgmt_rename
+	<TD> rename a queue
+	<TD> In: old queue name, new queue name
+	  <BR>
+	    Out: -
+<TR>	<TD> mos_mgmt_move
+	<TD> migrate a queue from one q-mgr to another
+		(this operation is performed on the destination q-mgr)
+		(<EM>This needs more thought.
+		Probably better for API to do the work.</EM>)
+	<TD> In: queue name (destination), queue name (source)
+	  <BR>
+	    Out: -
+</TABLE>
+
+<P>
+<!-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -->
+<H3>Queue (Data) Operations</H3>
+These are operations on a particular queue.
+We think of these as the "data" operations.
+<P>
+
+<TABLE BORDER>
+<TR> <TH> Operation	<TH> Description
+	<TH> Parameters
+
+<TR>	<TD> mos_q_enqueue
+	<TD> add an item to an existing queue
+	<TD> In: queue name, attributes, message
+	  <BR>
+	    Out: UUID of item
+<TR>	<TD> mos_q_dequeue
+	<TD> dequeue first item from a queue that matches given selection criteria;
+	    optionally blocks, depending on flags
+	<TD> In: queue name, selection filter, flags
+	  <BR>
+	    Out: attributes, message
+<TR>	<TD> mos_q_dequeue_next
+	<TD> dequeue first item on a queue
+	<TD> In: queue name
+	  <BR>
+	    Out: attributes, message
+<TR>	<TD> mos_q_peek
+	<TD> return copy of first item from a queue that matches given selection criteria;
+	    optionally blocks, depending on flags
+	<TD> In: queue name, selection filter, flags
+	  <BR>
+	    Out: attributes, message
+<TR>	<TD> mos_q_purge
+	<TD> purge/delete item in queue with given message ID
+	    optionally blocks, depending on flags
+	<TD> In: queue name, message ID
+	  <BR>
+	    Out: attributes, message
+
+<TR>	<TD> mos_q_retrieve_attr
+	<TD> retrieve attributes of next item from queue that matches given selection criteria
+	<TD> In: queue name, selection filter
+	  <BR>
+	    Out: attributes
+<TR>	<TD> mos_q_ping
+	<TD> determines if a given queue exists
+	<TD> In: queue name
+	  <BR>
+	    Out: uuid
+<TR>	<TD> mos_q_retrieve_attr_by_id
+	<TD> retrieve attributes of item from queue with given message ID
+	<TD> In: queue name, message ID
+	  <BR>
+	    Out: attributes
+
+<TR>	<TD> mos_q_ping
+	<TD> determines if a given queue exists
+	<TD> In: queue name
+	  <BR>
+	    Out: queue ID
+<TR>	<TD> mos_q_get_id_list
+	<TD> get list of message IDs
+	<TD> In: queue name
+	  <BR>
+	    Out: array of message IDs
+
+<TR>	<TD> mos_q_delete_queue
+	<TD> delete a queue
+	<TD> In: queue name, flags
+	  <BR>
+	    Out: -
+<TR>	<TD> mos_q_get_attr_by_name
+	<TD> get the attributes of a given queue
+	<TD> In: queue name
+	  <BR>
+	    Out: attributes
+<TR>	<TD> mos_q_get_attr_by_id
+	<TD> get the attributes of a given queue, based on ID
+	<TD> In: queue ID (UUID)
+	  <BR>
+	    Out: attributes
+<TR>	<TD> mos_q_set_attr_by_name
+	<TD> set the attributes of a given queue
+	<TD> In: queue name, attributes
+	  <BR>
+	    Out: -
+<TR>	<TD> mos_q_set_attr_by_id
+	<TD> set the attributes of a given queue, based on ID
+	<TD> In: queue ID (UUID), attributes
+	  <BR>
+	    Out: -
+<TR>	<TD> mos_q_move_item
+	<TD> move a single message from one queue to another, given message ID
+	<TD> In: queue names, message ID
+	  <BR>
+	    Out: -
+</TABLE>
+
+<P>
+<!--HR--> <!-- __________________________________________________ -->
+<!--NewPage-->
+
+<H2>Some Implementation Details</H2>
+All operations assume the caller has permission, based on the ACLs.
+<P>
+There will be several backing stores:
+one for the ACL database,
+one for queue attributes,
+and one for queue items (messages) themselves.
+The latter is use only for messages specified as "persistent".
+<P>
+Queue attributes will be kept in memory.
+(They are not that large, and this information should be readily available
+for various reasons, such as testing timeouts and checking if name already exists.)
+
+<!-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -->
+<H3>Management (Queue Manager) Operations</H3>
+
+<H4><CODE>mos_mgmt_create_queue</CODE></H4>
+Create a queue.
+Steps:
+<OL>
+  <LI> Ensure that a queue by this name does not already exist.
+    If a queue by this name exists, return its ID.
+  <LI> Add to the in-memory list of queues.
+  <LI> Write to the queue-info backing store.
+</OL>
+
+<H4><CODE>mos_mgmt_get_id_list</CODE></H4>
+Return a list of the IDs of all queues.
+Steps:
+<OL>
+  <LI> Return UUIDs from the in-memory list of queues.
+</OL>
+
+<H4><CODE>mos_mgmt_rename</CODE></H4>
+Rename a queue within queue manager.
+Steps:
+<OL>
+  <LI> Find the matching queue in the in-memory list of queues.
+  <LI> Rename it.
+  <LI> Write to the queue-info backing store.
+</OL>
+
+<H4><CODE>mos_mgmt_move</CODE></H4>
+Move a queue from one queue manager to another, retaining all atributes.
+
+<P> <STRONG>NOTE:</STRONG> This still needs some thought.
+The API can probably do all the work better, or at least more conveniently.
+
+
+<!-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -->
+
+<H3>Queue (Data) Operations</H3>
+
+<H4><CODE>mos_q_enqueue</CODE></H4>
+Enqueue a message in a given queue.
+The message is placed in the queue according to priority.
+Steps:
+<OL>
+  <LI> Find the matching queue in the in-memory list of queues.
+  <LI> Add the new message into its queue, based in priority.
+  <LI> If the persistence flag is set, write it to the backing store.
+  <LI> If the notification is desired, send an appropriate ack to the sender.
+</OL>
+
+<H4><CODE>mos_q_dequeue</CODE></H4>
+Dequeue a message (body and attributes) from a queue,
+optionally dequeuing it and optionally blocking until a message is available.
+Also optionally accepts a selection filter.
+Steps:
+<OL>
+  <LI> Find the matching queue in the in-memory list of queues.
+  <LI> Find the matching message in the queue (selection filter, if specified)
+    (if no filter, get first item).
+  <LI> Extract item (attributes and body).
+  <LI> If the persistence flag is set, remove it from the backing store.
+  <LI> If the notification is desired, send an appropriate ack to the sender.
+</OL>
+
+<H4><CODE>mos_q_dequeue_next</CODE></H4>
+Simpler version <CODE>mos_q_dequeue</CODE>.
+Dequeues next available message and attributes from a queue.
+
+<H4><CODE>mos_q_peek</CODE></H4>
+Similar to <CODE>mos_q_dequeue</CODE>, but only a copy of the message
+attributes and body are returned; it is not dequeued.
+
+<H4><CODE>mos_q_purge</CODE></H4>
+Purge a message with a given ID.
+Steps:
+<OL>
+  <LI> Find the matching queue in the in-memory list of queues.
+  <LI> Find the matching message in the queue, given ID.
+  <LI> Remove it from the list.
+  <LI> If the notification is desired, send an appropriate ack to the sender.
+</OL>
+
+<H4><CODE>mos_q_retrieve_attr</CODE></H4>
+Retrieve message attributes from a queue,
+optionally blocking until a message is available.
+Also optionally accepts a selection filter.
+Similar to <CODE>mos_q_dequeue</CODE>, but a message body is not returned
+and the message is not dequeued.
+Steps:
+<OL>
+  <LI> Find the matching queue in the in-memory list of queues.
+  <LI> Find the matching message in the queue (selection filter, if specified)
+    (if no filter, get first item).
+  <LI> Extract attributes of item.
+</OL>
+
+<H4><CODE>mos_q_retrieve_attr_by_id</CODE></H4>
+Retrieve message attributes from a queue,
+optionally blocking until a message is available.
+Also optionally accepts a selection filter.
+Similar to <CODE>mos_q_dequeue</CODE>, but a message body is not returned
+and the message is not dequeued.
+Steps:
+<OL>
+  <LI> Find the matching queue in the in-memory list of queues.
+  <LI> Find the matching message in the queue (selection filter, if specified)
+    (if no filter, get first item).
+  <LI> Extract attributes of item.
+</OL>
+
+<H4><CODE>mos_q_ping</CODE></H4>
+Determine if a queue with a given name exists.
+Its ID is returned, since queues may have aliases, and UUIDs are unique.
+This is a simplified version of <CODE>mos_q_retrieve_attr</CODE>,
+but optimized for just determining if a queue is there.
+It is indended for the API's "attach" call.
+Steps:
+<OL>
+  <LI> Find the matching queue in the in-memory list of queues.
+  <LI> Return its ID.
+</OL>
+
+<H4><CODE>mos_q_get_id_list</CODE></H4>
+Return a list of IDs of all messages on a queue.
+Steps:
+<OL>
+  <LI> Find the matching queue in the in-memory list of queues.
+  <LI> Return array of UUIDs of items.
+</OL>
+
+<H4><CODE>mos_q_delete_queue</CODE></H4>
+Delete a queue.
+Steps:
+<OL>
+  <LI> If there are items in the queue and the flag saying what to do about
+    queue items says to delete them, delete the items.
+  <LI> Remove the queue information from the queue-info backing store and
+    in-memory list of queues.
+</OL>
+
+<H4><CODE>mos_q_get_attr_by_name</CODE> and <CODE>mos_q_get_attr_by_id</CODE></H4>
+Return attributes of the queue described by the given name or UUID.
+Steps:
+<OL>
+  <LI> Find the matching queue in the in-memory list of queues.
+  <LI> Extract and return attribute data.
+</OL>
+
+<H4><CODE>mos_q_set_attr_by_name</CODE> and <CODE>mos_q_set_attr_by_id</CODE></H4>
+Set attributes of the queue described by the given name or UUID.
+Steps:
+<OL>
+  <LI> Find the matching queue in the in-memory list of queues.
+  <LI> Replace the writable attributes in the in-memory list.
+  <LI> Write to the queue-info backing store, if persistent.
+</OL>
+
+<H4><CODE>mos_q_move_item</CODE></H4>
+Move a single message from one queue to another.
+Both queues must be on the queue manager.
+Steps:
+<OL>
+  <LI> Ensure both queues and the message item exist
+  <LI> Remove the item from one queue, adding to the other
+  <LI> Change the item's attribute that says to what queue it belongs
+  <LI> Write message to backing store, if persistent.
+</OL>
+
+
+<!-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -->
+
+<H3>Startup</H3>
+
+Yes, more needed here.	<P>
+
+Steps:
+read queue-info backing store, populating in-memory list of queue information;
+read queue-data backing store, populating queue items
+(these are the persistent messages).
+<P>
+In production <CODE>dced</CODE> will start the queue manager.
+dced will maintain startup parameters, such as directory, principal, etc.
+
+
+<P> <!--EndPage-->
+<HR> <!-- __________________________________________________ -->
+<P ALIGN=CENTER>
+[
+<A HREF="dd-toc.html">Detailed Design TOC</A> |
+<A HREF="../index.html">Messaging</A>
+]
+</P>
+</BODY>
+</HTML>

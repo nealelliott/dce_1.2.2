@@ -1,0 +1,280 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: common_functions,v $
+# Revision 1.1.101.2  1996/03/11  02:45:13  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:07:52  marty]
+#
+# Revision 1.1.101.1  1995/12/11  22:00:49  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/29  18:20 UTC  bell_d
+# 	Merge in latest version fixed for heterogenous cell operation - must rshell and copy test from system
+# 	local test area.
+# 
+# 	HP revision /main/HPDCE02/1  1994/06/29  20:39 UTC  bissen
+# 	Merge hpdce02 (DCE 1.1 beta) and HPDCE01 into HPDCE02
+# 
+# 	HP revision /main/HPDCE01/2  1994/03/25  18:53 UTC  bissen
+# 	merge changes
+# 
+# 	HP revision /main/HPDCE01/bissen_systest/1  1994/03/25  18:51 UTC  bissen
+# 	fix to let remote hosts get own binaries
+# 
+# 	HP revision /main/HPDCE01/1  1994/01/27  16:20  bissen
+# 	merge kk and hpdce01
+# 	[1995/12/11  20:59:51  root]
+# 
+# Revision 1.1.5.2  1993/07/09  12:33:43  root
+# 	Initial King Kong branch
+# 	[1993/07/09  12:33:15  root]
+# 
+# Revision 1.1.3.3  1993/04/23  14:42:26  giza
+# 	add changes for OS portability
+# 	[1993/04/22  23:32:26  giza]
+# 
+# Revision 1.1.3.2  1993/03/31  12:49:35  mgm
+# 	Initial GAMERA branch
+# 
+# Revision 1.1.2.7  1992/12/09  15:08:27  mgm
+# 	Added code to break out of infinite loops after so many minutes
+# 	(to avoid hangs).  Changed cleanup() and misc.
+# 	[1992/12/09  15:01:46  mgm]
+# 
+# Revision 1.1.2.6  1992/12/03  20:52:54  mgm
+# 	Put in timer to break out of infinite loops if, for some reason,
+# 	the client didn't start.
+# 	[1992/12/03  20:51:58  mgm]
+# 
+# Revision 1.1.2.5  1992/11/24  22:12:42  mgm
+# 	Fixed check_results to search only filename.* and not filename*
+# 	[1992/11/24  22:11:43  mgm]
+# 
+# Revision 1.1.2.4  1992/11/20  15:10:18  mgm
+# 	Added -h $LOCAL_HOST to start_clients.
+# 	Added failed, usage and Usage to grep in check results.
+# 	[1992/11/20  15:03:08  mgm]
+# 
+# Revision 1.1.2.3  1992/11/18  11:46:03  mgm
+# 	Changed TCDIR from $TET_ROOT/tet_tmp.dir to /tmp
+# 	[1992/11/18  11:45:25  mgm]
+# 
+# Revision 1.1.2.2  1992/11/03  21:43:52  mgm
+# 	Common functions for all TET rpc systests.
+# 	[1992/11/03  21:42:49  mgm]
+# 
+# $EndLog$
+#===============================================================================
+# COMMON RPC VARIABLES: If you want to overide these values in specific test
+# scripts, then modify/uncomment the corresponding values in their scripts
+# (i.e. for dcerpbnk modify line in tet/rpc/ts/dcerpbnk/dcerpbnk). Also tet_scen
+# file contains the actual pathname of the script being referenced by the "tcc"
+# command arguments.
+#  
+# 11/03/92	Rick Obrien	Created initial file
+
+#export MACHINES			# Exports command line option.
+				# Can also overide here or in specific script.
+
+export LOCAL_HOST=`hostname`
+export PROTO=${PROTO:-"ncadg_ip_udp"}	# Use datagram protocol string as
+					# default
+
+#===============================================================================
+del_test_purp ()
+{
+	for test_purp in $*
+	do
+		tet_delete $test_purp "FAILURE: Startup...$test_purp() deleted."
+	done
+}	# end del_test_purp ()
+
+
+#===============================================================================
+ping_hosts()
+{	
+        export OSTYPE=`uname`
+        if [ "$OSTYPE" = "OSF1" ]
+        then
+                PINGCOMMAND='eval ping -p 1 -c 1 $RHOST'
+        else
+                PINGCOMMAND='eval ping $RHOST 8 1'
+        fi
+	
+        for RHOST in $(cdscp list dir "/.:/hosts/*"|awk 'BEGIN {for (i=0;i<3;i++) getline;}\
+                                                        {print $1}')
+        do
+                $PINGCOMMAND > /dev/null
+                if [ "$?" != 0 ]
+                then
+                        tet_infoline "$RHOST not responding"
+                else
+			name=$($RSH_COMM $RHOST uname -n)
+			if [ ${name} = $RHOST ]
+			then
+                       	  HOSTLIST=$HOSTLIST"$RHOST "
+                          tet_infoline "$RHOST is responding"
+			fi
+                fi
+        done
+
+        if [ -z "$HOSTLIST" ]
+        then
+                tet_infoline "No hosts responded"
+                del_test_purp ${testlist}
+                return
+        else
+                export HOSTLIST
+        fi
+
+}
+
+
+###########################################################################
+#
+# Start server process in backround, saving its process id number.  Verify
+# that the process started correctly
+#
+###########################################################################
+start_server()
+{
+	tet_infoline "Starting $SERVER_FILE $SERVER_FILE $SERVER_PARMS"
+	print "Starting $SERVER_FILE $SERVER_FILE $SERVER_PARMS"
+	./$SERVER_FILE $SERVER_PARMS &
+
+        BK_COUNT=0
+
+        until ( ps -e |grep $SERVER_FILE > /dev/null )
+        do
+                sleep 1
+                BK_COUNT=`expr $BK_COUNT + 1`
+	        if [ $BK_COUNT -eq 30 ]		# Give it 30 seconds to start.
+	        then
+	                tet_infoline "Cannot start $SERVER_FILE"
+        	        return 1
+		fi
+        done
+
+	SERVER_PID=$!
+	sleep 5
+}
+
+###########################################################################
+#
+# Start a client process on each host specified by the user.
+#
+###########################################################################
+start_clients()
+{
+TESTNAME=$1
+	PIDS=""
+	for RHOST in $HOSTLIST
+	do
+		tet_infoline "Starting $CLIENT_FILE -h $LOCAL_HOST $CLIENT_PARMS on $RHOST"
+		print "Starting $CLIENT_FILE -h $LOCAL_HOST $CLIENT_PARMS on $RHOST"
+
+                if [ ${LOCAL_HOST} = ${RHOST} ];then
+                        cp ./$CLIENT_FILE $STTMPDIR
+                else
+			# Instead of remote copy the file from here to there it 
+			# must be locally copied out of the client systems tet 
+			# for binary compatibility in a heterogeneous cell	
+			$RSH_COMM $RHOST cp $TET_ROOT/systest/rpc/ts/${TESTNAME}/$CLIENT_FILE /$STTMPDIR
+                fi
+
+                rshsp $RHOST "$STTMPDIR/$CLIENT_FILE -h $LOCAL_HOST $CLIENT_PARMS \
+			> $STTMPDIR/$CLIENT_FILE.$RHOST" &
+		PIDS="$PIDS$! "
+		tet_infoline "done"
+	done
+	sleep 10
+}
+
+###########################################################################
+#
+# Wait for the client processes to complete.
+#
+###########################################################################
+wait_for_clients()
+{
+	tet_infoline "Waiting for client processes to finish"
+	count=900
+	i=0
+        for PID in $PIDS
+        do
+		while [ $i -lt $count ]
+                do 
+			ps -ef |grep -v grep | grep $PID >/dev/null
+			if [ $? -eq 0 ]
+			then
+				i=`expr $i + 30`
+				sleep 30
+			else
+				break
+			fi
+                done
+		kill -9 $PID 2> /dev/null >/dev/null
+	
+        done
+        tet_infoline "done"
+}
+
+
+###########################################################################
+#
+# Check the testcase logs for any errors or severe errors.
+#
+###########################################################################
+check_results()
+{
+	tet_infoline "Checking results "
+
+	error=0
+        for RHOST in $HOSTLIST
+        do
+		tet_infoline "Checking results in $STTMPDIR/$CLIENT_FILE.$RHOST"
+
+                if [ ${RHOST} != ${LOCAL_HOST} ];then
+                        rcp ${RHOST}:$STTMPDIR/$CLIENT_FILE.$RHOST $STTMPDIR
+                fi
+
+                if [ -f $STTMPDIR/$CLIENT_FILE.$RHOST ]
+                then
+                        grep -e error -e severe -e gethostbyname -e usage -e Usage -e ksh: $STTMPDIR/$CLIENT_FILE.$RHOST
+                        if [ $? -eq 0 ]
+                        then
+				file_to_journal $STTMPDIR/$CLIENT_FILE.$RHOST
+				error=1
+				tet_infoline "Client $RHOST failed"
+                        else
+                                tet_infoline "Client $RHOST passed"
+                        fi
+                else
+                        tet_infoline "No client file to grep"
+			error=1
+                fi
+        done
+
+        if [ $error -eq 1 ]
+        then
+                return 1
+        else
+                return 0
+        fi
+}
+
+
+file_to_journal()
+{
+	tet_infoline "$1"
+	while read LINE; do
+		tet_infoline "$LINE"
+	done < $1
+}
+

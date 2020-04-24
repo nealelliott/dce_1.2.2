@@ -1,0 +1,549 @@
+*
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+*  write.char.file.scr -- For DFS only.
+*	This script will write to files and and check ulimits.
+*       If the scripts interrupted by C-c, the cache size used by the
+*       cache manager may different from the one before it runs.
+*       This script has same check point with write.binary.file but
+*       using different data type. This script uses ascii data
+*       to do the write sys calls.
+*
+
+*
+* Privilege: You have to be the root and the cell_admin.
+*
+
+*
+* Requirement: have the common2.env copied here.
+*
+
+*
+* Usage: file_test -I write.char.file.scr
+*        file_test -I write.char.file.scr -D
+*        or
+*        file_test <write.char.file.scr
+*        or
+*        See file_test -help
+
+*  Terminology:
+*  PASSED -- no problem for the testings.
+*  FAILED -- failed when doing basic checks.
+*  XXXXXX -- means will be enhanced later.
+
+*  Errors: 24
+
+* Basically, the test write 64kb into the file and check if the file size
+* is ok with the write. After that the file size limitation is set to 64
+* and check if the further write will fail or not. The checks following
+* will be focus on the consistency of the file operations
+* and the file status as well as exercising to run the CM code coverage and 
+* functionality, such as storeback, exausting the scache entry, ect..
+* The test will extend the file size limitation as it needs that, that is
+*  why you have to be root. Chunk size used in CM currently is 64K.
+*       	
+
+*
+* Call this function to init the testing env.
+*
+include common2.env
+
+echo
+echo Running write.char.file.scr
+echo
+*
+* Define parameters.
+*
+
+* set the number of small files you want to create when testing flushing code.
+set numberOfFiles 1000
+
+* set how big the file will be written.
+set numOf64k 20
+
+* set number of times to rewrite
+set numOfRewrite 10
+
+* number of truncates.
+set numOfTrunc 100
+
+* Ulimit uses 512 bytes block size, so the 64 kb is 128 blocks.
+* The STRING256B contains 256 chars.
+* The numberOfTimes is used as a number times to increase the file size.
+
+set numberOfTimes 3
+set numberOfBlocks 128
+set numberOfLoops 256
+set cacheSizeWant 640
+
+************************************************************************
+!*                  BASIC CHECKING
+************************************************************************
+
+* Save the old cache size.
+get_cache_size oldCacheSize v2 v3
+if ( $v3 == 1 ) {
+  echo The current cache is in memory. This test will not change the size of it.
+}
+
+umask 0
+
+chdir $testDir
+
+*  1. Check that write fails due to ulimit, check that write file exceeds 
+*     process file size boundary and no data has been written, as well as 
+*     nor mtime has been changed.
+
+*
+!* Set process's file size to 64k which is  $numberOfBlocks blocks.
+*
+
+set newLimit $numberOfBlocks
+ulimit $GET_FSIZE
+set orig_file_size $CommandResult
+ulimit $SET_FSIZE $newLimit
+
+*
+* Create file, $testFile.
+*
+open $testFile ($O_CREAT|$O_RDWR) 0777 testFileId
+
+*
+!* Check that if write file within 64k works, write 128 bytes each time.
+*
+loop x 1 1 ( $numberOfLoops - 1 )
+  write $testFileId $STRING256B
+endLoop
+
+loop x 1 1 $numberOfLoops
+  write $testFileId "a"
+endLoop
+
+stat $testFile var1
+
+if ( $var1.st_size != ( 256 * $numberOfLoops ) ) {
+  set errorMessage ("FAILED: the file size is not the one expected, " + $testFile+", --E1")
+  exec err_Process
+}
+!*
+
+*
+!* Check that write file exceeds the process's file size (64k boundary).
+!* Check the file size and the mtime when the write failed (expected).
+*
+
+verifyStatus false
+write $testFileId $STRING256B
+if ( $ITL_Status != 0 ) {
+  if ( $CommandResult > 0 ) {
+     set errorMessage "FAILED: data has been written over the file size limitation. --E2"
+     exec err_Process
+  }
+  stat $testFile var2
+  if ( $var1.st_size != $var2.st_size ) {
+    set errorMessage "FAILED: The file size changed when writing exceeding the ulimit --E3"
+    exec err_Process
+  }
+  if ( $var1.st_mtime != $var2.st_mtime ) {
+    set errorMessage "FAILED: The mtime changed through a failed write. --E4"
+    exec err_Process
+  }
+* Make sure there no data has been written to the file.
+
+  lseek $testFileId $SEEK_SET $CONST64K
+  read $testFileId 1 junk
+  if ( $CommandResult > 0 ) {
+    set errorMessage "FAILED: The data has been read over the file size limitation. --E5"
+    exec err_Process
+  }
+}
+else {
+  set errorMessage "FAILED: It did not comply with the ulimit'f file size. --E6"
+  exec err_Process
+}
+verifyStatus true
+
+*
+!* Check that writes work spanning 64k boundaries.
+*
+!*
+
+*
+* Set process's file size to  8*64k.
+*
+set newLimit ($numberOfBlocks * (5 + $numberOfTimes))
+ulimit $SET_FSIZE $newLimit
+
+*
+* write file cross the 64k boundaries.
+*
+
+
+loop y 2 1 $numberOfTimes
+  loop x 1 1 $numberOfLoops
+    write $testFileId $STRING256B
+  endLoop
+endLoop
+
+write $testFileId $STRING64K
+
+* Now the file is 4 * 64k.
+
+*
+!* Check that some writes write the last byte in a chunk.
+*
+* write first two byte in a chunk.
+*
+
+write $testFileId "1"
+if ( $CommandResult != 1 ) {
+   set errorMessage ("FAILED: to write first byte in the chunk. --E8")
+   exec err_Process
+}
+
+*
+* write 64k at over 1 byte of the boundary.
+*
+write $testFileId $STRING64K
+
+*
+* write another 64k at over 1 byte of the boundary.
+*
+write $testFileId $STRING64K
+
+*
+* write third 64k at over 1 byte of the boundary.
+*
+write $testFileId $STRING64K
+if ( $CommandResult != $CONST64K ) {
+   set errorMessage ("FAILED: write the file crossing one byte over the boundary. --E9")
+   exec err_Process
+}
+
+*
+* Check file size after writing 7 * 64ks to the file $testFile. 
+*
+stat $testFile var1
+set myfile_size int (($numberOfBlocks * ( 4+ $numberOfTimes) *512)+1)
+if ( $var1.st_size != $myfile_size ) {
+   set errorMessage ("FAILED: the file has different size from expected. --E10")
+   exec err_Process
+}
+
+*
+* write eighth 64k at over 1 byte of the file size limit (error check).
+*
+
+VerifyStatus false
+
+write $testFileId $STRING64K
+
+* one byte over the file size limitation.
+if ( $CommandResult != ($CONST64K -1) ) {
+   set errorMessage ("FAILED: write the file crossing one byte over the boundary. --E11")
+   exec err_Process
+}
+
+verifyStatus true
+
+* Now the file is 8 * 64k (equal to the file size limitation).
+
+*
+* Position the fp to the last byte of the chunk.
+*
+lseek $testFileId $SEEK_CUR -1 
+* check last  byte in a chunk.
+read $testFileId 1 junk
+assert ( $junk=="5")
+
+* Write last byte in a chunk.
+lseek $testFileId $SEEK_CUR -1 
+write $testFileId "~"
+if ( $CommandResult != 1 ) {
+   set errorMessage ("FAILED: to write last byte in the chunk. --E12")
+   exec err_Process
+}
+
+*
+* Check if the byte we write is equal to the byte we read.
+*
+lseek $testFileId $SEEK_CUR -1
+read $testFileId 1 junk
+if ( $junk != "~" ) {
+   set errorMessage ("FAILED: the byte read is not the one we write there. --E13")
+   exec err_Process
+}
+
+close $testFileId
+
+******************************************************************************
+*
+!* Adjust the cache size to make the test condition more predictable. 
+*
+
+*
+* Recover the original file size.
+*
+ulimit $SET_FSIZE $orig_file_size
+ulimit $GET_FSIZE
+if ( $CommandResult != $orig_file_size ) {
+   set errorMessage "Can not recover the original file size. --E14"
+   exec err_Process
+}
+
+!* To dirty the file just closed.
+flush_file $testFile
+
+* Set the chache size.
+* If the cache is in disk
+if ( $v3 == 0 ) {
+  set_cache_size $cacheSizeWant
+  echo Set cache size to $cacheSizeWant
+}
+
+*  Exercise the cache flushing code by creating lots of small files
+*  and a big file with multiple chunks.
+*
+!* To exercise the cache flushing code.
+*
+!* Create lots of small files (1000) each has 256 bytes.
+* Those files will not be closed util the very end of the script.
+*
+
+loop x 1 1 $numberOfFiles
+  set file_name ($testFile+$x)
+  open $file_name ($O_CREAT|$O_RDWR) 0777 file_name_id[$x]
+  write $file_name_id[$x] $STRING256B
+  close $file_name_id[$x]
+endLoop
+
+*
+!* Open a big file that has multiple chunks.
+*
+open $testFile $O_RDWR 0 testFileId
+read $testFileId $CONST64K junk
+read $testFileId $CONST64K junk
+read $testFileId $CONST64K junk
+read $testFileId $CONST64K junk
+read $testFileId $CONST64K junk
+read $testFileId $CONST64K junk
+read $testFileId $CONST64K junk
+read $testFileId $CONST64K junk
+lseek $testFileId $SEEK_CUR -1
+read $testFileId 1 junk
+if ( $junk != "~" ) {
+  set errorMessage "FAILED: the last byte is not the one it should be. --E15"
+  exec err_Process
+}
+
+*
+!* write the a byte at end of the file.
+*  The file size won't be changed.
+*
+lseek $testFileId $SEEK_CUR -1 
+write $testFileId "?"
+
+stat $testFile var1
+
+*
+!* Rewrite the big file before close it, 8 chunks.
+*
+set junk string ""
+lseek $testFileId $SEEK_SET 0
+write $testFileId $STRING64K
+write $testFileId $STRING64K
+write $testFileId $STRING64K
+write $testFileId $STRING64K
+write $testFileId $STRING64K
+write $testFileId $STRING64K
+write $testFileId $STRING64K
+write $testFileId $STRING64K
+lseek $testFileId $SEEK_CUR -1
+read $testFileId 1 junk
+if ( $junk != "6" ) {
+  set errorMessage "FAILED: the last byte is not the one it should be. --E16"
+  exec err_Process
+}
+stat $testFile var2
+if ( $var1.st_size != $var2.st_size ) {
+  set errorMessage "FAILED: file size has been changed. --E17"
+  exec err_Process
+}
+
+get_cache_size v1 v2 v3
+echo Current cache size is $v1 k and $v2 k used
+
+if ( $DEBUG != "" ) {
+stat $testFile var
+echo $var.st_size
+set commd "ls -l tfile"
+shellExec commd
+}
+
+*
+!* Write and truncate over and over (100 times).
+*
+write $testFileId $STRING256B
+stat $testFile var1
+
+lseek $testFileId $SEEK_END 0
+set offset int $CommandResult
+echo $offset
+loop x 1 1 $numOfTrunc
+  write $testFileId $STRING64K
+*  ftruncate $testFileId $offset
+   truncate $testFile $offset
+endLoop
+
+*
+* check if the file size has been changed.
+*
+
+if ( $DEBUG != "" ) {
+stat $testFile var
+echo $var.st_size
+set commd "ls -l tfile"
+shellExec commd
+}
+
+stat $testFile var2
+if ( $var1.st_size != $var2.st_size ) {
+  set errorMessage "FAILED: file size has been changed (write and ftruncate). --E18"
+  exec err_Process
+}
+
+close $testFileId
+
+if ( $DEBUG != "" ) {
+stat $testFile var
+echo $var.st_size
+set commd "ls -l tfile"
+shellExec commd
+}
+
+!* To dirty the file just closed.
+flush_file $testFile
+
+if ( $DEBUG != "" ) {
+stat $testFile var
+echo $var.st_size
+set commd "ls -l tfile"
+shellExec commd
+}
+
+stat $testFile var1
+if ( $var1.st_size != $var2.st_size ) {
+  set errorMessage "FAILED: File size after flushing is not same as expected. --E19"
+  exec err_Process
+}
+
+*
+!* Write lots of data and do a chmod, then rewrite, over and over 
+*  a few times; yields a busy scache.
+
+*
+!* write $numOf64k x 64k to the file.
+*
+open $testFile $O_RDWR 0 testFileId
+loop x 1 1 $numOf64k
+  write $testFileId $STRING64K
+endLoop
+
+if ( $DEBUG != "" ) {
+stat $testFile var
+echo $var.st_size
+set commd "ls -l tfile"
+shellExec commd
+}
+
+set junksize int ($CONST64K * $numOf64k)
+stat $testFile var1
+if ( $var1.st_size != $junksize ) {
+  set errorMessage "FAILED: file size is not same as expected. --E20"
+  exec err_Process
+}
+
+
+*
+!* Do a chmod, then rewrite, over and over a few times (10)
+*
+loop y 1 1 $numOfRewrite
+  chmod $testFile 0777
+  lseek $testFileId $SEEK_SET 0
+  loop x 1 1 $numOf64k
+    write $testFileId $STRING64K
+  endLoop
+  chmod $testFile 0666
+endLoop
+
+get_cache_size v1 v2 v3
+echo Current cache size is $v1 k and $v2 k used
+
+close $testFileId
+
+flush_file $testFile
+
+stat $testFile var
+if ( $var.st_size != $junksize ) {
+  set errorMessage "FAILED: file size has been changed. --E21"
+  exec err_Process
+}
+if ( $var.st_mode & 0600 == 0 ) {
+  set errorMessage "FAILED: The file has wrong mod bits for the owner. --E22"
+  exec err_Process
+}
+if ( $var.st_mode & 060 == 0 ) {
+  set errorMessage "FAILED: The file has wrong mod bits for the group. --E23"
+  exec err_Process
+}
+if ( $var.st_mode & 06 == 0 ) {
+  set errorMessage "FAILED: The file has wrong mod bits for the others. --E24"
+  exec err_Process
+}
+
+
+******************************************************************************
+*
+!* cleaning up.
+*
+
+* Set old cache size back.
+if ( $v3 == 0 ) {
+  set_cache_size $oldCacheSize
+  echo Set cache size back to $oldCacheSize
+}
+
+*
+* Close the small files.
+*
+loop x 1 1 $numberOfFiles
+  set file_name ($testFile+$x)
+  remove $file_name
+endLoop
+
+remove $testFile
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+exec report_Proc "write.char.file.scr" $errorCounter
+echo
+quit

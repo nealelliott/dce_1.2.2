@@ -1,0 +1,509 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#  
+
+###############################################################################
+# Copyright (C) 1995, 1992 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS exporting Episode (not exported UFS, and
+# not local Episode). 
+
+# This is a advanced test of the fts clone and clonesys features.
+
+###############################################################################
+
+# Usage:                test18
+
+# Typically run via:    test18 >& test18.out or via runtests
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode. DFS server $SERVER_1
+# must export Episode aggregate $EPI_AGGRNAME_1, and $SERVER_2 must export
+# $EPI_AGGRNAME_2. $SERVER_1 and $SERVER_2 can be the same machine.
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1 and $SERVER_2, in
+# order to run the fts commands contained in this script. You must also be
+# able to create mount points in $export_root.
+
+# Highest error number is: 34.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${EPI_AGGRNAME_1=epi1}
+: ${EPI_AGGRNAME_2=epi2}
+: ${SERVER_1=$hn}
+: ${SERVER_2=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name="/.../$CELL_NAME"}
+: ${dns_server_prefix="/.:/hosts/"}
+: ${export_root=/.../$CELL_NAME/fs}
+
+cav_arg="$CELL_ARG $AUTH_ARG $VERB_ARG"
+ft=fts.test18.$$
+mp=$export_root/test/dir.$$
+
+EPI_PART_1=`fts aggrinfo $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 | sed -e 's/[^(]*(//' -e 's/).*//'`
+
+###############################################################################
+cleanup()
+{
+# Nothing yet.
+ return 0
+}
+
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+fillUpFileset()
+{
+#cp /*unix x1
+touch x1
+i=0
+while [ $i -lt 10 ]
+  do
+    cp x1 x1.$i; rf=$?
+    if [ $rf -ne 0 ]
+      then 
+	break
+      fi
+    i=`expr $i + 1`
+  done
+}
+
+###############################################################################
+
+echo ""; echo "Checking initial conditions..."
+
+if [ "$dfs_FileSysType" = "$DFS_WORKS_ON_UFS" ]
+then
+  echo ""; echo "$p not applicable to DFS exporting UFS"; echo ""
+  echo ""; echo "All done at `date`."; echo ""
+  if test $rc -eq 0
+     then echo "$p PASSED"
+     else echo "$p FAILED ($rc errors)"
+     fi
+  exit $rc
+fi
+
+# Check for empty EPI_AGGRNAME_1
+
+$bin_dir/fts lsheader $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 | grep "no filesets"; rf=$?
+if test $rf -ne 0
+   then
+      echo "Warning: aggregate $EPI_AGGRNAME_1 on $SERVER_1 is non-empty."
+      echo "Warning: skipping the ENTIRE test."
+      if test $rc -eq 0
+         then echo "$p PASSED"
+         else echo "$p FAILED ($rc errors)"
+         fi
+      exit $rc
+   fi
+
+# Check conditions for locally mounted Episode testing
+
+if [ -f $bin_dir/epiunmount ]
+   then
+      if [ "$hn" = "$SERVER_1" ]
+         then
+            echo "Will perform locally mounted Episode tests."
+            epi_LocalMountOK=TRUE
+         else
+            echo "Warning: not running on \$SERVER_1 -- will skip local mount tests."
+            epi_LocalMountOK=FALSE
+         fi
+   else
+      echo "Warning: missing $bin_dir/epiunmount -- will skip local mount tests."
+      epi_LocalMountOK=FALSE
+   fi
+
+# Check for cell name
+
+if [ "$CELL_NAME" = "" ]
+   then echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting."
+        exit 2
+   fi
+
+###############################################################################
+
+echo ""
+echo "$ty/$p starting as PID $$ at `date` on $hn"
+echo "   in cell $CELL_NAME."
+echo "Using aggregates $EPI_AGGRNAME_1 on $SERVER_1 and $EPI_AGGRNAME_2 on $SERVER_2."
+
+###############################################################################
+# Test clone first, then clonesys
+
+echo ""; echo "Running fts create $ft..."; sync; sync; sleep 1
+$bin_dir/fts create $ft $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg;rf=$?
+if test $rf -ne 0
+   then 
+	echo "fts create exit status was $rf"
+	echo "- command failed; $p ABORTING ($p: E1)"
+        rc=`expr $rc + 1`
+   fi
+echo ""; echo "Running fts crmount..."; sync; sync; sleep 1
+$bin_dir/fts crmount $mp $ft; rf=$?
+if test $rf -ne 0
+   then 
+	echo "fts crmount exit status was $rf"
+	echo "- command failed ($p: E2)" 
+	rc=`expr $rc + 1`
+   fi
+
+setFsetRootProt $mp $testuid "E100"
+
+echo ""; echo "Checking if FLDB entry looks right..."; sync; sync; sleep 1
+$bin_dir/fts lsfldb $ft $CELL_ARG | grep readWrite | fgrep " valid"; rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts lsfldb exit status was $rf"
+	echo "- command failed ($p: E3)" 
+	rc=`expr $rc + 1`
+   fi
+$bin_dir/fts lsfldb $ft $CELL_ARG | grep readOnly | grep invalid; rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts lsfldb exit status was $rf"
+	echo "- command failed ($p: E4)" 
+	rc=`expr $rc + 1` 
+   fi
+$bin_dir/fts lsfldb $ft $CELL_ARG | grep backup | grep invalid; rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts lsfldb exit status was $rf"
+	echo "- command failed ($p: E5)" 
+	rc=`expr $rc + 1`
+   fi
+echo ""; echo "Checking the quota of RW and BK filesets..."; sync; sync
+rwq=`$bin_dir/fts lsquota -fileset $ft $CELL_ARG|grep $ft|awk '{print $3}'`
+rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts lsquota exit status was $rf"
+	echo "- command failed ($p: E6)" 
+	rc=`expr $rc + 1`
+   fi
+echo ""; echo "Cloning the created fileset..."; sync; sync; sleep 1
+$bin_dir/fts clone $ft $CELL_ARG; rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts clone exit status was $rf"
+	echo "- command failed ($p: E7)" 
+	rc=`expr $rc + 1`
+   fi
+echo ""; echo "Checking if backup fileset is created..."; sync; sync
+$bin_dir/fts lsfldb $ft $CELL_ARG | grep backup | fgrep " valid"; rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts lsfldb exit status was $rf"
+	echo "- command failed ($p: E8)" 
+	rc=`expr $rc + 1`
+   fi
+echo ""; echo "Checking the quota of BK fileset..."; sync; sync
+bkq=`$bin_dir/fts lsquota -fileset $ft.backup $CELL_ARG|grep $ft.backup|awk '{print $3}'`
+rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts lsquota exit status was $rf"
+	echo "- command failed ($p: E9)" 
+	rc=`expr $rc + 1`
+   fi
+if [ $rwq -ne $bkq ]
+   then
+	echo "backup fileset quota not correct, should equal RW quota"
+	rc=`expr $rc + 1`
+   fi
+echo ""; echo "Altering the RW..."; sync; sync
+cd /tmp; cd $mp; echo pwd: `pwd`
+fillUpFileset
+
+rwq2=`$bin_dir/fts lsquota -fileset $ft $CELL_ARG|grep $ft|awk '{print $3}'`; rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts lsquota exit status was $rf"
+	echo "- command failed ($p: E10)" 
+	rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Cloning again..."; sync; sync; sleep 2
+$bin_dir/fts clone $ft $CELL_ARG; rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts clone exit status was $rf"
+	echo "- command failed ($p: E11)" 
+	rc=`expr $rc + 1`
+   fi
+echo ""; echo "Checking the quota of RW and BK filesets..."; sync; sync
+bkq2=`$bin_dir/fts lsquota -fileset $ft.backup $CELL_ARG|grep $ft.backup|awk '{print $3}'`; rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts lsquota exit status was $rf"
+	echo "- command failed ($p: E12)" 
+	rc=`expr $rc + 1`
+   fi
+diffq=`expr $rwq2 - 8 + $bkq - $bkq2`
+if [ $diffq -le 2 -a $diffq -ge -2 ]
+   then
+	:
+   else
+	echo "backup fileset quota incorrect"
+	rc=`expr $rc + 1`
+   fi
+echo ""; echo "Cloning again..."; sync; sync
+$bin_dir/fts clone $ft $CELL_ARG; rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts clone exit status was $rf"
+	echo "- command failed ($p: E13)" 
+	rc=`expr $rc + 1`
+   fi
+echo ""; echo "Checking the quota of RW and BK filesets..."; sync; sync
+bkq=`$bin_dir/fts lsquota -fileset $ft.backup $CELL_ARG|grep $ft.backup|awk '{print $3}'`; rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts lsquota exit status was $rf"
+	echo "- command failed ($p: E14)" 
+	rc=`expr $rc + 1`
+   fi
+if [ $bkq -ne $bkq2 ]
+   then
+	echo "backup fileset quota incorrect, should be same as before reclone"
+	rc=`expr $rc + 1`
+   fi
+echo ""; echo "Deleting $ft.backup..."; sync; sync
+$bin_dir/fts delete $ft.backup $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg; rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts delete exit status was $rf"
+	echo "- command failed ($p: E15)" 
+	rc=`expr $rc + 1`
+   fi
+echo ""; echo "Checking if backup fileset is invalid..."; sync; sync
+$bin_dir/fts lsfldb $ft $CELL_ARG | grep backup | grep invalid; rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts lsfldb exit status was $rf"
+	echo "- command failed ($p: E16)" 
+	rc=`expr $rc + 1`
+   fi
+echo ""; echo "Checking the quota of RW..."; sync; sync
+rwq=`$bin_dir/fts lsquota -fileset $ft $CELL_ARG|grep $ft|awk '{print $3}'`; rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts lsquota exit status was $rf"
+	echo "- command failed ($p: E17)" 
+	rc=`expr $rc + 1`
+   fi
+if [ $rwq -ne $bkq ]
+   then
+	echo "RW quota incorrect, should equal just deleted BK's quota"
+	rc=`expr $rc + 1`
+   fi
+# Now do cloning with concurrent access
+(
+  echo ""; echo "Process $$ accessing the fileset repeatedly..."; sync; sync
+  i=0
+  while [ $i -le 20 ]
+  do
+    ls -l
+    touch x
+    i=`expr $i + 1`
+  done
+) &
+echo ""; echo "Cloning with concurrent modification of fileset..."
+sync; sync; sleep 15
+$bin_dir/fts clone $ft $CELL_ARG; rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts clone exit status was $rf"
+	echo "- command failed ($p: E18)" 
+	rc=`expr $rc + 1`
+   fi
+$bin_dir/fts lsfldb $ft $CELL_ARG | grep backup | fgrep " valid"; rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts lsfldb exit status was $rf"
+	echo "- command failed ($p: E19)" 
+	rc=`expr $rc + 1`
+   fi
+wait
+# Now do a clone in parallel with dump
+(
+  echo ""; echo "Process $$ dumping the fileset..."; sync; sync
+  $bin_dir/fts dump -fileset $ft -time 0 -file /tmp/dump.$$ $CELL_ARG; rf=$?
+  # This is a race condition, so can't judge the result
+) &
+echo ""; echo "Cloning with concurrent dump of fileset..."
+sync; sync; 
+$bin_dir/fts clone $ft $CELL_ARG; rf=$?
+# This is a race condition, so can't judge the result
+if [ $rf -eq 0 ] 
+   then
+	echo "either dump or clone closed the fileset before the other"
+        echo "opened it, so no conflict"
+	echo "fts clone exit status was $rf"
+   else
+	echo "clone tries to open fileset while dump has it open already"
+        echo "conflict here"
+	echo "fts clone exit status was $rf"
+   fi
+wait
+if [ "$epi_LocalMountOK" != "TRUE" ]
+  then
+      echo "Skipping tests of a locally mounted Episode fileset."
+  else
+    echo ""; echo "Locally mounting the fileset..."; sync; sync; sleep 5
+    cd /tmp; mkdir /tmp/epi.$$
+    epimount $ft /tmp/epi.$$; rf=$?
+    if [ $rf -ne 0 ] 
+      then
+	echo "epimount exit status was $rf"
+	echo "- command failed ($p: E22)" 
+	rc=`expr $rc + 1`
+      fi
+    echo ""; echo "Cloning a locally mounted fileset..."; sync; sync; sleep 1
+    $bin_dir/fts clone $ft $CELL_ARG; rf=$?
+    if [ $rf -ne 0 ] 
+      then
+	echo "fts clone exit status was $rf"
+	echo "- command failed ($p: E23)" 
+	rc=`expr $rc + 1`
+      fi
+    echo ""; echo "Removing the local mount..."; sync; sync; sleep 1
+    epiunmount /tmp/epi.$$
+    if [ $rf -ne 0 ] 
+      then
+	echo "epiunmount exit status was $rf"
+	echo "- command failed ($p: E24)" 
+	rc=`expr $rc + 1`
+      fi
+  fi
+echo ""; echo "Deleting the RW..."; sync; sync; sleep 1
+$bin_dir/fts delete $ft $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg; rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts delete exit status was $rf"
+	echo "- command failed ($p: E25)" 
+	rc=`expr $rc + 1`
+   fi
+$bin_dir/fts lsfldb $ft $CELL_ARG; rf=$?
+if [ $rf -eq 0 ] 
+   then
+	echo "fts lsfldb exit status was $rf"
+	echo "- command succeeded unexpectedly ($p: E26)" 
+	rc=`expr $rc + 1`
+   fi
+$bin_dir/fts lsft -fileset $ft $CELL_ARG; rf=$?
+if [ $rf -eq 0 ] 
+   then
+	echo "fts lsft exit status was $rf"
+	echo "- command succeeded unexpectedly ($p: E27)" 
+	rc=`expr $rc + 1`
+   fi
+$bin_dir/fts delmount $mp; rf=$?
+if [ $rf -ne 0 ] 
+   then
+	echo "fts delmount exit status was $rf"
+	echo "- command failed ($p: E28)" 
+	rc=`expr $rc + 1`
+   fi
+rm -f /tmp/dump.$$
+
+# Now test clonesys
+for i in 1 2 3 4 5 6 7 8 9 10
+  do
+  echo ""; echo "Running fts create $ft.$i..."; sync; sync; sleep 1
+  $bin_dir/fts create $ft.$i $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+  rf=$?
+  if test $rf -ne 0
+     then 
+  	echo "fts create exit status was $rf"
+	echo "- command failed; $p ABORTING ($p: E29.$i)"
+        rc=`expr $rc + 1`
+     fi
+  done
+echo ""; echo "Running clonesys..."; sync; sync; sleep 1
+$bin_dir/fts clonesys -prefix $ft $CELL_ARG; rf=$?
+if test $rf -ne 0
+   then 
+ 	echo "fts clonesys exit status was $rf"
+	echo "- command failed; $p ABORTING ($p: E30)"
+        rc=`expr $rc + 1`
+   fi
+echo ""; echo "Counting the number of backup filesets..."; sync; sync
+fsC=`$bin_dir/fts lsheader $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $CELL_ARG|awk '/Total filesets on server/ {print $10}'`
+rf=$?
+if test $rf -ne 0
+   then 
+ 	echo "fts lsheader exit status was $rf"
+	echo "- command failed; $p ABORTING ($p: E31)"
+        rc=`expr $rc + 1`
+   fi
+bkC=`$bin_dir/fts lsheader $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $CELL_ARG|fgrep ".backup"|wc -l`
+rf=$?
+if test $rf -ne 0
+   then 
+ 	echo "fts lsheader exit status was $rf"
+	echo "- command failed; $p ABORTING ($p: E32)"
+        rc=`expr $rc + 1`
+   fi
+if [ $fsC -lt 20 -o $bkC -lt 10 ]
+  then
+	echo "fts clonesys failed to create backup filesets"
+	echo "- command failed; ($p: E33)"
+	rc=`expr $rc + 1`
+  fi
+for i in 1 2 3 4 5 6 7 8 9 10
+  do
+  echo ""; echo "Deleting RW fileset $ft.$i..."; sync; sync; sleep 1
+  $bin_dir/fts delete $ft.$i $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg; rf=$?
+  if [ $rf -ne 0 ] 
+    then
+	echo "fts delete exit status was $rf"
+	echo "- command failed ($p: E34.$i)" 
+	rc=`expr $rc + 1`
+    fi
+  done
+fsC=`$bin_dir/fts lsheader $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $CELL_ARG|fgrep "There are no filesets"`
+rf=$?
+if test $rf -ne 0
+   then 
+	echo "There are some filesets left over in $EPI_AGGRNAME_1"
+	echo "They probably existed before the test started, so not cleaning up"
+ 	echo "fts lsheader exit status was $rf"
+   fi
+
+###############################################################################
+
+echo ""; echo "All done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################

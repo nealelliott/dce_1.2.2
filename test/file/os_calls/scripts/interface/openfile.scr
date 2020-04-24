@@ -1,0 +1,250 @@
+*
+* ID: $Id:
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* openfile.scr -- This script tests the open sys calls.
+*
+* Execution requirement: Better login as no root.
+*
+
+* Usage: file_test -I openfile.scr 
+*        file_test -I openfile.scr -D 
+*        or 
+*        or 
+*        file_test <openfile.scr
+*        or
+*     	 See file_test -help 
+*
+*  Check points:
+*  1. open file for writing.
+*  2. open file for reading.
+*  3. open file for write+truncate.
+*  4. open file for read+truncate.
+*  5. mtime for successful truncate.
+*  6. atime and mtime do not change for illegal opens.
+*  7. unlink an open file.
+
+*  Terminology:
+*  PASSED -- no problem for the testings.
+*  FAILED -- failed when doing basic checks.
+*  XXXXXX -- means will be enhanced later.
+
+*  Errors: 12
+
+
+***************************************************************************
+* This script implement the basic open syscall test described in Mike Kazar's
+* syscall check list. It will be changed later on.
+***************************************************************************
+
+*
+* Common settings.
+*
+include common2.env
+echo 
+echo Running openfile.scr
+echo
+
+*************************************************************************
+!*                         BASIC CASES                                   *
+*************************************************************************
+
+chdir $testDir
+umask 0000
+* "The umask call return $ITL_Status"
+
+*
+!* Check open file for writing.
+*
+
+open $testFile ($O_CREAT|$O_WRONLY) 0777 testFileId
+
+* Get stat infor of the file created.
+stat $testFile var1
+
+* write 64k to the file.
+write $testFileId $STRING64K
+close $testFileId
+
+sleep $sleepTime
+
+*
+!* Check that open for write+truncate.
+*
+open  $testFile ($O_TRUNC|$O_WRONLY) 0777 testFileId
+
+stat $testFile var2
+if ( $var2.st_size != 0 ) {
+  set errorMessage ("FAILED: truncate did not truncate "+$testFile+", --E1")
+  exec err_Process
+}
+else {
+!* Check that mtime changed for a successful O_TRUNC open.
+  if ( $var1.st_mtime == $var2.st_mtime ) {
+      set errorMessage ("FAILED: truncate did not change mtime, "+$testFile+", --E2")
+      exec err_Process
+  }
+}
+
+* write 64k to the file (64K+1 because the null terminated string).
+write $testFileId $STRING64K
+if ( $CommandResult != $CONST64K ) {
+  set errorMessage ("FAILED: write "+$testFile+", --E3")
+  exec err_Process
+}
+close $testFileId
+
+
+*
+!* Check open file for reading.
+*
+open $testFile $O_RDONLY 0777 testFileId
+
+* read 64k from the file.
+read $testFileId $CONST64K junk
+if ( $CommandResult != $CONST64K ) {
+  set errorMessage ("FAILED: open for reading "+$testFile+", --E4")
+  exec err_Process
+}
+close $testFileId
+
+*
+!* Check open file for reading+truncate.
+*
+chmod $testFile 0777
+
+open $testFile ($O_TRUNC|$O_RDONLY) 0777 testFileId
+
+stat $testFile var
+if ( $var.st_size != 0 ) {
+  set errorMessage ("FAILED: read+truncate "+$testFile+", --E5")
+  exec err_Process
+}
+else {
+  verifyStatus false
+  read $testFileId $CONST64K junk
+  verifyStatus true
+  if ( $CommandResult > 0 ) {
+    set errorMessage ("FAILED: The read should fail when the file is opened for read+truncate "+$testFile+", --E6")
+    exec err_Process
+  }
+}
+close $testFileId
+
+*
+!* Check that mtime and atime do not change on failed opens (error check).
+*
+
+stat $testFile var1
+sleep $sleepTime
+
+verifyStatus false
+open $testFile ($O_CREAT|$O_EXCL) 0 testFileId
+if ($ITL_Status != 0 ) {
+  verifyStatus true
+  stat $testFile var2
+  If ( $var2.st_mtime != $var1.st_mtime ) {
+    set errorMessage ("FAILED: failed open changed mtime, "+$testFile+", --E7")
+    exec err_Process
+  }
+  If ( $var2.st_atime != $var1.st_atime ) {
+    set errorMessage ("FAILED: failed open changed atime, "+$testFile+", --E8")
+    exec err_Process
+  }
+}
+else {
+  verifyStatus true
+  set errorMessage ("FAILED: open should fail, "+$testFile+", --E9")
+  exec err_Process
+}
+  
+
+*
+!* Check another wrong open if the mtime or atime changed (error check).
+*
+
+* Set modbit so that the owner has no read and write rights.
+chmod $testFile 0111
+
+verifyStatus false
+
+open $testFile ($O_RDONLY|$O_TRUNC) 0 testFileId
+if ( $ITL_Status == 0 ) {
+  verifyStatus true
+  if ( $localPath && $USER != "rootl" && $USER != "root" ) {
+    set errorMessage ("FAILED: open should fail, "+$testFile+", --E10")
+    exec err_Process
+  }
+  else {
+    close $testFileId
+  }
+}
+else {
+  verifyStatus true
+  stat $testFile var2
+  If ( $var2.st_mtime != $var1.st_mtime ) {
+      set errorMessage ("FAILED: failed open changed mtime, "+$testFile+", --E11")
+      exec err_Process
+  }
+  If ( $var2.st_atime != $var1.st_atime ) {
+      set errorMessage ("FAILED: failed open changed atime, "+$testFile+", --E12")
+      exec err_Process
+  }
+}
+
+*
+!* Open a file and do nothing but close it.
+*
+open junkFile ($O_CREAT|$O_RDWR) 0777 junkId
+close $junkId
+
+verifyStatus false
+access junkFile $accessFlagE
+if ( $ITL_Status != 0 ) {
+  verifyStatus true
+  set errorMessage "FAILED: can not create zero length file, file not found. --E13"
+  exec err_Process
+}
+else {
+  verifyStatus true
+  remove junkFile
+}
+
+
+*
+!* Unlink an open file.
+*
+chmod $testFile 0777
+open $testFile $O_RDWR 0 testFileId
+unlink $testFile
+
+*************************************************************************
+*                         CLEANING UP AND REPORT                        *
+*************************************************************************
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+*rmdir $testDir
+exec report_Proc "openfile.scr" $errorCounter
+echo
+quit
+

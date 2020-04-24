@@ -1,0 +1,287 @@
+#!/bin/sh 
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: rtestErrMapQuota,v $
+# Revision 1.1.10.1  1996/10/17  18:29:52  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:55:00  damon]
+#
+# Revision 1.1.4.4  1993/01/11  18:33:51  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:16:45  htf]
+# 
+# Revision 1.1.4.3  1992/10/28  18:14:32  jaffe
+# 	Transarc delta: jess-ot5320-fix-fs-low-testhome 1.1
+# 	  Selected comments:
+# 	    The fs and low test shell scripts have the following if statement
+# 	    if [ "$TESTTOP" = "`pwd`" ]
+# 	    then
+# 	    UTIL_DIR=../util
+# 	    testhome=$TESTTOP
+# 	    else
+# 	    UTIL_DIR=$TESTTOP/util
+# 	    testhome=$TESTTOP/$testSuiteType
+# 	    fi
+# 	    The problem is that variable testSuiteType is not defined at this time.
+# 	    See above.
+# 	[1992/10/28  14:45:25  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/28  18:16:38  jaffe
+# 	Transarc delta: rajesh-clean-low-tests 1.5
+# 	  Selected comments:
+# 	    To remove make and clean options from the low test suite. To change
+# 	    the scripts to use common shell functions. To create a file
+# 	    fs_functionsScript with the common shell functions in the util
+# 	    directory.
+# 	    To change the scripts to use common shell functions from
+# 	    util/fs_functionsScript instead of inline code.
+# 	    Modify scripts to follow coding standards, simplify the code, increase
+# 	    readability etc.
+# 	    No changes yet
+# 	    More of above.
+# 	    Modify the tests to give them a simpler logical structure, modularity,
+# 	    readability ( one command per line) and to change then to use the
+# 	    common function created earlier.
+# 	    Modification of rtest1 and rtest2 to use the utility functions
+# 	    correctly.
+# 	[1992/08/28  12:31:49  jaffe]
+# 
+# Revision 1.1.2.3  1992/05/29  22:59:54  mason
+# 	Transarc delta: fred-3754-change-script-name 1.1
+# 	  Selected comments:
+# 	    To clean up a number of defects with the tests.  In addition to defect
+# 	    3754, the changes also fix defects 3750 and 3748.
+# 	    Fixed setting of TESTTOP variable.
+# 	[1992/05/29  12:52:40  mason]
+# 
+# Revision 1.1.2.2  1992/05/21  12:47:35  jaffe
+# 	Transarc delta: fred-remove-sys 1.1
+# 	  Selected comments:
+# 	    To remove dependency on the AFS sys command in the test scripts.
+# 	    To remove dependency on AFS sys command.
+# 	Transarc delta: rajesh-test-error-mapping 1.1
+# 	  Selected comments:
+# 	    Tests to check DFS error mapping.
+# 	    Driver for rprogErrMapQuota.c
+# 	[1992/05/20  20:45:31  jaffe]
+# 
+# $EndLog$
+###############################################################################
+#    Copyright (C) 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This script runs a C program  to test mapping of error EDQUOTA in DFS
+# Must be run with cell_admin authentication.
+#
+# Usage is:   testErrMap {-curLocalPath <pathName>} {-mountPoint <dirName>}
+#	                 {-fileserver <fileserverMachineName> }
+#			 [-debug] [make|clean]
+#
+# Default for debug mode off.
+#
+# Details on parameters:
+#
+#	AggrName	Name of an exported aggregate on which to create the 
+#               	test LFS fileset.
+#			(Device Name | Aggregate ID | Aggregate Name)
+#
+#	MountPointDir 	Directory at which to mount the test LFS fileset.
+#	
+#	FileServer	Name of fileserver machine
+#	
+#	DebugMode	debugon 
+###############################################################################
+
+set -x
+
+TESTTOP=${TESTTOP:="`pwd`"}
+if [ "$TESTTOP" = "`pwd`" ]
+then
+    UTIL_DIR = ../util
+    testhome=$TESTTOP
+else
+    UTIL_DIR = $TESTTOP/util
+    testhome=$TESTTOP/low
+fi
+
+. $UTIL_DIR/fs_FunctionsScript
+fs_InitSetup low
+
+a=$1
+case $a in 
+  make|-make) if test $func != void
+                 then echo "$p: cannot do both $func and $a"; exit 2
+              fi
+              func=make
+              ;;
+  clean|-clean) if test $func != void
+                  then echo "$p: cannot do both $func and $a"; exit 2
+                fi
+                func=clean
+                ;;
+  help|-help) echo "$p does testing for error mapping"
+              echo "Usage:"
+              echo "$p aggrName mountPointDir fileServer [-debugon]"
+              exit 2 ;;
+  *) if [ $# -lt 3 ] 
+     then
+         echo "Usage: $p aggrName mountPointDir fileServer [-debugon]"
+        exit 1
+     fi
+     ;;
+esac
+
+if [ $func = void ]
+then
+    func=run
+fi
+if test $func = make
+then
+     (echo "$p make" ; date ) | tee -a $lf
+     if test -n "$testhome"
+     then
+         cd $testhome
+         if test `pwd` != $d
+         then
+             cp $cp.c $d
+             if test -f $cp
+             then
+                 cp $cp $d
+             fi
+         fi
+         cd $d
+     fi
+     if test ! -f $cp.c
+     then
+         echo "$p: cannot find C program" | tee -a $lf; exit 2
+     fi
+
+     if test ! -f $cp
+     then
+        if echo $fs_sysName | grep -s '^rs'; then arg=_AIX
+        elif echo $fs_sysName | grep -s '^hp'; then arg=HP
+        elif echo $fs_sysName | grep -s '^pmax'; then arg=MIPS
+        elif echo $fs_sysName | grep -s '^next'; then arg=NEXT
+        elif echo $fs_sysName | grep -s '^rt'; then arg=RT
+        elif echo $fs_sysName | grep -s '^sun3'; then arg=SUN3
+        elif echo $fs_sysName | grep -s '^sun4'; then arg=SPARC
+        elif echo $fs_sysName | grep -s '^vax'; then arg=VAX
+        else echo "$p: don't recognize system type $fs_sysName" | tee -a $lf; ex
+it 2
+        fi
+        cc -g -D$arg $cp.c -o $cp; exit $?
+     else
+         exit 0
+     fi
+elif test $func = clean
+then
+    (echo "$p clean" ; date ) | tee -a $lf
+    rm -f $cp $p.*.out $p.[0-9.a-zA-Z]*
+    if test -n "$testhome"
+    then
+        cd $testhome
+        if test `pwd` != $d -a -f $cp.c
+        then
+            rm -f $d/$cp.c
+        fi
+        cd $d
+    fi
+    exit 0
+
+elif test $func = run
+then
+    fs_CheckBinaryExistence $cp
+
+    #
+    #   Process fileset creation and mounts
+    #
+    echo "Fetching aggregate name"
+    ftsAggrName=$1
+    shift
+
+    echo "Fetching mount directory name"
+    ftsMountDirName=$1
+    shift
+
+    echo "Fetching server name"
+    ftsServerName=$1
+    shift
+
+    #
+    # debug verbose flag
+    #
+    if [ $# -gt 0 ]
+    then 
+        if [ $1 = "debug" ]
+        then 
+      	    verbose="-verbose"
+        else
+            verbose=""
+        fi
+    fi
+
+    ftsName="ErrorMapFileset"
+    ftsQuota=2 # 2 K bytes always.
+
+else
+    echo "$p: requires an argument" | tee -a $lf
+    exit 2
+fi
+
+###############################################################################
+
+(echo "$p (dir) starting in $d"; echo "Host `hostname` ($fs_sysName)"; date) |
+   tee -a $lf
+echo "parent process number $$" | tee -a $lf 
+echo "aggregate name $ftsAggrName, mount directory $ftsMountDirName"|tee -a $lf
+echo "fileserver $ftsServerName" | tee -a $lf
+
+fs_DetermineFSType
+if [ $fsType -ne 2 ] 
+then
+    (echo "This test should be run only in DFS") | tee -a $lf
+    exit 1
+fi    
+echo "" | tee -a $lf
+
+echo "$p starting test" | tee -a $lf
+
+echo "Issuing fts create $ftsName $ftsServerName $ftsAggrName"
+fts create -ftname $ftsName -server $ftsServerName \
+           -aggregate $ftsAggrName $verbose
+
+echo "Issuing fts crmount $ftsMountDirName $ftsName"
+fts crmount -dir $ftsMountDirName -fileset $ftsName $verbose
+
+echo "Setting fileset quota"
+fts setquota -fileset $ftsName -size $ftsQuota $verbose
+
+echo "Testing EDQUOTA error"
+./$cp $ftsMountDirName $ftsQuota > $p.out
+rf=$?
+cat $p.out | tee -a $lf
+
+###############################################################################
+
+rm -rf $p.out $p.[0-9]*.t* $cp.[0-9]*.t*
+
+(echo ""; echo "$ty/$p returning $rc in $d"; date) | tee -a $lf
+
+#
+# Remove temporary file created by the test. (Previously done in -clean option)
+#
+(echo "$p clean" ; date ) | tee -a $lf
+rm -f $cp $p.*.out $p.[0-9.a-zA-Z]*
+
+exit $rc
+
+###############################################################################
+
+
+
+

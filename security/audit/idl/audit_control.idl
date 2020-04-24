@@ -1,0 +1,181 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * (c) Copyright International Business Machines Corp. 1994, 1996
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ *
+ */
+/*
+ * HISTORY
+ * $Log: audit_control.idl,v $
+ * Revision 1.1.6.1  1996/07/08  18:28:28  arvind
+ * 	Audit for 1.2.2
+ * 	[1996/06/21  20:25 UTC  arvind  /main/arvind_audit122/1]
+ *
+ * 	Audit for 1.2.2
+ * 	[1996/03/09  23:27:06  marty  1.1.4.2]
+ *
+ * Revision 1.1.4.2  1996/03/09  23:27:06  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:42:37  marty]
+ * 
+ * Revision 1.1.4.1  1995/12/08  17:40:25  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  17:17:56  root]
+ * 
+ * Revision 1.1.2.4  1994/08/17  19:56:51  weisz
+ * 	CR 11443: added PENDING as a new valid outcome.
+ * 	[1994/08/17  19:54:05  weisz]
+ * 
+ * Revision 1.1.2.1  1993/12/22  12:39:12  zeliff
+ * 	First version of code
+ * 	[1993/12/21  15:01:24  zeliff]
+ * 
+ * $EndLog$
+ */
+
+[
+uuid(006A04B4-E1C1-1C14-A5F2-02608C0FF790),
+pointer_default(ptr),
+version(1.0)
+]
+
+interface audit_control {
+
+    import "dce/rgynbase.idl";
+
+    typedef enum {
+        aud_e_esl_princ,     
+        aud_e_esl_foreign_princ,
+        aud_e_esl_group, 
+        aud_e_esl_foreign_group,
+        aud_e_esl_cell,         
+        aud_e_esl_cell_overridable,
+        aud_e_esl_world,
+        aud_e_esl_world_overridable,
+	aud_e_esl_max
+    } aud_esl_type_t;
+    
+    typedef unsigned32 aud_esl_cond_t;
+
+    const aud_esl_cond_t aud_c_esl_cond_success = 0x00000001;
+    const aud_esl_cond_t aud_c_esl_cond_failure = 0x00000002;
+    const aud_esl_cond_t aud_c_esl_cond_denial  = 0x00000004;
+    const aud_esl_cond_t aud_c_esl_cond_pending = 0x00000008;
+    const aud_esl_cond_t aud_c_esl_cond_all     = 0x0000000F;
+    const unsigned16 aud_c_esl_cond_number = 5;
+    const aud_esl_cond_t aud_c_esl_cond_unknown = 0x00000000;
+
+    typedef unsigned32 aud_esl_act_t;
+    
+    const aud_esl_act_t aud_c_esl_act_none  = 0x0;
+    const aud_esl_act_t aud_c_esl_act_log   = 0x00000001;
+    const aud_esl_act_t aud_c_esl_act_alarm = 0x00000002;
+    const aud_esl_act_t aud_c_esl_act_all   = 0x00000003;
+
+    /* is daemon accepting audit records */
+    const unsigned32 aud_c_dmn_state_enabled = 0x0;  
+    const unsigned32 aud_c_dmn_state_disabled = 0x1;  
+
+    typedef struct aud_esl_evt_classes {
+	    unsigned32	evt_class;
+	    struct aud_esl_evt_classes *next;
+    } aud_esl_evt_classes_t, *aud_esl_evt_classes_p_t;
+
+    typedef struct aud_esl_guides {
+	aud_esl_evt_classes_p_t ec_list;
+	aud_esl_cond_t audit_condition;
+	aud_esl_act_t  audit_action;
+	struct aud_esl_guides *next;
+    } aud_esl_guides_t, *aud_esl_guides_p_t;
+ 
+    typedef struct aud_esl_entry {
+        uuid_t          subject_uuid;
+        aud_esl_guides_p_t guides;   /* guides are link-listed */
+        struct aud_esl_entry *next;
+    } aud_esl_entry_t, *aud_esl_entry_p_t;
+    
+    typedef struct aud_esl_foreign_entry {
+        uuid_t          subject_uuid;
+        uuid_t          cell_uuid;
+        aud_esl_guides_p_t guides;   /* guides are link-listed */
+        struct aud_esl_foreign_entry *next;
+    } aud_esl_foreign_entry_t, *aud_esl_foreign_entry_p_t;
+
+    void audit_control_show_filter (
+        [in]            handle_t               h,
+        [in]            aud_esl_type_t      esl_type,
+        [in]            sec_rgy_name_t         subject_name,
+        [out]		aud_esl_guides_p_t  *guides,
+        [out]           error_status_t         *st
+    );
+    
+    void audit_control_add_filter (
+        [in]          handle_t               h,
+        [in]          aud_esl_type_t      esl_type,
+        [in]          sec_rgy_name_t         subject_name,
+ 	[in] 	      aud_esl_guides_p_t  *guides,
+        [out]         error_status_t         *st
+    );
+
+    void audit_control_remove_filter (
+        [in]          handle_t               h,
+        [in]          aud_esl_type_t      esl_type,
+        [in]          sec_rgy_name_t         subject_name,
+ 	[in] 	      aud_esl_guides_p_t  *guides,
+        [out]         error_status_t         *st
+    );
+
+    void audit_control_delete_filter (
+        [in]          handle_t               h,
+        [in]          aud_esl_type_t      esl_type,
+        [in]          sec_rgy_name_t         subject_name,
+        [out]         error_status_t         *st
+    );
+
+    void audit_control_list_filter (
+        [in]          handle_t               h,
+        [in]          aud_esl_type_t      esl_type,
+	[in, out]     unsigned16	     *cursor,
+	[out]         aud_esl_entry_p_t   *first_entry,
+	[out]         aud_esl_foreign_entry_p_t *first_foreign_entry,
+        [out]         error_status_t         *st
+    );
+
+    void audit_control_modify_sstrategy (
+        [in]          handle_t               h,
+        [in]          unsigned32   	     strgy,
+        [out]         error_status_t         *st
+    );
+
+    void audit_control_show_sstrategy (
+        [in]          handle_t               h,
+        [out]         unsigned32             *strgy,
+        [out]         error_status_t         *st
+    );
+
+    void audit_control_modify_state (
+        [in]          handle_t               h,
+        [in]          unsigned32             state,
+        [out]         error_status_t         *st
+    );
+
+    void audit_control_show_state (
+        [in]          handle_t               h,
+        [out]         unsigned32             *state,
+        [out]         error_status_t         *st
+    );
+
+    void audit_control_rewind (
+        [in]          handle_t               h,
+        [out]         error_status_t         *st
+    );
+
+    void audit_control_stop (
+        [in]          handle_t               h,
+        [out]         error_status_t         *st
+    );
+
+}

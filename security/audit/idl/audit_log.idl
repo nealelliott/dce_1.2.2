@@ -1,0 +1,145 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * (c) Copyright International Business Machines Corp. 1994, 1996
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ *
+ */
+/*
+ * HISTORY
+ * $Log: audit_log.idl,v $
+ * Revision 1.1.6.1  1996/07/08  18:28:49  arvind
+ * 	Audit for 1.2.2
+ * 	[1996/06/21  20:25 UTC  arvind  /main/arvind_audit122/1]
+ *
+ * 	Audit for 1.2.2
+ * 	[1996/03/09  23:27:09  marty  1.1.4.2]
+ *
+ * Revision 1.1.4.2  1996/03/09  23:27:09  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:42:39  marty]
+ * 
+ * Revision 1.1.4.1  1995/12/08  17:40:33  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  17:17:57  root]
+ * 
+ * Revision 1.1.2.2  1994/03/02  16:06:17  luan
+ * 	CR 10038: Added delegation information in audit record header.
+ * 	[1994/03/02  16:04:35  luan]
+ * 
+ * Revision 1.1.2.1  1993/12/22  12:39:13  zeliff
+ * 	First version of code
+ * 	[1993/12/21  15:01:25  zeliff]
+ * 
+ * $EndLog$
+ */
+
+[
+uuid(00164C16-E218-1C14-9864-02608C0FF790),
+version(1.0),
+pointer_default(ptr)
+]
+
+interface audit_log {
+
+    import "dce/utctypes.idl";
+    import "dce/aclbase.idl";
+
+    typedef enum {
+        audit_log_async,
+        audit_log_sync_no_wait,
+        audit_log_sync
+    } audit_log_sync_t;
+
+    typedef struct {
+        uuid_t           client;
+        uuid_t           cell;       /* client cell */
+        unsigned16       num_groups; /* no. of client groups */
+        [size_is(num_groups), ptr]
+        uuid_t           *groups;   /* client groups */
+    } client_id_t;
+
+
+    typedef struct {
+        unsigned16       format;     /* event tail data format*/
+        uuid_t           server;     /* uuid of server (audit client) */
+        unsigned32       event;      /* event number */
+        unsigned16       outcome;    /* event outcome (failed?) */
+        unsigned16       authz_st;   /* authorization status */
+        unsigned16       num_client_ids; /* number of client id's */
+        [size_is(num_client_ids), ptr]
+        client_id_t      *client_id;
+        utc_t            time;       /* record commit time */
+        [string, ptr] 
+        char             *addr;      /* client address */
+    } dce_aud_hdr_t;
+
+    const unsigned16 aud_c_evt_info_small_int	= 0;
+    const unsigned16 aud_c_evt_info_short_int = 1;
+    const unsigned16 aud_c_evt_info_long_int	= 2;
+    const unsigned16 aud_c_evt_info_hyper_int = 3;
+    const unsigned16 aud_c_evt_info_usmall_int = 4;
+    const unsigned16 aud_c_evt_info_ushort_int = 5;
+    const unsigned16 aud_c_evt_info_ulong_int = 6;
+    const unsigned16 aud_c_evt_info_uhyper_int = 7;
+    const unsigned16 aud_c_evt_info_short_float = 8;
+    const unsigned16 aud_c_evt_info_long_float = 9;
+    const unsigned16 aud_c_evt_info_boolean   = 10;
+    const unsigned16 aud_c_evt_info_uuid	= 11;
+    const unsigned16 aud_c_evt_info_utc 	= 12;
+    const unsigned16 aud_c_evt_info_acl    	= 13;
+    const unsigned16 aud_c_evt_info_byte_string = 14;
+    const unsigned16 aud_c_evt_info_char_string = 15;
+
+    typedef union switch (unsigned16 format) {
+	case aud_c_evt_info_small_int:
+	    small int small_int;
+	case aud_c_evt_info_short_int:
+	    short int short_int;
+        case aud_c_evt_info_long_int:
+	    long int long_int;
+        case aud_c_evt_info_hyper_int:
+	    hyper int * hyper_int;
+        case aud_c_evt_info_usmall_int:
+	    unsigned small int usmall_int;
+        case aud_c_evt_info_ushort_int:
+	    unsigned short int ushort_int;
+        case aud_c_evt_info_ulong_int:
+	    unsigned long int ulong_int;
+        case aud_c_evt_info_uhyper_int:
+	    unsigned hyper int * uhyper_int;
+        case aud_c_evt_info_short_float:
+	    float short_float;
+        case aud_c_evt_info_long_float:
+	    double * long_float;
+        case aud_c_evt_info_boolean:
+	    boolean bool;
+        case aud_c_evt_info_uuid:
+	    uuid_t * uuid;
+        case aud_c_evt_info_utc:
+	    utc_t * utc;
+        case aud_c_evt_info_acl:
+	    sec_acl_t * acl;
+        case aud_c_evt_info_byte_string:
+	    [string] byte * byte_string;
+        case aud_c_evt_info_char_string:
+	    [string] char * char_string;
+	default:
+	    ;
+    } aud_log_ev_info_t;
+
+    typedef struct {
+	unsigned32	item_count;
+	[size_is(item_count)] aud_log_ev_info_t info_item[];
+    } aud_log_ev_info_list_t;
+	 
+    void audit_log_append (
+        [in]        handle_t               h,
+        [in]        unsigned32       	   options,
+        [in]        dce_aud_hdr_t          *header_info,
+        [in] 	    aud_log_ev_info_list_t **tail_info,
+        [out]       error_status_t         *st
+    );
+}

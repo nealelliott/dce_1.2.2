@@ -1,0 +1,47 @@
+srcdir = @srcdir@
+VPATH = @srcdir@
+ 
+DEFS = @DEFS@
+LIBS = @LIBS@
+ 
+CFLAGS = -g $(DEFS) $(LOCALINCLUDE)
+LDFLAGS = -g
+
+BUILDTOP=../..
+SRCTOP = $(srcdir)/$(BUILDTOP)
+TOPLIBD = $(BUILDTOP)/lib
+ISODELIB=$(TOPLIBD)/libisode.a
+COMERRLIB=$(BUILDTOP)/util/et/libcom_err.a
+DBMLIB=
+
+
+all::
+
+KLIB = $(TOPLIBD)/libkrb5.a $(TOPLIBD)/libcrypto.a $(ISODELIB) $(COMERRLIB) $(DBMLIB)
+
+OBJS1 = dfs_login.o common.o kinit.o tgt_pack.o sendrcv.o
+OBJS2 = dfs_logout.o common.o sendrcv.o
+
+dfs_login: $(OBJS1)
+	$(CC) $(CFLAGS) -o dfs_login $(OBJS1) $(KLIB) $(LIBS)
+
+dfs_logout: $(OBJS2)
+	$(CC) $(CFLAGS) -o dfs_logout $(OBJS2) $(KLIB) $(LIBS)
+
+dfs_login.o:	$(srcdir)/dfs_login.c
+common.o: $(srcdir)/common.c
+kinit.o: $(srcdir)/kinit.c
+tgt_pack.o: $(srcdir)/tgt_pack.c
+sendrcv.o: $(srcdir)/sendrcv.c
+dfs_logout.o: $(srcdir)/dfs_logout.c
+
+all:: dfs_login dfs_logout
+
+
+clean::
+	$(RM) $(OBJS1) dfs_login
+	$(RM) $(OBJS2) dfs_logout
+
+install::
+	$(INSTALLPROG) dfs_login ${DESTDIR}$(CLIENT_BINDIR)/dfs_login
+	$(INSTALLPROG) dfs_logout ${DESTDIR}$(CLIENT_BINDIR)/dfs_logout

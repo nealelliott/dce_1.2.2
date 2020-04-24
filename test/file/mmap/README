@@ -1,0 +1,110 @@
+Basic mmap/munmap tests:
+
+  - Open a file, map it via mmap, unmap it via munmap, close it.
+  - Open a file, map it via mmap, close it, unmap it via munmap.
+
+msync tests:
+
+  - Map a file, modify it by writing to mapped memory, and then msync it.
+  - Same, but don't msync the whole file:
+    - msync a portion containing the modified page.
+    - msync a portion containing the modified block but not the page.
+    - msync an unmodified block.
+  - Different flags:
+    - MS_ASYNC
+    - MS_SYNC
+    - MS_ASYNC | MS_INVALIDATE
+    - MS_SYNC | MS_INVALIDATE
+    We have no way of testing the semantics of msync short of crashing the
+    machine.  So we are just checking that the msync system calls complete
+    successfully.
+
+memcntl tests:
+
+  memcntl (..., MC_SYNC, ...) seems to be equivalent to msync.  Other values
+  for the cmd (MC_LOCK, MC_UNLOCK, etc.) are not interesting because they
+  do not exercise the file system.  So, no separate tests for memcntl.
+
+Consistency tests:
+
+  - Extend via syscall, read via map.
+  - Write via syscall, read via map.
+  - Write via map, read via syscall.
+
+EOF handling tests:
+
+  - Read beyond EOF via map; should get SIGBUS signal.
+  - Write beyond EOF via map; should get SIGBUS signal.
+  - Both of the above, but EOF is within a page, and read/write is on same
+    page.  Should read zeroes.  Write should have no effect; file size should
+    not change.
+  - All of the above, for file that is:
+    - empty;
+    - inline;
+    - fragmented;
+    - blocked;
+    - blocked, but recently truncated to less than 1 block size.
+
+Truncation tests:
+
+  - Truncate, read via map from what used to be the file; should get
+    SIGBUS signal.
+  - Same, but new EOF is within a page, and reading on the same page.
+    Should get zeroes;
+    - truncate to a page that's already in memory, see if it gets zeroed;
+    - truncate to a page that isn't in memory.
+
+Hole in file tests:
+
+  - Read via map from hole in file; should get zeroes.
+  - Write via map to hole in file:
+    - on a page from which reading has been done;
+    - on a page that has not yet been accessed;
+    should cause file allocation to increase (as observed by calling stat
+    before and after the write).
+
+Fsync tests:
+
+  - If EOF is within a page, fsync must not set it to the end of the page;
+  - fsync must not cause any change in the file allocation (as observed
+    by calling stat).
+
+Space and quota error tests:
+
+  - Write via map to hole in file, when volume is full;
+  - Write via map to hole in file, when aggregate is full.
+  (Don't know what these should do, but presumably some signal.)
+
+Fileset op tests:
+
+  - fts clone
+    - Read via map; clone fileset; read again and compare.
+    - Clone fileset; map R/O file; read and compare with R/W file.
+    - Clone fileset; map R/O file; write (should fail).
+    - Concurrency: one process repeatedly reads/writes mapped R/W file;
+      another process repeatedly clones fileset.
+  - fts reclone
+    - Clone fileset; map R/O file; read; modify R/W file; reclone;
+      reread R/O and compare.
+  - fts delete
+    - Read via map; fts delete; read again (should fail).
+
+Multiple process tests:
+
+  This is a stress test.  The idea is to have the same file mapped for
+  several (at least 3) processes, and the processes are all concurrently
+  accessing the mapped memory, while the VM system is concurrently doing
+  I/O from/to the same memory.
+
+  To control the concurrent accesses of the memory, a process can pick a
+  random address in the map, randomly choose reading it or writing it, and
+  then, after accessing it, randomly select a time to spin before its next
+  access.
+
+  To control the I/O, there are a few possibilities:
+  - a process can open the file with O_SYNC and randomly write to it with
+    the write syscall (this generates output but not input);
+  - a process can randomly perform msync (..., MS_INVALIDATE, ...) on the
+    mapped memory;
+  - a process can be a "page eater", consuming enough memory that the
+    mapped file does not fit.

@@ -1,0 +1,519 @@
+*
+* @OSF_COPYRIGHT@
+* COPYRIGHT NOTICE
+* Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+* ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+* the full copyright text.
+*
+* (C) Copyright 1992 Transarc Corporation.
+* All Rights Reserved.
+*
+*  stress1.itl --
+*    Initial stress script for the DFS file exporter.
+*
+* 
+* HISTORY
+* $Log: stress1.itl,v $
+* Revision 1.1.147.1  1996/10/17  18:23:32  damon
+* 	Submitting on behalf of Transarc
+* 	[1996/10/17  16:51:58  damon]
+*
+* Revision 1.1.142.1  1994/02/04  20:42:51  devsrc
+* 	Merged from 1.0.3a to 1.1
+* 	[1994/02/04  15:23:25  devsrc]
+* 
+* Revision 1.1.140.2  1994/01/20  18:43:52  annie
+* 	added copyright header
+* 	[1994/01/20  18:40:10  annie]
+* 
+* Revision 1.1.140.1  1993/12/07  17:43:05  jaffe
+* 	New File from Transarc 1.0.3a
+* 	[1993/12/02  21:59:56  jaffe]
+* 
+* $EndLog$
+*
+
+*
+!* Include configuration setup.
+*
+include stress1.config
+
+*
+!* Sanity checks.
+*
+assert ($numThreads > 0)
+assert ($timeToRun >= 60)
+assert ($filesetName != "")
+assert ($fileName != "")
+assert (($fileSystem == "UFS") || ($fileSystem == "LFS"))
+assert ($numUsers > 0)
+assert ($ioMaxFileSize > 99)
+assert ($ioMaxTransfer > 49)
+assert ((2 * $ioMaxTransfer) < $ioMaxFileSize)
+
+*
+!* Initialize the random number generator using seed, $seedStart
+*
+randomSeed $seedStart
+
+*
+*  Define locally required variables.  These are basically constants.
+*
+*  The random operations fall out as follows.  If you change these you
+*  must also change the code in the ThreadProc procedure.
+*    0 - do a write to a random location
+*    1 - do a read from a random location
+*    2 - chmod the file.
+*    3 - extend the file
+*    4 - truncate the file
+*    5 - stat the file
+*
+set numRandomOps int 6
+set minVolVersion hyper 0 1
+set testIsOver int 0
+set ownerReadWriteMask int 0600
+set modeBitsMask int 0777
+
+*
+* quiesceTime is a heuristic for how long to wait (sleep) at the end of
+* the script for the threads to finish processing once the alloted test time
+* has expired.  We guesstimate that it takes
+* roughly 10 seconds to transmit 64K of data, and assume the read/write 
+* operations take the most time.  So worst case scenario is just after a thread
+* issues a read/write, the test time runs out.  For good measure we add an
+* additional 5 seconds per thread.
+*
+set quiesceTime int ($numThreads * ((($ioMaxTransfer / (1024 * 64)) * 10) + 5))
+
+*
+*  ThreadProc() --
+*    Is the procedure that each thread executes.  It establishes it's
+*    environment and then loops doing one of the random operations, until
+*    the variable testIsOver becomes non-zero, or it encounters some error.
+*
+*  Arguments:
+*    index - index into the primaryHandles and secondaryHandles arrays.  
+*            Uses this to obtain the rpc handle to use for FX rpc's.
+*    statusIndex - index into the exit status array where it is to place its
+*                  exit status.
+*
+set ThreadProc proc 2 index int statusIndex int END_PROC
+  set fileLength local int 0
+  set fileMode local int 0644
+  set myFileName local string (@fileName + @ThreadId)
+  set ioData local string ("THREAD " + @ThreadId + " for USER " + @userNames[@index])
+  set ioDataLen local int #@ioData
+  set primary local @primaryHandles[@index]
+  set secondary local @secondaryHandles[@index]
+
+*
+* Some calculations below assume ioMaxTransfer is greater than ioDataLen.
+*
+  assert (@ioMaxTransfer > @ioDataLen)
+
+*
+* Insure the file exporter knows about this user.
+*
+  fxSetContext @primary $AFS_FLAG_SEC_SERVICE @secondary
+
+*
+* Check to see if the file we want to create already exist.  If so remove it.
+* Must turn error checking off since we don't know if the lookup will succeed.
+*
+  verifyStatus false
+  fxLookup @primary @testDirFid @myFileName @minVolVersion myFileId dirStatus fileStatus syncInfo
+  if (@CommandResult == 0) {
+*
+!* Removing existing file, @myFileName
+*
+    verifyStatus true
+    fxRemoveFile @primary @testDirFid @myFileId @myFileName @minVolVersion myFileId dirStatus fileStatus syncInfo
+  }
+  verifyStatus true
+*
+!* Creating file, @myFileName
+*
+  set storeStatus fs_fxStoreStatus 
+      (@AFS_SETMODTIME | @AFS_SETACCESSTIME | @AFS_SETOWNER | @AFS_SETGROUP | @AFS_SETMODE) 
+      "" "" 0 "" "" 0 @userNames[@index] @userNames[@index] @fileMode
+  fxCreateFile @primary @testDirFid @myFileName @storeStatus @minVolVersion myFileId dirStatus fileStatus syncInfo
+
+*
+*  Save the owner and group id's for later comparison when we do stat's.
+*
+  set myOwnerId int @storeStatus.owner
+  set myGroupId int @storeStatus.group
+  set errorFlag int 0
+
+  do
+    set opToDo int (0..@numRandomOps)
+
+    if (@opToDo == 0) {
+*
+!* Issuing random write.
+*
+      set fileOffset int (0..@ioMaxFileSize)
+      set numBytes int (@ioDataLen..@ioMaxTransfer)
+
+       if ((@fileOffset + @numBytes) > @ioMaxFileSize) {
+	  set fileOffset int (@ioMaxFileSize - @numBytes)
+       }
+*
+* Force writes to be a multiple of the string ioData, and  force writes to
+*  occur on "boundaries" of the string we write.
+*
+       set multiplier int ((@numBytes - (@numBytes % @ioDataLen)) / @ioDataLen)
+       set numBytes int (@ioDataLen * @multiplier)
+       set completeData string (@ioData * @multiplier)
+       set fileOffset int (@ioDataLen * ((@fileOffset - (@fileOffset % @ioDataLen)) / @ioDataLen))
+       set fxOffset hyper 0 @fileOffset
+
+       fxStoreData @secondary @myFileId @minVolVersion @fxOffset @numBytes @storeStatus @completeData fileStatus syncInfo
+*
+*  Validate write data.
+*
+       fxFetchData @primary @myFileId @minVolVersion @fxOffset @numBytes readData fileStatus syncInfo
+       if (@readData != @completeData) {
+         echo "READ I/O error (bytes written, @numBytes) -"
+         echo "  Expected: " @completeData
+         echo "  Actual: " @readData
+	 set errorFlag int 1
+       }
+
+       if ((@fileOffset + @numBytes) > @fileLength) {
+         set fileLength int (@fileOffset + @numBytes)
+       }
+*
+*  Free memory used by completeData and readData since it may be significant.
+*
+       set completeData ""
+       set readData ""
+    }
+
+    if (@opToDo == 1) {
+*
+!* Issuing random read.
+*
+      if (@fileLength >= @ioMaxTransfer) {
+        set numBytes int (@ioDataLen..@ioMaxTransfer)
+      }
+      else {
+        if (@fileLength >= @ioDataLen) {
+          set numBytes int (@ioDataLen..@fileLength)
+        }
+        else {
+          set numBytes int 0
+        }
+      }
+
+      if (@numBytes > 0) {
+        set fileOffset int (0..@fileLength)
+        if ((@fileOffset + @numBytes) > @fileLength) {
+	  set fileOffset int (@fileLength - @numBytes)
+        }
+      }
+      else {
+	set fileOffset int 0
+      }
+      set fxOffset hyper 0 @fileOffset
+
+      fxFetchData @primary @myFileId @minVolVersion @fxOffset @numBytes readData fileStatus syncInfo
+
+*
+*  Cannot validate the data just read, since we don't know if something has
+*  been actually written there.  This is because the file is randomly extended.
+*  and the writes are done in random places.
+*
+*  Free memory used by variable readData since it may be significant.
+*
+       set readData ""
+    }
+
+    if (@opToDo == 2) {
+*
+!* Issuing random chmod.
+*
+      set fileMode int (0..0777)
+      set storeStatus.mode int @fileMode
+      fxStoreStatus @secondary @myFileId @minVolVersion @storeStatus fileStatus syncInfo
+
+*
+* Make sure we can read/write the file.
+*
+      if ((@fileMode & @ownerReadWriteMask) != @ownerReadWriteMask) {
+        set fileMode int (@storeStatus.mode | @ownerReadWriteMask)
+        set storeStatus.mode int @fileMode
+        fxStoreStatus @secondary @myFileId @minVolVersion @storeStatus fileStatus syncInfo
+      }
+    }
+
+    if ((@opToDo == 3) || (@opToDo == 4)) {
+*
+!* Issuing random extend/truncate (@opToDo) 3 = extend / 4 = trunc.
+*
+      if (@opToDo == 3) {
+        set fileLength int ((@fileLength + 1)..@ioMaxFileSize)
+      }
+      else {
+	if (@fileLength != 0) {
+          set fileLength int (0..(@fileLength - 1))
+	}
+      }
+
+      set storeStatus.length hyper 0 @fileLength
+      set storeStatus.mask int (@storeStatus.mask | @AFS_SETTRUNCLENGTH | @AFS_SETLENGTH)
+      fxStoreStatus @secondary @myFileId @minVolVersion @storeStatus fileStatus syncInfo
+      set storeStatus.mask int (@storeStatus.mask & ~(@AFS_SETTRUNCLENGTH | @AFS_SETLENGTH))
+    }
+
+    if (@opToDo == 5) {
+*
+!* Issuing random stat.
+*
+      fxFetchStatus @primary @myFileId @minVolVersion fileStatus syncInfo
+      if (@fileStatus.linkCount != 1) {
+	echo Link count NOT equal to 1, @fileStatus.linkCount
+	set errorFlag int 1
+      }
+      if (@fileStatus.length.high != 0) {
+	echo Length (high) NOT equal to @fileLength, is @fileStatus.length.high
+	set errorFlag int 1
+      }
+      if (@fileStatus.length.low != @fileLength) {
+	echo Length (low) NOT equal to @fileLength, is @fileStatus.length.low
+	set errorFlag int 1
+      }
+      if (@fileStatus.owner != @myOwnerId) {
+	echo Owner NOT equal to @myOwnerId, @fileStatus.owner
+	set errorFlag int 1
+      }
+      if (@fileStatus.group != @myGroupId) {
+	echo Group NOT equal to @myGroupId, @fileStatus.group
+	set errorFlag int 1
+      }
+      if ((@fileStatus.mode & @modeBitsMask) != @fileMode) {
+	echo File mode NOT equal to @fileMode, @fileStatus.mode
+	set errorFlag int 1
+      }
+    }
+    fetch&op testIsOver + 0
+  while ((@testIsOver == 0) && (@errorFlag == 0))
+
+  if (@errorFlag == 0) {
+    echo Thread, @ThreadId, exiting normally.
+    echo Thread @ThreadId Results ->  Filename: @myFileName
+    echo Thread @ThreadId Results ->  Owner: @myOwnerId   Group: @myGroupId
+    echo Thread @ThreadId Results ->  Mode: @fileMode   Size: @fileLength
+    set exitStatus[@statusIndex] global int 0
+  }
+  else {
+*
+* Loop, so that this error message appears with other thread output.
+*
+    do
+      sleep 5000
+      fetch&op testIsOver + 0
+    while (@testIsOver == 0)
+    echo Thread, @ThreadId, FAILED!
+    set exitStatus[@statusIndex] global int 1
+  }
+  fetch&op threadsCompleted + 1
+END_PROC
+
+*
+!* Connect to fileset, $filesetName
+*
+filesetConnect $filesetName
+
+*
+!* Establish logins and RPC connections for $numUsers users.
+*
+loop x 0 1 ($numUsers - 1)
+*
+!* Setting up user, $userNames[$x]
+*
+  dceLogin $userNames[$x] $userPasswords[$x]
+  userConnect $filesetName $userNames[$x] PRIMARY userPrimary
+  set primaryHandles[$x] $userPrimary
+  userConnect $filesetName $userNames[$x] SECONDARY userSecondary
+  set secondaryHandles[$x] $userSecondary
+endLoop
+
+*
+!* Lookup root directory file identifier.
+*
+* Just use the last rpc handle.
+*
+fxSetContext $userPrimary $AFS_FLAG_SEC_SERVICE $userSecondary
+fxLookupRoot $userPrimary $minVolVersion rootDirFid fileStatus syncInfo
+
+
+*
+!* Determine working directory.
+*
+* This has to be done prior to defining the CreateWorkingDir procedure,
+* since that procedure uses the value of the myWorkingDir variable.
+*
+if ($multiplePrograms == "true") {
+  if ($workingDir != "") {
+    set realWorkingDir string ($workingDir + $ITL_HostName + $ITL_ProcessId)
+  }
+  else {
+    error If multiplePrograms is true, workingDir must be a non-empty string.
+  }
+}
+else {
+  set realWorkingDir string $workingDir
+}
+
+*
+*  If the workingDir variable is not the empty string, then create
+*  our working directory, and lookup it's file identifier.
+*
+
+if ($realWorkingDir != "") {
+*
+!* Create working directory, $realWorkingDir
+*
+* The mode is set to 0777 because we don't know what DCE logins will be
+* writing into the directory.
+*
+  set dirStoreStatus fs_fxStoreStatus 
+      ($AFS_SETMODTIME | $AFS_SETACCESSTIME | $AFS_SETOWNER | $AFS_SETGROUP | $AFS_SETMODE) 
+      "" "" 0 "" "" 0 $userNames[0] $userNames[0] 0777
+*
+* Turn off error checking.  If the directory exists, we just continue on.
+*
+  verifyStatus false
+
+  fxMakeDir $userPrimary $rootDirFid $realWorkingDir $dirStoreStatus $minVolVersion testDirFid dirStatus fileStatus syncInfo
+
+  if ($ITL_Status != 0) {
+    if ($ITL_Status == $EEXIST) {
+*
+* The testDirFid variable will not be set since the makedir failed, so we
+* look it up.
+*
+      verifyStatus true
+      fxLookup $userPrimary $rootDirFid $realWorkingDir $minVolVersion testDirFid dirStatus fileStatus syncInfo
+    }
+    else {
+      error Could not create directory, $realWorkingDir, status was $ITL_Status
+    }
+  }
+
+  verifyStatus true
+
+  if ($fileSystem == "LFS") {
+    echo 
+    echo Don't know how to set ACL's yet.  Will run test anyway.
+    echo 
+  }
+}
+else {
+    set testDirFid $rootDirFid
+}
+
+*
+*  The threadsCompleted variable is used to ensure a graceful shutdown.
+*
+set threadsCompleted global int 0
+
+*
+!* Start threads, run time is $timeToRun seconds.
+*
+*  Check to see if the number of users is greater than or equal to the 
+*  number of threads.  If so, we just need a single loop to start all 
+*  the threads.  Otherwise we need two loops.
+*
+*  Have to use a local only variable when executing procedures in detached
+*  threads since the value of the loop counter (a global variable) might
+*  change before the procedure gets started.
+*
+if ($numUsers >= $numThreads) {
+  loop x 0 1 ($numThreads - 1)
+    set procArg local int $x
+    threadExec ThreadProc $procArg $procArg
+   endLoop
+}
+else {
+  set threadsStarted local int 0
+  do
+    set userIndex local int 0
+    do
+      threadExec ThreadProc $userIndex $threadsStarted
+      set userIndex int ($userIndex + 1)
+      set threadsStarted int ($threadsStarted + 1)
+    while (($userIndex < $numUsers) && ($threadsStarted < $numThreads))
+  while ($threadsStarted < $numThreads)
+}
+
+sleep ($timeToRun * 1000)
+
+*
+!* Stopping tests.
+*
+fetch&op testIsOver + 1
+
+*
+!* Waiting up to $quiesceTime seconds for threads to quiesce.
+* To speed things along we check every minute to see if the threads 
+* completed, if the quiesceTime is greater than 2 minutes.
+*
+if ($quiesceTime > 120) {
+  set numSleepLoops int (($quiesceTime / 60) + 1)
+  set sleepCount int 0
+  do
+    sleep 60000
+    set sleepCount int ($sleepCount + 1)
+    fetch&op threadsCompleted + 0
+  while (($threadsCompleted < $numThreads) && ($sleepCount < $numSleepLoops))
+}
+else {
+  sleep ($quiesceTime * 1000)
+}
+
+*
+!* Waiting for threads to finish.
+*
+* Wait until all threads report in or we think we have waited long 
+* enough, which is currently 1 minute.
+*
+set waitCount int 0
+set waitCountLimit int 12
+do
+  sleep 5000
+  set waitCount int ($waitCount + 1)
+  fetch&op threadsCompleted + 0
+while (($threadsCompleted < $numThreads) && ($waitCount < $waitCountLimit))
+
+*
+!* Checking exit status of threads.
+*
+set programExit int 0
+set completedThreads int 0
+loop x 0 1 ($numThreads - 1)
+  if (?exitStatus[$x]) {
+    set completedThreads int ($completedThreads + 1)
+    if ($exitStatus[$x] != 0) {
+      set programExit int ($programExit + 1)
+    }
+  }
+endLoop
+
+set missingThreads int ($numThreads - $completedThreads)
+
+if (($programExit == 0) && ($missingThreads == 0)) {
+  echo Test Successfully Completed .
+}
+else {
+  if ($missingThreads != 0) {
+    error Test FAILED - Out of $numThreads, $completedThreads were successful, $programExit threads reported failures and $missingThreads threads failed to complete.
+  }
+  else {
+    error Test FAILED - Out of $numThreads, $completedThreads were successful, $programExit threads reported failures.
+  }
+}
+
+quit
+

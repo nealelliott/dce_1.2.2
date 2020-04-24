@@ -1,0 +1,2417 @@
+#!/bin/ksh
+#
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: gg.functions,v $
+BINRevision 1.1.2.1  1996/10/16  14:04:37  arvind
+BIN	merge tp3()  ~ loop count fix.
+BIN	[1996/10/14  18:56 UTC  bartf  /main/bartf_pk_fix/1]
+BIN
+BIN	fix tp3() count
+BIN	[1996/03/11  02:07:17  marty  1.1.8.3]
+BIN
+# $EndLog$
+#
+#
+
+# To exit TET gracefully: Delete test purposes.
+del_test_purp()
+{
+	for test_purp in $test_purp_list; do
+		tet_delete $test_purp "FAILURE...${test_purp} deleted."
+	done
+}	# end del_test_purp
+
+#===============================================================================
+# Function:     dce_auth <principal> <password>
+# Purpose:      To authenticate the cell by dce_login <principal>
+#===============================================================================
+dce_auth() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+	_principal="${1}"
+	_password="${2}"
+	tet_infoline "Attempting to authenticate as the principal ${_principal}"
+
+	KRB5CCNAME=`dce_login_noexec ${_principal} ${_password} 2> ${GG_OUTPUT}`
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: Unable to authenticate as ${_principal} in dce_auth: `cat ${GG_OUTPUT}`"
+                return 1
+        else 
+		tet_infoline "You are now authenticated as ${_principal}: `cat ${GG_OUTPUT}`"
+	        export KRB5CCNAME
+                return 0
+        fi
+
+} # End of function dce_auth
+
+#===============================================================================
+# Function:     dce_unauth <cell name>
+# Purpose:      Remove authenticated tickets by kdestroy
+#===============================================================================
+
+dce_unauth() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+	tet_infoline "Attempting to logout, via kdestroy, from ${1}"
+
+	kdestroy 1> /dev/null 2>&1
+	check_return "$?" "ERROR: Unable to logout from ${1}" \
+			"Kdestroy successful on ${1}"
+} # End of function dce_unauth
+
+#===============================================================================
+# Function:	check_return <Integer value(Return Code)> <Error Statement>
+# Purpose:	Check return code and exit if value is other than 0.
+#		
+#===============================================================================
+check_return() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+	if [ "${1}" != "0" ]; then
+		tet_infoline "${2}"	
+		return 1
+	else
+		if [ "${3}" != "" ]; then
+			tet_infoline "${3}"
+		fi
+		return 0
+	fi
+} # End of function check_return
+
+#===============================================================================
+# Function:	verify_existence string_to_match
+# Purpose:	Checks the output of rgy_edit view command to verify that
+#		the user/group/org with the UNIX ID provided exists in 
+#		the registry.
+#===============================================================================
+verify_existence() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+	MATCH_STRING="${1}"
+	# Search for member with specified ID in output file.
+	#
+	egrep -i "${MATCH_STRING}" 
+	return "$?"
+
+} # End of verify_existence
+	
+#===============================================================================
+# Function:	infoline_file string filename
+# Purpose:	Output the contents of 'filename' to the journal via
+#               tet_infoline. Prefix the output with 'string'.
+#===============================================================================
+infoline_file() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+	STRING="${1}"
+        FILENAME="${2}"
+
+        while read -r line
+                do tet_infoline "${STRING}: " "$line"
+        done < ${FILENAME}
+
+} # End of verify_existence
+	
+#===============================================================================
+# Function:	check_item_begin <check_item_id>
+# Purpose:	prepare to test the check item
+#===============================================================================
+check_item_begin() {
+	CHECK_ITEM_ID="${1}"
+	tet_infoline ">>> ${CHECK_ITEM_ID}"
+        echo "${CHECK_ITEM_ID}"
+} # End of check_item_begin
+
+#===============================================================================
+# Function:	check_item_done <exit_status>
+# Purpose:	report the check item status
+#===============================================================================
+check_item_done() {
+	if [ "${1}" = "0" ]; then
+	        tet_infoline "<<< ${CHECK_ITEM_ID}: PASSED"
+                tet_result PASS
+	else
+        	tet_infoline "<<< ${CHECK_ITEM_ID}: FAIL"
+                tet_result FAIL
+	fi
+} # End of check_item_done
+
+#===============================================================================
+# Function:	add_to_group_by_rgy_edit <name_of_group> <List of persons>
+# Purpose:	Add existing members to new group using rgy_edit command.
+#===============================================================================
+add_to_group_by_rgy_edit() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -lt 2 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	FLAG="group"
+	PGO="${1}"
+	shift;
+	MEMBERS="$*"
+
+	tet_infoline "Attempting to add ${PGO} member to ${FLAG} in ${FN}"
+
+	# If persons don't currently exist to add to membership, then exit
+	# Check the current length of MEMBERS
+	#
+	LENGTH=`expr "${MEMBERS}" : ".*"`
+	if [ "${LENGTH}" -eq 0 ]; then
+		tet_infoline "ERROR: Unable to continue because of lack of members in ${FN}"
+		return 1
+	fi
+
+	# Create rgy input file
+	#
+	MEMBERS_LIST=""
+	for i in ${MEMBERS}; do
+		if [ "${MEMBERS_LIST}" = "" ]; then
+			MEMBERS_LIST="${i}"
+		else
+			MEMBERS_LIST="${MEMBERS_LIST},${i}"
+		fi
+	done
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="site ${REGISTRY_SITE_NAME}"
+	else
+		_set_site=""
+	fi
+	cat << E_O_F > ${GG_INPUT}
+${_set_site}
+do ${FLAG}
+m ${PGO} -a ${MEMBERS_LIST}
+q
+E_O_F
+
+	# Execute rgy with input file.
+	${RGY_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${RGY_EXEC} FAILED in ${FN}"
+		tet_infoline "INPUT: `cat ${GG_INPUT}`"
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	# Call function to report that the members have been added properly.
+	tet_infoline "Members ${MEMBERS} have been ADDED properly to ${FLAG} ${PGO}"
+	return 0
+
+} # End of function add_to_group_by_rgy_edit
+
+#===============================================================================
+# Function:     add_neg_to_group_by_rgy_edit <name_of_group> <List of persons>
+# Purpose:      Add existing members to new group using rgy_edit
+#===============================================================================
+add_neg_to_group_by_rgy_edit() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -lt 2 ]; then
+        	tet_infoline "ERROR: Illegal input to function ${FN}"
+		return 1
+	fi
+
+        FLAG="group"
+        PGO="${1}"
+        shift;
+        MEMBERS="$*"
+
+        tet_infoline "Attempting to add ${PGO} member to ${FLAG} without permission"
+
+        # If persons don't current exist to add to membership, then exit
+        # Check the current length of MEMBERS
+        #
+        LENGTH=`expr "${MEMBERS}" : ".*"`
+        if [ "${LENGTH}" -eq 0 ]; then
+                tet_infoline "ERROR: Unable to continue because of lack of members in ${FN}"
+                return 1
+        fi
+
+        # Create rgy input file
+        #
+	MEMBERS_LIST=""
+	for i in ${MEMBERS}; do
+		if [ "${MEMBERS_LIST}" = "" ]; then
+			MEMBERS_LIST="${i}"
+		else
+			MEMBERS_LIST="${MEMBERS_LIST},${i}"
+		fi
+	done
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="site ${REGISTRY_SITE_NAME}"
+	else
+		_set_site=""
+	fi
+        cat << E_O_F > ${GG_INPUT}
+${_set_site}
+do ${FLAG}
+m ${PGO} -a ${MEMBERS_LIST}
+q
+E_O_F
+        # Execute rgy with input file.
+	${RGY_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+        if [ $? -eq 0 ]; then
+                tet_infoline "ERROR: ${RGY_EXEC} succeeded UNEXPECTEDLY in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+                infoline_file OUTPUT ${GG_OUTPUT}
+                return 1
+        fi
+
+        # Call function to report that the members have been added properly.
+        tet_infoline "Members ${MEMBERS} have NOT been added to ${PGO} AS EXPECTED."
+        return 0
+
+} # End of function add_neg_to_group_by_rgy_edit
+
+#===============================================================================
+# Function:     remove_from_group_by_rgy_edit <name_of_group> <List of persons>
+# Purpose:      Remove existing members from group using rgy_edit
+#===============================================================================
+remove_from_group_by_rgy_edit() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -lt 2 ]; then
+        	tet_infoline "ERROR: Illegal input to function ${FN}"
+                return 1
+	fi
+
+        FLAG="group"
+        PGO="${1}"
+        shift;
+        MEMBERS="$*"
+
+        tet_infoline "Attempting to remove ${PGO} members from ${FLAG}"
+
+        # If persons don't current exist to remove to membership, then exit
+        # Check the current length of MEMBERS
+        #
+        LENGTH=`expr "${MEMBERS}" : ".*"`
+        if [ "${LENGTH}" -eq 0 ]; then
+                tet_infoline "ERROR: Unable to continue because of lack of members in ${FN}"
+                return 1
+        fi
+
+        # Create rgy input file
+        #
+	MEMBERS_LIST=""
+	for i in ${MEMBERS}; do
+		if [ "${MEMBERS_LIST}" = "" ]; then
+			MEMBERS_LIST="${i}"
+		else
+			MEMBERS_LIST="${MEMBERS_LIST},${i}"
+		fi
+	done
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="site ${REGISTRY_SITE_NAME}"
+	else
+		_set_site=""
+	fi
+        cat << E_O_F > ${GG_INPUT}
+${_set_site}
+do ${FLAG}
+m ${PGO} -r ${MEMBERS_LIST}
+q
+E_O_F
+
+        # Execute rgy with input file.
+	${RGY_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: ${RGY_EXEC} FAILED in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+                infoline_file OUTPUT ${GG_OUTPUT}
+                return 1
+        fi
+
+        # Call function to report that the members have been added properly.
+        tet_infoline "Members ${MEMBERS} have been removed properly from ${PGO}"
+        return 0
+
+} # End of function remove_from_group_by_rgy_edit
+
+#===============================================================================
+# Function:     remove_neg_from_group_by_rgy_edit <group_name> <List of persons>
+# Purpose:      Remove existing members from group using rgy_edit
+#===============================================================================
+remove_neg_from_group_by_rgy_edit() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -lt 2 ]; then
+        	tet_infoline "ERROR: Illegal input to function ${FN}"
+                return 1
+	fi
+
+        FLAG="group"
+        PGO="${1}"
+        shift;
+        MEMBERS="$*"
+
+        tet_infoline "Attempting to remove ${PGO} members from ${FLAG} without permission"
+
+        # If persons don't current exist to remove to membership, then exit
+        # Check the current length of MEMBERS
+        #
+        LENGTH=`expr "${MEMBERS}" : ".*"`
+        if [ "${LENGTH}" -eq 0 ]; then
+                tet_infoline "ERROR: Unable to continue because of lack of members in ${FN}"
+                return 1
+        fi
+
+        # Create rgy input file
+        #
+	MEMBERS_LIST=""
+	for i in ${MEMBERS}; do
+		if [ "${MEMBERS_LIST}" = "" ]; then
+			MEMBERS_LIST="${i}"
+		else
+			MEMBERS_LIST="${MEMBERS_LIST},${i}"
+		fi
+	done
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="site ${REGISTRY_SITE_NAME}"
+	else
+		_set_site=""
+	fi
+        cat << E_O_F > ${GG_INPUT}
+${_set_site}
+do ${FLAG}
+m ${PGO} -r ${MEMBERS_LIST}
+q
+E_O_F
+
+        # Execute rgy with input file.
+	${RGY_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+        if [ $? -eq 0 ]; then
+                tet_infoline "ERROR: ${RGY_EXEC} succeeded UNEXPECTEDLY in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+                infoline_file OUTPUT ${GG_OUTPUT}
+                return 1
+        fi
+
+        # Call function to report that the members have been added properly.
+        tet_infoline "Members ${MEMBERS} have NOT been removed from ${PGO} AS EXPECTED"
+        return 0
+
+} # End of function remove_neg_from_group_by_rgy_edit
+
+#===============================================================================
+# Function:	view_group_members_by_rgy_edit <name_of_group>[<List of persons>]
+# Purpose:	View existing members in the group using rgy_edit command.
+#===============================================================================
+view_group_members_by_rgy_edit() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -lt 1 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	FLAG="group"
+	PGO="${1}"
+	shift;
+	MEMBERS="$*"
+
+	tet_infoline "Attempting to view members in the ${FLAG} ${PGO} in ${FN}"
+
+	# If persons don't currently exist to add to membership, then exit
+	# Check the current length of MEMBERS
+	#
+	LENGTH=`expr "${MEMBERS}" : ".*"`
+	
+	# Create rgy input file
+	#
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="site ${REGISTRY_SITE_NAME}"
+	else
+		_set_site=""
+	fi
+	cat << E_O_F > ${GG_INPUT}
+${_set_site}
+do ${FLAG}
+v ${PGO} -m
+q
+E_O_F
+
+	# Execute rgy with input file.
+	${RGY_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${RGY_EXEC} FAILED in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+                infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	# Check to make sure that new ID has been set.
+	FAIL="false"
+	for i in ${MEMBERS}; do
+		cat ${GG_OUTPUT} | verify_existence " ${i}" > /dev/null
+		# Exit if it doesn't exist
+		if [ $? -ne 0 ]; then
+			tet_infoline "ERROR: Member ${i} is NOT EXIST in ${FN}"
+			FAIL="true"
+		fi
+	done
+
+	if [ $FAIL = "true" ]; then
+		infoline_file INPUT ${GG_INPUT}
+                infoline_file OUTPUT ${GG_OUTPUT}
+		return 2
+	fi
+	# Call function to report that the members have been added properly.
+	if [ $LENGTH -gt 0 ]; then
+		tet_infoline "Members ${MEMBERS} are in ${FLAG} ${PGO}"
+	else
+		tet_infoline "No members are in ${FLAG} ${PGO} EXPECTEDLY"
+	fi
+	return 0
+
+} # End of function view_group_members_by_rgy_edit
+
+#===============================================================================
+# Function:	view_memberships_by_rgy_edit <name_of_person> [<List of groups>]
+# Purpose:	View memberships about the person using rgy_edit command.
+#===============================================================================
+view_memberships_by_rgy_edit() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -lt 1 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN";
+		return 1
+	fi
+
+	FLAG="principal"
+	PGO="${1}"
+	shift;
+	MEMBERS="$*"
+
+	tet_infoline "Attempting to view memberships on ${FLAG} ${PGO} in ${FN}"
+
+	# If persons don't currently exist to add to membership, then exit
+	# Check the current length of MEMBERS
+	#
+	LENGTH=`expr "${MEMBERS}" : ".*"`
+	
+	# Create rgy input file
+	#
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="site ${REGISTRY_SITE_NAME}"
+	else
+		_set_site=""
+	fi
+	cat << E_O_F > ${GG_INPUT}
+${_set_site}
+do ${FLAG}
+v ${PGO} -m
+q
+E_O_F
+
+	# Execute rgy with input file.
+	${RGY_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${RGY_EXEC} FAILED in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	# Check to make sure that new ID has been set.
+	FAIL="false"
+	for i in ${MEMBERS}; do
+		cat ${GG_OUTPUT} | verify_existence " ${i}" > /dev/null
+		# Exit if it doesn't exist
+		if [ $? -ne 0 ]; then
+			tet_infoline "ERROR: Membership ${i} is NOT EXIST in ${FN}"
+			FAIL="true"
+		fi
+	done
+
+	if [ $FAIL = "true" ]; then
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 2
+	fi
+	# Call function to report that the members have been added properly.
+	if [ $LENGTH -gt 0 ]; then
+		tet_infoline "${FLAG} ${PGO} has memberships ${MEMBERS}"
+	else
+		tet_infoline "${FLAG} ${PGO} has NO memberships EXPECTEDLY"
+	fi
+	return 0
+
+} # End of function view_memberships_by_rgy_edit
+
+#===============================================================================
+# Function:	add_to_group_by_dcecp <name_of_group> -m <List of persons>
+# Purpose:	Add existing members to new group using dcecp command.
+#===============================================================================
+add_to_group_by_dcecp() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	PGOS=""
+	MEMBERS=""
+	for arg in $*; do
+		case $arg in
+		-m)
+			shift
+			MEMBERS="$*"
+			break;
+			;;
+		*)
+			PGOS="${PGOS} ${1}"
+			;;
+		esac
+		shift
+	done
+
+	if [ "${PGOS}" = "" -o "${MEMBERS}" = "" ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	FLAG="group"
+
+	tet_infoline "Attempting to add ${PGOS} member to ${FLAG} in ${FN}"
+
+	# If persons don't currently exist to add to membership, then exit
+	# Check the current length of MEMBERS
+	#
+	LENGTH=`expr "${MEMBERS}" : ".*"`
+	
+	if [ "${LENGTH}" -eq 0 ]
+	then
+		tet_infoline "ERROR: Unable to continue because of lack of members in ${FN}"
+		return 1
+	fi
+
+	# Execute dcecp command
+	#
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="set _s(sec) ${REGISTRY_SITE_NAME}"
+	else
+		_set_site=""
+	fi
+
+	cat << E_O_F > ${GG_INPUT}
+${_set_site}
+group add {${PGOS}} -member {${MEMBERS}}
+E_O_F
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	# Call function to report that the members have been added properly.
+	tet_infoline "Members ${MEMBERS} have been ADDED properly to ${FLAG} ${PGOS}"
+	return 0
+
+} # End of function add_to_group_by_dcecp
+
+#===============================================================================
+# Function:     add_neg_to_group_by_dcecp <name_of_group> -m <List of persons>
+# Purpose:      Add existing members to new group using dcecp command
+#===============================================================================
+add_neg_to_group_by_dcecp() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	PGOS=""
+	MEMBERS=""
+	for arg in $*; do
+		case $arg in
+		-m)
+			shift
+			MEMBERS="$*"
+			break;
+			;;
+		*)
+			PGOS="${PGOS} ${1}"
+			;;
+		esac
+		shift
+	done
+
+	if [ "${PGOS}" = "" -o "${MEMBERS}" = "" ]; then
+        	tet_infoline "ERROR: Illegal input to function ${FN}"
+                return 1
+	fi
+
+        FLAG="group"
+
+        tet_infoline "Attempting NOT to add ${PGOS} member to ${FLAG} in ${FN}"
+
+        # If persons don't current exist to add to membership, then exit
+        # Check the current length of MEMBERS
+        #
+        LENGTH=`expr "${MEMBERS}" : ".*"`
+
+        if [ "${LENGTH}" -eq 0 ]; then
+                tet_infoline "ERROR: Unable to continue because of lack of members in ${FN}"
+                return 1
+        fi
+
+        # Execute dcecp command
+        #
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="${REGISTRY_SITE_NAME}/"
+	else
+		_set_site=""
+	fi
+        
+        FULL_PGOS=""
+        for arg in ${PGOS}; do
+                FULL_PGOS="${FULL_PGOS} ${_set_site}${arg}"
+        done
+
+       	cat > ${GG_INPUT} << E_O_F
+group add {${FULL_PGOS}} -member {${MEMBERS}}
+E_O_F
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+        if [ $? -eq 0 ]; then
+		tet_infoline "ERROR: ${DCECP_EXEC} succeeded UNEXPECTEDLY in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+                return 1
+        fi
+
+        # Check to make sure that new ID has been set.
+	FAIL="false"
+        for i in ${MEMBERS}; do
+                cat ${GG_OUTPUT} | verify_existence "Error:" > /dev/null
+                # Exit if it doesn't exist
+                if [ $? -ne 0 ]; then
+                        tet_infoline "ERROR: Able to add member ${i} to ${FLAG} unexpectedly in ${FN}"
+                        FAIL="true"
+                fi
+        done
+
+        if [ $FAIL = "true" ]; then
+                tet_infoline "ERROR: Some members have unexpectedly been added to $FLAG in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+                infoline_file OUTPUT ${GG_OUTPUT}
+                return 2
+        fi
+
+        # Call function to report that the members have been added properly.
+        tet_infoline "Members ${MEMBERS} have NOT been added to ${FULL_PGOS} AS EXPECTED."
+        return 0
+
+} # End of function add_neg_to_group_by_dcecp
+
+#===============================================================================
+# Function:     remove_from_group_by_dcecp <name_of_group> -m <List of persons>
+# Purpose:      Remove existing members from group using dcecp command
+#===============================================================================
+remove_from_group_by_dcecp() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	PGOS=""
+	MEMBERS=""
+	for arg in $*; do
+		case $arg in
+		-m)
+			shift
+			MEMBERS="$*"
+			break;
+			;;
+		*)
+			PGOS="${PGOS} ${1}"
+			;;
+		esac
+		shift
+	done
+
+	if [ "${PGOS}" = "" -o "${MEMBERS}" = "" ]; then
+        	tet_infoline "ERROR: Illegal input to function ${FN}"
+                return 1
+	fi
+
+        FLAG="group"
+
+        tet_infoline "Attempting to remove ${PGOS} members from ${FLAG} in ${FN}"
+
+        # If persons don't current exist to remove to membership, then exit
+        # Check the current length of MEMBERS
+        #
+        LENGTH=`expr "${MEMBERS}" : ".*"`
+        if [ "${LENGTH}" -eq 0 ]; then
+                tet_infoline "ERROR: Unable to continue because of lack of members in ${FN}"
+                return 1
+        fi
+
+        # Execute dcecp command
+	#
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="${REGISTRY_SITE_NAME}/"
+	else
+		_set_site=""
+	fi
+
+        FULL_PGOS=""
+        for arg in ${PGOS}; do
+                FULL_PGOS="${FULL_PGOS} ${_set_site}${arg}"
+        done
+
+       	cat > ${GG_INPUT} << E_O_F
+group remove {${FULL_PGOS}} -member {${MEMBERS}}
+E_O_F
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+        if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+                return 1
+        fi
+
+        # Call function to report that the members have been added properly.
+        tet_infoline "Members ${MEMBERS} have been removed properly from ${PGOS}"
+        return 0
+
+} # End of function remove_from_group_by_dcecp
+
+#===============================================================================
+# Function:     remove_neg_from_group_by_dcecp <group_name> -m <List of persons>
+# Purpose:      Remove existing members from group using dcecp
+#===============================================================================
+remove_neg_from_group_by_dcecp() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	PGOS=""
+	MEMBERS=""
+	for arg in $*; do
+		case $arg in
+		-m)
+			shift
+			MEMBERS="$*"
+			break;
+			;;
+		*)
+			PGOS="${PGOS} ${1}"
+			;;
+		esac
+		shift
+	done
+
+	if [ "${PGOS}" = "" -o "${MEMBERS}" = "" ]; then
+        	tet_infoline "ERROR: Illegal input to function ${FN}"
+                return 1
+	fi
+
+        FLAG="group"
+
+        tet_infoline "Attempting NOT to remove ${PGOS} members from ${FLAG} in ${FN}"
+
+        # If persons don't current exist to remove to membership, then exit
+        # Check the current length of MEMBERS
+        #
+        LENGTH=`expr "${MEMBERS}" : ".*"`
+        if [ "${LENGTH}" -eq 0 ]; then
+                tet_infoline "ERROR: Unable to continue because of lack of members in ${FN}"
+                return 1
+        fi
+
+        # Execute rgy with input file.
+	#
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="${REGISTRY_SITE_NAME}/"
+	else
+		_set_site=""
+	fi
+
+        FULL_PGOS=""
+        for arg in ${PGOS}; do
+                FULL_PGOS="${FULL_PGOS} ${_set_site}${arg}"
+        done
+
+       	cat > ${GG_INPUT} << E_O_F
+group remove {${FULL_PGOS}} -member {${MEMBERS}}
+E_O_F
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+	if [ $? -eq 0 ]; then
+		tet_infoline "ERROR: ${DCECP_EXEC} succeded UNEXPECTEDLY in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+                return 1
+        fi
+
+        # Check to make sure that new ID has been set.
+	FAIL="false"
+        for i in ${MEMBERS}; do
+                cat ${GG_OUTPUT} | verify_existence "Error:" > /dev/null
+                # Exit if it doesn't exist
+                if [ $? -ne 0 ]; then
+                        tet_infoline "ERROR: Able to remove member ${i} from ${FLAG} unexpectedly in ${FN}"
+                        FAIL="true"
+                fi
+        done
+
+        if [ $FAIL = "true" ]; then
+                tet_infoline "ERROR: Some members have unexpectedly been removed from $FLAG in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+                infoline_file OUTPUT ${GG_OUTPUT}
+                return 2
+        fi
+        # Call function to report that the members have been added properly.
+        tet_infoline "Members ${MEMBERS} have NOT been removed from ${PGOS} AS EXPECTED"
+        return 0
+
+} # End of function remove_neg_from_group_by_dcecp
+
+#===============================================================================
+# Function:	view_group_members_by_dcecp <name_of_group>[-s][-m <List of persons>]
+# Purpose:	View existing members in the group using dcecp command.
+#===============================================================================
+view_group_members_by_dcecp() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	PGOS=""
+	MEMBERS=""
+	SIMPLENAME=""
+	for arg in $*; do
+		case $arg in
+		-s)
+			SIMPLENAME="-simplename"
+			;;
+		-m)
+			shift
+			MEMBERS="$*"
+			break;
+			;;
+		*)
+			PGOS="${PGOS} ${1}"
+			;;
+		esac
+		shift
+	done
+
+	if [ "${PGOS}" = "" ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	FLAG="group"
+
+	tet_infoline "Attempting to view members in the ${FLAG} ${PGOS} in ${FN}"
+
+	# If persons don't currently exist to add to membership, then exit
+	# Check the current length of MEMBERS
+	#
+	LENGTH=`expr "${MEMBERS}" : ".*"`
+	
+	# Execute dcecp command
+	#
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="set _s(sec) ${REGISTRY_SITE_NAME}"
+	else
+		_set_site=""
+	fi
+
+       	cat > ${GG_INPUT} << E_O_F
+${_set_site}
+group list {${PGOS}} ${SIMPLENAME}
+E_O_F
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+        
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+                infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+        # Be careful. If there are no members, there is no output
+        if [ "${GG_OUTPUT}" = "" ]; then
+                cat > ${GG_OUTPUT} << E_O_F
+No Output
+E_O_F
+        fi
+
+	# Check to make sure that new ID has been set.
+	FAIL="false"
+	for i in ${MEMBERS}; do
+		PGO_HEAD=`echo ${i} | cut -c1-5`
+		if [ "${PGO_HEAD}" != "/.../" ]; then
+			i="`getcellname`/${i}"
+		fi
+		if [ "${SIMPLENAME}" = "-simplename" ]; then
+			CELL_NAME=`getcellname`
+			i=`echo ${i} | sed "s%^${CELL_NAME}/%%"`
+		fi
+		cat ${GG_OUTPUT} | verify_existence "${i}" > /dev/null
+		# exit if doesn't exist
+		if [ $? -ne 0 ]; then
+			tet_infoline "ERROR: ${i} is NOT A MEMBER of {${FULL_PGOS}} in ${FN}"
+			FAIL="true"
+		fi
+	done
+
+	if [ $FAIL = "true" ]; then
+		infoline_file INPUT ${GG_INPUT}
+                infoline_file OUTPUT ${GG_OUTPUT}
+		return 2
+	fi
+
+	# Call function to report that the members have been added properly.
+	if [ $LENGTH -gt 0 ]; then
+		tet_infoline "Members ${MEMBERS} are in ${FLAG} ${PGOS}"
+	else
+		tet_infoline "No members are in ${FLAG} ${PGOS} EXPECTEDLY"
+	fi
+	return 0
+
+} # End of function view_group_members_by_dcecp
+
+#===============================================================================
+# Function:	view_memberships_by_dcecp <name_of_person> [<List of groups>]
+# Purpose:	View memberships about the person using dcecp command.
+#===============================================================================
+view_memberships_by_dcecp() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	PGOS=""
+	MEMBERS=""
+	for arg in $*; do
+		case $arg in
+		-m)
+			shift
+			MEMBERS="$*"
+			break;
+			;;
+		*)
+			PGOS="${PGOS} ${1}"
+			;;
+		esac
+		shift
+	done
+
+	if [ "${PGOS}" = "" ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	FLAG="principal"
+
+	tet_infoline "Attempting to view memberships on ${FLAG} ${PGOS} in ${FN}"
+
+	# If persons don't currently exist to add to membership, then exit
+	# Check the current length of MEMBERS
+	#
+	LENGTH=`expr "${MEMBERS}" : ".*"`
+	
+	# Execute dcecp command
+	#
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="set _s(sec) ${REGISTRY_SITE_NAME}"
+	else
+		_set_site=""
+	fi
+
+       	cat > ${GG_INPUT} << E_O_F
+${_set_site}
+principal show {${PGOS}}
+E_O_F
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	# Check to make sure that new ID has been set.
+	FAIL="false"
+	for i in ${MEMBERS}; do
+		PGO_HEAD=`echo ${i} | cut -c1-5`
+		if [ "${PGO_HEAD}" != "/.../" ]; then
+			i="`getcellname`/${i}"
+		fi
+		if [ "${SIMPLENAME}" = "-simplename" ]; then
+			CELL_NAME=`getcellname`
+			i=`echo ${i} | sed "s%^${CELL_NAME}/%%"`
+		fi
+		cat ${GG_OUTPUT} | verify_existence "${i}" > /dev/null
+		# exit if doesn't exist
+		if [ $? -ne 0 ]; then
+			tet_infoline "ERROR: Membership ${i} does NOT EXIST in ${FN}"
+			FAIL="true"
+		fi
+	done
+
+	if [ $FAIL = "true" ]; then
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 2
+	fi
+
+	# Call function to report that the members have been added properly.
+	if [ $LENGTH -gt 0 ]; then
+		tet_infoline "${FLAG} ${PGOS} has memberships ${MEMBERS}"
+	else
+		tet_infoline "${FLAG} ${PGOS} has NO memberships EXPECTEDLY"
+	fi
+	return 0
+
+} # End of function view_memberships_by_dcecp
+
+#===============================================================================
+# Function:	get_api_value_of <name_of_argument>
+# Purpose:	Get value(s) of specified argument
+#===============================================================================
+get_api_value_of() {
+	_argument="${1}"
+	awk '$1 ~ /'${_argument}':/	{
+		for (i = 2; i <= NF; i++) {
+			print $i;
+		}
+	}'
+} # End of function get_api_value_of
+
+#===============================================================================
+# Function:	add_to_group_by_api <name_of_group> <name_of_person>[<exit_status>]
+# Purpose:	Add existing member to new group using API
+#===============================================================================
+add_to_group_by_api() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -lt 2 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	API="sec_rgy_pgo_add_member"
+	FLAG="sec_rgy_domain_group"
+	PGO="${1}"
+	MEMBER="${2}"
+	if [ "${3}" != "" ]; then
+		EXIT_STATUS="${3}"
+	else
+		EXIT_STATUS="error_status_ok"
+	fi
+
+	tet_infoline "Verify ${API} (with ${FLAG} ${PGO} ${MEMBER}) returns ${EXIT_STATUS}"
+
+	# If persons don't currently exist to add to membership, then exit
+	# Check the current length of MEMBER
+	#
+	LENGTH=`expr "${MEMBER}" : ".*"`
+	
+	if [ "${LENGTH}" -eq 0 ]
+	then
+		tet_infoline "ERROR: Unable to continue because of lack of member in ${FN}"
+		return 1
+	fi
+
+	# Execute API
+	#
+	${DO_GGAPI} ${API} ${FLAG} ${PGO} ${MEMBER} > ${GG_OUTPUT}
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${API} failed with UNEXPECTED in ${FN}"
+		tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} ${MEMBER}"
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+	_value=`cat ${GG_OUTPUT} | get_api_value_of status`
+	if [ "${_value}" != "${EXIT_STATUS}" ]; then
+		tet_infoline "ERROR: ${API} returned ${_value} UNEXPECTEDLY"
+		tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} ${MEMBER}"
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	return 0
+
+} # End of function add_to_group_by_api
+
+#===============================================================================
+# Function:     remove_from_group_by_api <name_of_group> <name_of_person>[<exit_status>]
+# Purpose:      Remove existing members from group using API
+#===============================================================================
+remove_from_group_by_api() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -lt 2 ]; then
+        	tet_infoline "ERROR: Illegal input to function ${FN}"
+                return 1
+	fi
+
+        API="sec_rgy_pgo_delete_member"
+        FLAG="sec_rgy_domain_group"
+        PGO="${1}"
+        MEMBER="${2}"
+	if [ "${3}" != "" ]; then
+		EXIT_STATUS="${3}"
+	else
+		EXIT_STATUS="error_status_ok"
+	fi
+
+        tet_infoline "Verify ${API} (with ${FLAG} ${PGO} ${MEMBER}) returns ${EXIT_STATUS}"
+
+        # If persons don't current exist to remove to membership, then exit
+        # Check the current length of MEMBER
+        #
+        LENGTH=`expr "${MEMBER}" : ".*"`
+
+        if [ "${LENGTH}" -eq 0 ]
+        then
+                tet_infoline "ERROR: Unable to continue because of lack of members in ${FN}"
+                return 1
+        fi
+
+	# Execute API
+	#
+	${DO_GGAPI} ${API} ${FLAG} ${PGO} ${MEMBER} > ${GG_OUTPUT}
+        if [ $? -ne 0 ]
+        then
+                tet_infoline "ERROR: ${API} failed with UNEXPECTED in ${FN}"
+		tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} ${MEMBER}"
+		infoline_file OUTPUT ${GG_OUTPUT}
+                return 1
+        fi
+	_value=`cat ${GG_OUTPUT} | get_api_value_of status`
+	if [ "${_value}" != "${EXIT_STATUS}" ]; then
+		tet_infoline "ERROR: ${API} returned ${_value} UNEXPECTEDLY"
+		tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} ${MEMBER}"
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+        return 0
+
+} # End of function remove_from_group_by_api
+
+#===============================================================================
+# Function:	view_group_members_by_api <name_of_group><List of persons>
+# Purpose:	View existing members in the group using API
+#===============================================================================
+view_group_members_by_api() {
+#echo ${CHECK_ITEM_ID}
+set -x
+FN="${0}"
+
+	if [ $# -lt 2 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	API="sec_rgy_pgo_get_members"
+	FLAG="sec_rgy_domain_group"
+	PGO="${1}"
+	shift;
+	MEMBERS="$*"
+
+	tet_infoline "Verify ${API} (with ${FLAG} ${PGO}) gets ${MEMBERS}"
+
+	# If persons don't currently exist to add to membership, then exit
+	# Check the current length of MEMBERS
+	#
+	LENGTH=`expr "${MEMBERS}" : ".*"`
+        if [ "${LENGTH}" -eq 0 ]; then
+                tet_infoline "ERROR: Unable to continue because of lack of members in ${FN}"
+                return 1
+        fi
+
+	# Execute API
+	#
+	${DO_GGAPI} ${API} ${FLAG} ${PGO} 1 > ${GG_OUTPUT}
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${API} failed with UNEXPECTED in ${FN}"
+		tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} 1"
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+	_statuses=`cat ${GG_OUTPUT} | get_api_value_of status`
+	for i in ${_statuses}; do
+		case ${i} in
+		error_status_ok)		;;
+		sec_rgy_no_more_entries)	;;
+		*)
+        		tet_infoline "ERROR: some ${API} returned ${i} UNEXPECTEDLY"
+	        	tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} 1"
+		        infoline_file OUTPUT ${GG_OUTPUT}
+			return 1
+			;;
+		esac
+	done
+
+        if [ "${MEMBERS}" = "none" ]; then
+                TEMP_OUT=`cat ${GG_OUTPUT}`
+                if [ "${TEMP_OUT}X" = "X" ]; then
+                        return 0
+                fi
+        else
+        	for i in ${MEMBERS}; do
+	        	cat ${GG_OUTPUT} | get_api_value_of member_list | fgrep -x -e "${i}" > /dev/null 2>&1
+		        if [ $? -ne 0 ]; then
+			        tet_infoline "ERROR: ${i} is NOT found"
+        	        	tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} 1"
+	        	        infoline_file OUTPUT ${GG_OUTPUT}
+		        	return 1
+        		fi
+	        done
+        fi
+
+	return 0
+
+} # End of function view_group_members_by_api
+
+#===============================================================================
+# Function:	view_neg_group_members_by_api <name_of_group> <exit_status>
+# Purpose:	View existing members in the group using API
+#===============================================================================
+view_neg_group_members_by_api() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -ne 2 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	API="sec_rgy_pgo_get_members"
+	FLAG="sec_rgy_domain_group"
+	PGO="${1}"
+	EXIT_STATUS="${2}"
+
+	tet_infoline "Verify ${API} (with ${FLAG} ${PGO}) returns ${EXIT_STATUS}"
+
+	# Execute API
+	#
+	${DO_GGAPI} ${API} ${FLAG} ${PGO} 1 > ${GG_OUTPUT}
+	if [ $? -ne 0 ]
+	then
+		tet_infoline "ERROR: ${API} failed with UNEXPECTED in ${FN}"
+	       	tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} 1"
+                infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+	_value=`cat ${GG_OUTPUT} | get_api_value_of status`
+	if [ "${_value}" != "${EXIT_STATUS}" ]; then
+		tet_infoline "ERROR: ${API} returned ${_value} UNEXPECTEDLY"
+	       	tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} 1"
+                infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	return 0
+
+} # End of function view_neg_group_members_by_api
+
+#===============================================================================
+# Function:	view_memberships_by_api <name_of_person><List of groups>
+# Purpose:	View existing memberships about the person using API
+#===============================================================================
+view_memberships_by_api() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -lt 2 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	API="sec_rgy_pgo_get_members"
+	FLAG="sec_rgy_domain_person"
+	PGO="${1}"
+	shift;
+	MEMBERS="$*"
+
+	tet_infoline "Verify ${API} (with ${FLAG} ${PGO}) gets ${MEMBERS}"
+
+	# If persons don't currently exist to add to membership, then exit
+	# Check the current length of MEMBERS
+	#
+	LENGTH=`expr "${MEMBERS}" : ".*"`
+	
+        if [ "${LENGTH}" -eq 0 ]; then
+                tet_infoline "ERROR: Unable to continue because of lack of members in ${FN}"
+                return 1
+        fi
+
+	# Execute API
+	#
+	${DO_GGAPI} ${API} ${FLAG} ${PGO} 1 > ${GG_OUTPUT}
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${API} failed with UNEXPECTED in ${FN}"
+	       	tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} 1"
+                infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+	_statuses=`cat ${GG_OUTPUT} | get_api_value_of status`
+	for i in ${_statuses}; do
+		case ${i} in
+		error_status_ok)		;;
+		sec_rgy_no_more_entries)	;;
+		*)
+			tet_infoline "ERROR: some ${API} returned ${i} UNEXPECTEDLY"
+        	       	tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} 1"
+                        infoline_file OUTPUT ${GG_OUTPUT}
+			return 1
+			;;
+		esac
+	done
+	for i in ${MEMBERS}; do
+		cat ${GG_OUTPUT} | get_api_value_of member_list | fgrep -x -e "${i}" > /dev/null 2>&1
+		if [ $? -ne 0 ]; then
+			tet_infoline "ERROR: ${i} is NOT found"
+        	       	tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} 1"
+                        infoline_file OUTPUT ${GG_OUTPUT}
+			return 1
+		fi
+	done
+
+	return 0
+
+} # End of function view_memberships_by_api
+
+#===============================================================================
+# Function:	view_neg_memberships_by_api <name_of_person> <exit_status>
+# Purpose:	View existing memberships about the person using API
+#===============================================================================
+view_neg_memberships_by_api() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -ne 2 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	API="sec_rgy_pgo_get_members"
+	FLAG="sec_rgy_domain_person"
+	PGO="${1}"
+	EXIT_STATUS="${2}"
+
+	tet_infoline "Verify ${API} (with ${FLAG} ${PGO}) returns ${EXIT_STATUS}"
+
+	# Execute API
+	#
+	${DO_GGAPI} ${API} ${FLAG} ${PGO} 1 > ${GG_OUTPUT}
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${API} failed with UNEXPECTED in ${FN}"
+       	       	tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} 1"
+                infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+	_value=`cat ${GG_OUTPUT} | get_api_value_of status`
+	if [ "${_value}" != "${EXIT_STATUS}" ]; then
+		tet_infoline "ERROR: ${API} returned ${_value} UNEXPECTEDLY"
+       	       	tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} 1"
+                infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	return 0
+
+} # End of function view_neg_memberships_by_api
+
+#===============================================================================
+# Function:	is_group_member_by_api <name_of_group><name_of_person> <TRUE|FALSE>
+# Purpose:	Verify the specified member is in the group using API
+#===============================================================================
+is_group_member_by_api() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -ne 3 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	API="sec_rgy_pgo_is_member"
+	FLAG="sec_rgy_domain_group"
+	PGO="${1}"
+	MEMBER="${2}"
+	TRUE_FALSE="${3}"
+	EXIT_STATUS="error_status_ok"
+
+	tet_infoline "Verify ${API} (with ${FLAG} ${PGO} ${MEMBER}) gets ${TRUE_FALSE}"
+
+	# If persons don't currently exist to add to membership, then exit
+	# Check the current length of MEMBER
+	#
+	LENGTH=`expr "${MEMBER}" : ".*"`
+
+        if [ "${LENGTH}" -eq 0 ]
+        then
+                tet_infoline "ERROR: Unable to continue because of lack of members in ${Fn}"
+                return 1
+        fi
+
+	# Execute API
+	#
+	${DO_GGAPI} ${API} ${FLAG} ${PGO} ${MEMBER} > ${GG_OUTPUT}
+	if [ $? -ne 0 ]
+	then
+		tet_infoline "ERROR: ${API} failed with UNEXPECTED in ${FN}"
+       	       	tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} ${MEMBER}"
+                infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	_value=`cat ${GG_OUTPUT} | get_api_value_of status`
+	if [ "${_value}" != "${EXIT_STATUS}" ]; then
+		tet_infoline "ERROR: ${API} returned ${_value} UNEXPECTEDLY"
+       	       	tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} ${MEMBER}"
+                infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	_value=`cat ${GG_OUTPUT} | get_api_value_of return_value`
+	if [ "${_value}" != "${TRUE_FALSE}" ]; then
+		tet_infoline "ERROR: ${API} returned ${_value} UNEXPECTEDLY"
+       	       	tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} ${MEMBER}"
+                infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	return 0
+
+} # End of function is_group_member_by_api
+
+#===============================================================================
+# Function:	is_neg_group_member_by_api <name_of_group><name_of_person> <exit_status>
+# Purpose:	Verify the specified member is in the group using API
+#===============================================================================
+is_neg_group_member_by_api() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -ne 3 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	API="sec_rgy_pgo_is_member"
+	FLAG="sec_rgy_domain_group"
+	PGO="${1}"
+	MEMBER="${2}"
+	EXIT_STATUS="${3}"
+
+	tet_infoline "Verify ${API} (with ${FLAG} ${PGO} ${MEMBER}) returns ${EXIT_STATUS}"
+
+	# If persons don't currently exist to add to membership, then exit
+	# Check the current length of MEMBER
+	#
+	LENGTH=`expr "${MEMBER}" : ".*"`
+
+        if [ "${LENGTH}" -eq 0 ]
+        then
+                tet_infoline "ERROR: Unable to continue because of lack of members in ${FN}"
+                return 1
+        fi
+	
+	# Execute API
+	#
+	${DO_GGAPI} ${API} ${FLAG} ${PGO} ${MEMBER} > ${GG_OUTPUT}
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${API} failed with UNEXPECTED in ${FN}"
+       	       	tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} ${MEMBER}"
+                infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+	_value=`cat ${GG_OUTPUT} | get_api_value_of status`
+	if [ "${_value}" != "${EXIT_STATUS}" ]; then
+		tet_infoline "ERROR: ${API} returned ${_value} UNEXPECTEDLY"
+       	       	tet_infoline "RUNNING: ${DO_GGAPI} ${API} ${FLAG} ${PGO} ${MEMBER}"
+                infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	return 0
+
+} # End of function is_neg_group_member_by_api
+
+#===============================================================================
+# Function:     add_acl_entry_by_dcecp <acl_name> <acl_entry>
+# Purpose:      add the specified ACL entry to object
+#===============================================================================
+add_acl_entry_by_dcecp() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -ne 2 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	OBJECT="${1}"
+	ACL="${2}"
+
+	tet_infoline "add the specified ACL entry ${ACL} to ${OBJECT} in ${FN}"
+
+	# Execute dcecp command
+	#
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="${REGISTRY_SITE_NAME}/"
+	else
+		_set_site=""
+	fi
+       	cat > ${GG_INPUT} << E_O_F
+acl modify ${_set_site}${OBJECT} -add {${ACL}}
+E_O_F
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	# verify if the specified ACL entry has added
+	#
+       	cat > ${GG_INPUT} << E_O_F
+acl show ${_set_site}${OBJECT}
+E_O_F
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	fgrep -x -e "${ACL}" ${GG_OUTPUT} > /dev/null 2>&1
+	if [ $? -eq 0 ]; then
+		tet_infoline "the specified ACL entry ${ACL} has already added to ${OBJECT}"
+	else
+		tet_infoline "ERROR: the specified ACL entry ${ACL} has NOT added to ${OBJECT}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+	return 0
+
+} #End of add_acl_entry_by_dcecp
+
+#===============================================================================
+# Function:     remove_acl_entry_by_dcecp <acl_name> <acl_entry>
+# Purpose:      remove the specified ACL entry from object
+#===============================================================================
+remove_acl_entry_by_dcecp() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -ne 2 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	OBJECT="${1}"
+	ACL="${2}"
+
+	tet_infoline "remove the specified ACL entry ${ACL} from ${OBJECT} in ${FN}"
+
+	# Execute dcecp command
+	#
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="set _s(sec) {REGISTRY_SITE_NAME}/"
+	else
+		_set_site=""
+	fi
+       	cat > ${GG_INPUT} << E_O_F
+acl modify ${_set_site}${OBJECT} -remove {${ACL}}
+E_O_F
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+	fi
+
+	# verify if the specified ACL entry has removed
+	#
+       	cat > ${GG_INPUT} << E_O_F
+acl show ${_set_site}${OBJECT}
+E_O_F
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	fgrep -x -e "${ACL}" ${GG_OUTPUT} > /dev/null 2>&1
+	if [ $? -ne 0 ]; then
+		tet_infoline "the specified ACL entry ${ACL} has already removed from ${OBJECT}"
+	else
+		tet_infoline "ERROR: the specified ACL entry ${ACL} has NOT removed from ${OBJECT}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+	return 0
+
+} #End of remove_acl_entry_by_dcecp
+
+#===============================================================================
+# Function:	show_acl_entry_by_dcecp <acl_name> <ACL entry>
+# Purpose:	verify if specified ACL entry is shown
+#===============================================================================
+show_acl_entry_by_dcecp() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -ne 2 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	OBJECT="${1}"
+	ACL="${2}"
+
+	tet_infoline "verify if ${OBJECT} has ACL entry ${ACL} in ${FN}"
+
+	# Execute dcecp command
+	#
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="set _s(sec) {REGISTRY_SITE_NAME}/"
+	else
+		_set_site=""
+	fi
+       	cat > ${GG_INPUT} << E_O_F
+acl show ${_set_site}${OBJECT}
+E_O_F
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	# verify if the specified ACL entry match to the returned ACL entry
+	fgrep -x -e "${ACL}" ${GG_OUTPUT} > /dev/null 2>&1
+	if [ $? -eq 0 ]; then
+		tet_infoline "${OBJECT} has specified ACL entry ${ACL}"
+	else
+		tet_infoline "ERROR: ${OBJECT} DOESN'T have the specified ACL entry ${ACL}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+	return 0
+
+} # End of function show_acl_entry_by_dcecp
+
+#===============================================================================
+# Function:	show_neg_acl_entry_by_dcecp <acl_name> <ACL entry>
+# Purpose:	verify if specified ACL entry is NOT shown
+#===============================================================================
+show_neg_acl_entry_by_dcecp() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -ne 2 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	OBJECT="${1}"
+	ACL="${2}"
+
+	tet_infoline "verify if ${OBJECT} DOESN'T have ACL entry ${ACL} in ${FN}"
+
+	# Execute dcecp command
+	#
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="${REGISTRY_SITE_NAME}/"
+	else
+		_set_site=""
+	fi
+       	cat > ${GG_INPUT} << E_O_F
+acl show ${_set_site}${OBJECT}
+E_O_F
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	# verify if the specified ACL entry match to the returned ACL entry
+	fgrep -x -e "${ACL}" ${GG_OUTPUT} > /dev/null 2>&1
+	if [ $? -ne 0 ]; then
+		tet_infoline "${OBJECT} DOESN'T have the specified ACL entry ${ACL} EXPECTEDLY"
+	else
+		tet_infoline "ERROR: ${OBJECT} has the specified ACL entry ${ACL}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+	return 0
+
+} # End of function show_neg_acl_entry_by_dcecp
+
+#===============================================================================
+# Function:	check_acl_entry_by_dcecp <acl_name> <permissions>
+# Purpose:	verify if object has correct permission
+#===============================================================================
+check_acl_entry_by_dcecp() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -ne 2 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	OBJECT="${1}"
+	PERMISSION="${2}"
+
+	tet_infoline "verify if ${OBJECT} has permission ${PERMISSION} in ${FN}"
+
+	# Execute dcecp command
+	#
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="${REGISTRY_SITE_NAME}/"
+	else
+		_set_site=""
+	fi
+       	cat > ${GG_INPUT} << E_O_F
+acl check ${_set_site}${OBJECT}
+E_O_F
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+	# verify if the specified permission match to the returned permission
+	fgrep -x -e ${PERMISSION} ${GG_OUTPUT} > /dev/null 2>&1
+	if [ $? -eq 0 ]; then
+		tet_infoline "${OBJECT} has specified permission ${PERMISSION}"
+	else
+		tet_infoline "ERROR: ${OBJECT} DOESN'T have the specified permission ${PERMISSION}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+	return 0
+
+} # End of function check_acl_entry_by_dcecp
+
+#===============================================================================
+# Function:	check_neg_acl_entry_by_dcecp <acl_name>
+# Purpose:	verify if object has no permission
+#===============================================================================
+check_neg_acl_entry_by_dcecp() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+	if [ $# -ne 1 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	OBJECT="${1}"
+
+	tet_infoline "verify if ${OBJECT} has NO permission in ${FN}"
+
+	# Execute dcecp command
+	#
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="set _s(sec) {REGISTRY_SITE_NAME}/"
+	else
+		_set_site=""
+	fi
+       	cat > ${GG_INPUT} << E_O_F
+acl check ${_set_site}${OBJECT}
+E_O_F
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+        if [ $? -ne 0 ]; then
+		tet_infoline "${OBJECT} has NO permission EXPECTEDLY"
+	else
+		tet_infoline "ERROR: ${OBJECT} has some permissions in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+        fi
+	return 0
+
+} # End of function check_neg_acl_entry_by_dcecp
+
+#===============================================================================
+# Function:     verify_show_principal_as_acl_object_by_dcecp <acl_name>
+# Purpose:      verify to be able to show the object due to ACL entries
+#===============================================================================
+verify_show_principal_as_acl_object_by_dcecp() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+        tet_infoline "Verify that we have permissions to show the principal"
+
+	if [ $# -ne 1 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	OBJECT=${1}
+
+	# Execute dcecp command
+	#
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="${REGISTRY_SITE_NAME}/"
+	else
+		_set_site=""
+	fi
+	PGOS=`echo ${OBJECT} | sed -e 's@/.:/sec/principal/@@'`
+       	cat > ${GG_INPUT} << E_O_F
+principal show ${_set_site}{${PGOS}}
+E_O_F
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+        if [ $? -eq 0 ]; then
+                tet_infoline "Able to show the object due to ACL entries"
+        else
+                tet_infoline "ERROR: Unable to show the object due to ACL entries in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+        fi
+	return 0
+
+} #End of verify_show_principal_as_acl_object_by_dcecp
+
+#===============================================================================
+# Function:     verify_neg_show_principal_as_acl_object_by_dcecp <acl_name>
+# Purpose:      Verify to be unable to show the object to due to ACL entries
+#===============================================================================
+verify_neg_show_principal_as_acl_object_by_dcecp() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+
+        tet_infoline "verify to be unable to show the object due to ACL entries"
+
+	if [ $# -ne 1 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+
+	OBJECT=${1}
+
+	# Execute dcecp command
+	#
+	if [ "${REGISTRY_SITE_NAME}" != "" ]; then
+		_set_site="{REGISTRY_SITE_NAME}/"
+	else
+		_set_site=""
+	fi
+       	cat > ${GG_INPUT} << E_O_F
+principal show ${_set_site}${OBJECT}
+E_O_F
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+        if [ $? -ne 0 ]
+        then
+                tet_infoline "Unable to show the object due to ACL entries EXPECTEDLY"
+        else
+                tet_infoline "ERROR: Able to show the object due to ACL entries in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+        fi
+	return 0
+
+} #End of verify_neg_show_principal_as_acl_object_by_dcecp
+
+#===============================================================================
+# Function:     setup_for_cdscache <available|unavailable>
+# Purpose:      setup cdscache environment available/unavailable
+#===============================================================================
+setup_for_cdscache() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+	tet_infoline "Start to ${FN} $*"
+
+	if [ $# -ne 1 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+	_direction="${1}"
+
+       	tet_infoline "Make the remote namespace ${_direction}"
+
+        if [ "${REMOTE_HOST}" = "" ]; then
+                tet_infoline "ERROR: Remote hostname is NOT set"
+                return 1
+        fi
+
+	# Execute dcecp command
+	#
+	if [ "${_direction}" = "available" ]; then
+        	cat > ${GG_INPUT} << E_O_F
+cdscache create ${REMOTE_HOST} -binding ncadg_ip_udp:`getip ${REMOTE_HOST}`
+E_O_F
+	elif [ "${_direction}" = "unavailable" ]; then
+        	cat > ${GG_INPUT} << E_O_F
+cdscache delete ${REMOTE_HOST}
+cdscache discard
+E_O_F
+	else 
+		tet_infoline "ERROR: unknown argument ${_direction} in ${FN}"
+		return 1
+	fi
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+        fi
+
+       	tet_infoline "cdscache create succeeded"
+	return 0
+
+} #End of setup_for_cdscache
+
+#===============================================================================
+# Function:     setup_for_registry_connect <remote_cell>
+# Purpose:      setup registry connection environment available/unavailable
+#===============================================================================
+setup_for_registry_connect() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+	tet_infoline "Start to ${FN} $*"
+
+	if [ $# -ne 1 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+	_remote_cell="${1}"
+
+	echo ${_remote_cell} | grep -e '^/\.\.\./' > /dev/null
+	if [ $? -eq 0 ]; then
+		_remote_cell=`expr ${_remote_cell} : '\/\.\.\.\/\(.*\)'`
+	fi
+
+        # This is a hack to prevent a registry connect from being run more than once
+        cat > ${GG_INPUT} << E_O_F
+principal show krbtgt/${_remote_cell}
+E_O_F
+        ${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+        if [ $? -eq 0 ]; then
+                tet_infoline "WARNING: Intercell connection already established. Ignoring connect."
+                return 0
+        fi
+
+       	tet_infoline "Running registry connect to remote cell ${_remote_cell}"
+
+	# Execute dcecp command
+	#
+       	cat > ${GG_INPUT} << E_O_F
+registry connect /.../${_remote_cell} -group none -org none -mypwd ${PASSWORD} -fgroup none -forg none -facct ${CELL_ADMIN} -facctpwd ${PASSWORD} -acctvalid -facctvalid
+E_O_F
+       	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+	if [ $? -ne 0 ]; then
+		tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+       		infoline_file INPUT ${GG_INPUT}
+        	infoline_file OUTPUT ${GG_OUTPUT}
+		return 1
+	fi
+
+       	tet_infoline "Registry connect successful."
+        return 0
+
+} #End of setup_for_registry_connect
+
+#===============================================================================
+# Function:     setup_pgo_for_remote_cell <create|clean> <remote_cell>
+# Purpose:      setup pgo's for the remote cell
+#===============================================================================
+setup_pgo_for_remote_cell() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+	tet_infoline "Start to ${FN} $*"
+
+	if [ $# -ne 2 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+	_operation="${1}"
+	_remote_cell="${2}"
+
+	echo ${_remote_cell} | grep -e '^/\.\.\./' > /dev/null
+	if [ $? -eq 0 ]; then
+		_remote_cell=`expr ${_remote_cell} : '\/\.\.\.\/\(.*\)'`
+	fi
+
+       	tet_infoline "*** try to ${_operation} the pgo's in remote cell ${_remote_cell} ***"
+
+	# Execute dcecp command
+	#
+	if [ "${_operation}" = "create" ]; then
+        	cat > ${GG_INPUT} << E_O_F
+group create /.../${_remote_cell}/${gR}
+principal create /.../${_remote_cell}/${pR}
+group add /.../${_remote_cell}/none -member ${pR}
+group add /.../${_remote_cell}/${gR} -member ${pR}
+organization add /.../${_remote_cell}/none -member ${pR}
+principal create /.../${_remote_cell}/${pRs}
+group add /.../${_remote_cell}/none -member ${pRs}
+organization add /.../${_remote_cell}/none -member ${pRs}
+principal create /.../${_remote_cell}/${pRl}
+group add /.../${_remote_cell}/none -member ${pRl}
+organization add /.../${_remote_cell}/none -member ${pRl}
+E_O_F
+        	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+		if [ $? -ne 0 ]; then
+			tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+	        	infoline_file INPUT ${GG_INPUT}
+        		infoline_file OUTPUT ${GG_OUTPUT}
+			return 1
+		fi
+
+		# add an alias account
+        	cat > ${GG_INPUT} << E_O_F
+principal show /.../${_remote_cell}/${pR}
+E_O_F
+        	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+		if [ $? -ne 0 ]; then
+			tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+	        	infoline_file INPUT ${GG_INPUT}
+        		infoline_file OUTPUT ${GG_OUTPUT}
+			return 1
+		fi
+		_attr_uid="`grep -e '^{uid ' ${GG_OUTPUT}`"
+        	cat > ${GG_INPUT} << E_O_F
+principal create /.../${_remote_cell}/${pRa} -attribute {{alias yes} ${_attr_uid}}
+group add /.../${_remote_cell}/none -member ${pRa}
+organization add /.../${_remote_cell}/none -member ${pRa}
+E_O_F
+        	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+		if [ $? -ne 0 ]; then
+			tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+	        	infoline_file INPUT ${GG_INPUT}
+        		infoline_file OUTPUT ${GG_OUTPUT}
+			return 1
+		fi
+
+		# because "dcecp> account create" in remote cell fails,
+		# use rgy_edit in stead of dcecp
+		cat << E_O_F > ${GG_INPUT}
+site /.../${_remote_cell}
+do account
+add ${pR} -mp ${PASSWORD} -pw ${pR} -g none -o none
+add ${pRs} -mp ${PASSWORD} -pw ${pRs} -g none -o none
+add ${pRl} -mp ${PASSWORD} -pw ${pRl} -g none -o none
+add ${pRa} -mp ${PASSWORD} -pw ${pRa} -g none -o none
+E_O_F
+		# Execute rgy with input file.
+		${RGY_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+		if [ $? -ne 0 ]; then
+			tet_infoline "ERROR: ${RGY_EXEC} FAILED in ${FN}"
+	        	infoline_file INPUT ${GG_INPUT}
+        		infoline_file OUTPUT ${GG_OUTPUT}
+			return 1
+		fi
+
+	elif [ "${_operation}" = "clean" ]; then
+        	cat > ${GG_INPUT} << E_O_F
+principal delete /.../${_remote_cell}/${pR}
+principal delete /.../${_remote_cell}/${pRs}
+principal delete /.../${_remote_cell}/${pRl}
+principal delete /.../${_remote_cell}/${pRa}
+group delete /.../${_remote_cell}/${gR}
+E_O_F
+        	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+		if [ $? -ne 0 ]; then
+			tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+	        	infoline_file INPUT ${GG_INPUT}
+        		infoline_file OUTPUT ${GG_OUTPUT}
+			return 1
+		fi
+	else 
+		tet_infoline "ERROR: unknown argument ${_operation} in ${FN}"
+		return 1
+	fi
+
+       	tet_infoline "*** now ${_operation} the pgo's in remote cell ${_remote_cell} ***"
+	return 0
+
+} #End of setup_pgo_for_remote_cell
+
+#===============================================================================
+# Function:     setup_pgo_for_local_cell <create|clean>
+# Purpose:      setup pgo's for the local cell
+#===============================================================================
+setup_pgo_for_local_cell() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+	tet_infoline "Start to ${FN} $*"
+
+	if [ $# -ne 1 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+	_operation="${1}"
+
+       	tet_infoline "*** try to ${_operation} the pgo's in local cell ***"
+
+	# Execute dcecp command
+	#
+	if [ "${_operation}" = "create" ]; then
+        	cat > ${GG_INPUT} << E_O_F
+group create ${gG}
+group create ${gGnp} -attribute {{inprojlist yes}}
+principal create ${pL}
+group add none -member ${pL}
+organization add none -member ${pL}
+account create ${pL} -mypwd ${PASSWORD} -password ${pL} -group none -organization none
+principal create ${pLo}
+group add none -member ${pLo}
+organization add none -member ${pLo}
+account create ${pLo} -mypwd ${PASSWORD} -password ${pLo} -group none -organization none
+E_O_F
+        	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+		if [ $? -ne 0 ]; then
+			tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+		infoline_file INPUT ${GG_INPUT}
+		infoline_file OUTPUT ${GG_OUTPUT}
+			return 1
+		fi
+		# add an alias group
+        	cat > ${GG_INPUT} << E_O_F
+group show ${gG}
+E_O_F
+        	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+		if [ $? -ne 0 ]; then
+			tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+        		infoline_file INPUT ${GG_INPUT}
+	        	infoline_file OUTPUT ${GG_OUTPUT}
+			return 1
+		fi
+		_attr_gid="`grep -e '^{gid ' ${GG_OUTPUT}`"
+        	cat > ${GG_INPUT} << E_O_F
+group create ${gGa} -attribute {{alias yes} ${_attr_gid}}
+E_O_F
+        	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+		if [ $? -ne 0 ]; then
+			tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+        		infoline_file INPUT ${GG_INPUT}
+	        	infoline_file OUTPUT ${GG_OUTPUT}
+			return 1
+		fi
+
+	elif [ "${_operation}" = "clean" ]; then
+        	cat > ${GG_INPUT} << E_O_F
+principal delete ${pL}
+principal delete ${pLo}
+group delete ${gG}
+group delete ${gGnp}
+group delete ${gGa}
+E_O_F
+        	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+		if [ $? -ne 0 ]; then
+			tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+	        	infoline_file INPUT ${GG_INPUT}
+        		infoline_file OUTPUT ${GG_OUTPUT}
+			return 1
+		fi
+	else 
+		tet_infoline "ERROR: unknown argument ${_operation} in ${FN}"
+		return 1
+	fi
+
+       	tet_infoline "*** now ${_operation} the pgo's in local cell ***"
+	return 0
+
+} #End of setup_pgo_for_local_cell
+
+#===============================================================================
+# Function:     setup_acl_object_for_local_cell <create|clean>
+# Purpose:      setup acl object for the local cell
+#===============================================================================
+setup_acl_object_for_local_cell() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+	tet_infoline "Start to ${FN} $*"
+
+	if [ $# -ne 1 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+	_operation="${1}"
+
+       	tet_infoline "*** try to ${_operation} the acl object in local cell ***"
+
+	# Execute dcecp command
+	#
+	if [ "${_operation}" = "create" ]; then
+        	cat > ${GG_INPUT} << E_O_F
+principal create `echo ${aclName} | sed -e 's@/.:/sec/principal/@@'`
+E_O_F
+        	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+		if [ $? -ne 0 ]; then
+			tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+	        	infoline_file INPUT ${GG_INPUT}
+        		infoline_file OUTPUT ${GG_OUTPUT}
+			return 1
+		fi
+	elif [ "${_operation}" = "clean" ]; then
+        	cat > ${GG_INPUT} << E_O_F
+principal delete `echo ${aclName} | sed -e 's@/.:/sec/principal/@@'`
+E_O_F
+        	${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+		if [ $? -ne 0 ]; then
+			tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+	        	infoline_file INPUT ${GG_INPUT}
+        		infoline_file OUTPUT ${GG_OUTPUT}
+			return 1
+		fi
+	else 
+		tet_infoline "ERROR: unknown argument ${_operation} in ${FN}"
+		return 1
+	fi
+
+       	tet_infoline "*** now ${_operation} the acl object in local cell ***"
+	return 0
+
+} #End of setup_acl_object_for_local_cell
+
+#===============================================================================
+# Function:     setup_many_principals_for_remote_cell <create|clean> <remote_cell> <number_of_entries>
+# Purpose:      setup many principals for the remote cell
+#===============================================================================
+setup_many_principals_for_remote_cell() {
+#echo ${CHECK_ITEM_ID}
+#set -x
+FN="${0}"
+	tet_infoline "Start to ${FN} $*"
+
+	if [ $# -ne 3 ]; then
+		tet_infoline "ERROR: Illegal input to function ${FN}";
+		return 1
+	fi
+	_operation="${1}"
+	_remote_cell="${2}"
+	_number_of_entries="${3}"
+
+	echo ${_remote_cell} | grep -e '^/\.\.\./' > /dev/null
+	if [ $? -eq 0 ]; then
+		_remote_cell=`expr ${_remote_cell} : '\/\.\.\.\/\(.*\)'`
+	fi
+
+       	tet_infoline "*** try to ${_operation} the ${_number_of_entries} principals in remote cell ${_remote_cell} ***"
+
+	# Execute dcecp command
+	#
+	if [ "${_operation}" = "create" ]; then
+		_cnt=1
+		while [ ${_cnt} -le ${_number_of_entries} ]; do
+		
+	        	cat > ${GG_INPUT} << E_O_F
+principal create /.../${_remote_cell}/${pR}${_cnt}
+group add /.../${_remote_cell}/none -member ${pR}${_cnt}
+organization add /.../${_remote_cell}/none -member ${pR}${_cnt}
+E_O_F
+			${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+			if [ $? -ne 0 ]; then
+				tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+	        	        infoline_file INPUT ${GG_INPUT}
+        	        	infoline_file OUTPUT ${GG_OUTPUT}
+				return 1
+			fi
+
+			# because "dcecp> account create" in remote cell fails,
+			# use rgy_edit in stead of dcecp XXX
+			cat << E_O_F > ${GG_INPUT}
+site /.../${_remote_cell}
+do account
+add ${pR}${_cnt} -mp ${PASSWORD} -pw ${pR}${_cnt} -g none -o none
+E_O_F
+			# Execute rgy with input file.
+			${RGY_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+			if [ $? -ne 0 ]; then
+				tet_infoline "ERROR: ${RGY_EXEC} FAILED in ${FN}"
+		                infoline_file INPUT ${GG_INPUT}
+                		infoline_file OUTPUT ${GG_OUTPUT}
+				return 1
+			fi
+
+			_cnt=`expr ${_cnt} + 1`
+		done
+
+	elif [ "${_operation}" = "clean" ]; then
+		_cnt=1
+		while [ ${_cnt} -le ${_number_of_entries} ]; do
+		
+        		cat > ${GG_INPUT} << E_O_F
+principal delete /.../${_remote_cell}/${pR}${_cnt}
+E_O_F
+        		${DCECP_EXEC} < ${GG_INPUT} > ${GG_OUTPUT} 2>&1
+			if [ $? -ne 0 ]; then
+				tet_infoline "ERROR: ${DCECP_EXEC} FAILED in ${FN}"
+		                infoline_file INPUT ${GG_INPUT}
+                		infoline_file OUTPUT ${GG_OUTPUT}
+				return 1
+			fi
+
+			_cnt=`expr ${_cnt} + 1`
+		done
+
+	else 
+		tet_infoline "ERROR: unknown argument ${_operation} in ${FN}"
+		return 1
+	fi
+
+       	tet_infoline "*** now ${_operation} the ${_number_of_entries} principals in remote cell ${_remote_cell} ***"
+	return 0
+
+} #End of setup_many_principals_for_remote_cell

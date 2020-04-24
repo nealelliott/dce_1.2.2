@@ -1,0 +1,197 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: run.dced,v $
+# Revision 1.1.4.2  1996/03/11  02:38:04  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:05:12  marty]
+#
+# Revision 1.1.4.1  1995/12/11  21:55:08  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:55:17  root]
+# 
+# Revision 1.1.2.6  1994/07/27  19:26:26  fadden
+# 	Fix typo in help message
+# 	[1994/07/27  00:03:54  fadden]
+# 
+# 	Add dcdrel002 as valid test scenario name.
+# 	[1994/07/26  23:54:17  fadden]
+# 
+# Revision 1.1.2.5  1994/07/26  21:41:47  fadden
+# 	Modify usage message to reflect current tests.
+# 	Add dcdrel003 as valid test scenario name.
+# 	[1994/07/26  19:40:52  fadden]
+# 
+# Revision 1.1.2.4  1994/07/21  21:26:56  fadden
+# 	Change name of test from dcdrel01 to dcdrel001
+# 	[1994/07/21  21:01:00  fadden]
+# 
+# Revision 1.1.2.3  1994/06/24  19:54:03  fadden
+# 	Merged with changes from 1.1.2.2
+# 	[1994/06/24  19:53:24  fadden]
+# 
+# 	Remove incorrect help information
+# 	[1994/06/24  18:24:25  fadden]
+# 
+# Revision 1.1.2.2  1994/06/17  18:46:09  devsrc
+# 	cr10872 - fix copyright
+# 	[1994/06/17  18:37:00  devsrc]
+# 
+# Revision 1.1.2.1  1994/05/26  22:44:27  fadden
+# 	Prepare for initial submission
+# 	[1994/05/26  20:10:58  fadden]
+# 
+# $EndLog$
+
+LOOPS_TO_EXECUTE=""
+HOURS_TO_EXECUTE=""
+export internal_loop_hours=""
+KEEP_ALL_JOURNALS=""
+callwas="$*"
+if [[ -z $TET_ROOT ]]
+then
+        echo TET_ROOT not defined.
+        exit 1
+fi
+
+test_name="all"			# Default to run all tests in tet_scen file.
+				# This is also used to name the results directory.
+				
+
+myname=${0##*/}
+
+Usage() {
+    cat <<BeQuietNow
+
+Usage: $myname {-l loops | -t hours} [other opts] test_name
+Options:
+  -l <number>	Number of external loops or passes to run.
+  -t <hours>	Time in hours.  Accepts decimal point, eg -t .5 = 30 minutes.
+  -c		Keep the journal files from all successful iterations.
+  -e <number>	Max errors-in-a-row allowed before punting test (default=50).
+  -E <number>	Max total errors allowed before punting test (default=500).
+  -h		List test-specific options.
+  -m <name(s)>	Machine(s) to work with.  Multiple -m <name> options
+		and -m \"name1 ... nameN\" are ok.
+  -M		Get machine(s) to work with from <testname>.data file.
+		Either -m or -M or env. var. CLIENT_MACHINES are required for
+		all tests.
+		-m and -M are mutually exclusive.
+
+Args:
+  Test name: dcdrel001 | dcdrel002 | dcdrel003 | all
+  -l and -t are mutually exclusive, and one or the other is required.
+  Quotes around a string arg may be omitted when arg contains no whitespace.
+
+BeQuietNow
+	exit 2
+}
+
+
+havmopt=0
+while getopts :l:t:e:E:cMm:hC: arguments
+do
+	case $arguments in
+
+		l)      LOOPS_TO_EXECUTE=$OPTARG;;
+
+		t)      HOURS_TO_EXECUTE=$OPTARG;;
+
+		e)	MaxErrsInARow=$OPTARG;;
+
+		E)	MaxErrors=$OPTARG;;
+
+		m)	if ((havmopt<0))
+			then
+				echo "-m <machine> and -M are mutually exclusive."
+				Usage
+				exit 1
+			elif ((havmopt==0))
+			then
+				CLIENT_MACHINES="$OPTARG"
+			else
+				CLIENT_MACHINES="$CLIENT_MACHINES $OPTARG"
+			fi
+			((havmopt+=1))
+			export CLIENT_MACHINES;;
+
+		M)	if ((havmopt>0))
+			then
+				echo "-m <machine> and -M are mutually exclusive."
+				Usage
+				exit 1
+			fi
+			CLIENT_MACHINES=""
+			havmopt=-1
+			export CLIENT_MACHINES;;
+
+		c)	KEEP_ALL_JOURNALS="YES";;
+
+		C)	export CLIENTLOOPS=$OPTARG
+			(( $CLIENTLOOPS )) 
+			(( $? )) && \
+				echo "-C option must be an integer between 1 and 255 inclusive." && exit 1
+			(( $CLIENTLOOPS >= 256 || $CLIENTLOOPS < 1 )) && \
+				echo "-C option must be an integer between 1 and 255 inclusive." && exit 1;;
+
+		h)	cat <<SayNoMore
+
+TEST: dcdrel001
+  Runs DCDREL001
+
+TEST: dcdrel002
+  Runs DCDREL002
+
+TEST: dcdrel003
+  Runs DCDREL003
+
+TEST: all
+  Run each of the above in sequence.
+
+
+
+SayNoMore
+			exit 1;;
+
+		:)	echo "	-$OPTARG requires an argument"
+			Usage
+			exit 1;;
+
+		\?)	echo "	-$OPTARG is not a valid switch"			
+			Usage
+			exit 1;;
+
+         esac
+done
+shift OPTIND-1
+
+
+if [ -n "$1" ]
+then
+	test_name=$1	# Assign test name if there is one on command line.
+fi
+
+if [[	$test_name = "all" || $test_name = "dcdrel001" || $test_name = "dcdrel002" || $test_name = "dcdrel003" ]]
+then
+        if [[ $havmopt -eq 0 && -z "$CLIENT_MACHINES" ]]
+        then
+                echo "Test \"$test_name\" requires the -m or -M switch or the"
+		echo "env. var. CLIENT_MACHINES to specify remote machines."
+		Usage
+                exit 1
+        fi
+else
+	echo "Test name \"$test_name\" is unknown."
+	exit 1
+fi
+
+#
+# Now run the main loops.
+#
+. $TET_ROOT/system/tools/run_loops.ksh dced "run.dced $callwas"

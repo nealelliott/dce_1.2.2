@@ -1,0 +1,68 @@
+This memo lists the test cases for "Using a Refreshed TGT in the DFS". Please
+refer to the design memo for more details. 
+
+
+Ticket expiration and refreshing a new ticket are very deterministic behaviors.
+Therefore, testing TGT's expiration can be straightforward. For the test, we
+should set TGT's expiration time to 10 minutes or less in order to facilitate
+the testing work. The following major areas (scenarios) need to be tested:
+
+1) Testing afscall_cm_newtgt()
+
+As mentioned before, this system call can be tested by executing  dce_login
+and/or kinit programs under following situations;
+
+ o After dce_login,  do klist. Later, execute  kinit and then do  klist
+   to make sure that ticket time has changed. 
+
+ o a) Run a test (say fs/test2) that creates files on the server, the test 
+      eventually prints out an appropriate rpc error messages indicating the 
+      TGT expires. 
+
+   b) At this time, the CM creates an unauthenticated rpc binding for the 
+      running process to continue the work. However, the process now assumes 
+      only anonymous privileges. The running test may fail or not depending 
+      on how the 'mode' bit or ACL is set in that testing directory. 
+
+   c) Put that running program in background. Execute kinit and resume that 
+      the same test. The test should continue run without any problem. 
+
+2) Testing Access Checking After TGT Expires
+
+When user's TGT expires, the user will be treated as an anonymous user. So
+subsequent  open system calls or commands chmod or ls, etc., should be
+denied if ``other'' has no appropriate right to files or directories. This is
+true even though these files could be already cached in the local disk. 
+
+However, the same user should be able to continue doing a read (or a write)
+from (or to) the local cached files, even their TGTs expires. This is 
+because the UNIX system does not perform access checking on read and write 
+system calls once the file is open according to POSIX.
+
+3)  Testing Garbage Collection of Obsolete cm_conn and cm_tgts 
+
+Continue running the test driver that starting with three processes. Two of 
+them execute a test (eg., fs/test2) that creates lots of files on the server
+and the third process that wakes up every 5 minutes doing  kinit. 
+
+The purpose is twofold;
+
+   a)  Program kinit will make existing rpc connections obsolete and
+       create new bindings for the user. The running program SHOULD be able
+       to switch to use the new rpc bindings automatically without any 
+       problem. 
+
+   b) In the meantime, the CM daemon will GC obsolete rpc bindings every 10 
+      minutes. The GC operation and the operation of creating new rpc 
+      connections should generate a big contention as far as handling rpc
+      binding is concerned. 
+
+
+
+4) Repeat test 3) with lots of PAGs. 
+
+Test 3) only deals with one login session, ie., one pag. We could 'dce_login'
+onto different xterms. Each 'dce_login' will create a new environment with a
+different pag number. Repeat the same test described in 3). The test becomes
+more stressful. 
+

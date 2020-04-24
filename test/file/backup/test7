@@ -1,0 +1,227 @@
+#! /bin/sh 
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# test7
+#
+# tests verifydb, savedb, restoredb, labeltape, readlabel
+#
+# This script exercises bak commands that result in
+# any tape drive operations.
+#
+#
+# HISTORY
+# $Log: test7,v $
+# Revision 1.1.12.1  1996/10/17  18:12:27  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:47:54  damon]
+#
+# Revision 1.1.5.2  1993/01/11  17:37:16  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  16:53:38  htf]
+# 
+# Revision 1.1.2.2  1992/05/21  12:32:44  jaffe
+# 	To convert the /bin/csh backup test scripts to /bin/sh.
+# 	To change the scripts to use the recommended style of variable names.
+# 
+# 	$TALog: test7,v $
+# 	Revision 4.4  1994/06/01  17:25:15  andi
+# 	None of the files existed in the configuration!  Checked them all out
+# 	and added them.
+# 	[added by delta andi-db5496-checkout-backup-tests, r1.1]
+# 
+# Revision 4.3  1993/01/14  17:32:15  jaffe
+# 	revdrop of latest OSF copyright changes to these files
+# 	[from r4.2 by delta osf-revdrop-01-12-92, r1.1]
+# 
+# 	[1992/05/20  16:18:27  jaffe]
+# 
+# $EndLog$
+#
+
+: ${BAK_BIN_DIR=$1}
+: ${TCID=$2}
+: ${UBIK_DB_PATH="/opt/dcelocal/var/dfs/backup"}
+
+PATH=$PATH":"$BAK_BIN_DIR
+#export PATH
+
+echo ""
+echo "**************** TEST7 ******************"
+echo ""
+echo "REMOVE TAPE FROM DRIVE AND CONDUCT THIS TEST"
+echo "press return to continue"
+#For /bin/sh - set a=($<)
+read a
+echo bak readlabel $TCID 
+bak readlabel $TCID 
+if [ $? -ne 1 ] 
+then
+  echo "Case 7.0 WORKED unexpectedly"
+fi
+ 
+echo ""
+echo "INSERT UNLABELED TAPE HERE"
+echo "press return to continue"
+
+read a
+# attempt to read the label on an unlabeled tape
+echo bak readlabel $TCID 
+bak readlabel $TCID 
+if [ $? -ne 1 ] 
+then
+  echo "Case 7.1 WORKED unexpectedly"
+fi
+ 
+echo ""
+echo bak verifydb
+bak verifydb
+if [ $? -ne 0 ] 
+then
+  echo "Case 7.2 FAILED unexpectedly"
+  echo "Cannot continue until this case passes"
+  exit 1 
+fi
+
+echo ""
+echo "PLACE TAPE IN IN DRIVE -- THIS TAPE WILL BE NAMED db_dump.1" 
+echo "press return to continue"
+read a
+echo bak labeltape -tape Ubik_db_dump.1 -tcid $TCID
+bak labeltape -tape Ubik_db_dump.1 -tcid $TCID
+if [ $? -ne 0 ] 
+then
+   echo "Case 7.3 FAILED unexpectedly"
+   echo "Cannot continue until this case passes"
+   exit 1
+fi
+
+echo ""
+echo "READING BACK THE TAPE LABEL"
+echo bak readlabel -tcid $TCID
+bak readlabel -tcid $TCID
+if [ $? -ne 0 ] 
+then
+   echo "Case 7.4 FAILED unexpectedly"
+   echo "Cannot continue until this case passes"
+   exit 1
+fi
+
+echo ""
+echo "SCANTAPE SHOULD FAIL GRACEFULLY"
+echo bak scantape -tcid $TCID
+bak scantape -tcid $TCID
+if [ $? -ne 1 ] 
+then
+   echo "Case 7.5 WORKED unexpectedly"
+fi
+
+echo ""
+echo "NOW SAVING DATABASE TO TAPE"
+echo "press return to continue"
+read a
+echo bak savedb -tcid $TCID
+bak savedb -tcid $TCID
+if [ $? -ne 0 ] 
+then
+  echo "Case 7.6 FAILED unexpectedly"
+  echo "Cannot continue until this case passes"
+  exit 1 
+fi
+
+echo ""
+echo "VERIFYING THAT DB IS OK BEFORE WE BEGIN"
+echo "ALSO TESTING THE -VERBOSE OPTION ON VERIFYDB"
+echo bak verifydb -detail
+bak verifydb -detail
+if [ $? -ne 0 ] 
+then
+  echo "Case 7.7 FAILED unexpectedly"
+  echo "Cannot continue until this case passes"
+  exit 1
+fi
+
+echo ""
+# insert hack to corrupt the database
+echo "BACKING UP THE DATABASE TO /tmp/backup_ubik IN CASE OF FAILURE"
+# back the poor boys up in case things crap out.
+# possibly automate this process later.
+echo ""
+echo "ISSUE THE FOLLOWING COMMANDS ON THE MACHINE RUNNING BAKSERVER."
+echo ""
+echo "mkdir /tmp/backup_ubik"
+echo "rm -r /tmp/backup_ubik"
+echo "cp $UBIK_DB_PATH/bdb.DB0 /tmp/backup_ubik"
+echo "cp $UBIK_DB_PATH/bdb.DBSYS1 /tmp/backup_ubik"
+echo ""
+echo "press return when done"
+read a
+echo "CORRUPTING THE DATABASE"
+# good ole rm ought to handle it.
+# possibly automate this process later.
+echo ""
+echo "ISSUE THE FOLLOWING COMMANDS ON THE MACHINE RUNNING BAKSERVER."
+echo ""
+echo "rm -f $UBIK_DB_PATH/bdb.DB0"
+echo "rm -f $UBIK_DB_PATH/bdb.DBSYS1"
+echo ""
+echo "press return when done"
+read a
+
+echo ""
+echo "VERIFYING THE BACKUP DATABASE"
+echo bak verifydb
+bak verifydb
+if [ $? -ne 1 ] 
+then
+  echo "Case 7.8 WORKED unexpectedly"
+  echo "THE DATABASE IS STILL OK WHICH IS INCORRECT"
+  echo "Cannot continue until this case passed"
+  exit 1
+else
+  echo ""
+  echo "THE DATABASE HAS BEEN CORRUPTED AS PLANNED"
+fi
+
+echo ""
+echo "NOW ATTEMPTING RESTORE OF DB"
+echo bak restoredb -tcid $TCID
+bak restoredb -tcid $TCID
+if [ $? -ne 0 ] 
+then
+  echo "Case 7.9 FAILED unexpectedly"
+  echo "Cannot continue until this case passed" 
+  exit 1
+fi
+
+echo ""
+echo "NOW VERIFYING THAT RESTORE WAS A SUCCESS"
+echo bak verifydb
+bak verifydb
+if [ $? -ne 0 ] 
+then
+  echo "Case 7.10 FAILED unexpectedly"
+  echo "Cannot continue until this case passed"
+  exit 1 
+fi
+
+echo ""
+echo "SCANTAPE SHOULD SEE THE DB ON THE TAPE"
+echo bak scantape -tcid $TCID
+bak scantape -tcid $TCID
+if [ $? -ne 0 ] 
+then
+  echo "Case 7.11 FAILED unexpectedly"
+fi
+
+# setexp probably should be disabled in the case of a savedb.
+# perhaps include a case here later to insure the it doesn't
+# write a date.
+
+echo ""
+echo "**************** TEST7 END ******************"
+ 

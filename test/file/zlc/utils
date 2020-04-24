@@ -1,0 +1,319 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: utils,v $
+# Revision 1.1.424.1  1996/10/17  18:37:58  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:58:31  damon]
+#
+# Revision 1.1.419.1  1994/02/04  20:48:08  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:25:55  devsrc]
+# 
+# Revision 1.1.417.1  1993/12/07  17:47:03  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  19:45:23  jaffe]
+# 
+# Revision 1.1.2.3  1993/01/11  18:38:26  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:24:22  htf]
+# 
+# Revision 1.1.2.2  1992/11/19  13:37:50  jaffe
+# 	Transarc delta: comer-ot5597-add-zlc-tests 1.5
+# 	  Selected comments:
+# 	    Add a suite of tests for zero linkcount files.
+# 	    A set of useful utilities used by the test suite.
+# 	    Modified tests to check whether or not the blocks used by
+# 	    a file are returned on removal.
+# 	    Added a function to make a file or a specified length and a function
+# 	    to return the number of bytes currently used in a fileset.
+# 	    Cleaned up the code that keeps the file open.  Now just uses the
+# 	    shell file descriptor mechanism (exec 3< testfile) rather than
+# 	    using a sleeping process (duh!).
+# 	    Misc cleanup.
+# 	    Cleaned up the utilities file.  Replaced findremote with
+# 	    findlfsremote, which now will find a remote host with a specified
+# 	    number of LFS aggregates.
+# 	    Clean-up TET usage.
+# 	[1992/11/18  17:13:33  jaffe]
+# 
+# $EndLog$
+#
+
+###############################################################################
+#    Copyright (C) 1991, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+######################################################################
+# AUXILLIARY FUNCTIONS
+#
+# findhosts						# get list of principals
+# findaggrs 						# this host's exported list
+# finddev aggregate					# get device for this aggr
+# findremoteaggrs host					# aggr list from host
+# hostprincipal host					# craft host principal name
+# findlfsremote local_principal remoteP aggrP....
+				# find host other than local_principal
+				# places host principal name in remoteP env var
+				# places as many aggrs in aggrPs as are supplied
+# checkpath cmd1 cmd2					# check for commands in path
+# makepow2 file power_of_two catcher			# makes file 2^power bytes
+# getbytesused fileset					# get # bytes used in fileset
+# createfileset fileset server aggr mountpoint outparm
+			# create fileset in aggr on server
+			# dfs mount on mountpoint
+			# return volume ID in outparm
+# deletefileset fileset mountpoint			# delete fileset and DFS mount point
+######################################################################
+# Ask CDS for a list of machine principals in this cell
+findhosts() {
+	cdscp show dir /.:/hosts/\* | grep MyName | awk '{print $3}'
+}
+
+# Consult export table for list of exported aggregates.
+findaggrs() {
+	awk '$3 == "lfs" {print $2}' < /opt/dcelocal/var/dfs/dfstab
+}
+
+# Consult export table to find device for a particular aggregate
+finddev() {
+	awk '$2 == "'$1'" { print $1}' < /opt/dcelocal/var/dfs/dfstab
+}
+
+# Consult the ftserver for remote aggregates
+findremoteaggrs() {
+	_host=$1
+
+	fts lsaggr -server $_host -localauth |
+	awk '$4 == "(LFS)" {print $1}'
+}
+
+# Construct host principal
+hostprincipal() {
+	_host=$1
+
+	_cell=`getcellname 2>/dev/null`
+	if [ "$_cell" ]
+	  then
+		echo $_cell/hosts/$_host
+	  else
+		set -- `bos lscell $_host -noauth`
+		if [ "$1" = Cell ]
+		  then
+			echo $4/hosts/$_host
+		  else
+			echo
+		fi
+	fi
+}
+
+# Find a remote host in this cell with n LFS aggregates
+# usage: findlfsremote <this host principal> remoteP aggrP ...
+findlfsremote() {
+	_princ=$1
+	_remotep=$2
+	_retcode=1
+
+	shift 2
+	_arglist="$*"
+	for _h in `findhosts`
+	  do
+		if [ $_h != "$_princ" ]
+		  then
+			eval $_remotep=$_h
+			if [ "$_arglist" ]	# do we want an LFS aggregate?
+			  then
+				set -- $_arglist
+				for _aggr in `findremoteaggrs $_h`
+				  do
+					eval $1=$_aggr
+					shift
+					if [ ! "$1" ]		# no more needed?
+					  then break
+					fi
+				done
+				if [ ! "$1" ] 	# enough available?
+				  then 
+					_retcode=0
+					break
+				fi
+			  else
+				_retcode=0
+				break
+			fi
+		fi
+	done
+	return $_retcode
+}
+
+# check to see if commands in list are in user's PATH
+checkpath()
+{
+	_error=0
+	for _command in $*
+	  do
+		if type $_command | grep 'not found' > /dev/null
+	  then
+		_error=1
+		break
+	fi
+	done
+
+	# return error indication for brain dead shells
+	return $_error
+}
+
+# create file that's a power of 2 that has the specified eye catcher at the front
+makepow2() {
+	_file=$1
+	_logbytes=`expr $2 - 7`
+	_catcher=$3
+	_seed="1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+"
+	echo $_seed > $_file
+	while [ $_logbytes -ge 0 ]
+	  do
+		mv $_file $_file.tmp
+		if [ $_logbytes -eq 0 ]
+		  then
+			# place catcher at head of file last time through
+			echo $_catcher | cat - $_file.tmp $_file.tmp > $_file
+		  else
+			cat $_file.tmp $_file.tmp > $_file
+		fi
+		rm $_file.tmp
+		_logbytes=`expr $_logbytes - 1`
+	done
+}
+
+# get the number of bytes used in a fileset
+getbytesused() {
+	_fileset=$1
+
+	echo `fts lsquota -fileset $_fileset | tail -1 | awk '{print $3}'`
+}
+
+# Check location of fileset with 'cm whereis'
+checkwhereis() {
+	_mountpoint=$1
+	_location=$2
+
+	_real=`cm whereis $_mountpoint | tail -1 | sed -e 's/.*on host //' -e 's/\..*$//'`
+
+	[ "$_real" = "$_location" ]
+}
+
+# Create a fileset and a dfs mount point to hang it on
+createfileset() {
+	_fileset=$1
+	_server=$2
+	_aggr=$3
+	_mountpoint=$4
+	_outparm=$5
+
+	# create move fileset
+	Log "Creating fileset $_fileset"
+	if fts create $_fileset $_server $_aggr -localauth 
+	  then :
+	  else
+		ErrorLog "could not create $_fileset"
+		return 1
+	fi
+
+	# Get volume ID 
+	_volid=`fts lsft -fileset $_fileset -localauth | tail +2 | line |
+			sed -e 's/,/ /g' | awk '{print $3}'`
+	if [ ! "$_volid" ]
+	  then
+		ErrorLog "Couldn't obtain volume id for $_fileset"
+		return 1
+	fi
+	
+	# create mount point
+	echo "Creating mountpoint $_mountpoint"
+	if fts crmount -dir $_mountpoint -fileset $_fileset -rw 
+	  then :
+	  else
+		ErrorLog "could not create mount point $_mountpoint"
+		return 1
+	fi
+
+	eval $_outparm=$_volid
+	return 0
+}
+
+deletefileset() {
+	_fileset=$1
+	_mountpoint=$2
+	_error=0
+
+	# delete existing fileset if present
+	set -- `fts lsft -fileset $_fileset -localauth 2>/dev/null | tail -2 | line`
+	if [ $# -gt 2 ]
+	  then
+		# we found something
+		_server=`echo $1 | sed 's/\..*//'`
+		_aggr=$3
+
+		if fts delete -fileset $_fileset -server $_server -aggregate $_aggr -localauth > /dev/null 2>&1
+		  then
+			Log "fileset $_fileset removed from aggregate $_aggr"
+		  else
+			ErrorLog "could not remove $_fileset"
+			_error=1
+		fi
+	fi
+	
+	# delete mount point, if it exists
+	fts delmount $_mountpoint 2>/dev/null
+
+	return $_error
+}
+
+# define function to turn on output capture
+SAVESTDOUT=/tmp/SVstdout.$$
+CaptureOn() {
+	# save fd 1 on fd 8, fd 2 on fd 9
+	> $SAVESTDOUT
+	exec 8>&1 9>&2 1> $SAVESTDOUT 2>&1
+}
+
+CaptureOff() {
+	# Log contents of files using fildes 7
+	exec 7< $SAVESTDOUT
+	while read l <&7
+	  do
+		Log "output: $l"
+	done
+
+	# restore file descriptors and close temps
+	exec 1>&8 2>&9 8>&- 9>&- 7<&-
+
+	rm -f $SAVESTDOUT
+}
+
+# Define logging functions
+Openlog() {
+	_file=$1
+	_i=0
+	while [ -f $_file ]
+	  do
+		_file=$1.$_i
+		_i=`expr $_i + 1`
+	done
+	exec 6> $_file
+}
+
+Log() {
+	echo $* >&6
+}
+
+ErrorLog() {
+	echo "*** $*" >&6
+}
+

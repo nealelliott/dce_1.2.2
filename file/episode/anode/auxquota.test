@@ -1,0 +1,144 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: auxquota.test,v $
+# Revision 1.1.12.1  1996/10/02  17:16:14  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:07:09  damon]
+#
+# Revision 1.1.6.1  1994/06/09  13:56:36  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:31:21  annie]
+# 
+# Revision 1.1.4.4  1993/01/18  20:55:07  cjd
+# 	embedded copyright notice
+# 	[1993/01/18  17:42:07  cjd]
+# 
+# Revision 1.1.4.3  1992/09/15  17:29:58  jaffe
+# 	Transarc delta: mason-ot2930-logbuf-parts-of-nbs 1.14
+# 	  Selected comments:
+# 	    This is the logbuf portion of new block security (making sure someone
+# 	    else's data does not appear in your file across a system crash.)  For
+# 	    details, see the OT report, the postings to transarc.afs.episode, and
+# 	    the white paper on this subject.  Not done yet.  SNAPSHOT ONLY.
+# 	    Just wanted to fix a small nit in test_res.
+# 	    More work on NBS.  This is only a snapshot.
+# 	    Another snapshot; this time we make the interfaces between anode & buffer
+# 	    uniform (each was using a different convention).  Clean up names at the same
+# 	    time.  SNAPSHOT ONLY.
+# 	    Another snapshot.  NBS now works in the forward direction for basic.test!
+# 	    This part of this delta was removed and added to delta
+# 	    mason-ot5070-gc-tran-in-logfull-avoidance
+# 	    Snapshot of code working in the forward path in mp.test.
+# 	    Removed the contents of revision 1.6
+# 	    Checkpoint.  No work done here, just made sure that the other new
+# 	    delta works OK (mason-ot5070-gc-tran-in-logfull-avoidance).
+# 	    Make all_tests work again.
+# 	    Increase log size.
+# 	    Finish making all the tests run now.
+# 	    Cleanup compilation on OSF/1.
+# 	    Continue work to get new block security going.
+# 	    Add a script for the nbs tests.
+# 	[1992/09/14  19:03:56  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/31  18:20:18  jaffe
+# 	added a header line
+# 	[1992/08/30  12:51:47  jaffe]
+# 
+# 	Transarc delta: mason-ot4546-check-better-for-log-full 1.2
+# 	  Selected comments:
+# 	    We found some case where log-full was happening because a single
+# 	    transaction exceeded the size of the log.  This delta actually improves the
+# 	    log-full detection.
+# 	    Had to bump log size for this test.
+# 	    Found a typo which would cause log full conditions.
+# 	[1992/08/30  01:44:40  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/13  21:54:06  jdp
+# 	Transarc delta: ota-perfileset-acl-tlock-2254 1.2
+# 	  Files modified:
+# 	    anode: all_tests, auxquota.test, block_alloc.c
+# 	    anode: buffer-slosh.test, file.c, multi-block-frag.int.test
+# 	    anode: volume.c, volume.h
+# 	  Selected comments:
+# 	    Modify the file module to use a per fileset tlock for auxiliary
+# 	    containers instead of the global tlock that is currently used.  The
+# 	    current code is incorrect because the global tlock would sometimes try
+# 	    to merge transactions that are in different aggregates.  This can't work
+# 	    and in fact leads to a panic in the logbuf layer.
+# 	    Several other cleanups were also made in the handling of auxiliary
+# 	    containers.  The comments around this code mentioned several TODO items.
+# 	    Most of these were attended to.
+# 	    One of these items regarded handling errors caused by quota and space
+# 	    errors when copying ACLs.  I wrote a new script to expose this error.
+# 	    In the course of looking a this problem I discovered that the limitation
+# 	    of MAX_FREEDBLOCKS_PER_TRANS (10) was insufficient to recover from a
+# 	    quota error while copying initial acls (because it has to delete 2+ aux
+# 	    containers each up to 8 1K blocks in size).  This necessitated changes
+# 	    to block_alloc.c.
+# 	    I was also unable to avoid further changes to all_tests and the disk
+# 	    space tracking code in there.  Of course, auxquota.test was added.
+# 	    Script that tests quota errors during acl initialization.
+# 	    Inexplicable problem with all_tests script.
+# 	[1992/05/13  18:57:54  jdp]
+# 
+# $EndLog$
+# /* Copyright (C) 1992 Transarc Corporation - All rights reserved */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/auxquota.test,v 1.1.12.1 1996/10/02 17:16:14 damon Exp $
+
+auxquota 1
+modify_afsdb logbuf on 31		# turn on new buffer randomization
+modify_afsdb anode on 31		# turn on code block counting
+
+open_device 1 1024 1024 1143
+create_aggregate 140
+
+create_vol bar 0,,0 100
+create_dir parent
+write_aux ifacl 0 8000			# give it a big initial file acl
+write_aux idacl 0 8000			# give it a big initial dir acl
+
+create_vol foo 0,,0 20
+
+create_file child1 parent
+create_file child2 parent
+(code = VOLUMEFULL) create_file child3 parent
+open_file child1
+delete_file
+open_file child2
+delete_file
+
+# This exercises deleting many large aux containers in a single
+# transaction.  In this case up to 3*8 blocks.
+
+(code = VOLUMEFULL) create_dir child1 parent
+
+# See what happens when we run out of quota allocating the file because
+# we can't grow the volume table.  Note we can fit 4 anodes per block.
+
+create_vol fax 0,,0 30
+create_file dummy1			# fills 1st page
+write_aux acl abc			# create aux page of vt w/ inline acl
+vol_info g=2
+write_file 0 4000			# fill up volume; exactly 24K left
+(code = VOLUMEFULL) create_dir child1 parent
+
+# Try deleting a file that also frees last page of vt.  Since the file
+# delete code prunes the acls in separate transactions this isn't as
+# stress full as above test which has to unwind after creating 24K of acl.
+
+open_file dummy1
+truncate 0
+write_aux acl 0 0			# delete the acl
+vol_info g=1
+create_dir child1 parent
+vol_info g=27				# 3*8 for acls + 1+2 for vt
+delete_file
+vol_info g=1
+
+check_device
+end

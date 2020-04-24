@@ -1,0 +1,1477 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# (c) Copyright International Business Machines Corp. 1994, 1996
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: aud.sams,v $
+# Revision 1.1.9.1  1996/07/08  22:26:10  arvind
+# 	OSF DCE 1.2.2 Drop3
+# 	[1996/07/08  22:16:42  arvind]
+#
+# Revision 1.1.4.2  1996/03/09  23:27:17  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:42:47  marty]
+# 
+# Revision 1.1.4.1  1995/12/08  17:41:16  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/08  17:18:06  root]
+# 
+# Revision 1.1.2.14  1994/09/30  12:05:01  weisz
+# 	CR 12304: fixed.
+# 	[1994/09/30  12:04:11  weisz]
+# 
+# Revision 1.1.2.13  1994/09/22  21:09:03  weisz
+# 	CR 10703: handling of trail full situation.
+# 	[1994/09/22  21:07:42  weisz]
+# 
+# Revision 1.1.2.12  1994/09/01  16:55:33  weisz
+# 	CR 10710: Sams file cleanup.
+# 	[1994/09/01  16:54:01  weisz]
+# 
+# Revision 1.1.2.11  1994/08/19  18:00:15  weisz
+# 	CR 10985: changed auditd exit msgs from fatal to notice, notice_verbose.
+# 	[1994/08/19  17:58:54  weisz]
+# 
+# Revision 1.1.2.10  1994/08/17  19:56:52  weisz
+# 	CR 11443: added PENDING as a new valid outcome.
+# 	[1994/08/17  19:54:16  weisz]
+# 
+# Revision 1.1.2.9  1994/08/12  19:22:20  blazin
+# 	For CR 11431 added appropriate SAMS messages.
+# 	[1994/08/12  19:21:59  blazin]
+# 
+# Revision 1.1.2.8  1994/08/08  18:52:26  weisz
+# 	CR 10516: remove parameters from messages going accross rpcs as return codes.
+# 	[1994/08/08  18:51:24  weisz]
+# 
+# Revision 1.1.2.7  1994/07/26  17:27:05  weisz
+# 	CR 11425: remove own acl manager and use DCE acl mgr library.
+# 	[1994/07/26  17:25:11  weisz]
+# 
+# Revision 1.1.2.6  1994/07/18  15:58:00  rousseau
+# 	Added messages for exporting control if.
+# 	[1994/07/18  15:50:16  rousseau]
+# 
+# Revision 1.1.2.5  1994/06/23  19:09:07  weisz
+# 	CR 10995: add 2 new msgs: for removal of update binding file and dir
+# 	[1994/06/23  19:08:41  weisz]
+# 
+# Revision 1.1.2.4  1994/05/10  15:14:36  weisz
+# 	CR 10147: added aud_s_permission_denied and aud_s_invalid_quide
+# 	[1994/05/10  15:13:07  weisz]
+# 
+# Revision 1.1.2.3  1994/04/15  16:59:12  weisz
+# 	CR 10353: changed severity from notice to error
+# 	[1994/04/15  16:58:52  weisz]
+# 
+# Revision 1.1.2.2  1994/04/15  12:49:18  weisz
+# 	CR 10353: dce_aud_open - check input flags
+# 	[1994/04/15  12:48:40  weisz]
+# 
+# Revision 1.1.2.1  1994/03/11  22:48:34  luan
+# 	CR 9775 9776: Removed the svc_c_route_stderr attribute from messages.
+# 	[1994/03/11  22:15:59  luan]
+# 
+# Revision 1.1.2.2  1994/01/25  04:59:31  luan
+# 	Added aud_s_dmn_work_dir, aud_s_dmn_cannot_open_trail,
+# 	and aud_s_dmn_cannot_open_central_trail messages.
+# 	[1994/01/25  04:56:37  luan]
+# 
+# Revision 1.1.2.1  1993/12/22  12:38:35  zeliff
+# 	First version of code
+# 	[1993/12/21  15:00:58  zeliff]
+# 
+# $EndLog$
+
+component       aud
+table           aud__table
+technology      dce
+
+serviceability  table aud_svc_table handle aud_svc_handle
+start
+    sub-component aud_s_general "general"       aud_i_svc_general
+    sub-component aud_s_esl     "esl"           aud_i_svc_esl
+    sub-component aud_s_evt     "evt"           aud_i_svc_evt
+    sub-component aud_s_trl     "trl"           aud_i_svc_trl
+    sub-component aud_s_msgs    "msgs"          aud_i_svc_msgs
+end
+
+start
+code		aud_s_dmn_work_dir
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"The Audit daemon cannot change to working directory %s"
+explanation	"An invalid directory was specified or no permission to the directory."
+action		"Check the existence of the directory and its permissions."
+notes		"%s is the name of the working directory."
+end
+
+start
+code		aud_s_dmn_starts
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_notice"
+text		"The audit daemon started"
+explanation	"The Audit daemon has been started."
+action		"None required."
+end
+
+# start
+# code		aud_s_dmn_identity_argument
+# sub-component 	aud_s_general
+# attributes 	"svc_c_sev_fatal | svc_c_action_exit_bad"
+# text		"The -i option used without an argument"
+# explanation	"The \*L-i\*O option requires an identity argument."
+# action		"Give the identity of the Audit daemon with the \*L-i\*O option."
+# end
+
+start
+code		aud_s_dmn_trail_name
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"The -t option used without an argument"
+explanation	"The \*L-t\*O option requires a trail filename."
+action		"Give the trail filename with the \*L-t\*O option."
+end
+
+start
+code		aud_s_dmn_trail_size
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"The -s option used without an argument"
+explanation	"The \*L-s\*O option requires a trail file size limit."
+action		"Give the trail file size limit (defined by the user) with the \*L-s\*O option."
+end
+
+start           
+code		aud_s_dmn_usage
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_fatal | svc_c_action_exit_bad"
+text		"Unknown option %s used. Usage: %s [-i identity] [-a] [-t trail_name] [-s size] [-wrap] [-d where] [-w where] [-D]"
+explanation	"?"
+action		"Check arguments used."
+end
+
+start
+code		aud_s_dmn_cannot_get_context
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Auditd unable to get current login context."
+explanation	"The sec_login_get_current_context API returned the error: %d"
+action		"Make sure process is running as machine principal."
+end
+
+start
+code		aud_s_dmn_cannot_release_context
+sub-component   aud_s_general
+attributes 	"svc_c_sev_notice"
+text		"Auditd unable to release current login context."
+explanation	"The sec_login_release_context API returned the error: %d"
+action		"Please refer to the DCE Problem Determination Guide for more information."
+end
+
+start
+code		aud_s_dmn_cannot_get_mp_context
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Auditd unable to get machine principal login context."
+explanation	"The sec_login_get_current_context API returned the error: %d"
+action		"Make sure process is running as machine principal."
+end
+
+start
+code		aud_s_dmn_cannot_open_trail
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Cannot open audit trail"
+explanation	"An attempt to open the Audit trail file failed. This is not the first point of failure."
+action		"Check previous messages related to this error."
+end
+
+start
+code		aud_s_dmn_cannot_open_central_trail
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Cannot open audit central trail file %s"
+explanation	"An attempt to open the indicated Audit central trail file failed.  This is not the first point of failure."
+action		"Check previous messages related to this error."
+notes		"%s is the name of the central trail file."
+end
+
+start
+code		aud_s_dmn_ready_to_listen
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_notice_verbose"
+text		"Daemon is ready to listen to its interfaces"
+explanation	"The Audit daemon has started."
+action		"None required."
+end
+
+start
+code		aud_s_dmn_register_auth_info
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_notice_verbose"
+text		"Daemon registered its authentication identity %s with RPC runtime"
+explanation	"The indicated authentication identity has been registered with RPC."
+action		"None required."
+notes		"%s is the authentication identity."
+end
+
+start
+code		aud_s_dmn_identity_file
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Daemon cannot open its identity file %s to write"
+explanation	"The Audit daemon attempted to write its identity into a local file.  The write attempt failed, resulting in this message."
+action		"Check that the Audit daemon has write permission to the indicated file."
+notes		"%s is the identity file."
+end
+
+start
+code		aud_s_dmn_identity
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Daemon does not have an identity"
+explanation	"The \*Ldce_cf_prin_name_from_host()\*O call failed."
+action		"Use the \*L-I\*O option to specify the server's name for authentication purposes.  The default is \*Lhosts\*O/\*Vhostname\*O/\*Lself\*O." 
+end
+
+start
+code		aud_s_dmn_binding_file
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Daemon cannot open its binding file %s to write"
+explanation	"When the Audit daemon was started, it could not open its	binding file."
+action		"Check that the Audit daemon has write permission to the file."
+notes		"%s is the name of the binding file."
+end
+
+start
+code		aud_s_dmn_register_interface
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_notice_verbose"
+text		"Daemon registered interfaces with RPC runtime"
+explanation	"The request to register the Audit daemon interface with RPC was successful."
+action		"None required."
+end
+
+start
+code		aud_s_dmn_locale
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_notice_verbose"
+text		"Set daemon locale: %s"
+explanation	"The current locale is displayed."
+action		"None required."
+notes		"%s is the locale."
+end
+
+start
+code		aud_s_dmn_privilege
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Running %s without privileges"
+explanation	"The user is trying to run the Audit daemon, but does not have the appropriate privileges."
+action		"Login as root before starting up the Audit daemon."
+notes		"%s is the Audit daemon."
+end
+
+start
+code		aud_s_dmn_esl_mutex
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Daemon esl mutext initialization failed"
+explanation	"There was insufficient resource or memory to initialize the esl mutext."
+action		"Check system resource availability."
+end
+
+start
+code		aud_s_dmn_state_mutex
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Daemon state mutext initialization failed"
+explanation     "There was insufficient resource or memory to initialize the state mutex."	
+action		"Check system resource availability."
+end
+
+start
+code		aud_s_dmn_trail_mutex
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Daemon trail mutext initialization failed"
+explanation	"There was insufficient resource or memory to initialize the trail mutex."
+action		"Check system resource availability."
+end
+
+start
+code		aud_s_dmn_protseq
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Unable to select protocol sequence"
+explanation	"RPC tried to register the protocol sequence and failed."
+action		"Check the RPC return code and act accordingly."
+end
+
+start
+code		aud_s_dmn_bindings
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Unable to get daemon bindings"
+explanation	"The Audit daemon tried to inquire for its own bindings using \*Lrpc_server_inq_bindings\*O and failed."
+action		"Check the RPC return code and act accordingly."
+end
+
+start
+code		aud_s_dmn_acl_obj_init
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error"
+text		"Cannot initialize ACL object : %lx"
+explanation	"An attempt to initialize the Auditd ACL object failed."
+action		"DCE utilities error. Check utilities codes for more information."
+end
+
+start
+code		aud_s_dmn_acl_register_obj_type
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error"
+text		"Cannot register AUD object type with ACL library: %lx"
+explanation	"An attempt to register the Auditd ACL object type failed."
+action		"DCE utilities error.  Check utilities codes for more information."
+end
+
+start
+code		aud_s_dmn_acl_obj_add_user_entry
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error"
+text		"Cannot add host user to ACL: %lx"
+explanation	"An attempt to add host user to Auditd ACL failed."
+action		"DCE utilities error.  Check utilities codes for more information."
+end
+
+start
+code		aud_s_dmn_acl_obj_add_group_entry
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error"
+text		"Cannot add audit-admin group to ACL: %lx"
+explanation	"An attempt to add audit-admin group to Auditd ACL failed."
+action		"DCE utilities error.  Check utilities codes for more information."
+end
+
+start
+code		aud_s_dmn_acl_obj_add_obj_entry
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error"
+text		"Cannot add any-other obj to ACL: %lx"
+explanation	"An attempt to add any-other permissions to Auditd ACL failed."
+action		"DCE utilities error.  Check utilities codes for more information." 
+end
+
+start
+code		aud_s_dmn_acl_obj_add_unauth_entry
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error"
+text		"Cannot add unauthenticated obj to ACL: %lx"
+explanation	"An attempt to add unauthenticated permissions to Auditd ACL failed."
+action		"DCE utilities error.  Check utilities codes for more information."
+end
+
+start
+code		aud_s_dmn_db_open
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error"
+text		"Cannot open AUD ACL database for reading: %lx"
+explanation	"An attempt to open the AUD acl database failed."
+action		"DCE utilities error.  Check utilities codes for more information."
+end
+
+start
+code		aud_s_dmn_db_open_create
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error"
+text		"Cannot create AUD acl database : %lx"
+explanation	"An attempt to create the AUD acl database failed."
+action		"DCE utilities error.  Check utilities codes for more information."
+end
+
+start
+code		aud_s_dmn_db_store_uuid
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error"
+text		"Couldn't store the auditd ACL in the ACL file : %lx"
+explanation	"An attempt to store the AUD ACL in the  database failed."
+action		"DCE utilities error.  Check utilities codes for more information."
+end
+
+start
+code		aud_s_dmn_acl
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Cannot initialize daemon's ACL"
+explanation	"An attempt to initialize the Access Control List for the daemon failed.  This is not the first point of failure."
+action		"Check previous error messages and act accordingly."
+end
+
+start
+code		aud_s_dmn_interfaces
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Cannot register daemon's RPC interfaces"
+explanation	"An attempt to register the RPC interface for the Audit daemon using \*Lrpc_server_register_if()\*O failed."
+action		"Check the RPC return code and act accordingly."
+end
+
+start
+code		aud_s_dmn_acl_mgr_interface
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Cannot register daemon's ACL Manager interface bindings"
+explanation	"Cannot register daemon's ACL manager interface bindings using the \*Lrpc_server_register_if()\*O or \*Lrpc_ep_register()\*O calls."
+action		"Check the RPC return code and act accordingly."
+end
+
+start
+code		aud_s_dmn_svc_mgr_export_interface
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Cannot register daemon's SVC manager bindings to CDS"
+explanation	"The attempt to register the SVC manager bindings for the Audit daemon to using the \*Lrpc_ns_binding_export()\*O failed."
+action		"Check the RPC return code and act accordingly."
+end
+
+start
+code		aud_s_dmn_control_export_interface
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Cannot register daemon's control interface bindings to CDS"
+explanation	"CDS call failed."
+action		"Report the problem."
+end
+
+start
+code		aud_s_dmn_svc_mgr_register_bindings
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Cannot register daemon's svc manager bindings with RPCD"
+explanation     "An attempt to register the SVC manager bindings with RPC using the \*Lrpc_ep_register()\*O failed call."       
+action		"Check the RPC return code and act accordingly."
+end
+
+start
+code		aud_s_dmn_control_register_bindings
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Cannot register daemon's control interface bindings with the endpoint mapper."
+explanation	"The call to the endpoint mapper failed."
+action		"Report the problem."
+end
+
+start
+code		aud_s_dmn_auth_info
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_fatal | svc_c_action_exit_bad"
+text		"Cannot register daemon's authentication info with RPC runtime"
+explanation	"An attempt to register the Audit daemon's authentication information using \*Lrpc_server_auth_info()\*O failed."
+action		"Check the RPC return code and act accordingly."
+end
+
+start
+code		aud_s_dmn_listener_thread
+sub-component	aud_s_general
+attributes	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Cannot create the listener thread"
+explanation	"An attempt to create the listener thread using \*Lpthread_create()\*O failed."
+action		"Check the return code of the \*Lpthread_create()\*O call and act
+accordingly."
+end
+
+start
+code		aud_s_dmn_thread_join_listener
+sub-component	aud_s_general
+attributes	"svc_c_sev_error"
+text		"Daemon thread %s unable to join the listener task"
+explanation	"An attempt to join the indicated daemon thread using the \*Lpthread_join()\*O call failed."
+action		"Check the return code of the \*Lpthread_join()\*O call and act accordingly."
+notes 		"%s is the daemon thread."
+end
+
+start
+code		aud_s_dmn_distinguished_thread_fault
+sub-component	aud_s_general
+attributes	"svc_c_sev_notice_verbose"
+text		"%s distinguished thread cancelled"
+explanation	"Distinguished thread got exception pthread_cancel_e."
+action		"None required."
+notes		"%s is the daemon thread."
+end
+
+start
+code		aud_s_dmn_non_distinguished_thread_fault
+sub-component	aud_s_general
+attributes	"svc_c_sev_notice_verbose"
+text		"%s non-distinguished thread cancelled"
+explanation	"Non-Distinguished thread got exception pthread_cancel_e."
+action		"None required."
+notes		"%s is the daemon thread."
+end
+
+start
+code		aud_s_dmn_distinguished_thread_exit
+sub-component	aud_s_general
+attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+text		"%s thread got exception"
+explanation	"Thread got exception - exiting."
+action		"None required."
+end
+
+start
+code		aud_s_dmn_normal_exit
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_notice"
+text		"%s exits normally"
+explanation	"Audit daemon stopped normally as a result of the \*Laud stop\*O command."
+action		"None required."
+notes		"%s is the daemon."
+end
+
+start
+code		aud_s_rgy_server_unavailable
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error"
+text		"Registry server is not available"
+explanation	"An attempt was made to use the Registry server, but it was not found."
+action		"The Security daemon must be running in order to use the Registry server.  Start the Security daemon and retry the operation."
+end
+
+start
+code		aud_s_wrong_protection_level
+sub-component 	aud_s_general
+attributes 	"svc_c_sev_error"
+text		"RPC client used wrong protection level"
+explanation	"Returned the information from the \*Lrpc_binding_inq_auth()\*O together with \*Lauthr_level=rpc_c_protect_level_pkt_privacy\*O and \*Lauthz_svc=rpc_c_authz_dce\*O."
+action		"Check communication between the client and the application server.  Then, adjust the protection level."
+end
+
+start
+code		aud_s_cannot_authenticate
+sub-component	aud_s_general
+attributes	"svc_c_sev_notice"
+text		"Client RPC binding contains invalid authentication information"
+explanation	"The call \*Lrpc_binding_inq_auth_client()\*O failed."
+action		"Check the RPC return code and act accordingly."
+end
+
+start
+code		aud_s_cannot_gettime
+sub-component	aud_s_general
+attributes	"svc_c_sev_error"
+text		"The audit library could not backup a trail file due to failure of utc_gettime call for reading time from the system."
+explanation	"The call \*Lutc_gettime()\*O failed."
+action		"Check the reason why the call utc_gettime failed and act accordingly."
+end
+
+start
+code		aud_s_cannot_getgmtime
+sub-component	aud_s_general
+attributes	"svc_c_sev_error"
+text		"The audit library could not backup a trail file due to failure of utc_gmtime call for reading time from the system."
+explanation	"The call \*Lutc_gmtime()\*O failed."
+action		"Check the reason why the call utc_gmtime failed and act accordingly."
+end
+
+start
+code		aud_s_cannot_audit
+sub-component	aud_s_general
+attributes	"svc_c_sev_error"
+text		"Audit commit failed"
+explanation	"An attempt to commit to the Audit record failed.  This may be because the audit trail is full."
+action		"Backup and empty the audit trail."
+end
+
+start
+code		aud_s_permission_denied
+sub-component	aud_s_general
+attributes	"svc_c_sev_error"
+text		"Client has no permission to execute operation"
+explanation	"The client is not authorized to execute the operation invoked."
+action		"Check if the client should be authorized.  Modify the ACL of the Audit daemon, if necessary." 
+end
+
+start
+code		aud_s_log_access_denied
+sub-component	aud_s_general
+attributes	"svc_c_sev_error"
+text		"Client's audit log access denied"
+explanation	"A client attempted to log to the audit record; however, the client is not authorized to perform this operation."
+action		"Check if the client should be authorized.  Modify the ACL of the Audit daemon, if necessary." 
+end
+
+start
+code		aud_s_rpc_count
+sub-component	aud_s_general
+attributes	"svc_c_sev_notice_verbose"
+text		"Audit daemon serving RPC number %d"
+explanation	"The Audit daemon keeps track of RPC operations and displays this message."
+action		"None required."
+notes		"%d is the RPC number."
+end
+
+start
+code		aud_s_free_encoding_service_handle
+sub-component	aud_s_general
+attributes	"svc_c_sev_error"
+text		"Cannot free encoding service handle"
+explanation	"A call to \*Lrpc_sm_client_free()\*O to free the encoding handle failed."
+action		"Check the RPC return code, this may be a memory leak."
+end
+
+start
+code		aud_s_unknown_principal_rc
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Principal is not registered or has been removed"
+explanation	"An invalid principal name was used in a filter."
+action		"Provide a known principal name."
+end
+
+start
+code		aud_s_unknown_principal
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Principal %s is not registered or has been removed"
+explanation	"An unknown principal name was used in a filter."
+action		"Provide a known principal name."
+notes		"%s is the principal name."
+end
+
+start
+code		aud_s_unknown_foreign_principal_rc
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Foreign principal is not registered or has been removed"
+explanation	"An unknown foreign principal name was used in a filter."
+action		"Provide a known foreign principal name."
+end
+
+start
+code		aud_s_unknown_foreign_principal
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Foreign principal %s is not registered or has been removed"
+explanation	"An unknown foreign principal name was used in a filter."
+action		"Provide a known foreign principal name."
+notes		"%s is the name of the foreign principal."
+end
+
+start
+code		aud_s_unknown_group_rc
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Group is not registered or has been removed"
+explanation	"An unknown group name was used in a filter."
+action		"Provide a known group name."
+end
+
+start
+code		aud_s_unknown_group
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Group %s is not registered or has been removed"
+explanation	"An unknown group name was used in a filter."
+action		"Provide a known group name."
+notes		"%s is the name of the group."
+end
+
+start
+code		aud_s_unknown_foreign_group_rc
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Foreign group is not registered or has been removed"
+explanation	"An unknown foreign group name was used in a filter."
+action		"Provide a known foreign group name."
+end
+
+start
+code		aud_s_unknown_foreign_group
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Foreign group %s is not registered or has been removed"
+explanation	"An unknown foreign group name was used in a filter."
+action		"Provide a known foreign group name."
+notes		"%s is the name of the foreign group."
+end
+
+start
+code		aud_s_unknown_cell_rc
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Foreign cell is not registered or has been removed"
+explanation	"An unknown cell name was used in a filter."
+action		"Provide a known cell name."
+end
+
+start
+code		aud_s_unknown_cell
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Foreign cell %s is not registered or has been removed"
+explanation	"An unknown cell name was used in a filter"
+action		"Provide a known cell name."
+notes		"%s is the name of the foreign cell."
+end
+
+start
+code		aud_s_invalid_guide
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Invalid guide supplied"
+explanation	"The audit control client has provided an invalid guide, \
+with condition, action or event class in error."
+action		"Provide a valid guide.  Refer to the Administration guide for a description of valid guides."
+end
+
+start
+code		aud_s_invalid_esl_type_rc
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"The esl type is invalid"
+explanation	"The audit control client has provided an invalid esl type."
+action		"Provide a valid esl type.  Refer to the Administration guide for the description of valid esl types."
+end
+
+start
+code		aud_s_invalid_esl_type
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"The esl type %d is invalid"
+explanation	"The audit control client provided a invalid esl type."
+action		"Provide a valid esl type.  Refer to the Administration guide for the description of valid esl types."
+notes 		"%d is the esl type."
+end
+
+start
+code		aud_s_invalid_action_bit_set
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Audit action bit set %lx is not within %lx"
+explanation	"The audit control client provided an invalid action vector."
+action		"Specify valid actions in the filter.  Refer to the administration guide for the description of valid actions."
+notes		"%lx is the action bit set."
+end
+
+start
+code		aud_s_invalid_condition_bit_set
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Audit condition bitset %lx is not within %lx or it contains no bit"
+explanation	"The audit control client provided an invalid condition vector."
+action		"Specify valid conditions in the filter.  Refer to the Administration Guide for the description of valid conditions."
+notes		"%lx is the condition bit set."
+end
+
+start
+code		aud_s_empty_event_class_list
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Audit event class list is empty"
+explanation	"The audit control client provided an empty event class list."
+action		"Specify a valid event class.  Refer to the Administration guide for the description of a valid event class."
+end
+
+start
+code		aud_s_trl_invalid_stostrategy
+sub-component	aud_s_trl
+attributes	"svc_c_sev_error"
+text		"Audit trail store strategy is invalid"
+explanation	"The audit control client provided an invalid store strategy."
+action		"Provide a valid store strategy.  Valid store strategies are described in the Administration guide."
+end
+ 
+start
+code		aud_s_trl_invalid_open_flags
+sub-component	aud_s_trl
+attributes	"svc_c_sev_error"
+text		"dce_aud_open received invalid option combination"
+explanation	"An attempt was made to open an audit trail file, but neither the read or write option was specified."
+action		"The \*Ldce_aud_open()\*O function must include either the \*Lread\*O or \*Lwrite\*O option.  Correct the function call by including one of these options."
+end
+
+start
+code		aud_s_rename_trail_file_rc
+sub-component	aud_s_trl
+attributes	"svc_c_sev_error"
+text		"Cannot rename audit trail file"
+explanation	"Internally, the audit trail file was being renamed and the renaming failed."
+action		"Report the problem to OSF."
+end
+
+start
+code		aud_s_rename_trail_file
+sub-component	aud_s_trl
+attributes	"svc_c_sev_error"
+text		"Cannot rename %s to %s"
+explanation	"Internally, the audit trail file was being renamed and the renaming failed."
+action		"Report the problem to OSF."
+notes		"%s is the name of the source audit trail file and %s is the target."
+end
+
+start
+code		aud_s_rename_trail_index_file_rc
+sub-component	aud_s_trl
+attributes	"svc_c_sev_error"
+text		"Cannot rename audit trail index file"
+explanation	"Internally, the audit trail index file was being renamed and the renaming failed."
+action		"Report the problem to OSF."
+end
+
+start
+code		aud_s_rename_trail_index_file
+sub-component	aud_s_trl
+attributes	"svc_c_sev_error"
+text		"Cannot rename %s to %s"
+explanation	"Internally, the audit trail index file was being renamed and the renaming failed."
+action		"Report the problem to OSF."
+notes		"%s is the name of the source audit trail index file and %s is the target."
+end
+
+start
+code		aud_s_cannot_reopen_trail_file_rc
+sub-component	aud_s_trl
+attributes	"svc_c_sev_error"
+text		"Cannot reopen audit trail file"
+
+explanation	"Internally, the audit trail file was being reopened and the reopen failed."
+action		"Report the problem to OSF."
+end
+
+start
+code		aud_s_cannot_reopen_trail_file
+sub-component	aud_s_trl
+attributes	"svc_c_sev_error"
+text		"Cannot reopen %s"
+explanation	"Internally, the audit trail file was being reopened and the reopen failed."
+action		"Report the problem to OSF."
+notes		"%s is the name of the audit trail file."
+end
+
+start
+code		aud_s_cannot_reopen_trail_index_file_rc
+sub-component	aud_s_trl
+attributes	"svc_c_sev_error"
+text		"Cannot reopen audit trail index file"
+
+explanation	"Internally, the audit trail index file was being reopened and the reopen failed."
+action		"Report the problem to OSF."
+end
+
+start
+code		aud_s_cannot_reopen_trail_index_file
+sub-component	aud_s_trl
+attributes	"svc_c_sev_error"
+text		"Cannot reopen %s"
+explanation	"Internally, the audit trail index file was being reopened and the reopen failed."
+action		"Report the problem to OSF."
+notes		"%s is the name of the audit trail index file."
+end
+
+start
+code		aud_s_rename_esl_file
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Cannot rename %s to %s"
+explanation	"Internally, the esl file was being renamed and the renaming failed."
+action		"Report the problem to OSF."
+notes		"%s is the name of the esl file."
+end
+
+start
+code		aud_s_rename_esl_update_file
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Cannot rename %s to %s"
+explanation	"Internally, the esl update file was being renamed and the renaming failed."
+action		"Report the problem to OSF."
+notes		"%s is the name of the esl update file."
+end
+
+start
+code		aud_s_lock_esl_file
+sub-component	aud_s_esl
+attributes	"svc_c_sev_notice_verbose"
+text		"Cannot lock file %s"
+explanation	"For various reasons (for example, file may be locked by others), the file cannot be locked."
+action		"None required."
+notes		"%s is the name of the esl file."
+end
+
+start
+code		aud_s_open_esl_file
+sub-component	aud_s_esl
+attributes	"svc_c_sev_warning"
+text		"Cannot open esl file %s"
+explanation	"The Audit daemon cannot open the esl file."
+action		"Check if the esl file should be there.  If so, check permissions."
+notes		"%s is the name of the esl file."
+end
+
+start
+code		aud_s_open_esl_update_file
+sub-component	aud_s_esl
+attributes	"svc_c_sev_warning"
+text		"Cannot open esl update file %s"
+explanation	"The Audit daemon cannot open the esl file."
+action		"Check if the esl file should be there.  If so, check permissions."
+notes		"%s is the name of the esl update file."
+end
+
+start
+code		aud_s_stat_esl_update_file
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Cannot stat esl update file %s"
+explanation	"The UNIX \*Lstat\*O command returned an error when the Audit daemon tried to get size information about the esl file."
+action		"Make sure the file exists.  The file name is of the form \*L/opt/dcelocal/var/audit/esl*\*O."
+notes		"%s is the name of the esl update file."
+end
+
+start
+code		aud_s_retry_lock_esl_updt_file
+sub-component	aud_s_esl
+attributes	"svc_c_sev_warning"
+text		"Cannot lock esl update file %s, retry %d seconds later"
+explanation	"The indicated event selection list could not be locked for update because it is being read."
+action		"Wait for the indicated time and retry the operation."
+notes		"%s is the name of the esl update file.  %d is the number of seconds."
+end
+
+start
+code		aud_s_wrong_version_esl_updt_file
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"The version of esl update file %s is not current"
+explanation	"An attempt was made to read an esl update file which was obsolete."
+action		"Remove the obsolete esl update file."
+notes		"%s is the name of the esl update file."
+end
+
+start
+code		aud_s_cant_open_client_binding_file_rc
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Cannot open client binding file"
+explanation	"The Audit daemon cannot open the client binding file."
+action		"Check the permissions of the file and make sure the Audit daemon has read permission to the file."
+end
+
+start
+code		aud_s_cant_open_client_binding_file
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Cannot open client binding file %s"
+explanation	"The Audit daemon cannot open the indicated client binding file."
+action		"Check the permissions of the file and make sure the Audit daemon has read permission to the file."
+notes		"%s is the name of the client binding file."
+end
+
+start
+code		aud_s_remove_file_client_update_binding_failed
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Unable to remove client update binding file %s, rc= %d, errno= %d"
+explanation	"Audit client cannot remove its binding file."
+action		"Remove the specified file."
+notes		"%s is the binding file.  The first %d is the return code.  The second %d is the error number."
+end
+
+start
+code		aud_s_remove_dir_client_update_binding_failed
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Unable to remove client update binding directory %s, rc= %d, errno= %d"
+explanation	"Audit client cannot remove its binding directory."
+action		"Remove the specified directory."
+notes		"%s is the binding file.  The first %d is the return code.  The second %d is the error number."
+end
+
+start
+code		aud_s_unable_to_sync_client
+sub-component	aud_s_esl
+attributes	"svc_c_sev_warning"
+text		"Unable to inform process %s about esl update"
+explanation	"Audit client died without cleaning its binding file, thus the indicated process was not notified of the event selection list update."
+action		"Remove the obsolete client binding file."
+notes		"%s is the process name."
+end
+
+start
+code		aud_s_trl_write_failure
+sub-component 	aud_s_evt
+attributes	"svc_c_sev_error"
+text		"The write to the trail file failed."
+explanation	"An attempt to write to the audit trail file (using the \*Lfwrite()\*O call) failed."
+action		"Find out the reason why \*Lfwrite()\*O failed and act accordingly."
+end
+
+start
+code		aud_s_trl_full
+sub-component 	aud_s_evt
+attributes	"svc_c_sev_error"
+text		"The trail file is full"
+explanation	"The storage size limit for the audit trail file has been reached."
+action		"Empty the trail file and issue the \*Laud enable\*O command to restart the logging of audit records."
+end
+
+start
+code		aud_s_dmn_disabled
+sub-component	aud_s_general
+attributes	"svc_c_sev_error"
+text		"The daemon is disabled for logging"
+explanation	"An attempt was made to log an audit record but the Audit daemon has been disabled by the administrator."
+action		"Reenable the Audit daemon by issuing the \*Laud enable\*O command."  
+end
+
+start
+code		aud_s_dmn_disabled_in_selfaudit
+sub-component	aud_s_general
+attributes	"svc_c_sev_notice"
+text		"Operation denied: audit daemon is disabled"
+explanation	"The Audit daemon was started in self-audit mode, but since the Audit daemon has been disabled by the administrator it cannot log its own audit records, therefore all admin operations are not allowed, with the exception of enable and rewind."
+action		"Reenable the Audit daemon by issueing the \*Laud enable\*O command."  
+end
+
+start
+code		aud_s_uuid_hash_failed
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Cannot get the hash value of the subject uuid: %s ; status: %s"
+explanation	"The \*Luuid_hash\*O call failed."
+action		"See the corresponding RPC error code."
+end
+
+start
+code		aud_s_retry_lock_esl_file
+sub-component 	aud_s_esl
+attributes 	"svc_c_sev_warning"
+text		"Cannot lock esl file %s, retry %d seconds later"
+explanation	"The indicated event selection list could not be locked because it is being read."
+action		"Wait for the indicated time and retry the operation."
+notes		"%s is the name of the esl file.  %d is the number of seconds."
+end
+
+start
+code		aud_s_wrong_esl_file_version
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"The format of esl file %s is not current version"
+explanation	"The internal file which holds the filter was corrupted."
+action		"Remove the old version of the esl file, and retry the operation."
+notes		"%s is the name of the esl file."
+end
+
+start
+code		aud_s_wrong_esl_updt_file_version
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"The format of esl update file %s is not current version"
+explanation	"An attempt was made to read an esl update file which was not current."
+action		"Remove the old version of the esl update file, and retry the operation."
+end
+
+start
+code		aud_s_cannot_allocate_memory
+sub-component	aud_s_general
+attributes	"svc_c_sev_error"
+text		"Cannot allocate %d bytes memory"
+explanation	"The \*Lmalloc()\*O call failed."
+action		"Report to your system administrator for resolution."
+notes		"%d is the number of bytes of memory."
+end
+
+start
+code		aud_s_cannot_read_file
+sub-component 	aud_s_esl
+attributes	"svc_c_sev_notice"
+text		"Cannot read file %s in buffer"
+explanation	"The file cannot be read in the buffer."
+action		"Report the problem to OSF."
+notes		"%s is the name of the file."
+end
+
+start
+code		aud_s_action_bit_set
+sub-component	aud_s_esl
+attributes	"svc_c_sev_notice"
+text		"Audit Actions: %lx"
+explanation	"Lists Audit actions."
+action		"None required."
+notes		"%lx is the audit action."
+end
+
+start
+code		aud_s_condition_bit_set
+sub-component	aud_s_esl
+attributes	"svc_c_sev_notice"
+text		"Audit Conditions: %lx"
+explanation	"Lists Audit conditions."
+action		"None required."
+notes 		"%lx is the audit condition."
+end
+
+ 
+start
+code		aud_s_evt_classes
+sub-component	aud_s_esl
+attributes	"svc_c_sev_notice_verbose"
+text		"Event Classes:"
+explanation	"This is a listing of the event classes."
+action		"None required."
+end
+
+
+
+start
+sub-component	aud_s_general
+attributes	svc_c_sev_error
+code		aud_s_invalid_event_class_file
+text		"Format error in event class file %s."
+explanation	"A format error was encountered in the event class file."
+action		"Correct the event class file format error, and retry."
+notes		"%s is the name of the event class file."
+end
+
+start
+sub-component	aud_s_general
+attributes	svc_c_sev_error
+code		aud_s_unknown_event_class
+text		"%s is not a known event class."
+explanation	"There is no event class file for the indicated event class."
+action		"Use a known event class.  Use the \*Laudevents catalog\*O command to obtain a list of all known event classes."
+notes		"%s is the name of the event class."
+end
+
+start
+sub-component	aud_s_general
+attributes	svc_c_sev_error
+code		aud_s_line_too_long_in_class_file
+text		"A line is too long in event class file %s"
+explanation	"A line in the event class file exceeds 2K."
+action		"Check the event class file.  Correct the line length and retry the operation."
+notes		"%s is the name of the event class file."
+end
+
+
+start
+sub-component	aud_s_general
+attributes	svc_c_sev_error
+code		aud_s_invalid_line_in_class_file
+text		"An invalid line %s was found in event class file %s"
+explanation	"A line in the event class file had invalid syntax."
+action		"Correct the invalid line and retry the operation.  For the correct event class file syntax, refer to the Administration Guide."
+notes		"%s is the name of the event class file."
+end
+
+start
+code		aud_s_cannot_open_event_class_file
+sub-component	aud_s_general
+attributes	svc_c_sev_error
+text		"Cannot open event class file %s to read."
+explanation	"An attempt to open the indicated event class file failed.  You must have read permission to the file."
+action		"Check the file permissions and ensure that you have read permission to the file.  Then, retry the operation."
+notes		"%s is the name of the event class file."
+end
+
+start
+code		aud_s_cannot_open_event_class_dir
+sub-component	aud_s_general
+attributes	svc_c_sev_error
+text		"Cannot open event class directory %s to read."
+explanation	"An attempt to open the indicated event class directory failed.  You must have read and execute permissions to this directory."
+action		"Set the proper permissions to the directory and retry the operation."
+notes		"%s is the name of the event class directory."
+end
+
+start
+code		aud_s_no_filter
+sub-component	aud_s_esl
+attributes	"svc_c_sev_notice"
+text		"No filter was found for the subject."
+explanation	"This is an informational message."
+action		"None required."
+end
+
+
+start
+sub-component	aud_s_general
+attributes	"svc_c_sev_error"
+code		aud_s_no_current_login_context
+text		"Cannot get login context"
+explanation	"The \*Ldce_login\*O command has not been performed and is required by the requested operation."
+action		"Execute the \*Ldce_login\*O command."
+end
+
+start
+code		aud_s_cannot_open_dmn_binding_file
+sub-component	aud_s_general
+attributes 	"svc_c_sev_error"
+text		"Cannot open audit daemon's binding file"
+explanation	"This can either be due to a file permission problem or the Audit daemon is not running."
+action		"Check if the file exists.  If the file exists, check the file's permissions.  If the file does not exist, make sure that the Audit daemon is running."
+end
+
+
+start
+code		aud_s_cannot_open_dmn_identity_file
+sub-component	aud_s_general
+attributes 	"svc_c_sev_error"
+text		"Cannot open Audit daemon's identity file"
+explanation	"This can either be due to a file permission problem or the Audit daemon is not running."
+action		"Start the Audit daemon."
+end
+
+start
+code		aud_s_stat_esl_file
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Cannot stat esl file %s"
+explanation	"The \*Lfstat()\*O call on the esl file failed."
+action		"Check the \*Lfstat()\*O error code and act accordingly."
+notes		"%s is the name of the esl file."
+end
+
+start
+code		aud_s_cannot_mkdir
+sub-component	aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Cannot make %s directory"
+explanation	"An attempt to create the indicated directory failed."
+action		"Make sure that the Audit client has the appropriate permissions to create the directory."
+notes		"%s is the name of the directory."
+end
+
+start
+code		aud_s_cannot_open_trail_file_rc
+sub-component	aud_s_general
+attributes 	"svc_c_sev_error"
+text		"Cannot open trail file"
+explanation	"An attempt to open the indicated trail file failed."
+action		"Check that the file exists.  Check that you have the required permissions to open the file, and retry the operation."
+end
+
+start
+code		aud_s_cannot_open_trail_file
+sub-component	aud_s_general
+attributes 	"svc_c_sev_error"
+text		"Cannot open trail file %s"
+explanation	"An attempt to open the indicated trail file failed."
+action		"Check that the file exists.  Check that you have the required permissions to open the file, and retry the operation."
+notes		"%s is the name of the trail file."
+end
+
+start
+code		aud_s_client_esl_mutex
+sub-component	aud_s_trl
+attributes	"svc_c_sev_error"
+text		"Audit client's esl mutext initialization failed."
+explanation	"An attempt to initialize the event selection list mutex failed due to lack or resources or shortage of memory."
+action		"Check system resource availability."
+end
+
+start
+code		aud_s_trail_file_corrupted
+sub-component	aud_s_evt
+attributes	"svc_c_sev_error"
+text		"Trail file %s is corrupted."
+explanation	"The \*Lfread()\*O call on the trail file failed."
+action		"Contact your system administrator."
+notes		"%s is the name of the trail file."
+end
+
+start
+code		aud_s_invalid_record_descriptor
+sub-component	aud_s_evt
+attributes	svc_c_sev_error
+text		"An invalid audit record descriptor was used."
+explanation	"The user invoked the Audit routines and passed a NULL \*Vard\*O."
+action		"Use a valid audit record descriptor.  Refer to the Application Development Guide and Reference for the description of record descriptors."
+end
+
+start
+code		aud_s_invalid_outcome
+sub-component	aud_s_evt
+attributes	svc_c_sev_error
+text		"Outcome %lx supplied is invalid."
+explanation	"An invalid outcome has been supplied."
+action		"Check the range of valid outcomes, and provide the correct outcome."
+end
+
+start
+code		aud_s_outcomes_inconsistent
+sub-component	aud_s_evt
+attributes	svc_c_sev_error
+text		"Outcome %lx supplied in dce_aud_commit is not consistent with %lx supplied in dce_aud_start()."
+explanation	"Outcome supplied in dce_aud_commit has to be consistent with the one in \*Ldce_aud_start()\*O."
+action		"Check consistency of outcomes supplied in \*Ldce_aud_start()\*O and \*Ldce_aud_commit()\*O."
+end
+
+start
+code		aud_s_invalid_trail_descriptor
+sub-component	aud_s_evt
+attributes	svc_c_sev_error
+text		"An invalid audit trail descriptor was used"
+explanation	"The user invoked the Audit routines using an invalid \*Vat\*O value."
+action		"Use a valid audit trail descriptor."
+end
+
+start
+code		aud_s_evt_tail_info_exceeds_limit
+sub-component	aud_s_evt
+attributes	svc_c_sev_error
+text		"The count of audit record tail information items exceeds the limit"
+explanation	"The tail portion of the audit trail record has exceeded its limit of 4K."
+action		"Make sure that the tail portion of the audit record does not exceed 4K."
+end
+
+start
+code		aud_s_trl_file_size_limit
+sub-component	aud_s_trl
+attributes	svc_c_sev_notice
+text		"Audit trail file %s and its companion index file %s are ready to be backed-up."
+explanation	"This is an informational message, indicating that the audit trail file has reached its set limit, has been saved to the named files, which can be backed up to save on-line storage space for new audit records."
+action		"Back up the audit trail file and its companion index file and remove these files."
+notes		"%s is the name of the audit trail file and %s is its companion index file to be backed-up."
+end
+
+start
+code		aud_s_invalid_audit_trail_size_limit
+sub-component	aud_s_trl
+attributes	svc_c_sev_error
+text		"Environment variable DCEAUDITTRAILSIZE has an invalid value."
+explanation	"The Environment variable \*LDCEAUDITTRAILSIZE\*O is either 0 or out of range."
+action		"Assign a valid value to  environment variable \*LDCEAUDITTRAILSIZE\*O and restart the server."
+end
+
+start
+code		aud_s_cannot_init_trail_mutex
+sub-component	aud_s_trl
+attributes	svc_c_sev_error
+text		"Cannot initialize the mutex for the audit trail."
+explanation	"The \*Lpthread_mutex_init()\*O call failed."
+action		"Check the return code of the \*Lpthread_mutex_init()\*O call."
+end
+
+start
+code		aud_s_dmn_create_update_thread
+sub-component	aud_s_general
+attributes	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Cannot create the update thread"
+explanation	"An attempt to create the update thread using 
+                 \*Lpthread_create()\*O failed: errno = %d"
+action		"Check the return code of the \*Lpthread_create()\*O call and 
+                 act accordingly."
+end
+
+start
+code            aud_s_client_updt_mutex_init_fail
+sub-component   aud_s_general
+attributes	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Cannot initialize the mutex for the client update list."
+explanation	"The \*Lpthread_mutex_init()\*O call failed."
+action		"Check the return code of the \*Lpthread_mutex_init()\*O call."
+end
+
+start
+code            aud_s_client_updt_cond_init_fail
+sub-component   aud_s_general
+attributes	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Cannot initialize the condition variable for the client 
+                 update list."
+explanation	"The \*Lpthread_cond_init()\*O call failed."
+action		"Check the return code of the \*Lpthread_cond_init()\*O call."
+end
+
+start
+code            aud_s_client_updt_mutex_lock_fail
+sub-component   aud_s_general
+attributes	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Cannot lock the mutex for the client update list."
+explanation	"The \*Lpthread_mutex_lock()\*O call failed."
+action		"Check the return code of the \*Lpthread_mutex_lock()\*O call."
+end
+
+start
+code            aud_s_client_updt_mutex_unlock_fail
+sub-component   aud_s_general
+attributes	"svc_c_sev_error | svc_c_action_exit_bad"
+text		"Cannot unlock the mutex for the client update list."
+explanation	"The \*Lpthread_mutex_unlock()\*O call failed."
+action		"Check the return code of the \*Lpthread_mutex_unlock()\*O call."
+end
+
+start
+code            aud_s_updt_opendir_fail
+sub-component   aud_s_esl
+attributes	"svc_c_sev_error"
+text		"Cannot open %s: errno = %d"
+explanation	"The \*opendir()\*O call failed."
+action		"There is some problem in opening the specified directory. Verify
+                 that the permissions on the directory are correct and that there
+                 are not any filesystem problems."
+end
+
+start
+code            aud_s_got_server_uuid
+sub-component   aud_s_evt
+attributes	"svc_c_sev_error"
+text		"dce_aud_print received a server UUID. This was not expected. UUID is %s"
+explanation	"The dce_aud_print routine received a server UUID. This was not
+                 expected. The routine is expecting to always receive a NULL server
+                 UUID."
+action		"Contact your DCE supplier."
+end
+
+start
+code            aud_s_rewind_trail_file
+sub-component   aud_s_trl
+attributes      "svc_c_sev_error"
+text            "Could not rewind the Audit trail file"
+explanation     "The \*Lftruncate()\*O call on the trail file failed."
+action          "Contact your system administrator."
+end
+
+start
+code            aud_s_rewind_index_file
+sub-component   aud_s_trl
+attributes      "svc_c_sev_error"
+text            "Could not rewind the Audit index file"
+explanation     "The \*Lftruncate()\*O call on the index file failed."
+action          "Contact your system administrator."
+end
+
+
+
+## Messages for serviceability table
+start		!intable undocumented
+code		aud_i_svc_general
+text		"General server administration"
+end
+
+start		!intable undocumented
+code		aud_i_svc_evt
+text		"Audit record management"
+end
+
+start		!intable undocumented
+code		aud_i_svc_esl
+text		"Event selection list (filters) management"
+end
+
+start		!intable undocumented
+code		aud_i_svc_trl
+text		"Audit trail management"
+end
+
+start		!intable undocumented
+code		aud_i_svc_msgs
+text		"Debugging messages"
+end
+

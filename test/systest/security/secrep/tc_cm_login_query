@@ -1,0 +1,180 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: tc_cm_login_query,v $
+# Revision 1.1.2.2  1996/03/09  20:52:17  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:52  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:43  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:18 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  20:11 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/03  14:43 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/03  14:32 UTC  gordon_l
+# 	Fixes for change_master/b
+# 	ecome_master
+# 	[1995/12/11  22:22:36  root]
+# 
+# $EndLog$
+
+
+if [ -z "${TC_CM_LOGIN_QUERY_DEFINED}" ] ; then
+
+TC_CM_LOGIN_QUERY_DEFINED=1
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  DESCRIPTION:
+#      This test case is part of the security replication system test.
+#      The purpose of this test is to ensure that logins and queries
+#      are still allowed when a change_master is being done.
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+tet_startup="tc_cm_login_query_init"
+tet_cleanup="tc_cm_login_query_cleanup"
+tet_testlist="tc_cm_login_query"
+
+iclist="ic1"
+ic1="tc_cm_login_query"
+
+tc_cm_login_query_init()
+{
+    typeset st
+
+    tc_common_init ; st=$?
+    if [ $st -ne 0 ] ; then
+        tet_delete $ic1 "tc_cm_login_query_init(): Initialization failed"
+        return 
+    fi
+}
+
+tc_cm_login_query_cleanup()
+{
+    tc_common_cleanup
+}
+
+
+tc_cm_login_query()
+{
+    typeset tmp_SLV_NAMES  tmp_SLV_HOSTNAMES slvhost_1 slvnm_1
+    typeset old_master_host  old_master_name st1 st2 st
+
+    testdesc="Change master - while logins and queries are in progress"
+    replog_testhdr "$testdesc"
+
+    slvhost_1=${SLV_HOSTNAMES[0]} ; slvnm_1=${SLV_NAMES[0]}
+
+    #   Stop all slaves except for the first slave. This will ensure
+    #   that the logins will either use the new or the old master.
+
+    repdb_del_elmnt "${SLV_NAMES[*]}" $slvnm_1  # Sets REPDB_STRING
+    set -A tmp_SLV_NAMES $REPDB_STRING
+
+    repdb_del_elmnt "${SLV_HOSTNAMES[*]}" $slvhost_1  # Sets REPDB_STRING
+    set -A tmp_SLV_HOSTNAMES $REPDB_STRING
+    
+    secd_stop "${tmp_SLV_HOSTNAMES[*]}" "${tmp_SLV_NAMES[*]}" ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+ 
+    #   Run the update test to add rgy items to the registry. These will be
+    #   used by the rgylogin and query test. The number of prinicpals must
+    #   sufficiently large that the query and rgylogin test that the rgylogin
+    #   and query tests should not complete before change_master begins.
+
+    replog_msg "Running update test to add rgy items required by this test"
+    sft_x_update_hosts "$MASTER_HOSTNAME $slvhost_1" $CM_RGYLOGIN_NPRINC $SFT_UPDATE_ADD
+   
+    tc_wait_bgjobs "update test"    # wait for the update test to complete
+
+    sft_v_update_hosts "$MASTER_HOSTNAME $slvhost_1" $SFT_UPDATE_ADD ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    sa_wait_prop_complete $slvnm_1 ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #   Start the login and query test on the current master as well
+    #   as $slvnm_1 which will be the new master. Both the login and
+    #   query test should pass.
+
+    sft_x_rgylogin_hosts "$MASTER_HOSTNAME $slvhost_1" $CM_RGYLOGIN_NPRINC ; st=$?
+    sft_x_query_hosts "$MASTER_HOSTNAME $slvhost_1" "$MASTER_NAME $slvnm_1" ; st=$?
+ 
+    old_master_host=$MASTER_HOSTNAME ; old_master_name=$MASTER_NAME
+
+    sa_change_master $slvnm_1 ; st=$?   # Change master
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #   Wait for the rgylogin and query tests to complete.
+
+    tc_wait_bgjobs "rgylogin query test"
+
+    st=0
+    sft_v_rgylogin_hosts "$old_master_host $slvhost_1" ; st1=$?
+    sft_v_query_hosts    "$old_master_host $slvhost_1" ; st2=$?
+    if [[ $st1 -eq 1 || $st2 -eq 1 ]] ; then
+        st1=1
+    fi
+
+    secd_start "${tmp_SLV_HOSTNAMES[*]}" "${tmp_SLV_NAMES[*]}" ; st=$? 
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #   Wait until the "Number of outstanding updates" is 0 
+
+    sa_wait_prop_complete "${SLV_NAMES[*]}" ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #    Verify that the new master is the only master on all replica lists.
+
+    replist_verify_master "${REP_NAMES[*]}" $MASTER_NAME ; st=$?
+    if [[ $st1 -ne 0 || $st -ne 0 ]] ; then
+        st=1
+    fi
+    replog_testresult "$testdesc" $st
+    sft_cleanup # Cleanup registry
+}
+
+. $TET_ROOT/profile.dcest
+. ./profile
+. $PHOME/replog
+. $PHOME/tc_common
+. $PHOME/secd
+. $PHOME/slv
+. $TCM
+#. $TET_ROOT/lib/xpg3sh/tcm.sh
+
+fi

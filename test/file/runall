@@ -1,0 +1,193 @@
+#!/bin/sh
+
+# list of candidate tests for this script
+# cm fset acl rep fts
+
+# select the tests to run from the above list
+tests="rep acl fts fset cm"
+
+echo This script runs overnite and executes
+echo "$tests."
+echo ""
+
+echo "Expect these tests to generate 3.2 megabytes of log info,"
+echo "expect these tests to complete in about 9 hours."
+echo ""
+
+echo The runall script verifies that the necessary
+echo "servers and aggregates are present;"
+echo "subscripts verify that other needed resources are present."
+echo ""
+
+echo It is intended that these tests sould be self configuring
+echo "and should run unattended."
+echo ""
+
+echo "The test logs are stored in the logs subdirectory."
+echo ""
+
+# globals: $servers
+
+# verify argument list is not empty
+check_list()
+{
+	if test $# -eq 0
+	then
+		return 1
+	else
+		return 0
+	fi
+}
+
+# input a list of servers and return
+# a list of file exporters in $servers
+get_server_list()
+{
+	servers=
+	for i
+	do
+		temp_list=`fts aggrinfo $i|awk '{print $3}'|grep epi`
+		check_list $temp_list
+		if test $? -ne 0
+		then
+			continue
+		fi
+		servers="$servers $i"
+	done
+}
+
+# pick out two distinguished servers from list
+# of all servers in cell
+get_servers()
+{
+        if test $# -lt 2
+        then
+                echo there are only $# servers in this cell
+                echo we need two servers for these tests
+                return 1
+        fi
+        SMOKE2_SERVER_1=$1
+        SMOKE2_SERVER_2=$2
+        return 0
+}
+
+# pick out two aggregates from
+# list of all aggregates exported from server
+get_aggrs_server1()
+{
+        if test $# -lt 2
+        then
+		echo there are only $# aggregates
+		echo exported from server $SMOKE2_SERVER_1
+		echo we need two aggregates for these tests
+                return 1
+        fi
+	SMOKE2_SERVER_1_AGGR_1=$1
+	SMOKE2_SERVER_1_AGGR_2=$2
+        return 0
+}
+
+get_aggrs_server2()
+{
+	if test $# -lt 2
+	then
+		echo there are only $# aggregates
+		echo exported from $SMOKE2_SERVER_2
+		echo we need two
+		return 1
+	fi
+	SMOKE2_SERVER_2_AGGR_1=$1
+	SMOKE2_SERVER_2_AGGR_2=$2
+	return 0
+}
+
+# get list of all servers in cell
+echo find two file exporters in cell
+list=`rgy_edit -v | grep self | awk -F'/' '{print $2}'`
+
+# get list of all file exporters in cell
+# returned in $servers
+get_server_list $list
+get_servers $servers
+if test $? -ne 0
+then
+	echo more servers!
+	exit 1
+fi
+export SMOKE2_SERVER_2
+export SMOKE2_SERVER_1
+echo "we have at least these servers: $SMOKE2_SERVER_2 $SMOKE2_SERVER_1"
+
+# get list of all epi aggregates for a server
+echo find two aggregates per file exporter
+list=`fts aggrinfo $SMOKE2_SERVER_1 | awk '{print $3}' | grep epi`
+get_aggrs_server1 $list
+if test $? -ne 0
+then
+	echo more aggregates for $SMOKE2_SERVER_1!
+        exit 1
+fi
+export SMOKE2_SERVER_1_AGGR_1
+export SMOKE2_SERVER_1_AGGR_2
+echo "on $SMOKE2_SERVER_1 we have at least these aggregates:"
+echo $SMOKE2_SERVER_1_AGGR_1 $SMOKE2_SERVER_1_AGGR_2
+list=`fts aggrinfo $SMOKE2_SERVER_2 | awk '{print $3}' | grep epi`
+get_aggrs_server2 $list
+if test $? -ne 0
+then
+        echo more aggregates for $SMOKE2_SERVER_2!
+        exit 1
+fi
+export SMOKE2_SERVER_2_AGGR_1
+export SMOKE2_SERVER_2_AGGR_2
+echo "on $SMOKE2_SERVER_2 we have at least these aggregates:"
+echo $SMOKE2_SERVER_2_AGGR_1 $SMOKE2_SERVER_2_AGGR_2
+
+echo save old logs
+if test -d logs
+then
+	if test -d logs.old
+	then
+		\rm -f logs.old/*
+	else
+		mkdir logs.old
+	fi
+	cp logs/* logs.old
+
+	\rm -f logs/*
+else
+	mkdir logs
+fi
+if test -d runall_logs
+then
+        if test -d runall_logs.old
+        then
+                \rm -f runall_logs.old/*
+        else
+                mkdir runall_logs.old
+        fi
+        cp runall_logs/* runall_logs.old
+
+	\rm -f runall_logs/*
+else
+	mkdir runall_logs
+fi
+here=`pwd`
+for i in $tests
+do
+	echo ""
+	echo $i
+	if test -d $i
+	then
+		cd $i
+	else
+		echo $i tests not present
+		cd $here
+		continue
+	fi
+	sh runall|tee $here/runall_logs/$i.runall_log 2>&1
+
+	cd $here
+done
+echo ""
+echo all tests done

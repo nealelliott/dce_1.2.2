@@ -1,0 +1,190 @@
+
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+* Test basic name resolution, both after flushing the directory, and
+* also without intervening flushes.
+* Infact, this tests the correspondence of name and inode.
+
+* Test name resolution after flushing dirctory, with N concurrent test
+* processes on the same DFS client, all resolving the same name.
+
+*
+* Note: Try this test only on a single client.
+*
+
+* Include config file.
+include config
+
+set stressLoop 5
+set loopTimes 5
+
+****************************************************************************
+* Check spokes.
+if ( $ITL_nspokes < 4 ) {
+  echo FAILED: You need at least four spokes to run the test.
+  quit
+}
+
+chdir $testDir
+
+* Stress loop
+loop loopVar 1 1 $stressLoop
+
+!* Without flushing dir.
+* This is the outmost loop which controls the procedure running remotely.
+loop f 1 1 $loopTimes
+  set fileName ( $testFile + $f )
+  open $fileName ($O_CREAT|$O_RDWR) 0777 fileId[$f]
+  write $fileId[$f] $fileName
+  close $fileId[$f]
+  stat $fileName statVar
+  set fileInode $statVar.st_ino
+
+   *
+   * This procedure stats a file.
+   *
+   set test_Proc proc END_PROC
+     echo
+     echo Test file from spoke.
+
+     getwd myDir
+     chdir $testDir
+
+     sync_join "begin_sync" $timeout
+
+     stat $fileName var
+     if ( @var.st_ino != $fileInode ) {
+       echo FAILED the tested file has wrong inode number.
+     }
+
+     sync_join "finish_sync" $timeout
+  
+     chdir @myDir
+
+     echo Done.
+     echo 
+   END_PROC
+
+
+* Have n test process check the same file form the same client.
+   loop x 0 1 ( $ITL_nspokes -1 )
+     rexec_async $ITL_spoke[$x] test_Proc result[$x] asyncVar[$x]
+   endLoop
+
+   sync_create "begin_sync" $ITL_nspokes $timeout
+   sync_release "begin_sync"
+
+   sync_create "finish_sync" $ITL_nspokes $timeout
+   sync_release "finish_sync"
+
+   loop x 0 1 ($ITL_nspokes-1)
+     async_join $asyncVar[$x] $timeout
+   endloop
+
+   loop x 0 1 ($ITL_nspokes-1)
+     if ( $result[$x] != 0 ) {
+       echo Spoke $x has a failure.
+     }
+   endloop
+
+* End of create files.
+endloop
+
+!* Delete those files
+loop x 1 1 $loopTimes
+  set fileName ( $testFile + $x )
+  remove $fileName
+endloop
+
+!* With flushing dir.
+
+* This is the outmost loop which controls the procedure running remotely.
+loop f 1 1 $stressLoop
+  set fileName ( $testFile + $f )
+  open $fileName ($O_CREAT|$O_RDWR) 0777 fileId[$f]
+  write $fileId[$f] $fileName
+  close $fileId[$f]
+  stat $fileName statVar
+  set fileInode $statVar.st_ino
+  flush_file $fileName
+  flush_file .
+
+   *
+   * This procedure stats a file.
+   *
+   set test_Proc proc END_PROC
+     echo
+     echo Test file from spoke.
+
+     getwd myDir
+     chdir $testDir
+
+     sync_join "begin_sync" $timeout
+
+     stat $fileName var
+     if ( @var.st_ino != $fileInode ) {
+       echo FAILED the tested file has wrong inode number.
+     }
+
+     sync_join "finish_sync" $timeout
+  
+     chdir @myDir
+
+     echo Done.
+     echo 
+   END_PROC
+
+
+* Have n test process check the same file form the same client.
+   loop x 0 1 ( $ITL_nspokes -1 )
+     rexec_async $ITL_spoke[$x] test_Proc result[$x] asyncVar[$x]
+   endLoop
+
+   sync_create "begin_sync" $ITL_nspokes $timeout
+   sync_release "begin_sync"
+
+   sync_create "finish_sync" $ITL_nspokes $timeout
+   sync_release "finish_sync"
+
+   loop x 0 1 ($ITL_nspokes-1)
+     async_join $asyncVar[$x] $timeout
+   endloop
+
+   loop x 0 1 ($ITL_nspokes-1)
+     if ( $result[$x] != 0 ) {
+       echo Spoke $x has a failure.
+     }
+   endloop
+
+* End of create files.
+endloop
+
+loop x 1 1 $loopTimes
+  set fileName ( $testFile + $x )
+  remove $fileName
+endloop
+
+* End stress loop
+endloop
+
+chdir $currentDir
+echo HUB Done
+quit

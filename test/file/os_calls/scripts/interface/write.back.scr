@@ -1,0 +1,170 @@
+*
+* ID: $Id:
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+*  write.back.scr --
+*	This script implements the followings:
+*
+*> Async write-back.
+*
+* Generate some status updates to send asynchronously to the server:
+* For example, read a file that is at least an hour old, but do not
+* update it (generates an async update of atime), and verify that after
+* flushing that the atime has changed.
+*
+* Also, update a file via write (not ftrunc or an O_TRUNC open), and
+* sleep 30 seconds before closing the file (will cause async write
+* daemon to have enough time).
+*
+* Also, do same thing, only ftruncate the file after writing a byte to
+* it, so that there's no modified data, but there's still a modified
+* mtime field.  Again, wait 30 seconds to allow async daemon to do the
+* storeback of the updated status.
+*
+*
+
+* Usage: file_test -I write.back.scr
+*        file_test -I write.back.scr -D
+*        or
+*        file_test <write.back.scr
+*        or
+*        See file_test -help
+
+
+* Note:
+*  1. Run the test from both dfs and local path.
+
+*
+* Have common variables and procedures set.
+*
+include common2.env
+
+echo
+echo Running write.back.scr
+echo
+
+set check_Atime proc 2 filename string flag OUT END_PROC
+  time currTime
+  stat @filename var
+  if ( @var.st_atime > (@currTime - 3600) ) {
+    set flag false
+  }
+  else {
+    set flag true
+  }
+END_PROC
+
+
+**********************************************************************o*
+!*                  BASIC CHECKING
+************************************************************************
+
+umask 0
+
+* Set this variable to define a old file.
+set oldFile onemegabin
+
+!* find a file that is at least an hour old of its atime.
+opendir . dirPtr
+readdir $dirPtr dirInfo
+readdir $dirPtr dirInfo
+do 
+  readdir $dirPtr dirInfo
+  exec check_Atime $dirInfo.d_name flag
+while ( $CommandResult != -1 && $flag != true ) 
+if (  $CommandResult == -1 && $flag != true ) {
+  echo There is no such file that is at least an hour old. Give one.
+  quit
+}
+closedir $dirPtr
+set oldFile $dirInfo.d_name
+
+echo working on $oldFile
+time currTime
+stat $oldFile oldVar
+
+* Found a file old enough.
+!* Test if the atime changed via a read by async store.
+open $oldFile $O_RDONLY 0777 fId
+read $fId 1 junk
+close $fId
+
+flush_file $oldFile
+
+stat $oldFile newVar
+if ( ($newVar.st_atime - $oldVar.st_atime) < 3600 ) {
+  set errorMessage "FAILED: atime failed to be changed by asyn store back."
+  exec err_Process
+}
+
+flush_file $oldFile
+
+!* Test if mtime changed via a write by async store.
+time currTime
+open $testFile ($O_CREAT|$O_WRONLY) 0777 fid
+write $fid $NUMVEC64K
+sleep 30000
+close $fid
+flush_file $testFile
+
+stat $testFile var
+if ( $var.st_mtime < $currTime ) {
+  set errorMessage "FAILED: mtime failed to be changed via a write."
+  exec err_Process
+}
+
+set junk vector 0x0
+open $testFile ($O_CREAT|$O_RDONLY) 0777 fid
+read $fid $CONST64K junk
+if ( $junk != $NUMVEC64K ) { 
+  set errorMessage "FAILED: read wrong data."
+  exec err_Process
+}
+
+!* Write a byte to a file and ftruncate the byte and check if mtime changed.
+set junk vector 0x01
+flush_file $testFile
+stat $testFile oldVar
+open $testFile ($O_CREAT|$O_WRONLY) 0777 fid
+lseek $fid $SEEK_SET $CONST64K
+write $fid $junk
+ftruncat $fid $CONST64K
+sleep 35000
+close $fid
+flush_file $testFile
+stat $testFile newVar
+if ( $newVar.st_mtime < $oldVar.st_mtime ) {
+  set errorMessage "FAILED: mtime failed to be changed via write and ftruncate."
+  exec err_Process
+}
+
+************************************************************************
+!* Cleaning up.
+************************************************************************
+*
+*
+
+remove $testFile
+chdir $currentDir
+exec clearDir_Proc $testDir
+exec report_Proc "write.back.scr" $errorCounter
+echo
+quit

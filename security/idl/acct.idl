@@ -1,0 +1,255 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: acct.idl,v $
+ * Revision 1.1.41.2  1996/03/09  23:27:40  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:08  marty]
+ *
+ * Revision 1.1.41.1  1995/12/08  17:30:43  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:54:43  root]
+ * 
+ * Revision 1.1.39.1  1993/10/05  22:30:43  mccann
+ * 	CR8651 64 bit porting changes
+ * 	[1993/10/04  19:11:39  mccann]
+ * 
+ * Revision 1.1.2.2  1992/12/29  13:28:44  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:16:30  zeliff]
+ * 
+ * Revision 1.1  1992/01/19  14:55:29  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+
+/*  acct.idl V=7 11/08/91 //littl/prgy/src/idl
+**
+** Copyright (c) Hewlett-Packard Company 1991
+** Unpublished work. All Rights Reserved.
+**
+*/
+/* User Registry - account management - client agent
+ * 
+ */
+
+[local]
+interface sec_rgy_acct
+
+{
+
+    import "dce/rgybase.idl";
+    import "dce/passwd.idl";
+
+    /* Note on Password Updates
+     *
+     * New passwords may be transmitted to the server as plaintext, or 
+     * ciphertext computed by the client before transmission.  In either
+     * case, the new key is encrypted under the caller's key before
+     * going out on the wire.  If the new key is plaintext, the server
+     * will generate the corresponding ciphertext, but requires an additional
+     * parameter specifying the ciphetext key type.
+     *
+     * All routines that update a password take the following parameters.
+     *            
+     * caller_key:
+     *     The caller's key to be used for encrypting the new key on the
+     *     wire.  If rpc_c_authn_level_pkt_privacy were guaranteed to be
+     *     available on all systems, we wouldn't need this parameter, but it
+     *     isn't, so we need an application level mechanism for obscuring
+     *     keys on the wire.
+     *    
+     * new_key:
+     *     The new key.  If no version number is specified (i.e. the
+     *     version_number field is sec_passwd_c_key_version_none), the
+     *     server assigns the next available key version number for
+     *     a key of the specified type, for the specifed account.  If
+     *     a key version number is specified, and the key version number
+     *     is invalid (because it is already in use for the specified 
+     *     account, or is not in the range of valid version numbers 
+     *     for the key type), the update is rejected.
+     *     
+     *     The prefix field interacts with the key type as follows.
+     *
+     *                            key type
+     *                        plain   ciphertext 
+     *                     ---------------------
+     *                NULL |    A   |   C
+     *     prefix          |--------------------
+     *            non-NULL |    B   |   D
+     *
+     *
+     *    A) The server generates a prefix, prepends it to the plaintext
+     *       provided by the client, generates a ciphertext key, and stores
+     *       the prefix with the key.  This case is typical of user 
+     *       password updates.
+     *
+     *    B) The server prepends the client-supplied prefix to the plaintext,
+     *       generates a ciphetext key, and stores the prefix with the key.
+     *
+     *    C) The server stores the ciphertext key with no prefix.  This case
+     *       is typical of service key updates. 
+     *   
+     *    D)  The server stores the client-supplied prefix with the client-
+     *        supplied ciphertext key.
+     *
+     * new_keytype:
+     *     Used by the server to determine the type of ciphertext key to generate
+     *     when the new key arrives in plaintext.
+     *
+     * new_key_version [out]
+     *     Used by the server to pass the version number of the new key back to
+     *     the client. If the client requests a particular key version number
+     *     (via the version_number field of the new_key input parameter), the 
+     *     server returns the requested version number back to the client.
+     */     
+
+
+    /*
+     * sec_r g y _ a c c t _ a d d 
+     *
+     * add an account for the specified login name person.group.org.  key_parts
+     * identifies how much of the string will be used as the key.  If the
+     * requested abbreviation is already in use, it will be reset t the next
+     * shortest available abbreviation. 
+     *
+     * Errors: 
+     *  Not Authorized
+     *  Not Member of Group
+     *  Not Member of Org
+     *  Not Member of Group and Org
+     *  Object already exists 
+     */
+    void sec_rgy_acct_add (
+        [in]        sec_rgy_handle_t        context,
+        [in]        sec_rgy_login_name_t    * login_name,
+        [in, out]   sec_rgy_acct_key_t      * key_parts,
+        [in]        sec_rgy_acct_user_t     * user_part,
+        [in]        sec_rgy_acct_admin_t    * admin_part,
+        [in]        sec_passwd_rec_t        * caller_key,
+        [in]        sec_passwd_rec_t        * new_key,
+        [in]        sec_passwd_type_t       new_keytype,
+        [out]       sec_passwd_version_t    * new_key_version,
+        [out]       error_status_t          * status
+    );
+
+    void sec_rgy_acct_user_replace (
+        [in]        sec_rgy_handle_t        context,
+        [in]        sec_rgy_login_name_t    * login_name,
+        [in]        sec_rgy_acct_user_t     * user_part,
+        [in]        boolean32               set_password,
+        [in]        sec_passwd_rec_t        * caller_key,
+        [in]        sec_passwd_rec_t        * new_key,
+        [in]        sec_passwd_type_t       new_keytype,
+        [out]       sec_passwd_version_t    * new_key_version,
+        [out]       error_status_t          * status
+    );
+
+    void sec_rgy_acct_admin_replace (
+        [in]        sec_rgy_handle_t        context,
+        [in]        sec_rgy_login_name_t    * login_name,
+        [in, out]   sec_rgy_acct_key_t      * key_parts,
+        [in]        sec_rgy_acct_admin_t    * admin_part,
+        [out]       error_status_t          * status
+    );
+
+    void sec_rgy_acct_replace_all (
+        [in]        sec_rgy_handle_t        context,
+        [in]        sec_rgy_login_name_t    * login_name,
+        [in, out]   sec_rgy_acct_key_t      * key_parts,
+        [in]        sec_rgy_acct_user_t     * user_part,
+        [in]        sec_rgy_acct_admin_t    * admin_part,
+        [in]        boolean32               set_password,
+        [in]        sec_passwd_rec_t        * caller_key,
+        [in]        sec_passwd_rec_t        * new_key,
+        [in]        sec_passwd_type_t       new_keytype,
+        [out]       sec_passwd_version_t    * new_key_version,
+        [out]       error_status_t          * status
+    );
+
+    void sec_rgy_acct_delete (
+        [in]        sec_rgy_handle_t        context,
+        [in]        sec_rgy_login_name_t    * login_name,
+        [out]       error_status_t          * status
+    ); 
+
+    void sec_rgy_acct_rename (
+        [in]        sec_rgy_handle_t        context,
+        [in]        sec_rgy_login_name_t    * old_login_name,
+        [in]        sec_rgy_login_name_t    * new_login_name,
+        [in, out]   sec_rgy_acct_key_t      * new_key_parts,
+        [out]       error_status_t          * status
+    );
+
+    /* s e c _ r g y _ a c c t _ p a s s w d
+     *
+     * Change an accounts password.
+     */
+    void sec_rgy_acct_passwd (
+        [in]        sec_rgy_handle_t        context,
+        [in]        sec_rgy_login_name_t    * login_name,
+        [in]        sec_passwd_rec_t        * caller_key,
+        [in]        sec_passwd_rec_t        * new_key,
+        [in]        sec_passwd_type_t       new_keytype,
+        [out]       sec_passwd_version_t    * new_key_version,
+        [out]       error_status_t          * status
+    );
+
+    [idempotent] void sec_rgy_acct_get_projlist (
+        [in]        sec_rgy_handle_t        context,
+        [in]        sec_rgy_login_name_t    * login_name,
+        [in, out]   sec_rgy_cursor_t        * projlist_cursor,
+        [in]        signed32                max_number,
+        [out]       signed32                * supplied_number,
+        [out, length_is(*supplied_number), size_is(max_number)] 
+                    uuid_t                  id_projlist[],
+        [out, length_is(*supplied_number), size_is(max_number)] 
+                    signed32               unix_projlist[],
+        [out]       signed32               * num_projects,
+        [out]       error_status_t         * status
+    );
+
+    /* s e c _ r g y _ a c c t _ l o o k u p
+     *
+     * Lookup an account by sec_rgy_login_name_t key.
+     *
+     * INPUT:
+     *   context        Handle to a registry server.
+     *   name_key       Pass empty str for p,g, and/or org for wildcard
+     *                  lookup.
+     *   acct_cursor    Marker into the database for successive lookups.
+     * OUTPUT:
+     *   name_result    Key found as result of lookup (p,g and o)
+     *   id_sid         UUIDs for principal, group and org
+     *   unix_sid       Unix number
+     *   key_parts      abbreviation
+     *   user_part      user information
+     *   admin_part     administrative information
+     *   status         resulting status
+     * NOTE:
+     *   NULL ptrs may be specified for any of id_sid, unix_sid, key_parts,
+     *   user_part and admin_part, if that information is not useful to the
+     *   client.
+     */
+    [idempotent] void sec_rgy_acct_lookup (
+        [in]        sec_rgy_handle_t        context,
+        [in]        sec_rgy_login_name_t    * name_key,
+        [in, out]   sec_rgy_cursor_t        * account_cursor,
+        [out]       sec_rgy_login_name_t    * name_result,
+        [out]       sec_rgy_sid_t           * id_sid,
+        [out]       sec_rgy_unix_sid_t      * unix_sid,
+        [out]       sec_rgy_acct_key_t      * key_parts,
+        [out]       sec_rgy_acct_user_t     * user_part,
+        [out]       sec_rgy_acct_admin_t    * admin_part,
+        [out]       error_status_t          * status
+    );
+}

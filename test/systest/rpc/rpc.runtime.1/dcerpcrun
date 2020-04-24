@@ -1,0 +1,725 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dcerpcrun,v $
+# Revision 1.1.9.2  1996/03/09  20:51:26  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:13  marty]
+#
+# Revision 1.1.9.1  1995/12/11  22:43:21  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/29  18:54 UTC  bell_d
+# 	Merge in latest version fixed for heterogenous cell operation - rshell and copy test instead of rcp test.  Also
+# 	standardize set of timing variable.
+# 
+# 	HP revision /main/HPDCE01/2  1994/03/30  16:08 UTC  truitt
+# 
+# 	HP revision /main/HPDCE01/truitt_junk/1  1994/03/30  15:58 UTC  truitt
+# 	Update test to latest tet version
+# 	[1995/12/11  22:34:01  root]
+# 
+# Revision 1.1.2.2  1993/08/24  18:50:32  giza
+# 	Initial version.
+# 	[1993/08/24  18:50:06  giza]
+# 
+# $EndLog$
+#########
+######### TESTNAME:             dcerpcrun
+#########
+######### COMPONENT_NAME:       dce.systest
+#########
+######### FILE:                 dcerpcrun.data
+#########                       dcerpcrun.functions
+#########                       client
+#########                       server
+#########                       dumpDB
+#########
+######### DESCRIPTION:          RPC runtime exerciser, network/RPC runtime stress test.
+#########                       Makes a great network traffic generator too.
+#########
+#########                       Basically start up a RPC server with one listening thread
+#########                       and then start up (n) clients on (n) hosts to see where
+#########                       the server will start to loose packets.  This test is set
+#########                       up to run a MAXHOSTS=100 and MAXCLIENTS=100.  Although
+#########                       that large a number has not been run, we have successfully
+#########                       started 40 hosts within a 60 second boundry, with 50 iter-
+#########                       ations/client @ 10 clients/host.
+#########
+######### SEQUENCE:              1) Validate client(s) communication ability via ping/rcmds
+#########                        2) Setup server (THISHOST) and start it.  All work is done
+#########                           in the $WORKDIR for server and client(s).
+#########                        3) Setup client(s).
+#########                        4) Start clientwait process on each client.  Sleep for a
+#########                           brief specified time.
+#########                        5) Start clientwrapper process on each client.  Sleep for a
+#########                           brief specified time.
+#########                        6) Kill clientwait process on each client.  Sleep for a
+#########                           brief specified time.
+#########                        7) Check that clientwait process died on each client.  Sleep
+#########                           for a brief specified time.
+#########                        8) Give a report of the maximum delta client startup time.
+#########                        9) Check to see if clientwrapper has exited on each client
+#########                           if not, sleep and check again.
+#########                       10) Read the server's database for test status and report.
+#########                       11) If (iterations>0) goto 1) else...
+#########                       12) Dump server's database and report status to tcc.
+#########                       13) Read server.log file into tet_infoline via a while read
+#########                           loop.
+#########                       14) Test has completed.
+#########
+#################################################################################
+tet_startup="startUp"
+#tet_cleanup="cleanUp"
+tet_cleanup=""
+iclist="ic1"
+ic1="runrpcrun"
+test_purp_list="runrpcrun"
+
+
+## Function:    startUp()
+## Purpose:     rollin, rollin, rollin, get them dogies rollin... raw-hide!
+##
+startUp() {
+    (( $DEBUG )) && set -x
+
+    THISHOST=$(/bin/hostname)
+    case `uname -s` in
+
+        AIX   ) RSHELL=rsh
+                ;;
+
+        OSF1  ) RSHELL=rsh
+                ;;
+    
+        SUNOS ) RSHELL=rsh
+                ;;
+
+        HP-UX ) RSHELL=remsh
+                ;;
+
+        *     ) tet_result UNINITIATED
+                return
+                ;;
+    esac
+
+    #create WORKDIR
+    if [ ! -d $WORKDIR ]
+    then
+        mkdir $WORKDIR
+    elif [ -d $WORKDIR ]
+    then
+        rm -f $WORKDIR/* 1>/dev/null 2>&1;
+    fi
+
+    #initial validation of hostnames
+print "Clients: $CLIENTS"
+    checkHost "$CLIENTS"
+    (( $? )) && {
+        tet_result UNINITIATED
+        return
+    }
+
+    #start the server on *THISHOST*
+    startServer
+    (( $? )) && {
+        tet_result UNINITIATED
+        return
+    }
+
+    #create WORKDIR & copy client files to clients
+    setupClient
+    (( $? )) && {
+        tet_result UNINITIATED
+        return
+    }
+
+} #end startUp()
+
+
+## Function:    cleanUp()
+## Purpose:     spic&span; sort of.
+##
+cleanUp() {
+    (( $DEBUG )) && set -x
+    infoLine "\nCleaning up..."
+    [[ -x $KILL_SERVER ]] && ($PSCMD | egrep dcerpcrun_server | egrep -v 'ps|sh|grep' 1>/dev/null 2>&1) && {
+        $KILL_SERVER;
+    }
+    (( $SERVERCLEANUP )) && rm -r $WORKDIR
+    (( $CLIENTCLEANUP )) && cleanupClient
+} #end CleanUp()
+
+
+
+runrpcrun() {
+    (( $DEBUG )) && set -x
+
+    integer icnt=1 status=0 failed=0 Tt=0 IEt=0
+    integer D_HOSTS=0 D_STATUS=0 D_LOOPS=0
+    SECONDS=0
+
+#Changed by Deon - standardization of timing algorithm.  Run for loops
+#if set; otherwise run for NMIN.  If neither set, run for 17 loops
+#(about 15 min.)
+    if (( $LOOPS_TO_EXECUTE ))
+    then
+        infoLine "\n\nStarting RPC runtime tests for $LOOPS_TO_EXECUTE iteration(s)."
+	integer iteration=$LOOPS_TO_EXECUTE 
+    elif (( $NMIN ))
+    then
+        roundUp $(( $NMIN+($NMIN*10) ))
+        infoLine "\n\nStarting RPC runtime tests to run for ~$NMIN minutes."
+    else
+        LOOPS_TO_EXECUTE=17
+        infoLine "\n\nStarting RPC runtime tests for $LOOPS_TO_EXECUTE iteration(s)."
+	integer iteration=$LOOPS_TO_EXECUTE 
+    fi
+
+    infoLine "\nBEGIN RUN $$"
+
+    while (( $iteration ))
+    do
+        status=0
+        typeset -u T_STATUS=""
+
+        infoLine "\nBEGIN ITERATION $icnt"
+
+        f="sleepme
+           startSync
+           sleepme
+           startClient
+           sleepme
+           stopSync
+           sleepme"
+
+        if (( ${#HOSTS} ))
+        then
+            for function in $f
+            do
+                if (( ${#HOSTS} )) && [[ "$T_STATUS" = "" ]]
+                then
+                    $function
+                else
+                    T_STATUS=UNINITIATED
+                    failed=failed+1
+                    break 2
+                fi
+            done
+
+            checkClient clientwait; (( $? )) && failed=failed+1;
+            checkTime start "$HOSTS"
+            checkClient clientwrapper
+            dumpDatabase -r
+            if (( $D_STATUS || $D_HOSTS != $NHOSTS || $((D_LOOPS/icnt)) != $((CLIENTLOOPS*CONCURRENT)) ))
+            then
+                failed=failed+1
+                (( $D_HOSTS != $NHOSTS )) && {
+                    infoLine "\nERROR: A client failed to report status for the whole test.\n"
+                }
+                (( $((D_LOOPS/icnt)) != $((CLIENTLOOPS*CONCURRENT)) )) && {
+                    infoLine "\nERROR: A client failed to report status for each loop executed.\n"
+                }
+            else
+                infoLine "\nTest status for iteration $icnt = PASS"
+            fi
+        else
+            T_STATUS=UNINITIATED
+            failed=failed+1
+        fi #startServer
+
+        infoLine "\nEND ITERATION $icnt"
+
+        if (( $LOOPS_TO_EXECUTE ))
+        then
+            iteration=iteration-1
+        else
+            Tt=$IEt
+            IEt=$SECONDS
+
+            if (( $(( (($Ot*60)-$IEt)/($IEt-$Tt) )) ))
+            then
+                iteration=1
+            else
+                iteration=0
+            fi
+        fi
+        icnt=icnt+1
+    done #while (( $iteration ))
+
+    num_loops=`expr $icnt - 1`
+    measure="minutes"
+    minutes=`expr $SECONDS / 60`
+    if [ $minutes -lt 2 ]
+    then
+      minutes=$SECONDS
+      measure="seconds"
+    fi
+    infoLine "\nEND OF RUN $$"
+
+    dumpDatabase
+    readDBDump
+
+    infoLine "dcerpcrun test ran for $num_loops loops/iterations in $minutes $measure"
+
+
+    if (( $failed || $D_STATUS ))
+    then
+        T_STATUS=FAIL
+    else
+        T_STATUS=PASS
+    fi
+
+    infoLine "\nFinal test result = $T_STATUS"
+    tet_result $T_STATUS
+}
+
+
+
+## Function:    sleepme
+## Purpose:     well let me explain...
+##
+sleepme() {
+    (( $DEBUG )) && set -x
+    sleep $STIME
+}
+
+
+
+## Function:    checkHost()
+## Purpose:     check to see if we can 1) ping the host successfully, 2) rshell
+##              to the host successfully.  These two tests quickly check for
+##              invalid host names, network down, invalid permissions.
+##
+checkHost() {
+    (( $DEBUG )) && set -x
+    integer i=0 j=0 n=0 status=0 removed=0 c=0 rflag=0
+
+    while getopts :r flg
+    do
+        case $flg in
+            r)  rflag=1
+                shift
+                ;;
+
+            *)  #
+                ;;
+        esac
+    done
+
+    infoLine "\n\nChecking target host as a valid test client:\n"
+
+    for host in $*
+    do
+        n=0
+        status=0
+        ISt=$SECONDS
+        mode="/etc/ping"
+
+        if (( $c < 5 && !$rflag ))
+        then
+            infoLine "\t$host\c"
+        else
+            infoLine "\t$host\n"
+            c=0
+        fi
+        #first we'll see if we can ping..
+        while (( $n < $NETRETRYS && !$status && !$rflag ))
+        do
+            pingresult=$(/etc/ping $host 1450 1)
+            status=$?
+            if (( !$status ))
+            then
+                print - $pingresult | awk '{ if (match($(NF-2),"100%")) {exit 1} else {exit 0} }'
+                status=$?
+                if (( $status && $(( SECONDS-ISt)) < $NETTIMEOUT ))
+                then
+                    n=n+1
+                else
+                    n=$NETRETRYS
+                fi
+            fi
+            c=c+1
+        done
+
+        #now let's see if we can do a simple rshell
+        (( !$status )) && {
+            (( !$rflag )) && {
+                mode=$RSHELL
+                rshout=$($RSHELL $host uname -n 2>&1)
+                status=$?
+            }
+            (( !$status )) && {
+                if (( ${#hostlist[*]} < ${#1} && !$rflag )) && [[ "$rshout" = $host ]]
+                then
+                    hostlist[$j]=$host
+                    j=j+1
+                elif (( ${#hostlist[*]} > 0 )) && [[ "$rshout" != $host || "$rflag" = "1" ]]
+                then
+                    i=0
+                    while (( $i < ${#hostlist[*]} ))
+                    do
+                        [[ "${hostlist[$i]}" = "$host" ]] && {
+                            hostlist[$i]=""
+                            infoLine "\nINFO: $0: Client $host was removed from valid client list by request."
+                            removed=1
+                        }
+                        i=i+1
+                    done
+                fi
+            }
+         }
+
+        (( $status )) && {
+            if [[ "$mode" = "/etc/ping" ]]
+            then
+                infoLine "\n\nERROR: $0: $mode: \"$pingresult\""
+            else
+                infoLine "\n\nERROR: $0: "$rshout""
+            fi
+            infoLine "WARNING: $0: Client host $host was omitted from valid client list.\n"
+        }
+    done
+
+    # to compress or not to compress, that is the question.
+    if (( $removed ))
+    then
+        i=0
+        while (( $i < ${#hostlist[*]} ))
+        do
+            [[ "${hostlist[$i]}" != "" ]] && {
+                cmphostlist[$i]=${hostlist[$i]}
+            }
+            i=i+1
+        done
+        set -A hostlist ""
+        HOSTS=${cmphostlist[*]}
+        STIME=$(( $PERCLIENTSLEEP*${#cmphostlist[*]} ))
+        NHOSTS=${#cmphostlist[*]}
+    elif (( ! $removed && ${#hostlist[*]} ))
+    then
+        HOSTS=${hostlist[*]}
+        STIME=$(( $PERCLIENTSLEEP*${#hostlist[*]} ))
+        NHOSTS=${#hostlist[*]}
+    fi
+    infoLine "\n\n\t$NHOSTS hosts have been validated for this test.\n"
+    return $(( !NHOSTS ))
+} #end checkHost()
+
+
+
+## Function:    startServer()
+## Purpose:     to start server daemon on this host.
+##
+startServer() {
+    (( $DEBUG )) && set -x
+    integer status=0
+
+    infoLine "\nStarting server...logfile=$SERVER_LOGFILE\n"
+
+    pids=$($PSCMD | egrep $SERVER | egrep -v 'sh|ps|grep')
+    (( !$? )) && {
+        kill -9 $(print "$pids" | awk '{print $2}')
+    }
+
+    cp ./dumpDB ${WORKDIR} 1>>${SERVER_LOGFILE} 2>&1
+    status=status+$?
+
+    cp ./server ${WORKDIR}/${SERVER} 1>>${SERVER_LOGFILE} 2>&1
+    status=status+$?
+
+    cd ${WORKDIR}
+
+    ./dcerpcrun_server -f $ENDPOINT $PROTOCOL 1>>$SERVER_LOGFILE 2>&1 &
+    status=status+$?
+
+    print "/bin/kill $!\n" >$KILL_SERVER; chmod +x $KILL_SERVER
+    (( $status )) && {
+        infoLine "ERROR: $0: Server process did not start, aborting test."
+    }
+
+    cd $OLDPWD
+    return $status
+} #end startServer()
+
+
+
+## Function:    setupClient()
+## Purpose:     to remotely copy all client specific files to target host(s).
+##
+setupClient() {
+    (( $DEBUG )) && set -x
+    integer status=0 c=0
+
+    infoLine "\nSetting up clients:\n"
+    for host in $HOSTS
+    do
+        if (( $c < 5 ))
+        then
+            infoLine "\t$host\c"
+        else
+            infoLine "\t$host\n"
+            c=0
+        fi
+
+        [[ "${host}" != "${THISHOST}" ]] && {
+            rerror=$($RSHELL $host -n "/bin/ksh -c \"export WORKDIR=$WORKDIR; if [ ! -d $WORKDIR ]; then mkdir $WORKDIR; else rm -r $WORKDIR; mkdir $WORKDIR; fi\"" 2>&1)
+            status=$?
+        }
+
+        if (( $status ))
+        then
+            infoLine "ERROR: $0: Unable to make directory $WORKDIR on client host $host, error is:"
+            infoLine "$rerror\n"
+            checkHost -r $host
+        else
+            rerror=$($RSHELL $host -n "/bin/ksh -c \"export WORKDIR=$WORKDIR; export TET_ROOT=$TET_ROOT; cp $TET_ROOT/rpc/ts/rpc.runtime.1/clientwait $WORKDIR\"" 2>&1)
+            status=status+$?; (( $status )) && infoLine "$rerror\n";
+            rerror=$($RSHELL $host -n "/bin/ksh -c \"export WORKDIR=$WORKDIR; export TET_ROOT=$TET_ROOT; cp $TET_ROOT/rpc/ts/rpc.runtime.1/clientwrapper $WORKDIR\"" 2>&1)
+            status=status+$?; (( $status )) && infoLine "$rerror\n";
+            rerror=$($RSHELL $host -n "/bin/ksh -c \"export WORKDIR=$WORKDIR; export TET_ROOT=$TET_ROOT; export CLIENT=$CLIENT; cp $TET_ROOT/rpc/ts/rpc.runtime.1/client $WORKDIR/$CLIENT\"" 2>&1)
+            status=status+$?; (( $status )) && infoLine "$rerror\n";
+
+            (( $status )) && {
+                infoLine "WARNING: $0: Unable to setup client host $host."
+                checkHost -r $host
+            }
+        fi
+        c=c+1
+    done
+} #end setupClient()
+
+
+
+## Function:    startSync()
+## Purpose:     start clientwait process which is the mechanism used for
+##              synchronizing the clientwrapper/client RPC daemon(s).
+##
+startSync() {
+    (( $DEBUG )) && set -x
+    integer status=0 c=0
+
+    infoLine "\n\nStarting sync process on clients:\n"
+    for host in $HOSTS
+    do
+        if (( $c < 5 ))
+        then
+            infoLine "\t$host\c"
+        else
+            infoLine "\t$host\n"
+            c=0
+        fi
+        rerror=$($RSHELL $host -n "/bin/ksh -c \"export WORKDIR=$WORKDIR; cd $WORKDIR; ./clientwait 1>&- 2>&- &\"" 2>&1)
+        status=status+$?
+        (( $status )) && {
+            infoLine "WARNING: $0: Unable to start synchronization process on client $host."
+            infoLine "$rerror\n"
+            checkHost -r $host
+        }
+        c=c+1
+    done
+} #end startSync()
+
+
+
+## Function:    startClient()
+## Purpose:     start the clientwrapper process which waits on the clientwait
+##              process before any client RPC daemon(s) are started.
+##
+startClient() {
+    (( $DEBUG )) && set -x
+    integer c=0 status=0
+
+    infoLine "\n\nStarting client wrapper process on clients:\n"
+    for host in $HOSTS
+    do
+        if (( $c < 5 ))
+        then
+            infoLine "\t$host\c"
+        else
+            infoLine "\t$host\n"
+            c=0
+        fi
+        rerror=$($RSHELL $host -n "/bin/ksh -c \"export SERVER=$THISHOST; \
+                                        export CONCURRENT=$CONCURRENT; \
+                                        export LOOPS=$CLIENTLOOPS; \
+                                        export ENDPOINT=$ENDPOINT; \
+                                        export WORKDIR=$WORKDIR; \
+                                        cd $WORKDIR; ./clientwrapper 1>&- 2>&- &\"" 2>&1)
+        status=$?
+        (( $status )) && {
+            infoLine "WARNING: $0: Unable to start client process on client host $host."
+            infoLine "$rerror\n"
+            checkHost -r $host
+        }
+        c=c+1
+    done
+} #end startClient()
+
+
+
+## Function:    stopSync()
+## Purpose:     stop the clientwait sync process to allow the clientwrapper
+##              process to start client RPC daemon(s).
+##
+stopSync() {
+    (( $DEBUG )) && set -x
+    integer status=0 c=0
+
+    infoLine "\n\nStopping sync/wait process on clients:\n"
+    for host in $HOSTS
+    do
+        if (( $c < 5 ))
+        then
+            infoLine "\t$host\c"
+        else
+            infoLine "\t$host\n"
+            c=0
+        fi
+        rerror=$($RSHELL $host -n "$KILL_WAIT 1>&- 2>&- &" 2>&1)
+        status=status+$?
+        (( $status )) && {
+            infoLine "WARNING: $0: Unable to stop synchronization process on client $host, continuing test."
+            infoLine "$rerror\n"
+            checkHost -r $host
+        }
+        c=c+1
+    done
+} #end stopSync()
+
+
+
+## Function:    checkClient()
+## Purpose:     check for clientwrapper parent process running on all
+##              clients and waiting on those processes before dumping
+##              the database and stopping the server.
+##
+checkClient() {
+    (( $DEBUG )) && set -x
+    integer i=0 n=5 retry=0 alive=$NHOSTS j=0 ISt=$SECONDS
+    for h in $HOSTS;do hosts[$i]=$h; i=i+1;done
+
+    infoLine "\n\nWaiting for $1 pid(s) to exit.\c"
+    while (( $alive ))
+    do
+        infoLine ".\c"
+        while (( $i < ${#hosts[*]} && $alive ))
+        do
+            [[ "${hosts[$i]}" != "" ]] && {
+            rerror=$($RSHELL ${hosts[$i]} -n "$PSCMD" > $WORKDIR/ps.out)
+            if (( !$? ))
+            then 
+                pid=$(egrep $1 $WORKDIR/ps.out | egrep -v 'sh|ps|grep' | awk '{print $2}')
+                if [ ! -z "$pid" ]
+                then
+                    (( $(( SECONDS-ISt )) > $MAXRUNTIME )) && {
+                        infoLine "ERROR: $0: process $1 on ${hosts[$i]} has been running for more than 10 minutes."
+                        infoLine "ERROR: $0: Check client for loop problem, killing client process on $host."
+                        rerror=$($RSHELL ${hosts[$i]} -n /bin/kill -9 $pid 2>&1)
+                        infoLine "$rerror\n"
+                    }
+                else
+                    (( $alive > 0 )) && alive=alive-1
+                    hosts[$i]=""
+                fi
+            else
+                infoLine "ERROR: $0: Unable to contact client host ${hosts[$i]} via $RSHELL."
+                infoLine "WARNING: $0: Manual cleanup of client host ${hosts[$i]} may be neccessary."
+                checkHost -r ${hosts[$i]}
+                alive=alive-1
+                hosts[$i]=""
+            fi
+            }
+            i=i+1
+        done
+        (( $alive )) && sleep 5
+        i=0
+    done
+    infoLine "\n\n"
+} #end checkClient()
+
+
+
+## Function:    dumpDatabase()
+## Purpose:     dumps information from the server database and
+##              write it to the server.log file, return status
+##              is sum of all client status.
+##
+dumpDatabase() {
+    (( $DEBUG )) && set -x
+    integer status=0
+    typeset -i2 lmask=$(( (255<<8) ))
+    typeset -i2 hmask=$(( 255 ))
+
+    if (( ${#*} ))
+    then
+        infoLine "Getting test results from database."
+    else
+        infoLine "\nDumping final test results to $SERVER_LOGFILE"
+    fi
+
+    status=$(${WORKDIR}/dumpDB ${1} $(cat ${ENDPOINT}))
+    D_HOSTS=$(( status&hmask ))
+    D_LOOPS=$(( (status&lmask)>>8 ))
+    D_STATUS=$(( status>>16 ))
+} #end dumpDatabase()
+
+
+
+## Function:    readDBDump()
+## Purpose:     read into tet_infoline the output from the server DB dump.
+##
+readDBDump() {
+    (( $DEBUG )) && set -x
+
+    exec 5< $WORKDIR/server.log
+
+    while read -u5 line
+    do
+        tet_infoline "$line"
+    done
+    exec 5<&-
+}
+
+
+
+## Function:    cleanupClient()
+## Purpose:     clean em all up.
+##
+cleanupClient() {
+    (( $DEBUG )) && set -x
+    integer status=0 c=0
+
+    infoLine "\nCleaning up clients:\n"
+    for host in $HOSTS
+    do
+        if (( $c < 5 ))
+        then
+            infoLine "\t$host\c"
+        else
+            infoLine "\t$host\n"
+            c=0
+        fi
+        rerror=$($RSHELL $host -n "/bin/ksh -c \"export WORKDIR=$WORKDIR; if [ -d $WORKDIR ];then rm -r $WORKDIR;fi\"" 2>&1)
+        status=$?
+        if (( $status ))
+        then
+            infoLine "ERROR: $0: Unable to remove directory $WORKDIR on client host $host, error is:"
+            infoLine "$rerror\n"
+            infoLine "WARNING: $0: Manual cleanup may be neccessary for client host $host."
+        fi
+        c=c+1
+    done
+    infoLine " "
+
+} #end cleanupClient()
+
+. $TET_ROOT/profile.dcest
+. ./dcerpcrun.functions
+. ./dcerpcrun.data
+. $TET_ROOT/lib/ksh/tcm.ksh

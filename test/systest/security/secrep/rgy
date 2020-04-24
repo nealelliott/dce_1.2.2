@@ -1,0 +1,345 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+#
+# HISTORY
+# $Log: rgy,v $
+# Revision 1.1.2.2  1996/03/09  20:52:04  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:43  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:19  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:03 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  20:00 UTC  bissen
+# 	 merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:54 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  19:35 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 	[1995/12/11  22:22:26  root]
+# 
+# Revision 1.1.2.3  1993/08/11  13:24:34  sekhar
+# 	Removed incorrect break out of case stmnt.
+# 	Fixed rgy_get_state.
+# 	[1993/08/11  13:15:51  sekhar]
+# 
+# Revision 1.1.2.2  1993/08/02  17:40:28  sekhar
+# 	Replication system test. Initial version
+# 	[1993/08/02  17:30:06  sekhar]
+# 
+# $EndLog$
+#
+#
+#  History of changes 
+#
+#  In rgy_cmp_db
+
+if [ -z "${RGY_DEFINED}" ] ; then
+
+RGY_DEFINED=1
+
+. $PHOME/profile
+. $PHOME/replog
+. $PHOME/repdb
+. $PHOME/sa
+. $PHOME/secd
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  OBJECT : 
+#      Registry Databases of slaves or master. 
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+#-----------------------------------------------------------------------
+#  rgy_cmp_dbfile : Compares the print file obtained from 
+#                   sec_salvage_db on two replicas (replica 
+#                   can be either a master or slave ).
+#
+#  IN  : arg1 ..... hostname where first  replica is running
+#        arg2 ..... hostname where second replica is running
+#        arg3 ..... name of the print file (e.g. princ.prt)
+#
+#  RETURNS : 0 if file is consistent
+#            1 if file is not consistent
+#-----------------------------------------------------------------------
+
+rgy_cmp_dbfile()
+{
+    typeset st f1 f2
+
+    st=0
+    f1=$LOGS_DIR/$1/rgy_print/$3
+    f2=$LOGS_DIR/$2/rgy_print/$3
+
+    case $3 in
+
+    replicas.prt)
+        sed -e /Propagation_Type/D -e /Initialization_UUID/D \
+             $f1 > $rgy_tmpf1 ;
+        sed -e /Propagation_Type/D -e /Initialization_UUID/D \
+             $f2 > $rgy_tmpf2 ;
+        diff -b $rgy_tmpf1 $rgy_tmpf2 > $rgy_tmpf3 ;
+        st=$? ;
+        ;;
+
+    policy.prt)
+        sed -e /My_Name/D -e /Master_Key/D $f1 > $rgy_tmpf1 ;
+        sed -e /My_Name/D -e /Master_Key/D $f2 > $rgy_tmpf2 ;
+        diff -b $rgy_tmpf1 $rgy_tmpf2 > $rgy_tmpf3 ;
+        st=$? ;
+        ;;
+
+    rgy_state.prt)
+        sed -e /Server_UUID/D -e /Initialization_UUID/D  \
+            $f1 > $rgy_tmpf1 ;
+        sed -e /Server_UUID/D -e /Initialization_UUID/D  \
+            $f2 > $rgy_tmpf2 ;
+        diff -b $rgy_tmpf1 $rgy_tmpf2 > $rgy_tmpf3 ;
+        st=$? ;
+        ;;
+ 
+    princ.prt)
+        sed -e /Master_Key_Version/D $f1 > $rgy_tmpf1 ;
+        sed -e /Master_Key_Version/D $f2 > $rgy_tmpf2 ;
+        diff -b $rgy_tmpf1 $rgy_tmpf2 > $rgy_tmpf3 ;
+        st=$? ;
+        ;;
+
+    group.prt|org.prt)
+        diff  -b $f1 $f2 > $rgy_tmpf3 ;
+        st=$?
+        ;;
+
+    *)
+        replog_interr "Unknown registry database file"
+        ip=`expr $il - 1` ; return 1 ;
+        ;;
+
+    esac
+
+    if [ $st -ne 0 ] ; then
+        replog_error "$3 is inconsistent"
+        cat $rgy_tmpf3
+        st=1
+    else
+        replog_msg "$3 is consistent"
+    fi 
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#   rgy_cmp_db : Checks the consitency of each of the slave 
+#                registries against the master registry.
+#
+#   IN arg1 ...  List of host names 
+#      arg2 ...  Corresponding list of replica names
+#   
+#   RETURNS .... 0 if all databases are consistent ; otherwise 1 
+#-----------------------------------------------------------------------
+
+rgy_cmp_db()
+{
+    typeset i fail st1 st2 st3 st4 st5 st6 r_list h_list
+
+    set -A h_list $1 ; set -A r_list $2
+    replog_msg "Attempting to verify registry database consistency between master"
+    replog_msg "and replicas ${r_list[*]}"
+    let IL=IL+1
+    secd_stop "$MASTER_HOSTNAME ${h_list[*]}" "$MASTER_NAME ${r_list[*]}" ; st1=$?
+    if [ $st1 -ne 0 ] ; then
+        replog_abort "rgy_cmp_db" "secd_stop"
+        let IL=IL-1 ; return $st1
+    fi
+#     
+#   run sec_salavage_db on hosts.
+#
+    for i in $MASTER_HOSTNAME ${h_list[*]} 
+    do
+        $RSH_COMM $i ". $PHOME/profile ;                     \
+                cd $LOGS_DIR/$i ; sec_salvage_db -print;  \
+                chmod -R g+rx,o+rx rgy_print "
+    done
+#
+#   Compare databases
+#
+    fail=0
+    for i in ${h_list[*]} 
+    do
+        replog_msg "Checking registry consistency between $i and $MASTER_HOSTNAME"
+        let IL=IL+1
+        rgy_cmp_dbfile $i $MASTER_HOSTNAME princ.prt     ; st1=$?
+        rgy_cmp_dbfile $i $MASTER_HOSTNAME group.prt     ; st2=$?
+        rgy_cmp_dbfile $i $MASTER_HOSTNAME org.prt       ; st3=$?
+        rgy_cmp_dbfile $i $MASTER_HOSTNAME policy.prt    ; st4=$?
+        rgy_cmp_dbfile $i $MASTER_HOSTNAME replicas.prt  ; st5=$?
+        rgy_cmp_dbfile $i $MASTER_HOSTNAME rgy_state.prt ; st6=$?
+        if [[ $st1 -ne 0 || $st2 -ne 0 || $st3 -ne 0 || \
+              $st4 -ne 0 || $st5 -ne 0 || $st6 -ne 0 ]] ; then
+            fail=1
+        fi
+        let IL=IL-1 
+    done
+
+    for i in $MASTER_HOSTNAME ${h_list[*]}
+    do
+        rm -rf $LOGS_DIR/$i/rgy_print
+    done
+
+    secd_start "${h_list[*]}" "${r_list[*]}" ; st1=$?
+    if [ $st1 -ne 0 ] ; then
+        replog_abort "rgy_cmp_db" "secd_start"
+        let IL=IL-1 ; return $st1
+    fi
+
+#
+#   note that master must be started after
+#   all the slave because if there are more
+#   than two slaves when master comes up then
+#   two or more propagation tasks are started
+#   and this needs to be tested.
+#
+    secd_start $MASTER_HOSTNAME $MASTER_NAME ; st1=$?
+    if [ $st1 -ne 0 ] ; then
+        replog_abort "rgy_cmp_db" "secd_start"
+        let IL=IL-1 ; return $st1
+    fi
+
+    sa_wait_prop_complete "${r_list[*]}" ; st1=$?
+    if [ $st1 -ne 0 ] ; then
+        replog_abort "sa_wait_prop_complete" "secd_start"
+        let IL=IL-1 ; return $st1
+    fi
+
+    let IL=IL-1
+
+    if [ $fail -ne 0 ] ; then
+        replog_error "At least one registry was not consistent with master registry"
+    else 
+        replog_msg   "Successfully verified registries are consistent"
+    fi
+    return $fail
+}
+
+#-----------------------------------------------------------------------
+#   rgy_delete - Deletes the registry on the specified host
+#
+#   IN  : arg1 ..... Hostname where the registry is to be deleted.
+#-----------------------------------------------------------------------
+
+rgy_delete()
+{
+    replog_msg "Deleting registry on $1"
+    $RSH_COMM $1 "  rm -rf $DCELOCAL/var/security/rgy_data \
+            ; rm -f $DCELOCAL/var/security/.mkey"
+}
+
+#-----------------------------------------------------------------------
+#  rgy_get_state
+#      Gets the information about registry (exists or does not exist)
+#      on the specified host list in the array ST_RGY .
+#   
+#  IN : arg1 ..... Array of host names separted by a white space e.g. "x y z"
+#
+#  OUT : ST_RGY . Array of entries with one entry for each host. 
+#                 An entry contains the status of registry on the host.
+#
+#-----------------------------------------------------------------------
+
+rgy_get_state()
+{
+    typeset i hostlist filecnt
+   
+    set -A hostlist $1 
+    i=0
+    while [ $i -lt ${#hostlist[*]} ]
+    do
+
+    #   Currently a slave which has been deleted or destroyed has 
+    #   no files in the rgy_data directory even though the rgy_data and 
+    #   .mkey file exist . In such a case, the registry is considered
+    #   to not exist. This hack is so that the cleanup code in slv_cleanup()
+    #   will function correctly.
+
+    #   if [[ -d $NET/$1/$DCELOCAL/var/security/rgy_data ] ; then
+    #       ST_RGY[i]=ST_RGY_EXISTS
+    #   else
+    #       ST_RGY[i]=ST_RGY_NOTEXIST
+    #   fi
+
+        filecnt=`ls $NET/${hostlist[i]}$DCELOCAL/var/security/rgy_data | wc -l`
+        if [ $filecnt -ne 0 ] ; then
+            ST_RGY[i]=ST_RGY_EXISTS
+        else
+            ST_RGY[i]=ST_RGY_NOTEXIST
+        fi
+        i=`expr $i + 1`
+    done
+}
+
+#-----------------------------------------------------------------------
+#  rgy_print_state
+#      Prints the state about registry on the list of hosts
+#
+#  IN : arg1 .. Array of host names e.g. "x y z".
+#   
+#-----------------------------------------------------------------------
+
+rgy_print_state()
+{
+    typeset i hostlist
+   
+    set -A hostlist $1 
+    rgy_get_state "${hostlist[*]}"   # Sets ST_RGY
+    i=0
+    while [ $i -lt ${#hostlist[*]} ]
+    do
+        if [ ${ST_RGY[i]} -eq $ST_RGY_EXISTS ] ; then
+            replog_msg "Registry exists on host ${hostlist[i]}"
+        else
+            replog_msg "Registry does not exist on host ${hostlist[i]}"
+        fi
+        i=`expr $i + 1`
+    done
+}
+
+#-----------------------------------------------------------------------
+#  rgy_print_state_all
+#      Prints the state about registry (exists or does not exist) 
+#      on all the security slaves and the master configured in the cell.
+#
+#-----------------------------------------------------------------------
+
+rgy_print_state_all()
+{
+    typeset hostlist 
+    
+    repdb_get_replist # Sets REP_NAME and REP_HOSTNAME
+    rgy_print_state ${REP_HOSTNAME[*]}
+}
+
+rgy_init()
+{
+    rgy_tmpf1=/tmp/rgy_tmpf1_`uname -n`
+    rgy_tmpf2=/tmp/rgy_tmpf2_`uname -n`
+    rgy_tmpf3=/tmp/rgy_tmpf3_`uname -n`
+}
+
+rgy_global_cleanup()
+{
+    rm -f $rgy_tmpf1 $rgy_tmpf2 $rgy_tmpf3
+}
+
+fi

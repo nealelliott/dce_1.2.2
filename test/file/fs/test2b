@@ -1,0 +1,736 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: test2b,v $
+# Revision 1.1.10.1  1996/10/17  18:20:09  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:50:43  damon]
+#
+# Revision 1.1.4.5  1993/01/11  18:26:51  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:00:27  htf]
+# 
+# Revision 1.1.4.4  1992/10/28  16:22:07  jaffe
+# 	Transarc delta: fred-ot5472-use-testhome-variable 1.1
+# 	  Selected comments:
+# 	    Fixed the fs and low tests to correctly use TESTTOP.  We were setting a
+# 	    variable, testhome, as the location for the test scripts and executables,
+# 	    but we did not use it to execute C programs.
+# 	    (I checked out some scripts which did not need this change.)
+# 	    No changes made.
+# 	Transarc delta: jess-add-dumpkernel-in-fs-tests 1.3
+# 	  Selected comments:
+# 	    The icldump command and debug option for the tests have been added in the
+# 	    fs test scripts. You can run fs/tests with -debug to dump kernel in case
+# 	    of error. The delta also adds the icl_DumpKernel function in the C programm.
+# 	    See above.
+# 	    Put the debug option in test1.
+# 	    When the debug is set the dumpfile is always created eventhough
+# 	    there is no error.
+# 	Transarc delta: jess-ot5320-fix-fs-low-testhome 1.1
+# 	  Selected comments:
+# 	    The fs and low test shell scripts have the following if statement
+# 	    if [ "$TESTTOP" = "`pwd`" ]
+# 	    then
+# 	    UTIL_DIR=../util
+# 	    testhome=$TESTTOP
+# 	    else
+# 	    UTIL_DIR=$TESTTOP/util
+# 	    testhome=$TESTTOP/$testSuiteType
+# 	    fi
+# 	    The problem is that variable testSuiteType is not defined at this time.
+# 	    See above.
+# 	[1992/10/27  18:17:11  jaffe]
+# 
+# Revision 1.1.4.3  1992/09/28  22:08:22  rsarbo
+# 	fixed various syntax errors.
+# 	[1992/09/02  17:59:38  rsarbo]
+# 
+# Revision 1.1.4.2  1992/08/28  18:12:09  jaffe
+# 	Transarc delta: mcinerny-fix-merge-makefile-refs-wrong-files 1.5
+# 	  Selected comments:
+# 	    (see below)
+# 	    Couple of typos
+# 	    Couple of minor changes to get tests running more smoothly.
+# 	    Fixed missing close bracket (thanks Bruce)
+# 	Transarc delta: rajesh-clean-fs-tests 1.6
+# 	  Selected comments:
+# 	    To remove make, clean options from fs tests
+# 	    Really no change
+# 	    Make the scripts modular, structured.
+# 	    The variable names are changed to follow coding standards.
+# 	    See above.
+# 	    Apply modification mentioned in revision 1.2 to 2 missed test file
+# 	    err1 and err2.
+# 	    Some bug fixes, and revision of tests err1 and err2. Introduction of
+# 	    a common functions ProcessResult to analyse the result.
+# 	    See above.
+# 	    Further changes to some utility functions.
+# 	    Added error test err2 to the Makefile
+# 	[1992/08/28  12:18:49  jaffe]
+# 
+# Revision 1.1.2.3  1992/05/29  22:58:33  mason
+# 	Transarc delta: fred-3754-change-script-name 1.1
+# 	  Selected comments:
+# 	    To clean up a number of defects with the tests.  In addition to defect
+# 	    3754, the changes also fix defects 3750 and 3748.
+# 	    Fixed setting of TESTTOP variable.
+# 	[1992/05/28  22:22:02  mason]
+# 
+# Revision 1.1.2.2  1992/05/21  12:40:28  jaffe
+# 	Transarc delta: fred-2980-and-2981-fix-sys 1.1
+# 	  Files modified:
+# 	    fs: Makefile, err1, err2, half_meg, test1, test10, test2
+# 	    fs: test2b, test2s, test3, test4, test5, test6, test7, test8
+# 	    fs: test9
+# 	  Selected comments:
+# 	    To fix reported defects indicating files could not be found.  Added two
+# 	    shell scripts, one to issue the correct command to get the system type
+# 	    (either AFS or DFS), and a second to generate a file from a string.
+# 	    Change variable sys to dfs_fsSysName and use fsSetSysName shell script.
+# 	Transarc delta: fred-merge-tests 1.1
+# 	   Selected comments:
+# 	    Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	    the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	    should be looking at the same test code.
+# 	    Changes to facilitate merge of local DFS test code with the OSF's.
+# 	Transarc delta: fred-remove-sys 1.1
+# 	  Files modified:
+# 	    Makefile; cm: runtests, test0, test3, test4, test6
+# 	    fs: Makefile, err1, err2, rtest1, test10, test2, test2b
+# 	    fs: test2s, test3, test4, test5, test6, test7, test8, test9
+# 	    low: progErrMap.c, rprogErrMapQuota.c, rtest1, rtest2
+# 	    low: rtestErrMapQuota, test1, test10, test11, test12, test13
+# 	    low: test14, test2, test3, test4, test5, test6, test7, test8
+# 	    low: test9, testErrMap
+# 	    util: Makefile, fs_GenerateFile, fs_SetSysName
+# 	  Selected comments:
+# 	    To remove dependency on the AFS sys command in the test scripts.
+# 	    To remove dependency on AFS sys command.
+# 
+# 	$TALog: test2b,v $
+# 	Revision 4.23  1994/11/01  22:23:10  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r4.22 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	[1992/05/20  19:07:52  jaffe]
+# 
+# $EndLog$
+#
+###############################################################################
+#    Copyright (C) 1990, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This script performs a variety of standard file operations, like creating,
+# appending, modifying, linking (hard and symbolic), renaming, and removing.
+# Multiple process can be run at once; each runs in its own subdirectory.
+# This test uses bigger files than test2 does.
+
+# Usage: test2b [-np #-processes] [-nt #-times] [-p directory-prefix]
+
+# Note:  default is test2b -np 1 -nt 1 -p "."
+
+# Highest error number is: 45.
+
+###############################################################################
+
+#
+# PrintUsage() -
+#   Prints the usage message for this script.
+
+PrintUsage()
+{
+    echo "$programName tests common Unix file operations"
+    echo "Usage: $programName [-np #-procs] [-nt #-times] [-p prefix]"
+}
+
+#
+# Initialise some variables. UTIL_DIR is the directory containing 
+# the script fs_FunctionsScript with common functions.
+#
+
+TESTTOP=${TESTTOP:="`pwd`"}
+
+if [ "$TESTTOP" = "`pwd`" ]
+then
+    UTIL_DIR=../util
+    testhome=$TESTTOP
+else
+    UTIL_DIR=$TESTTOP/util
+    testhome=$TESTTOP/fs
+fi
+
+. $UTIL_DIR/fs_FunctionsScript
+. $UTIL_DIR/fs_SetSysVar
+createFileCmd="$UTIL_DIR/fs_GenerateFile"
+
+trap '
+    echo "Got kill signal - waiting for kids to die..." | tee -a $logFile
+    wait
+    cd $currentDir
+    rm -rf $prefix$programName.$$.[0-9]* sortdir error.$$
+    echo "$programName killed; returning $scriptErrorExit" | tee -a $logFile
+    exit $scriptErrorExit
+     ' 2 3 15
+
+#
+# Initialise setup variables
+#
+
+fs_InitSetup fs
+
+#
+# Default option argument values
+#
+
+processCount=1
+iterationCount=1
+prefix=""
+
+#
+# Parse the command line
+#
+
+while [ "$1" != "" ]
+do 
+    case $1 in 
+        help|-help) PrintUsage
+                    exit $successExit
+                    ;;
+
+        np|-np)     CheckOptionValue "np" $testSuiteType $programName $*
+                    processCount=$2
+                    shift
+                    shift
+                    ;;
+
+        nt|-nt)     CheckOptionValue "nt" $testSuiteType $programName $*
+                    iterationCount=$2
+                    shift
+                    shift
+                    ;;
+
+        p|-p)       CheckOptionValue "p" $testSuiteType $programName $*
+                    prefix=$2
+                    shift
+                    shift
+                    ;;
+
+        *)          echo "ERROR $testSuiteType/$programName: invalid argument \"$1\"" | tee -a $logFile
+                    exit $scriptErrExit
+                    ;;
+    esac
+done
+
+#
+# Validate arguments
+#
+
+if [ $processCount -lt 1 ]
+then 
+    echo "$programName: number of processes must be >= 1" | tee -a $logFile
+    exit $scriptErrorExit
+elif [ $iterationCount -lt 0 ]
+then 
+    echo "$programName: number of times must be >= 0" | tee -a $logFile
+    exit $scriptErrorExit
+fi
+
+
+#
+# Start test
+#
+
+(
+    echo "$programName (big beater) starting in $currentDir"
+    echo "Host `hostname` ($fs_sysName)"
+    date
+) | tee -a $logFile
+
+echo "Prefix $prefix; $processCount processes; $iterationCount times; parent process number $$" |
+   tee -a $logFile
+
+fs_DetermineFSType
+
+rm -rf $currentDir/sortdir; mkdir $currentDir/sortdir
+if [ $? -ne 0 ]
+then 
+    echo "- $programName EXITING EARLY: mkdir failed (E1)" | tee -a $logFile
+    exit $testErrorExit
+fi
+
+passedIterationCount=0
+failedIterationCount=0
+
+iterationNum=1
+while [ $iterationNum -le $iterationCount -o $iterationCount -eq 0 ]
+do
+    (
+        echo ""
+        echo "$programName starting iteration number $iterationNum"
+        date
+    ) | tee -a $logFile
+    date1=`date`
+
+    processNum=1
+    while [ $processNum -le $processCount ]
+    do
+        echo "   $programName starting process number $processNum, iteration $iterationNum" | tee -a $logFile
+        (
+            errorCount=0
+            u="$prefix"$programName.$$.$processNum
+            rm -rf $u; mkdir $u
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: mkdir failed (E2)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+            cd $u
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: cd failed (E3)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            echo "This is a test of the emergency broadcast system." > orig
+            echo "This is only a test." >> orig
+            echo "Do not attempt to adjust your set!!" >> orig
+            echo "This is only a test." >> orig
+            cat orig orig orig orig orig orig orig orig > o1
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: cat failed (E4)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+            cat o1 o1 o1 o1 o1 o1 o1 o1 o1 o1 o1 o1 o1 o1 o1 o1 > orig
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: cat failed (E5)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+            cat orig orig orig orig orig orig orig orig > o1
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: cat failed (E6)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+            mv o1 orig
+            sz=`cat orig | wc -c`; sz=`expr $sz`
+            if [ $sz -ne 131072 ]
+            then 
+                echo "- $programName process $processNum: orig size is $sz, not 131072 (E7)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            date > sorted; sort -T $currentDir/sortdir < orig > sorted
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: sort failed (E8)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+            wc orig > orig.wc; wc sorted > sorted.wc
+            sz=`cat sorted | wc -c`
+            sz=`expr $sz`
+            if [ $sz -ne 131072 ]
+            then 
+                echo "- $programName process $processNum: sorted size is $sz, not 131072 (E9)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            cp sorted s1
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: copy to s1 failed (E10)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+            cmp sorted s1 > /dev/null 2> /dev/null
+            if [ $? -ne 0 ]
+            then echo "- $programName process $processNum: cmp is wrong (E11)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            cp sorted.wc s2
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: copy to s2 failed (E12)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+            mv s1 s2
+            cmp sorted s2 > /dev/null 2> /dev/null
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: cmp is wrong (E13)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            ln orig hardwc
+            cmp orig hardwc > /dev/null 2> /dev/null
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: cmp is wrong (E14)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            ln -s sorted symwc
+            cmp s2 symwc > /dev/null 2> /dev/null
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: cmp is wrong (E15)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            mv hardwc hwc
+            cmp orig hwc > /dev/null 2> /dev/null
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: cmp is wrong (E16)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            mv symwc swc
+            cmp sorted swc > /dev/null 2> /dev/null
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: cmp is wrong (E17)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            mkdir x y z
+            if [ $? -ne 0 ]
+            then  
+                echo "- $programName process $processNum: mkdir failed (E18)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            ln -s z zz
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: ln -s failed (E19)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            mv x xx
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: mv failed (E20)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            mv sorted.wc y
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: mv failed (E21)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            mv hwc xx
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: mv failed (E22)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            cmp orig xx/hwc > /dev/null 2> /dev/null
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: cmp is wrong (E23)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            cp swc xx
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: copy to xx failed (E24)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            cmp s2 xx/swc > /dev/null 2> /dev/null
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: cmp is wrong (E25)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            if [ `ls | wc -l` -ne 9 ]
+            then 
+                echo "- $programName process $processNum: extra files (E26)" | tee -a $logFile
+                ls
+                ls | wc -l
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            rm orig.wc s2 sorted swc xx/*
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: rm failed (E27)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            rm -r y
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: rm failed (E28)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            rmdir xx z
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: rmdir failed (E29)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+            rm zz
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: rm failed (E30)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+
+
+            for f in f1 f2 f3 f4 f5 f6 f7 f8
+            do
+                cp orig $f
+                if [ $? -ne 0 ]
+                then 
+                    echo "- $programName process $processNum: copy to $f failed (E31)" | tee -a $logFile
+                    touch $currentDir/error.$$
+                exit $testErrorExit
+                fi
+                sz=`cat $f | wc -c`; sz=`expr $sz`
+                if [ $sz -ne 131072 ]
+                then 
+                    echo "- $programName process $processNum: $f size is $sz, not 131072 (E32)" |
+                     tee -a $logFile
+                    touch $currentDir/error.$$
+                exit $testErrorExit
+                fi
+            done
+    
+            for f in f1 f2 f3 f4 f5 f6 f7 f8
+            do
+                cmp orig $f > /dev/null 2> /dev/null
+                if [ $? -ne 0 ]
+                then 
+                    echo "- $programName process $processNum: $f is wrong (E33)" | tee -a $logFile
+                    touch $currentDir/error.$$
+                exit $testErrorExit
+                fi
+    
+                rm $f
+                if [ $? -ne 0 ]
+                then 
+                    echo "- $programName process $processNum: rm failed (E34)" | tee -a $logFile
+                    touch $currentDir/error.$$
+                exit $testErrorExit
+                fi
+            done
+    
+            if [ `ls | wc -l` -ne 1 ]
+            then 
+                echo "- $programName process $processNum: extra files (E35)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+    
+            for dir in d1 d2 d3 d4 d5 d6 d7 d8
+            do
+                mkdir $dir
+                if [ $? -ne 0 ]
+                then 
+                    echo "- $programName process $processNum: mkdir failed (E36)" | tee -a $logFile
+                    touch $currentDir/error.$$
+                exit $testErrorExit
+                fi
+        
+                cp orig $dir
+                if [ $? -ne 0 ]
+                then 
+                    echo "- $programName process $processNum: copy to $dir failed (E37)" | tee -a $logFile
+                    touch $currentDir/error.$$
+                exit $testErrorExit
+                fi
+        
+                sz=`cat $dir/orig | wc -c`; sz=`expr $sz`
+                if [ $sz -ne 131072 ]
+                then 
+                    echo "- $programName process $processNum: $dir/orig size is $sz, not 131072 (E38)" | tee -a $logFile
+                    touch $currentDir/error.$$
+                exit $testErrorExit
+                fi
+            done
+    
+            for dir in d1 d2 d3 d4 d5 d6 d7 d8
+            do
+                cmp orig $dir/orig > /dev/null 2> /dev/null
+                if [ $? -ne 0 ]
+                then 
+                    echo "- $programName process $processNum: $dir/orig is wrong (E39)" | tee -a $logFile
+                    touch $currentDir/error.$$
+                exit $testErrorExit
+                fi
+    
+                rm $dir/orig
+                if [ $? -ne 0 ]
+                then 
+                    echo "- $programName process $processNum: rm failed (E40)" | tee -a $logFile
+                    touch $currentDir/error.$$
+                exit $testErrorExit
+                fi
+    
+                rmdir $dir
+                if [ $? -ne 0 ]
+                then 
+                    echo "- $programName process $processNum: rmdir failed (E41)" | tee -a $logFile
+                    touch $currentDir/error.$$
+                exit $testErrorExit
+                fi
+            done
+    
+            rm orig
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: rm failed (E42)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+    
+            if [ `ls | wc -l` -ne 0 ]
+            then 
+                echo "- $programName process $processNum: extra files (E43)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+    
+            cd $currentDir
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: cd failed (E44)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+    
+            rm -r $u
+            if [ $? -ne 0 ]
+            then 
+                echo "- $programName process $processNum: rm failed (E45)" | tee -a $logFile
+                touch $currentDir/error.$$
+                exit $testErrorExit
+            fi
+            echo "  $programName process number $processNum, iteration $iterationNum, passed" | tee -a $logFile
+        ) &
+
+        processNum=`expr $processNum + 1`
+    done
+
+    date | tee -a $logFile; wait; date | tee -a $logFile
+
+    date2=`date`
+
+    hour1=`echo $date1 | sed 's/^... ... [0-9]* \(..\).*/\1/'`
+    minute1=`echo $date1 | sed 's/^... ... [0-9]* ..:\(..\).*/\1/'`
+    second1=`echo $date1 | sed 's/^... ... [0-9]* ..:..:\(..\).*/\1/'`
+    hour2=`echo $date2 | sed 's/^... ... [0-9]* \(..\).*/\1/'`
+    minute2=`echo $date2 | sed 's/^... ... [0-9]* ..:\(..\).*/\1/'`
+    second2=`echo $date2 | sed 's/^... ... [0-9]* ..:..:\(..\).*/\1/'`
+
+    if [ $second2 -lt $second1 ]
+    then 
+        second2=`expr $second2 + 60`
+        minute2=`expr $minute2 - 1`
+    fi
+
+    if [ $minute2 -lt $minute1 ]
+    then 
+        minute2=`expr $minute2 + 60`
+        hour2=`expr $hour2 - 1`
+    fi
+
+    if [ $hour2 -lt 0 ]
+    then 
+        hour2=$hour1
+    fi
+
+    es=`expr $second2 - $second1`
+    em=`expr $minute2 - $minute1`
+    eh=`expr $hour2 - $hour1`
+    elapsedTime=`expr $es + $em \* 60 + $eh \* 3600`
+
+    echo "Elapsed time for iteration #$iterationNum is $elapsedTime seconds." | tee -a $logFile
+
+    ef=0
+    if [ -f $currentDir/error.$$ ]
+    then 
+        ef=1
+        errorCount=1
+        rm -f $currentDir/error.$$
+    fi 
+
+    if [ $ef -eq 0 ]
+    then 
+        echo "Iteration $iterationNum PASSED" | tee -a $logFile
+        passedIterationCount=`expr $passedIterationCount + 1`
+   else 
+        echo "Iteration $iterationNum FAILED" | tee -a $logFile
+        failedIterationCount=`expr $failedIterationCount + 1`
+   fi
+
+    echo "$passedIterationCount successful iterations so far; $failedIterationCount failures." | tee -a $logFile
+
+    if [ $fsType = $DFS ] 
+    then 
+        cm lsstores
+    fi
+
+    iterationNum=`expr $iterationNum + 1`
+done
+
+###############################################################################
+
+cd $currentDir; rm -rf "$prefix"$programName.$$.[0-9]* sortdir error.$$
+
+(
+    echo ""
+    echo "$testSuiteType/$programName returning $errorCount in $currentDir"
+    date
+) | tee -a $logFile
+
+exit $errorCount
+
+###############################################################################

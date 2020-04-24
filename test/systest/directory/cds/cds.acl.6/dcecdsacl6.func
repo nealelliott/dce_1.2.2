@@ -1,0 +1,682 @@
+#!/bin/ksh 
+# @HP_COPYRIGHT@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dcecdsacl6.func,v $
+# Revision 1.1.9.2  1996/03/09  20:50:38  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:28:42  marty]
+#
+# Revision 1.1.9.1  1995/12/11  21:56:21  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:46 UTC  bell_d
+# 	Changes by others
+# 
+# 	HP revision /main/HPDCE01/bissen_systest/1  1994/03/18  19:33 UTC  bissen
+# 	fix wildcards for cell w/DFS
+# 
+# 	HP revision /main/HPDCE01/1  1994/01/25  18:23  bissen
+# 	merge kk and hpdec01
+# 	[1995/12/11  20:56:12  root]
+# 
+# Revision 1.1.2.2  1993/08/19  18:07:55  bissen
+# 	Initial kk branch
+# 	[1993/08/19  18:07:22  bissen]
+# 
+# $EndLog$
+
+# To exit TET gracefully: Delete test purposes.
+del_test_purp ()
+{
+        for test_purp in $test_purp_list
+        do
+                tet_delete $test_purp "FAILURE...$test_purp() deleted."
+        done
+}       # end del_test_purp ()
+
+# Get all cell clearinghouses
+get_allch()
+{
+        cdscp show cell $1 | awk '
+                $1 ~ /Clearinghouse/ && $2 ~ /Name/ {
+                        for ( i=3; i<=NF; ++i) {
+                                z=split ( $i,iarray,"/" )
+                                if ( z > 0 && iarray[z] ~ /.*_ch/ )
+                                        print iarray[z]
+                        }
+        }'
+}
+
+# Gets hosts known clearinghouse
+get_ch()
+{
+        cdscp show server | awk '
+                $1 ~ /Known/ && $2 ~ /Clearinghouses/ {
+                        for ( i=4; i<=NF; ++i) {
+                                z=split ( $i,iarray,"/" )
+                                print iarray[z]
+                        }
+                }'
+}
+
+# Get local cell name
+get_cell()
+{
+        cdscp show server | awk '
+        $1 ~ /Known/ && $2 ~ /Clearinghouses/ {
+                for ( i=4; i<=NF; ++i) {
+                        z=split ( $i,iarray,"/" )
+                        printf ("/%s/%s\n",iarray[2],iarray[3])
+                }
+        }'
+}
+
+# Get cell hosts
+get_hosts()
+{
+	C=$1
+        cdscp list dir "$C/hosts/*" |
+                awk ' BEGIN { host_num = 0 }
+                $1 != "" && $1 !~ /LIST/ && $2 == "" {
+                        host_num += 1
+                        output[host_num] = sprintf( "%s ", $1)
+                }
+                END {
+                        for ( i = 1; i <= host_num; ++i )
+                                printf ( "%s", output[i])
+                        printf("\n")
+                }'
+}
+
+# See if host is a cds server
+ck_host()
+{
+        CELL=$2
+        ALLCH=`get_allch $CELL`
+        for CH in $ALLCH
+        do
+               SRV=`echo $CH | sed 's/...$//'`
+               if [ "$1" = "$SRV" ]
+               then
+                        if rpccp show entry $CELL/hosts/$1/cds-server
+                        then
+                                return 1
+                        else
+                                return 0
+                        fi
+               fi
+        done
+}
+
+#
+cch_clr()
+{
+        cdscp show cached clearinghouse "$1/*" | awk '
+                $1 ~ /CACHED/ && $2 ~ /CLEARINGHOUSE/ {
+                        for ( i=3; i<=NF; ++i) {
+                                z=split ( $i,iarray,"/" )
+                                if ( z > 0 && iarray[z] ~ /.*_ch/ )
+                                        print iarray[z]
+                        }
+        }'
+}
+
+# Get klist info
+kl_princ()
+{
+klist 2>&1 | awk '
+        $1 ~ /Global/ { NETP = $3 }
+END {
+                if ( ! NETP ) {
+                        print "none"
+                        exit
+                }
+                g = split ( NETP, glb_id, "/" )
+                for (i = 1; i <= g; ++i)
+                        if (glb_id[i] == "self") {
+                                print "machine"
+                                exit
+                        }
+                printf ("%s\n",glb_id[g])
+}'
+}
+
+# Tests to see if PR is logged into cell
+auth_ck()
+{
+PR=$1
+if klist 2>&1 >/dev/null
+then
+        ID=`kl_princ`
+        if [ "$ID" = "$PR" ]
+        then
+                return 0
+        else
+                return 1
+        fi
+else
+	return 1
+fi
+}
+
+
+#setup.ksh
+# Does rgy_edit
+rgy()
+{
+  typeset ENT=""
+  typeset OLINE=""
+
+  while [ "$#" != "0" ] ; do
+        case $1 in
+        -cell)  	typeset CELL="$2"; shift;;
+	-opt)		typeset OPT="$2"; shift;;
+	-pgo) 		typeset PGO="$2"; shift;;
+	-ent)		typeset ENT="$ENT $2"; shift;;
+	-grp)		typeset GP="-g $2"; shift;;
+	-org)		typeset OG="-o $2"; shift;;
+	-ppw)		typeset RPPW="-pw $2"; shift;;
+	-pw)		typeset RPW="-mp $2"; shift;;
+        esac
+        shift
+  done
+
+  case "$PGO" in
+  g)	PGO="group";;
+  o)	PGO="org";;
+  p)	PGO="principal";;
+  a)	PGO="account"
+  esac
+ if [ -n "$OPT" ]
+ then 
+  for EACH in `echo "$ENT"`
+  do
+	OLINE="${OLINE}$OPT $EACH $GP $OG $RPPW $RPW\n"
+  done
+ fi
+
+
+  tet_infoline "${OPT} $PGO $ENT in the $CELL registry"
+
+  if [ -n "$PGO" -a -n "$CELL" -a -n "$ENT" ]
+  then
+	if rgy_edit -s $CELL <<-END > $TMP_FILE 
+	domain $PGO 
+	`echo $OLINE` 
+	view
+	quit
+	END
+	then
+		return 0
+	else
+		return -1
+	fi
+  fi
+}
+
+
+verify()
+{
+	typeset ENT=$1
+	if egrep "$ENT +" $TMP_FILE 
+	then
+		return 0
+	else
+		return 1
+	fi
+}
+
+chk_fatal()
+{
+  	if [ -n "$2" ]
+  	then
+		if verify $2 
+		then
+			tet_infoline "Failed removal of $2"
+			return 1
+		fi
+  	else
+		ret=`verify "$1"`
+		if [ ! "$ret" ]
+		then
+			tet_infoline "Failed add of $1"
+			return 1
+		fi
+  	fi
+}
+
+setup()
+{
+	SETUP_CELLS=""
+	CHS=""
+
+	while [ "$#" != "0" ] ; do
+        	case $1 in
+        	/...*)          SETUP_CELLS="$SETUP_CELLS $1";;
+        	-c)             CLFLAG=1;;
+        	esac
+        	shift
+	done
+
+	TMP_FILE="/tmp/temp"
+	SRV_HOST=`get_ch | sed 's/...$//'`
+	HOST=`hostname`
+
+	if [ "$HOST" != "$SRV_HOST" ]
+	then
+        	tet_infoline "	This host is a client"
+        	return 1
+	fi
+
+	export PRC=""
+	export ADM=""
+
+	auth_ck cell_admin
+	if [ $? -ne 0 ]
+	then
+        	export KRB5CCNAME=`dce_login_noexec $SETUP_PRINC $SETUP_PW` 
+	fi
+	if [ -z "$KRB5CCNAME" ]
+	then
+        	tet_infoline "Failure: Unable to authenticate cell: /.:/admin. pricipal"
+        	return 1
+	fi
+	
+	if [ -z "$SETUP_CELLS" ]
+	then
+        	SETUP_CELLS=`get_cell`
+	fi
+
+	for CELL in `echo "$SETUP_CELLS"`
+	do
+  		tet_infoline "Initializing cell: $CELL"
+  		if [ -n "$KRB5CCNAME" ]
+  		then
+        		if [ "$CLFLAG" -eq 1 ]
+        		then
+                		rgy -opt delete -cell $CELL -pgo g -ent $GRP
+                		chk_fatal ! $GRP
+				if [ "$?" = "1" ]
+				then
+					return 1
+				fi
+                		rgy -opt delete -cell $CELL -pgo g -ent $ADMG
+                		chk_fatal ! $ADMG
+				if [ "$?" = "1" ]
+				then
+					return 1
+				fi
+                		rgy -opt delete -cell $CELL -pgo o -ent $ORG
+                		chk_fatal ! $ORG
+				if [ "$?" = "1" ]
+				then
+					return 1
+				fi
+                		INCR=1
+                		while [ $INCR -le $PNUM ]
+                		do
+                        		PRC="$PRC -ent ${PNAM}$INCR"
+                        		INCR=`expr $INCR + 1`
+                		done
+                		INCR=1
+                		while [ $INCR -le $ADMNUM ]
+                		do
+                        		ADM="$ADM -ent ${ADMNAM}$INCR"
+                        		INCR=`expr $INCR + 1`
+                		done
+                		rgy -opt delete -cell $CELL -pgo p $PRC
+				rgy -opt delete -cell $CELL -pgo p $ADM
+
+                		tet_infoline "	Modifying acls on $CELL"
+                		acl_edit $CELL -s unauthenticated:rt \
+                		group:subsys/dce/cds-admin:rwcidta \
+                		group:subsys/dce/cds-server:rwcidta \
+                		any_other:rt
+
+				if [ "$?" != "0" ]
+				then
+					tet_infoline "Could not modify acls on $CELL"
+					return 1
+				fi
+
+ 				LIST=`get_allch $CELL`
+				for CHS in $LIST 
+				do
+                			tet_infoline "	Modifying acls on $CELL/$CHS"
+                			acl_edit -e ${CELL}/$CHS -s \
+                			unauthenticated:rt \
+                			group:subsys/dce/cds-admin:rwdtc \
+                			group:subsys/dce/cds-server:rwdtc \
+                			any_other:rt
+
+					acl_edit ${CELL}/$CHS -s \
+					unauthenticated:rt \
+					group:subsys/dce/cds-admin:rwdtc \
+					group:subsys/dce/cds-server:rwdtc \
+					any_other:rt
+
+                			if [ "$?" != 0 ]
+                			then
+                        			tet_infoline " acl_edit of $CELL/$CHS failed"
+						return 1
+                			fi
+	
+				done
+                		for HOST in `get_hosts "$CELL"`
+                		do
+       	                 		ck_host "$HOST" "$CELL"
+                        		if [ "$?" -eq 1 ]
+                        		then
+                        			acl_edit ${CELL}/hosts/$HOST/cds-server -s \
+                        			unauthenticated:r \
+                        			user:hosts/$HOST/self:rwc \
+                        			group:subsys/dce/cds-admin:rwc \
+                        			any_other:r
+                        			if [ "$?" != 0 ]
+                        			then
+                                			tet_infoline " acl_edit of cds-server failed"
+                        			fi
+	
+                       			else
+						tet_infoline "HOST: $HOST is not a CDS server"
+						continue
+                       			fi
+               			done
+
+        		else
+                		rgy -opt add -cell $CELL -pgo g -ent $GRP
+                		chk_fatal $GRP
+				if [ "$?" = "1" ]
+				then
+					return 1
+				fi
+                		rgy -opt add -cell $CELL -pgo g -ent $ADMG
+                		chk_fatal $ADMG
+				if [ "$?" = "1" ]
+				then
+					return 1
+				fi
+                        	rgy -opt add -cell $CELL -pgo o -ent $ORG
+                		chk_fatal $ORG
+				if [ "$?" = "1" ]
+				then
+					return 1
+				fi
+                		INCR=1
+                		while [ $INCR -le $PNUM ]
+                		do
+                        		PRC="$PRC -ent ${PNAM}$INCR"
+                        		INCR=`expr $INCR + 1`
+                		done
+                		INCR=1
+                		while [ $INCR -le $ADMNUM ]
+                		do
+                        		ADM="$ADM -ent ${ADMNAM}$INCR"
+                        		INCR=`expr $INCR + 1`
+                		done
+                		rgy -opt add -cell $CELL -pgo p $ADM
+                		rgy -opt add -cell $CELL -pgo a $ADM -grp $ADMG \
+                        		-org $ORG -ppw $ADM_PWS -pw $SETUP_PW
+                		rgy -opt add -cell $CELL -pgo p  $PRC
+                		rgy -opt add -cell $CELL -pgo a  $PRC -grp $GRP \
+                        		-org $ORG -ppw $PWS -pw $SETUP_PW
+
+                		tet_infoline "	Modifying acls on $CELL"
+                		acl_edit $CELL -s \
+                		unauthenticated:rt \
+                		group:systest/st_admin:rwcidta \
+                		group:subsys/dce/cds-admin:rwcidta \
+                		group:subsys/dce/cds-server:rwcidta \
+                		any_other:rt
+		
+                		if [ "$?" != 0 ]
+                		then
+                        		tet_infoline " acl_edit of $CELL failed"
+                        		return 1
+                		fi
+ 				LIST=`get_allch $CELL`
+				for CHS in $LIST 
+				do
+                			tet_infoline "	Modifying acls on $CELL/$CHS"
+					acl_edit -e ${CELL}/$CHS -s \
+					unauthenticated:rt \
+					group:systest/st_admin:rwdtc \
+					group:subsys/dce/cds-admin:rwdtc \
+					group:subsys/dce/cds-server:rwdtc \
+					any_other:rt
+
+					acl_edit ${CELL}/$CHS -s \
+					unauthenticated:rt \
+					group:systest/st_admin:rwdtc \
+					group:subsys/dce/cds-admin:rwdtc \
+					group:subsys/dce/cds-server:rwdtc \
+					any_other:rt
+	
+                			if [ "$?" != 0 ]
+                			then
+                        			tet_infoline " acl_edit of ${CELL}/$CHS failed"
+                        			return 1
+                			fi
+				done
+                		for HOST in `get_hosts "$CELL"`
+                		do
+                        		ck_host "$HOST" "$CELL"
+                        		if [ "$?" -eq 1 ]
+                        		then
+                                		tet_infoline "This host: $HOST is a CDS server already"
+                        		else
+						tet_infoline "HOST: $HOST is not a CDS server"
+						continue
+                        		fi
+
+                        		tet_infoline "	Modifying acls on $CELL/hosts/$HOST/cds-server"
+                        		acl_edit ${CELL}/hosts/$HOST/cds-server -s \
+                        		unauthenticated:r \
+                        		user:hosts/$HOST/self:rwc \
+                        		group:systest/st_admin:rwc \
+                        		group:subsys/dce/cds-admin:rwc \
+                        		any_other:r
+
+                        		if [ "$?" != 0 ]
+                        		then
+                                		tet_infoline " acl_edit of $CELL/hosts/$HOST/cds-server failed"
+						return 1
+                        		fi
+	
+                		done
+	
+        		fi
+  		fi
+	done
+}
+
+# Executes the command lines in the state files
+cmd_exc()
+{
+	CMD_PRIN=$1
+	CMD_PW=$2
+	INPUT_FILE=$3
+	CMD_PRIN=${CMD_PRIN:-"cell_admin"}
+	CMD_PW=${CMD_PW:-"-dce-"}
+	DEBUG=${DEBUG:-0}
+	TCMD=""
+	export FAILS=0
+	export ERRORS=""
+
+	if [ "$DEBUG" -gt 0 ]
+	then
+        	tet_infoline "Entering $0 $1 $2 $3"
+	fi
+	if [ -z "$INPUT_FILE" ]
+	then
+		tet_infoline "INPUT_FILE missing for $CMD_PRIN"
+        	return 
+	fi
+	CUR_P=`klist 2>/dev/null| awk ' $1 ~ /Principal:/ { print $3 }'`
+	if [ "$CUR_P" != "$CMD_PRIN" ]
+	then
+        	export KRB5CCNAME=`dce_login_noexec $CMD_PRIN $CMD_PW` 
+        	if [ "$?" != "0" -o -z "$KRB5CCNAME" ]
+        	then
+          		tet_infoline "Failure: Unable to authenticate cell pricipal: $CMD_PRIN"
+          		return 
+        	fi
+	else
+        	tet_infoline "Authenticated as $CMD_PRIN"
+	fi
+
+	CMD_NUM=0
+	OUT=/tmp/xq$$
+
+	# Get expected results
+	for EXP in `cat  $INPUT_FILE | $PARSER -e $CMD_PRIN`
+	do
+        	CMD_NUM=`expr $CMD_NUM + 1`
+        	OUTCOME[$CMD_NUM]="$EXP"
+	done
+
+	# Presentation stuff and get command array
+	CI=0
+	cat $INPUT_FILE | $PARSER -c $CMD_PRIN |
+	while read C
+	do
+        	CI=`expr $CI + 1`
+        	OPS_CMD[$CI]="$C"
+	done
+	if [ "$CI" -eq "0" ]
+	then
+        	tet_infoline "$CMD_PRIN has no operations in $INPUT_FILE"
+        	echo ""
+		kdestroy
+        	return 
+	fi
+
+	tet_infoline "$INPUT_FILE: $CMD_PRIN user command list and expected results:"
+	K=1
+	while [ $K -le $CI ]
+	do
+		tet_infoline "${OPS_CMD[$K]} ${OUTCOME[$K]}"
+		K=`expr $K + 1`
+	done
+
+	tet_infoline ""
+	tet_infoline "$CMD_PRIN test execution follows..."
+
+	# Command line execution and check
+	CMD_CT=1
+	while [ "$CMD_CT" -le "$CMD_NUM" ]
+	do
+        	if [ -n "${OPS_CMD[$CMD_CT]}" -a "$CI" -eq "$CMD_NUM" ]
+        	then
+                	EXCMD="${OPS_CMD[$CMD_CT]}"
+                	COMMAND=`eval echo "$EXCMD"`
+			tet_infoline "$COMMAND"
+			echo $EXCMD | /bin/ksh  >$OUT 2>&1
+
+                	if [ "$?" -eq 0 ]
+                	then
+                        	RET=pass
+                	else
+                        	RET=fail
+                	fi
+
+                	if [ "$RET" = "fail" -a "${OUTCOME[$CMD_CT]}" = "pass" -o \
+                        	"$RET" = "pass" -a "${OUTCOME[$CMD_CT]}" = "fail" ]
+                	then
+                        	FAILS=`expr $FAILS + 1`
+                        	obadcmd[$FAILS]="$EXCMD"
+                        	if fgrep "ERROR:" $OUT >/dev/null
+                        	then
+                                	ERROR[$FAILS]=`fgrep "ERROR:" $OUT`
+                        	fi
+
+				out_to_journal "ERROR:Output from command:" $OUT
+                	fi
+                	if [ "$DEBUG" -gt 0 ]
+                	then
+				out_to_journal "Output from command:" $OUT
+                	fi
+                	rm $OUT
+                	if [ "$?" != 0 ]
+                	then
+                        	tet_infoline "Problem removing temp file:$OUT"
+                	fi
+
+                	tet_infoline "$CMD_PRIN cmd return:$RET expected:${OUTCOME[$CMD_CT]}"
+        	fi
+        	CMD_CT=`expr $CMD_CT + 1`
+	done
+
+	CMD_CT=`expr $CMD_CT - 1`
+
+	FN=0
+	while [ "$FAILS" -gt "$FN" ]
+	do
+        	FN=`expr $FN + 1`
+        	tet_infoline "$CMD_PRIN failed: $FN) ${obadcmd[$FN]}"
+        	if [ -n "${ERRORS[$FN]}" ]
+        	then
+                	tet_infoline "${ERRORS[$FN]}"
+        	fi
+	done
+
+	line=`echo "$INPUT_FILE $CMD_PRIN Total failures: $FAILS out of $CMD_CT operations"`
+	L_FAILS=`echo $line | awk '{print $5}'`
+	L_CMDT=`echo $line | awk '{print $8}'`
+	TOTAL_FAILS=`expr $L_FAILS + $TOTAL_FAILS`
+	OPS_TOTAL=`expr $L_CMDT + $OPS_TOTAL`
+	tet_infoline "$INPUT_FILE $CMD_PRIN Total failures: $L_FAILS out of $L_CMDT operations"
+	tet_infoline ""
+
+	kdestroy
+}
+
+tst_acl()
+{
+        ADMIN_COUNT=$2
+        if [ "$DEBUG" -gt 0 ]
+        then
+                tet_infoline "Entering function tst_acl $1 $ADMIN_COUNT"
+        fi
+        FILE=$1
+        I=1
+        while [ "$I" -le "$ADMIN_COUNT" ]
+        do
+                J=`expr $I + 5`
+                USER="${PNAM}$I"
+                USER2="${PNAM}$J"
+                if F_USER=`cat "$FILE" | $PARSER -u "$USER"`
+                then
+                        if [ "$F_USER" = "$USER" ]
+                        then
+                                cmd_exc "$USER" "st" "$FILE"
+                        fi
+                fi
+                if  F_USER=`cat "$FILE" | $PARSER -u "$USER2"`
+                then
+                        if [ "$F_USER" = "$USER2" ]
+                        then
+                                cmd_exc "$USER2" "st" "$FILE"
+                        fi
+                fi
+                I=`expr $I + 1`
+        done
+}
+
+
+#output a file to the journal
+out_to_journal()
+{
+
+	tet_infoline "$1"
+	while read LINE;do
+		tet_infoline "$LINE"
+	done < $2
+
+}

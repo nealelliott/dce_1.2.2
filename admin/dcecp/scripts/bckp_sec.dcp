@@ -1,0 +1,66 @@
+#!/usr/bin/dcecp
+# @OSF_COPYRIGHT@
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: bckp_sec.dcp,v $
+# Revision 1.1.7.2  1996/10/15  20:43:33  arvind
+# 	OSF DCE 1.2.2 Drop 4.5
+# 	[1996/10/15  20:07:06  arvind]
+#
+# Revision 1.1.7.1  1996/10/04  16:53:17  arvind
+# 	OSF DCE 1.2.2 Drop 4
+# 	[1996/10/04  16:53:05  arvind]
+# 
+# Revision /main/DCE_1.2.2/1  1996/10/03  15:46 UTC  truitt
+# 	Initial branch.
+# 
+# Revision /main/truitt_dcecp_pk6/1  1996/10/03  15:45 UTC  truitt
+# 	OT13103: Minor changes to 'cell backup'.
+# 
+# Revision 1.1.4.2  1996/03/09  23:06:27  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:25:19  marty]
+# 
+# Revision 1.1.4.1  1995/12/08  21:23:46  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/1  1995/03/10  20:20 UTC  dnguyen
+# 	Merge up
+# 	   "Add -xattrs switch to command 'principal show'
+# 	   to get the ERA 'bckp_dest'"
+# 
+# 	HP revision /main/dnguyen_mothra/1  1995/03/06  19:25 UTC  dnguyen
+# 	Add -xattrs switch to command 'principal show'
+# 	to get the ERA 'bckp_dest'
+# 	[1995/12/08  17:57:38  root]
+# 
+# Revision 1.1.2.1  1994/07/28  19:29:03  kevins
+# 	OT 9691 Cell task script first submission
+# 	[1994/07/28  18:39:27  kevins]
+# 
+# $EndLog$
+#
+# This script backups a the sec master database. This is called by the cell backup 
+# command via the server conf dced interface. It disables the secd on the 
+# node which is started up from and tars the appropriate files via tar to the 
+# destination specified by the principal dce-rgy era bckp_dest. It then enables
+# the secd server. 
+#
+#
+proc backup_security {} {
+
+     global dcelocal_path
+     
+     set bckp_dest [lindex [attrlist getvalues [principal show dce-rgy -xattrs] -type bckp_dest] 0]
+     set master_key ${dcelocal_path}/var/security/.mkey 
+     set security_files ${dcelocal_path}/var/security/rgy_data
+     registry disable 
+     catch {exec tar cf $bckp_dest $security_files $master_key} msg
+     registry enable
+}
+
+backup_security

@@ -1,0 +1,324 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: fs_FunctionsScript,v $
+# Revision 1.1.12.1  1996/10/17  18:37:41  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:58:24  damon]
+#
+# Revision 1.1.7.1  1994/07/13  22:32:54  devsrc
+# 	merged with bl-10
+# 	[1994/06/29  12:17:13  devsrc]
+# 
+# 	Use /bin/pwd so shell built-in pwd that does not always
+# 	expand /: avoided (code depends on /.../<cell>/fs).
+# 	[1994/05/16  19:36:47  gmd]
+# 
+# Revision 1.1.2.5  1993/01/11  18:38:09  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:23:34  htf]
+# 
+# Revision 1.1.2.4  1992/12/07  13:20:05  zeliff
+# 	Removed duplicate OSF copyright markers
+# 	[1992/12/06  00:44:01  zeliff]
+# 
+# Revision 1.1.2.3  1992/10/28  18:16:19  jaffe
+# 	Transarc delta: jess-add-dumpkernel-in-fs-tests 1.3
+# 	  Selected comments:
+# 	    The icldump command and debug option for the tests have been added in the
+# 	    fs test scripts. You can run fs/tests with -debug to dump kernel in case
+# 	    of error. The delta also adds the icl_DumpKernel function in the C programm.
+# 	    Add the kerneldump variable and initiate it to false in the file.
+# 	    Put the debug option in test1.
+# 	    When the debug is set the dumpfile is always created eventhough
+# 	    there is no error.
+# 	Transarc delta: rajesh-ot5367-salvage-recovery-authorization-check-tests 1.8
+# 	  Selected comments:
+# 	    To add authorization check tests for salvage/recovery. This is
+# 	    the initial checkpoint.
+# 	    Just a checkpoint.
+# 	    Another checkpoint.
+# 	    Checkpoint.
+# 	    This delta version has been tested.
+# 	    Changed permissions.
+# 	    Update makefiles.
+# 	    Fixed logical errors in the script pertaining to requiring read/write
+# 	    access to aggregate to perform salvage and/or recovery, handling
+# 	    of error counts generated in the AuthCheckTest.noroot script.
+# 	    Fix a build-time error.
+# 	[1992/10/28  15:10:33  jaffe]
+# 
+# Revision 1.1.2.2  1992/08/28  18:42:26  jaffe
+# 	Transarc delta: mcinerny-fix-merge-makefile-refs-wrong-files 1.5
+# 	  Selected comments:
+# 	    (see below)
+# 	    Couple of typos
+# 	    Couple of minor changes to get tests running more smoothly.
+# 	    Finally solve the " : not found" problem--the shell was complaining
+# 	    about the command " " (space) not being found!  Moral: don't end lines
+# 	    in a shell script with a semicolon-backslash-space!
+# 	Transarc delta: mcinerny-ot5101-colon-not-found 1.1
+# 	  Selected comments:
+# 	    The tests were complaining about ": not found"
+# 	    Shell syntax snafu fix.
+# 	Transarc delta: rajesh-clean-fs-tests 1.6
+# 	  Selected comments:
+# 	    To remove make, clean options from fs tests
+# 	    Make the scripts modular, structured.
+# 	    The variable names are changed to follow coding standards.
+# 	    Change the functions fs_DetermineFSType to set
+# 	    fsType to values that are well-known variables.
+# 	    The variables are AFS, DFS, LOCAL, LOCAL_HP.
+# 	    Apply modification mentioned in revision 1.2 to 2 missed test file
+# 	    err1 and err2.
+# 	    Some bug fixes, and revision of tests err1 and err2. Introduction of
+# 	    a common functions ProcessResult to analyse the result.
+# 	    See above.
+# 	    Further changes to some utility functions.
+# 	    See above
+# 	    Added error test err2 to the Makefile
+# 	Transarc delta: rajesh-clean-low-tests 1.5
+# 	  Selected comments:
+# 	    To remove make and clean options from the low test suite. To change
+# 	    the scripts to use common shell functions. To create a file
+# 	    fs_functionsScript with the common shell functions in the util
+# 	    directory.
+# 	    Modify scripts to follow coding standards, simplify the code, increase
+# 	    readability etc.
+# 	    New name for fs_functionsScript
+# 	    More of above.
+# 	    Modify the tests to give them a simpler logical structure, modularity,
+# 	    readability ( one command per line) and to change then to use the
+# 	    common function created earlier.
+# 	    See above.
+# 	    Modification of rtest1 and rtest2 to use the utility functions
+# 	    correctly.
+# 	    Commented out debug echo statements.
+# 	[1992/08/28  12:38:32  jaffe]
+# 
+# $EndLog$
+#!/bin/sh
+#
+###############################################################################
+#    Copyright (C) 1992 Transarc Corporation - All rights reserved            #
+###############################################################################
+
+# 
+# This file contains functions to be used in the shell scripts.
+# The file should be sourced in by the fs and low test shell scripts.
+#
+
+#echo "foo fs_CheckFileSize"	#**
+
+#
+#  fs_CheckFileSize -
+#	This function checks the size of the specified file with the specified 
+#   size and sets variable result appropriately. The value of result should
+#   be checked by caller.
+#
+#  Arguments
+#   $1 -  file name
+#   $2 -  expected file size
+#
+#  Output
+#   Sets global variable result to 0 if the file is the expected size and 1
+#   otherwise. The value of variab
+#
+#  Assumptions
+#	None
+#
+
+fs_CheckFileSize()
+{
+   #
+   #  Validate number of arguments
+   #
+   if [ $# -lt 2 ]
+   then 
+       echo "Usage: fs_CheckFileSize <file-name> <file-length>"
+       exit $scriptErrorExit
+   fi
+   fileName=$1
+   fileExpectedLength=$2
+
+   #
+   # Check file size
+   #   
+   if [ `cat $fileName | wc -c | sed 's/[	]//g'` != $fileExpectedLength ]
+   then
+       result=1
+   else
+       result=0
+   fi
+}
+
+#echo "foo fs_DetermineFSTtpe" 	#** 
+
+#
+#  fs_DetermineFSType -
+#	This function determines whether the tests are being executed in a 
+#   AFS system or DFS system or local directory and prints an appropriate
+#   message and variable fsType is set depending of file system type.
+#
+#  Arguments
+#   None
+#
+#  Outputs
+#   file system type     fsType
+# 	----------------     ------
+#	AFS						$AFS
+#	DFS						$DFS
+#	Local Dir 				$LOCAL
+#
+#  Assumptions
+#   Variable logFile contains the name of the log file.
+#
+
+fs_DetermineFSType() 
+{
+	/bin/pwd | grep -s '^/afs/'
+   	if [ $? -eq 0 ]
+   	then
+    	fsType=$AFS
+       	(	
+			echo "This is an AFS directory"; 
+			fs whereis .; 
+			fs lq .; 
+			fs getca) | tee -a $logFile
+   	else
+        /bin/pwd | grep -s '^/\.\.\./'
+        if [ $? -eq 0 ]
+        then
+            (
+				echo "This is a DFS directory"; 
+				cm whereis .; 
+				fts lsq -path .;
+		            	cm getca
+			) | tee -a $logFile
+            fsType=$DFS
+       	else
+           	if echo $fs_sysName | grep -s '^hp'
+           	then 
+				fsType=$LOCAL_HP
+               	df
+           	else 
+				fsType=$LOCAL
+               	df .
+           	fi
+           	echo "This is a local directory" | tee -a $logFile
+		fi
+   	fi
+   	echo "" | tee -a $logFile
+	}
+
+# echo "foo fs_CheckBinaryExistence" 	#**w
+
+#
+#  fs_CheckBinaryExistence
+#	This function determines the existence of the C program binary
+#       executed by the shell script in the current directory. If the binary
+#       does not exist, it prints an error message and exits.
+#
+#  Arguments
+#       $1 = Name of binary 
+#
+#  Assumptions
+#       Variable logFile is set to name of log file.
+#       Variable programName is set to name of calling shell script
+#
+
+fs_CheckBinaryExistence ()
+{
+   if [ $# -lt 1 ] 
+   then
+       echo "Usage: fs_CheckBinaryExistence <binary pathname>"
+   fi
+   cp=$1
+   if [ ! -f $cp ]
+   then 
+       echo "$programName: cannot open $cp" | tee -a $logFile
+       exit $scriptErrorExit
+   fi
+}
+
+# echo "foo fs_CheckFileExistence" 	#**
+
+#
+#  fs_CheckFileExistence
+#	This function checks if the specified file exists or not. If it does 
+#   not, it prints an error message and exits.
+#
+#  Arguments
+#   $1 - File name
+#
+#  Assumptions
+#  	Variable programName is set to name of calling shell script
+#   Variable logFile is set to name of log file.
+#
+
+fs_CheckFileExistence ()
+{
+   if [ $# -lt 1 ] 
+   then
+        echo "Usage: fs_CheckFileExistence <file pathname>"
+   fi
+   cp=$1
+   if [ ! -f $1 ]
+   then 
+       echo "$programName: cannot open $1" | tee -a $logFile
+       exit $scriptErrorExit
+   fi
+}
+
+# echo "foo fs_InitSetup" 	#**
+
+#
+#  fs_InitSetup ()
+#	This function initialises the variables used by the test shell
+#   scripts and sources necessary shell scripts.
+#
+#  Arguments
+#   $1 = type of tests being executed [ low | fs ... ]
+#
+#  Outputs
+#   Variable currentDir is set to name of current directory.
+#	Variable programName is set to name of the current shell script
+#	Variable errorCount is initialised to zero
+#	Variable testSuiteType is set to test suite type
+#   Variable cProgramName is set to name of binary program executed by the script.
+#   Variable logFile is set to name of log file.
+#
+#  Assumptions
+#	UTIL_DIR is set.
+#
+
+fs_InitSetup ()
+{
+   if [ $# -lt 1 ] 
+   then
+        echo "Usage: fs_InitSetup <test-suite-type>"
+        exit $scriptErrorExit
+   fi
+
+   dumpkernel="false"
+   currentDir=`pwd`
+   programName=`basename $0`
+   errorCount=0
+   testSuiteType=$1
+
+   logFile=${currentDir}/${testSuiteType}.${programName}.log
+   cProgramName=`echo $programName | sed 's/test/prog/'`
+
+   . $UTIL_DIR/fs_SetSysVar
+
+}
+
+#
+# Source in the general functions script
+#
+. $UTIL_DIR/gen_FunctionsScript
+

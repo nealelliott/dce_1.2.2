@@ -1,0 +1,383 @@
+#!/bin/ksh
+#  @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: dceseact,v $
+# Revision 1.1.11.2  1996/03/09  20:51:53  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:35  marty]
+#
+# Revision 1.1.11.1  1995/12/11  22:44:40  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/29  19:22 UTC  bell_d
+# 	Merge in many fixes done by others for Mothra, and change tet_result to FAIL on failure, instead of
+# 	DCE_ERROR.   Add report of elapsed time and # iterations to journal file.  Autoconfigure to nodes present
+# 	in cell.
+# 
+# 	HP revision /main/HPDCE01/2  1994/03/18  14:12 UTC  bissen
+# 	merge changes
+# 
+# 	HP revision /main/HPDCE01/bissen_systest/1  1994/03/18  14:09 UTC  bissen
+# 	Add $ to {RSH_COMM} variable
+# 
+# 	HP revision /main/HPDCE01/1  1994/01/28  18:58  bissen
+# 	merge kk and hpdce01
+# 	[1995/12/11  22:21:10  root]
+# 
+# Revision 1.1.6.4  1993/09/22  13:01:38  bissen
+# 	Added RSH_COMM variable
+# 	[1993/09/20  18:15:30  bissen]
+# 
+# Revision 1.1.6.3  1993/09/10  13:05:44  bissen
+# 	Changed to provide single loop case
+# 	[1993/09/09  18:24:47  bissen]
+# 
+# Revision 1.1.6.2  1993/07/09  14:12:36  root
+# 	Initial King Kong branch
+# 	[1993/07/09  14:12:04  root]
+# 
+# Revision 1.1.4.4  1993/04/28  18:54:08  eheller
+# 	*** empty log message ***
+# 	[1993/04/28  18:52:24  eheller]
+# 
+# Revision 1.1.4.3  1993/04/23  13:51:04  eheller
+# 	Merged time looping changes
+# 	[1993/04/23  13:22:42  eheller]
+# 
+# Revision 1.1.4.2  1993/03/31  12:54:19  mgm
+# 	Initial GAMERA branch
+# 
+# Revision 1.1.3.4  1993/03/04  18:20:18  bissen
+# 	incorporated looping into test
+# 	[1993/03/04  18:19:11  bissen]
+# 
+# Revision 1.1.3.3  1993/02/02  14:21:13  mgm
+# 	Replaced remove_KRB5CCNAME with kdestroy
+# 	[1993/02/02  14:18:02  mgm]
+# 
+# Revision 1.1.3.2  1992/11/03  14:43:47  mgm
+# 	Replaces dceseact.main for TET
+# 	[1992/11/03  14:39:56  mgm]
+# 
+# Revision 1.1.3.3  1992/07/24  14:26:06  macgregor_m
+# 	Ported to HP-UX (ie: rsh -> remsh)
+# 	[1992/07/24  14:25:47  macgregor_m]
+# 
+# Revision 1.1.3.2  1992/06/11  20:02:08  mcfarland
+# 	changed files from test_latest
+# 	[1992/06/09  13:08:48  mcfarland]
+# 
+# 	new systests changes for security
+# 	[1992/05/08  15:54:13  bmw]
+# 
+# Revision 1.1.1.2  1992/05/28  15:16:20  root
+# 	    Loading drop Dce1_0_1b15
+# 
+# $EndLog$
+#
+# FILE: test1.main		DATE: 91/06/10		VERSION: 1.5
+#
+# TEST_NAME:  dceseact
+#
+# COMPONENT_NAME:  dce.systest
+#
+# FILE:  dceseact.data
+#        sec.functions
+#
+# DESCRIPTION:
+#	To test the addition and deletion of objects to/from the registry. 
+#	Create principals, group, organization and accounts. Log in to different
+#	machines with the new accounts, then change their passwords. Change
+#	the name of the group, add new member to the new group. Change the full
+#	name of the organization and add new member to it. Change account's
+#	home directory. Delete all created objects, then verify the deletion.
+#
+# CHANGE HISTORY
+# 3/12/92			Update to the current interface.
+#
+# 6/29/92	Mary MacGregor	Changed /bin/sh to /bin/ksh
+#				Took out hard-coded pathnames
+#				Changed rsh to remsh for HP-UX
+# 11/2/92	Mary MacGregor	Ported to TET
+#
+# 3/4/92        Bob Bissen      Incorporated looping in order 
+#				minimize tet journal files
+#
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1" 
+ic1="check_rgy"
+test_purp_list="check_rgy"
+
+# Authenticate the cell
+
+startup ()
+{
+#set -x
+echo "startup ()"
+
+        fail=0
+	login_fail=0
+	export HOST=`hostname`
+	MYDIR=/tmp
+	TESTDIR="/security/ts/dceseact"	
+	export TEST_FILE="test.ksh"
+	export TEST_CMD="test_cmd.ksh"
+
+	export SEC_MACHINES=$(cdscp list dir "/.:/hosts/*"| awk 'BEGIN {for (i=0;i<3;i++) \
+								getline;} {print $1}')
+        echo "do p" > $MYDIR/clean_act$HOST
+        echo "del ${SEC_PERSON}" >> $MYDIR/clean_act$HOST
+        echo "del ${SEC_ALIAS}" >> $MYDIR/clean_act$HOST
+        echo "do g" >> $MYDIR/clean_act$HOST
+        echo "del ${SEC_GROUP}" >> $MYDIR/clean_act$HOST
+        echo "del new${SEC_GROUP}" >> $MYDIR/clean_act$HOST
+        echo "do o" >> $MYDIR/clean_act$HOST
+        echo "del ${SEC_ORG}" >> $MYDIR/clean_act$HOST
+        echo "q" >> $MYDIR/clean_act$HOST
+
+	chmod 777 $MYDIR/clean_act$HOST
+
+        # Use a feature of dce_login that allows authentication from a shell script
+        if [ -f /usr/bin/dce_login -a ! -f /usr/bin/dce_login_noexec ]
+        then
+                ln -s /usr/bin/dce_login /usr/bin/dce_login_noexec >/dev/null
+        fi
+
+	# Authenticate the cell
+	dce_auth $PARENT_ACCOUNT $PARENT_PASSWD
+
+	if [ $fail -ne 0 ]
+	then
+		login_fail=1
+		del_test_purp
+		return
+	fi
+
+        # Make sure that rgy_edit can be accessed as current user.
+        tet_infoline "Attempting to access rgy_edit as current user."
+
+        ${RGY_EXEC} < /dev/null
+        check_return "$?" "ERROR: ${RGY_EXEC} cannot be accessed by current user." \
+                                "Current user can access registry"
+        if [ $fail -ne 0 ]
+        then
+		login_fail=1
+                del_test_purp
+                return
+        fi
+	for RHOST in $SEC_MACHINES
+	do
+		
+		SYS=$($RSH_COMM $RHOST uname -r|awk -F\. '{print $2}')
+		if [ -z "$SYS" ]
+		then
+		  rcp $TET_ROOT/systest/$TESTDIR/test* $RHOST:/tmp
+		elif [ $SYS = 09 -o $SYS = 10 ]
+		then
+		  rcp $TET_ROOT/systest/$SYS/$TESTDIR/test* $RHOST:/tmp
+		fi 
+	done
+        tet_infoline "Starting test DCESEACT"
+}	# end startup ()
+
+# Ensure test accounts are not left in the registry
+cleanup ()
+{
+echo "cleanup ()"
+        dce_login cell_admin -dce- -e /tmp/test_cmd.ksh "rgy_edit < $MYDIR/clean_act$HOST" > /dev/null
+
+        # Remove authenticated tickets
+	if [ "$?" != "0" ]
+	then
+		tet_infoline "Test accounts not cleaned up"
+		tet_infoline "If part of normal cleanup, this is expected"
+	fi
+}	# end cleanup
+
+# See if users already exist in the registry
+
+check_rgy ()
+{
+#set -x
+echo "check_rgy ()"
+	LOOP=1	
+        CURRENT_LOOP=1
+        if [ -n "$RUN_TIME" ]
+        then
+                SECONDS_TO_EXECUTE=`awk "BEGIN { printf (\"%d\", 3600 * $RUN_TIME); exit; }"`
+        fi
+
+	SECONDS=0
+        while [ $LOOP -eq 1 ]
+	do
+		if [ $CURRENT_LOOP -eq 1 ]
+		then
+			fail=0
+			test_fail=0
+		fi
+	
+		tet_infoline "Starting iteration $CURRENT_LOOP"
+		tet_infoline "Scanning registry for users...begin check_rgy()"
+		state_of_rgy -p "${SEC_PERSON}" -a "${SEC_ALIAS}" -g "${SEC_GROUP}" \
+			     -o "${SEC_ORG}"
+		check_return "$?" "ERROR in determining state of registry " "State of registry is fine...end check_rgy()"
+
+	# Add test subjects to registry
+	#
+
+		tet_infoline "Attempting to add users to registry...begin add_to_rgy"
+		add_person "${SEC_PERSON}" "" "$FULL_NAME${SEC_PERSON}"
+		SEC_PERSON_ID="`grep ${SEC_PERSON} ${RGY_OUTPUT} | awk '{print $NF}'`"
+
+		add_alias "${SEC_ALIAS}" ${SEC_PERSON_ID} "$FULL_NAME${SEC_ALIAS}"
+
+		add_group "${SEC_GROUP}" ""
+
+		add_org "${SEC_ORG}" ""
+
+		add_account "${SEC_PERSON}" "${SEC_GROUP}" "${SEC_ORG}"\
+			$SEC_LOGIN_PASSWD $PARENT_PASSWD $VALID\
+			$SEC_HOME_DIR $SEC_SHELL
+
+		add_account "${SEC_ALIAS}" "${SEC_GROUP}" "${SEC_ORG}"\
+		        $SEC_LOGIN_PASSWD $PARENT_PASSWD $VALID\
+		        $SEC_HOME_DIR $SEC_SHELL
+
+
+	# Remote login to other machines
+	# Change the password
+	#
+		tet_infoline "Attempting remote login...begin remote_login_first()"
+
+		#Remote login to the accounts from other machines in the cell
+		for MACHINE in $SEC_MACHINES
+		do
+			fail=0
+			rlogin_to_machine ${MACHINE} ${SEC_PERSON} ${SEC_ORG} ${SEC_GROUP}\
+					${SEC_LOGIN_PASSWD} ${SEC_LOGIN_NEW_PASSWD} 
+#${SEC_ALIAS}
+
+		        rlogin_to_machine ${MACHINE} ${SEC_ALIAS} ${SEC_ORG} ${SEC_GROUP}\
+		       		         ${SEC_LOGIN_PASSWD} ${SEC_LOGIN_NEW_PASSWD} 
+#${SEC_PERSON}
+	
+		# Update password
+			TEMP=${SEC_LOGIN_PASSWD}
+			SEC_LOGIN_PASSWD=${SEC_LOGIN_NEW_PASSWD}
+			SEC_LOGIN_NEW_PASSWD=$TEMP	
+
+
+		done
+		# Change the group name 
+		# Update variable for name of group only if the change was successful
+
+		tet_infoline "Attempting updates to registry...begin run_updates()"
+
+		change_group_name "${SEC_GROUP}" "new${SEC_GROUP}"
+
+		if [ "$?" -eq 0 ]
+		then
+			SEC_GROUP_ORIG=$SEC_GROUP
+			SEC_GROUP="new${SEC_GROUP}"
+			tet_infoline "Was able to change group to new name...change_group_name()"
+		else
+			tet_infoline "ERROR: Was unable to change group to new name...change_group_name()"
+			test_fail=1
+		fi
+
+		# Add existing users to group
+		add_to_group_or_org -g "${SEC_GROUP}" "${SEC_GROUP_MEMBERS}"
+
+		# Change the organization
+		change_org_full_name "${SEC_ORG}" "${SEC_ORG_FULL}"
+
+		# Add existing persons to the organization
+		add_to_group_or_org -o "${SEC_ORG}" "${SEC_ORG_MEMBERS}"
+
+		# Change home directory of person
+		change_home_directory "${SEC_PERSON}" "${SEC_GROUP}" "${SEC_ORG}" ${NEW_HOME_DIR}
+
+		# Delete the added objects from registry
+		delete_objects -p "${SEC_PERSON}" -a "${SEC_ALIAS}" -g "${SEC_GROUP}" -o "${SEC_ORG}"
+
+
+	# Recheck login to see if they all fail
+	#
+
+		tet_infoline "Attempting second set of remote logins...begin remote_login_second()"
+
+		#Remote login to the accounts from other machines in the cell
+		for MACHINE in $SEC_MACHINES
+		do
+			tet_infoline "Attempting to login non-existent accounts at $MACHINE"
+
+		       	${RSH_COMM} $MACHINE  "dce_login ${SEC_PERSON} ${SEC_LOGIN_PASSWD}\
+				-e /tmp/$TEST_FILE" | grep "Sorry" > /dev/null
+		       	check_return "$?" "ERROR: non-existent person account: ${SEC_PERSON} at $MACHINE...remote_login_second()" \
+				"Was NOT able to login to non-existent person account: ${SEC_PERSON} AS EXPECTED"
+
+		       	${RSH_COMM} $MACHINE  "dce_login ${SEC_ALIAS} ${SEC_LOGIN_PASSWD}\
+					-e /tmp/$TEST_FILE" | grep "Sorry" > /dev/null
+		       	check_return "$?" "ERROR: non-existent alias account: ${SEC_ALIAS} at $MACHINE...remote_login_second()" \
+				"Was NOT able to login to non-existent alias account: ${SEC_ALIAS} AS EXPECTED"
+
+		done
+
+		SEC_GROUP=$SEC_GROUP_ORIG
+       		CURRENT_LOOP=`expr $CURRENT_LOOP + 1`
+                if [ -n "$LOOPS_TO_EXECUTE" ]
+                then
+                        if [ $CURRENT_LOOP -gt $LOOPS_TO_EXECUTE ]
+                        then
+                                LOOP=0
+                        fi
+                elif [ -n "$RUN_TIME" ]
+                then
+                        if [ "$SECONDS" -ge "$SECONDS_TO_EXECUTE" ]
+                        then
+                                LOOP=0
+                        fi
+                else
+                        LOOP=0
+                fi
+if [ -f ./core ];then
+    echo "core file found: moved to /net/`uname -n`/tmp/security/dceseact/core$CURRENT_LOOP$$"
+    cp ./core /tmp/security/dceseact/core$CURRENT_LOOP$$
+fi
+	 done  #finished looping
+
+         num_loops=`expr $CURRENT_LOOP - 1`
+         measure="minutes"
+         minutes=`expr $SECONDS / 60`
+         if [ $minutes -lt 2 ]
+         then
+           minutes=$SECONDS
+           measure="seconds"
+         fi
+         tet_infoline "dceseact test ran for $num_loops loops/iterations in $minutes $measure"
+
+	if [ $test_fail -eq 0 ]
+	then 
+		tet_infoline "DCESEACT Passed"
+		echo "DCESEACT Passed"
+		tet_result PASS
+	else
+		tet_infoline "DCESEACT Failed"
+		echo "DCESEACT Failed"
+		tet_result DCE_ERROR
+	fi
+}
+
+# tcc will fail if these files don't exist and get sourced
+# so there is no need to check that this happens
+
+. $TET_ROOT/profile.dcest
+. ./dceseact.data
+. $TET_ROOT/systest/security/ts/sec.functions
+. $TET_ROOT/lib/ksh/tcm.ksh

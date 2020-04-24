@@ -1,0 +1,814 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: test3,v $
+# Revision 1.1.135.1  1996/10/17  18:20:14  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:50:45  damon]
+#
+# Revision 1.1.130.1  1994/02/04  20:40:45  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:22:32  devsrc]
+# 
+# Revision 1.1.128.1  1993/12/07  17:41:54  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  18:55:08  jaffe]
+# 
+# Revision 1.1.11.2  1993/07/19  19:40:42  zeliff
+# 	HP port of DFS
+# 	[1993/07/19  18:31:06  zeliff]
+# 
+# Revision 1.1.9.3  1993/07/16  21:40:55  kissel
+# 	*** empty log message ***
+# 	[1993/06/21  14:53:27  kissel]
+# 
+# Revision 1.1.7.2  1993/06/04  20:18:12  kissel
+# 	Initial HPUX RP version.
+# 	[1993/06/03  22:41:09  kissel]
+# 
+# Revision 1.1.5.3  1993/03/29  21:34:33  maunsell_c
+# 	03/17/93	maunsell_c	remove extra fi line 318, oops!
+# 	[1993/03/29  21:06:23  maunsell_c]
+# 
+# Revision 1.1.5.2  1993/02/05  20:58:02  maunsell_c
+# 	hpux changes
+# 	[1993/02/05  20:56:51  maunsell_c]
+# 
+# Revision 1.1.3.2  1993/02/05  17:06:37  maunsell_c
+# 	01/29/93	maunsell_c	add hp check for wc.is file setup
+# 
+# Revision 1.1.4.4  1993/01/11  18:26:57  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:00:42  htf]
+# 
+# Revision 1.1.4.3  1992/10/28  16:22:22  jaffe
+# 	Transarc delta: fred-ot5472-use-testhome-variable 1.1
+# 	  Selected comments:
+# 	    Fixed the fs and low tests to correctly use TESTTOP.  We were setting a
+# 	    variable, testhome, as the location for the test scripts and executables,
+# 	    but we did not use it to execute C programs.
+# 	    (I checked out some scripts which did not need this change.)
+# 	    No changes made.
+# 	Transarc delta: jess-add-dumpkernel-in-fs-tests 1.3
+# 	  Selected comments:
+# 	    The icldump command and debug option for the tests have been added in the
+# 	    fs test scripts. You can run fs/tests with -debug to dump kernel in case
+# 	    of error. The delta also adds the icl_DumpKernel function in the C programm.
+# 	    See above.
+# 	    Put the debug option in test1.
+# 	    When the debug is set the dumpfile is always created eventhough
+# 	    there is no error.
+# 	Transarc delta: jess-fs-path-for-icldump 1.1
+# 	  Selected comments:
+# 	    This delta adds the path for icldump command. The command has been
+# 	    installed at "util" dir in test tree by Fred's delta.
+# 	    See above.
+# 	Transarc delta: jess-ot5320-fix-fs-low-testhome 1.1
+# 	  Selected comments:
+# 	    The fs and low test shell scripts have the following if statement
+# 	    if [ "$TESTTOP" = "`pwd`" ]
+# 	    then
+# 	    UTIL_DIR=../util
+# 	    testhome=$TESTTOP
+# 	    else
+# 	    UTIL_DIR=$TESTTOP/util
+# 	    testhome=$TESTTOP/$testSuiteType
+# 	    fi
+# 	    The problem is that variable testSuiteType is not defined at this time.
+# 	    See above.
+# 	[1992/10/27  18:24:49  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/28  18:12:29  jaffe
+# 	Transarc delta: bk-ot4648-fs-test3 1.1
+# 	  Selected comments:
+# 	    For ot 4648
+# 	    Capitalized dfcmd variable.
+# 	Transarc delta: jess-ot4912-fix-fs-test3 1.2
+# 	  Selected comments:
+# 	    Test3 could not work consistently on diffrent flatforms. It works for
+# 	    osf1 on the file consistency check but on rios. The problem there is
+# 	    caused by "wc" command which depends on different flatform and env
+# 	    vars such as $LANG. This problem will be fixed by this delta. We have
+# 	    to test the same problem against any new flatform.
+# 	    Fix the problem by checking the platform and the var value and by modifying
+# 	    the referce data in the script.
+# 	    Fix wc problem.
+# 	    Bad merge choice resulted in incorrect results.
+# 	Transarc delta: rajesh-clean-fs-tests 1.6
+# 	  Selected comments:
+# 	    To remove make, clean options from fs tests
+# 	    Really no change
+# 	    Make the scripts modular, structured.
+# 	    The variable names are changed to follow coding standards.
+# 	    See above.
+# 	    Apply modification mentioned in revision 1.2 to 2 missed test file
+# 	    err1 and err2.
+# 	    Some bug fixes, and revision of tests err1 and err2. Introduction of
+# 	    a common functions ProcessResult to analyse the result.
+# 	    See above.
+# 	    Further changes to some utility functions.
+# 	    Added error test err2 to the Makefile
+# 	[1992/08/28  12:19:40  jaffe]
+# 
+# Revision 1.1.2.3  1992/05/29  22:58:48  mason
+# 	Transarc delta: fred-3754-change-script-name 1.1
+# 	  Selected comments:
+# 	    To clean up a number of defects with the tests.  In addition to defect
+# 	    3754, the changes also fix defects 3750 and 3748.
+# 	    Fixed setting of TESTTOP variable.
+# 	[1992/05/29  12:09:01  mason]
+# 
+# Revision 1.1.2.2  1992/05/21  12:40:46  jaffe
+# 	Transarc delta: fred-2980-and-2981-fix-sys 1.1
+# 	  Files modified:
+# 	    fs: Makefile, err1, err2, half_meg, test1, test10, test2
+# 	    fs: test2b, test2s, test3, test4, test5, test6, test7, test8
+# 	    fs: test9
+# 	  Selected comments:
+# 	    To fix reported defects indicating files could not be found.  Added two
+# 	    shell scripts, one to issue the correct command to get the system type
+# 	    (either AFS or DFS), and a second to generate a file from a string.
+# 	    Change variable sys to dfs_fsSysName and use fsSetSysName shell script.
+# 	Transarc delta: fred-merge-tests 1.1
+# 	   Selected comments:
+# 	    Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	    the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	    should be looking at the same test code.
+# 	    Changes to facilitate merge of local DFS test code with the OSF's.
+# 	Transarc delta: fred-remove-sys 1.1
+# 	  Files modified:
+# 	    Makefile; cm: runtests, test0, test3, test4, test6
+# 	    fs: Makefile, err1, err2, rtest1, test10, test2, test2b
+# 	    fs: test2s, test3, test4, test5, test6, test7, test8, test9
+# 	    low: progErrMap.c, rprogErrMapQuota.c, rtest1, rtest2
+# 	    low: rtestErrMapQuota, test1, test10, test11, test12, test13
+# 	    low: test14, test2, test3, test4, test5, test6, test7, test8
+# 	    low: test9, testErrMap
+# 	    util: Makefile, fs_GenerateFile, fs_SetSysName
+# 	  Selected comments:
+# 	    To remove dependency on the AFS sys command in the test scripts.
+# 	    To remove dependency on AFS sys command.
+# 
+# 	$TALog: test3,v $
+# 	Revision 4.33  1994/11/01  22:23:18  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r4.32 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	Revision 4.32  1993/11/02  15:52:31  andi
+# 	[merge of changes from 4.29 to 4.31 into 4.30]
+# 
+# Revision 4.31  1993/10/29  20:25:31  comer
+# 	Do a white-space-insensitive comparison in test3.
+# 	[from r4.29 by delta comer-db4581-fs-test3-needs-white-space-insensitive-diff, r1.1]
+# 
+# Revision 4.30  1993/08/24  15:18:08  bwl
+# 	More changes for HP port.  Milestone:  got the low tests built;
+# 	can run cthon on DFS.  (But not on glued UFS.)
+# 
+# 	Changes for HP port.
+# 	[from r4.29 by delta bwl-o-db3961-port-103-to-HP, r1.11]
+# 
+# Revision 4.29  1993/01/14  17:34:54  jaffe
+# 	revdrop of latest OSF copyright changes to these files
+# 	[from r4.28 by delta osf-revdrop-01-12-92, r1.1]
+# 
+# 	[1992/05/20  19:11:50  jaffe]
+# 
+# $EndLog$
+#
+###############################################################################
+#    Copyright (C) 1990, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This script creates hundreds of files and directories in the current
+# directory. It can be run with the "-small" option to create fewer (but
+# still many) of them in order to use less disk space, or with -large to
+# create more and larger files. This script runs "df" or "lq" frequently
+# so you can see how disk space is being used.
+
+# Usage: test3 [-small|-normal|-large] [-debug]
+
+# Note:  default is test3 -small
+
+# The amount of disk space required varies tremendously depending on system
+# type. In particular, the minimum physical file and/or directory size can be
+# as high as 2048 bytes, so you need more space than you might think. Maximum
+# disk usage occurs at df(2) or df(4); see the tests there for details about
+# the number of files and their sizes. Also, since so many files are created,
+# you will need thousands of free inodes in the test partition. Be careful
+# with -large; it REALLY is large!
+
+# Highest error number is: 27.
+
+###############################################################################
+
+#
+# PrintUsage() -
+#   Prints the usage message for this script.
+
+PrintUsage()
+{
+    echo "$programName creates many files and directories"
+    echo "Usage: $programName [-small|-normal|-large]"
+}
+
+#
+# Initialise some variables. UTIL_DIR is the directory containing 
+# the script fs_FunctionsScript with common functions.
+#
+
+TESTTOP=${TESTTOP:="`pwd`"}
+
+if [ "$TESTTOP" = "`pwd`" ]
+then
+    UTIL_DIR=../util
+    testhome=$TESTTOP
+else
+    UTIL_DIR=$TESTTOP/util
+    testhome=$TESTTOP/fs
+fi
+
+. $UTIL_DIR/fs_FunctionsScript
+. $UTIL_DIR/fs_SetSysVar
+createFileCmd="$UTIL_DIR/fs_GenerateFile"
+
+trap '
+    cd $currentDir
+    rm -rf $programName.$$
+    echo "$programName killed returning $scriptErrorExit" | tee -a $logFile
+    exit $scriptErrorExit
+    ' 2 3 15
+
+#
+# Initialise setup variables
+#
+
+fs_InitSetup fs
+
+#
+# Default values
+#
+
+longname="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+if echo $fs_sysName | grep -s '^hp'
+then 
+    longname="ABCDEFGHIJ"
+fi
+mode="small"
+
+#
+# Parse the command line
+#
+
+while [ "$1" != "" ]
+do 
+    case $1 in 
+        help|-help) PrintUsage
+                    exit $successExit
+                    ;;
+
+        large|-large) 
+                    mode=large
+                    shift
+                    ;;
+
+        normal|-normal) 
+                    mode=normal
+                    shift
+                    ;;
+
+        small|-small) 
+                    mode=small
+                    shift
+                    ;;
+        debug|-debug) 
+                    dumpkernel="true"
+                    shift
+                    ;;
+
+        *)          echo "ERROR $testSuiteType/$programName: invalid argument \"$1\"" | tee -a $logFile
+                    exit $scriptErrExit
+                    ;;
+    esac
+done
+
+#
+# Start test
+#
+
+(
+    echo "$programName (many) starting in $currentDir"
+    echo "Host `hostname` ($fs_sysName)"
+    date
+) | tee -a $logFile
+
+echo "Running in $mode mode" | tee -a $logFile
+pwd | grep -s '^/afs/'
+
+fs_DetermineFSType
+
+#
+# Issue "df"
+#
+
+FileSystemStat
+
+mkdir $programName.$$
+cd $programName.$$
+
+(
+    echo "Initial df(0) at `date`:"
+    FileSystemStat
+) | tee -a $logFile
+
+ls -F > ls.init
+cp ls.init ls.final
+ls -F > ls.init
+
+cat > t1 << ==END==
+The quick brown fox jumps over the lazy dog
+THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG
+==END==
+
+cat t1 t1 t1 t1 t1 t1 t1 t1 > t2
+cat t1 t1 t1 t1 t1 t1 t1 t1 >> t2
+cat t2 t2 t2 t2 t2 t2 t2 t2 t2 t2 t2 t2 t2 t2 t2 t2 > t3
+cat t3 t3 t3 t3 t3 t3 t3 t3 t3 t3 t3 t3 > t4
+cat t3 t3 t3 t3 >> t4
+
+wc t1 t2 t3 t4 | sed 's/[	 ][	 ]*/ /g' > wc.is
+
+(echo "$fs_sysName" | grep "rs_aix") >/dev/null
+if test $? -eq 0 ; then
+    sed 's/^/ /g' wc.is >wc.is.rios
+    mv wc.is.rios wc.is
+    if test $LANG = "En_US" ; then
+       sed 's/total/ total/g' wc.is >wc.is.rios
+       mv wc.is.rios wc.is
+    fi
+fi
+
+(echo "$fs_sysName" | grep -s '^hp') >/dev/null
+   if test $? -eq 0 ; then
+      sed 's/^/ /g' wc.is >wc.is.hp
+      mv wc.is.hp wc.is
+      if test $LANG = "En_US" ; then
+         sed 's/total/ total/g' wc.is >wc.is.hp
+         mv wc.is.hp wc.is
+      fi
+   fi
+
+cat > wc.ref << ==END==
+ 2 18 88 t1
+ 32 288 1408 t2
+ 512 4608 22528 t3
+ 8192 73728 360448 t4
+ 8738 78642 384472 total
+==END==
+diff -w wc.ref wc.is > /dev/null
+if [ $? -ne 0 ]
+then 
+    echo "- $programName: wc.ref and wc.is are different (E1)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+fi
+rm wc.ref wc.is
+
+cp t3 t0
+cat t1 > t0
+if [ `wc -c t0 | sed 's/t0//'` -ne 88 ]
+then 
+    echo "- $programName: t0 is the wrong size (E2)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+fi
+rm t0
+cat t3 >> t0
+if [ `wc -c t0 | sed 's/t0//'` -ne 22528 ]
+then 
+    echo "- $programName: t0 is the wrong size (E3)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+fi
+rm t0
+
+(
+    echo "df(1) after creating t? at `date`:"
+    FileSystemStat
+) | tee -a $logFile
+if [ $mode = "normal" -o $mode = "small" ]
+then 
+    cp t3 t4
+fi
+
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+do
+    for j in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+    do
+        if [ \( $mode != "small" \) -o \( $i -le 8 -a $j -le 8 \) ]
+        then
+            cp t1 ttt.$i.$j
+            mkdir ddd.$i.$j
+        fi
+    done
+done
+
+(
+    echo "df(2) after creating ddd* ttt* at `date`:"
+    FileSystemStat
+) | tee -a $logFile
+
+fileCount=`ls -l t? ttt* | wc -l`
+echo "Number of files: $fileCount" | tee -a $logFile
+directoryCount=`ls -ld ddd* | wc -l`
+echo "Number of directories: $directoryCount" | tee -a $logFile
+if [ $mode = "small" -a \( $fileCount -ne 68 -o $directoryCount -ne 64 \) ]
+then 
+    echo "- $programName: should be 68 and 64 (E4)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+elif [ $mode = "normal" -a \( $fileCount -ne 260 -o $directoryCount -ne 256 \) ]
+then 
+    echo "- $programName: should be 260 and 256 (E5)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+elif [ $mode = "large" -a \( $fileCount -ne 260 -o $directoryCount -ne 256 \) ]
+then 
+    echo "- $programName: should be 260 and 256 (E6)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+fi
+tfilesSize=`cat t? | wc -c`
+echo "Size of t? files: $tfilesSize"
+if [ $mode = "small" -a $tfilesSize -ne 46552 ]
+then 
+    echo "- $programName: should be 46552 (E7)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+elif [ $mode = "normal" -a $tfilesSize -ne 46552 ]
+then 
+    echo "- $programName: should be 46552 (E8)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+elif [ $mode = "large" -a $tfilesSize -ne 384472 ]
+then 
+    echo "- $programName: should be 384472 (E9)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+fi
+
+mkdir dir
+mv t1 t2 t3 t4 ddd.* ttt.* dir
+cd dir
+rm t1 t2 t3 t4
+rmdir ddd*
+cd ..
+if [ $mode = "normal" -o $mode = "small" ]
+then
+    rm dir/ttt.1*
+    for f in dir/ttt*
+    do 
+        cp /dev/null $f
+    done
+fi
+
+(
+    echo "df(3) after removing some stuff at `date`:"
+    FileSystemStat 
+) | tee -a $logFile
+
+# small mode:  1 directory containing  56 empty ttt files
+# normal mode: 1 directory containing 128 empty ttt files
+# large mode:  1 directory containing 256 88-byte ttt files
+
+for f in dir/ttt*
+do
+    if [ \( $mode = "small" -o $mode = "normal" \) -a -s $f ]
+    then 
+        echo "- $programName: $f size wrong (E10)" | tee -a $logFile
+        if [ $dumpkernel = "true" ]
+        then
+           $UTIL_DIR/icldump >> $logFile
+        fi
+        errorCount=`expr $errorCount + 1`
+    elif [ $mode = "large" -a ! -s $f ]
+    then 
+        echo "- $programName: $f size wrong (E11)" | tee -a $logFile
+        if [ $dumpkernel = "true" ]
+        then
+           $UTIL_DIR/icldump >> $logFile
+        fi
+        errorCount=`expr $errorCount + 1`
+    fi
+done
+
+if [ $mode = "small" ]
+then 
+    list="1 2 3 4 5 6 7 8 9"
+else 
+    list="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16"
+fi
+
+for i in $list
+do 
+    mkdir dir.$i
+    cp dir/ttt.* dir.$i
+done
+
+(
+    echo "df(4) after creating everything at `date`:"
+    FileSystemStat
+) | tee -a $logFile
+fileCount="0"
+for dir in dir dir.*
+do 
+    i=`ls -l $dir/* | wc -l`
+    fileCount=`expr $fileCount + $i`
+done
+echo "Number of files: $fileCount" | tee -a $logFile
+directoryCount=`ls -ld dir dir.* | wc -l`
+echo "Number of directories: $directoryCount" | tee -a $logFile
+if [ $mode = "small" -a \( $fileCount -ne 560 -o $directoryCount -ne 10 \) ]
+then 
+    echo "- $programName: should be 560 and 10 (E12)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+elif [ $mode = "normal" -a \( $fileCount -ne 2176 -o $directoryCount -ne 17 \) ]
+then 
+    echo "- $programName: should be 2176 and 17 (E13)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+elif [ $mode = "large" -a \( $fileCount -ne 4352 -o $directoryCount -ne 17 \) ]
+then 
+    echo "- $programName: should be 4352 and 17 (E14)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+fi
+fnf=`find dir* -type f -print | wc -l`
+echo "Number of files obtained by find: $fnf" | tee -a $logFile
+if [ $fnf -ne $fileCount ]
+then 
+    echo "- $programName: find results do not match ls"
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+fi
+
+for f in dir.[1-8]*
+do
+    cd $f
+    for g in *
+    do 
+        mv $g ../dir.9/$f.$g
+    done
+    cd ..
+    rmdir $f
+done
+
+fileCount=`ls -l dir.9 | wc -l`
+fileCount=`expr $fileCount - 1`
+echo "Number of files in directory dir.9: $fileCount" | tee -a $logFile
+if [ $mode = "small" -a $fileCount -ne 504 ]
+then 
+    echo "- $programName: should be 504 (E15)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+elif [ $mode = "normal" -a $fileCount -ne 2048 ]
+then 
+    echo "- $programName: should be 2048 (E16)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+elif [ $mode = "large" -a $fileCount -ne 4096 ]
+then 
+    echo "- $programName: should be 4096 (E17)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+fi
+fnf=`find dir.9 -type f -print | wc -l`
+echo "Number of files obtained by find at `date`: $fnf" | tee -a $logFile 
+if [ $fnf -ne $fileCount ]
+then 
+    echo "- $programName: find results do not match ls"
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+fi
+
+for f in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+do 
+    rm -f dir.9/dir.$f.*
+    rm -f dir.9/ttt.$f.*
+done
+ls -laiR dir.9 > dir.9/x
+rm dir.9/x
+rmdir dir.9
+
+(
+    echo "df(5) after deleting dir.* at `date`:"
+    FileSystemStat
+) | tee -a $logFile
+
+ls -F > ls.final
+cat > diff.ideal << ==END==
+> dir/
+==END==
+diff ls.init ls.final | sed '1d' > diff.is
+diff diff.ideal diff.is > /dev/null 2> /dev/null
+if [ $? -ne 0 ]
+then 
+    echo "- $programName: directory contents wrong (E18)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+fi
+rm -f diff.ideal diff.is
+
+fileCount=`ls -l dir/* | wc -l`
+echo "Number of files in dir: $fileCount" | tee -a $logFile
+if [ $mode = "small" -a $fileCount -ne 56 ]
+then 
+    echo "- $programName: should be 56 (E19)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+elif [ $mode = "normal" -a $fileCount -ne 128 ]
+then 
+    echo "- $programName: should be 128 (E20)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+elif [ $mode = "large" -a $fileCount -ne 256 ]
+then 
+    echo "- $programName: should be 256 (E21)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+fi
+fnf=`find dir -type f -print | wc -l`
+echo "Number of files obtained by find: $fnf" | tee -a $logFile
+if [ $fnf -ne $fileCount ]
+then 
+    echo "- $programName: find results do not match ls (E22)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+fi
+
+cd dir
+for f in ttt.*
+do
+    n=`echo $f | sed s/ttt//`
+    mv $f $longname$n
+done
+cd ..
+(
+    echo "df(6) after renaming files at `date`:"
+    FileSystemStat
+) | tee -a $logFile
+fileCount=`ls -l dir/* | wc -l`
+echo "Number of files in dir: $fileCount" | tee -a $logFile
+if [ $mode = "small" -a $fileCount -ne 56 ]
+then 
+    echo "- $programName: should be 56 (E23)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+elif [ $mode = "normal" -a $fileCount -ne 128 ]
+then 
+    echo "- $programName: should be 128 (E24)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+elif [ $mode = "large" -a $fileCount -ne 256 ]
+then 
+    echo "- $programName: should be 256 (E25)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+fi
+if [ `ls dir/$longname.[0-9]*.[0-9]* | wc -l` -ne $fileCount ]
+then 
+    echo "- $programName: directory names wrong (E26)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+fi
+fnf=`find dir -type f -print | wc -l`
+echo "Number of files obtained by find: $fnf" | tee -a $logFile
+if [ $fnf -ne $fileCount ]
+then 
+    echo "- $programName: find results do not match ls"
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+fi
+
+rm -rf dir*
+rm -f t1 t2 t3 t4 ttt*
+(
+    echo ""
+    echo "Done final df(7) at `date`:"
+    FileSystemStat
+) | tee -a $logFile
+ls -F > ls.final
+diff ls.init ls.final > /dev/null
+if [ $? -ne 0 ]
+then 
+    echo "- $programName: initial and final ls's are different (E27)" | tee -a $logFile
+    if [ $dumpkernel = "true" ]
+    then
+           $UTIL_DIR/icldump >> $logFile
+    fi
+    errorCount=`expr $errorCount + 1`
+fi
+
+###############################################################################
+
+cd $currentDir
+rm -rf $programName.$$
+
+(
+    echo ""
+    echo "$testSuiteType/$programName returning $errorCount in $currentDir"
+    date
+) | tee -a $logFile
+
+exit $errorCount
+
+###############################################################################

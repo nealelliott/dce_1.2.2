@@ -1,0 +1,414 @@
+#
+# ID: $Id: dump-1.1.3.2b,v 1.5 1996/01/21 09:46:46 hyer Exp $
+#
+# COMPONENT_NAME: bak tests
+#
+# The following functions list may not be complete.
+# Functions defined by/via macros may not be included.
+#
+# FUNCTIONS:
+#	dump test file
+#
+# ORIGINS: Transarc Corp.
+#
+# (C) COPYRIGHT Transarc Corp. 1993
+# All Rights Reserved
+# Licensed Materials - Property of Transarc
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+#
+# HISTORY
+# $TALog: dump-1.1.3.2b,v $
+# Revision 1.5  1996/01/21  09:46:46  hyer
+# Changes to make the backup test scripts with the callout routines for
+# mount and unmount in DCE 1.2.
+#
+# Added cm checkfilesets and cleaned up test to run with callout routines
+# [from r1.4 by delta hyer-7265-backup-test-mods-for-callout-routines, r1.1]
+#
+# Revision 1.4  1995/12/06  15:23:55  hyer
+# The backup test scripts were not working. Most of the tests either
+# failed or never ran. Made significant changes to all scripts to make
+# them work:
+#
+# Added function CATCHEXEC that does the same thing as catch "exec ..."
+# but also displays each command and the response as well as any error codes
+# that are returned from the exec.
+#
+# Added a loop in is_butc_ready to wait up to 200 seconds for the butc
+# process to start, sleeping 10 seconds between checks.
+#
+# Changed the expected command output to match the messages generated
+# by the current version of the code.
+#
+# Added sleeps around some of the tape I/O commands to keep them from
+# failing because the device wasn't ready.
+#
+# Added chmod ogu+rwx commands after each fts crmount to give the test
+# scripts access to the test filesets
+#
+#
+# [from r1.2 by delta hyer-7109-backup-test-changes, r1.1]
+#
+# Revision 1.3  1995/11/29  17:12:47  hyer
+# Delta for changes made to the backup scripts to get the backup tests running.
+# Several changes were made to get the tests to run:
+#
+# 1. A loop was added to is_butc_ready to retry the status command
+#    every 10 seconds, and time out after 200 seconds. The tests were
+#    not being run because it can take over 1 minute for butc to start.
+#
+# 2. The directory permissions needed to be changed to allow R/W access
+#    on the test filesets after they were created with fts crmount.
+#
+# 3. The error checking code in restore_disk and restore_ft, and dump
+#    was reworked to make sure that the success or failure of the
+#    operation was detected during the test.
+#
+# 4. The calls to "fts dump" and "fts restore" were returing error status
+#    even though the operation succeeded. Changed the script to read the
+#    response from the command to decide whether or not the command worked.
+#
+# 5. Added a EXEC routine that calls exec, but prints out each command and
+#    the response.
+#
+# 6. Several other minor changes were made to address verious problems
+#    with how the scripts were checking the success or failure of the
+#    tests. The tests have run successfully start to finish on
+#    Solaris with the changes reflected in this delta.
+#
+# see above
+# [from r1.2 by delta hyer_7109_fixes_to_backup_test_scripts, r1.1]
+#
+# Revision 1.2  1993/11/29  22:20:40  vijay
+# change "pass " and "run " to "pass" and "run" respectively. Trailing spaces
+# are significant.
+# [from r1.1 by delta vijay-db4691-bak-add-dump-tests-to-suite, r1.8]
+#
+# Revision 1.1  1993/11/15  22:21:49  vijay
+# Add the expect script tests for bak dump command. All these scripts reside
+# in the dump directory. The descriptions for each of these tests could be
+# found in the bak checklist.
+# [added by delta vijay-db4691-bak-add-dump-tests-to-suite, r1.1]
+#
+#
+
+TEST-SETUP
+
+    # create the filesets to dump
+    set test_cleanup_state 0
+    CATCHEXEC "cm checkfilesets"
+    if [CATCHEXEC "/opt/dcelocal/bin/fts create -ftname bak-dump-1.1.3.1b \
+	-server $ftserver_host -aggr $fileset_aggr"] {
+	send_user "\nDanger - unable to create fileset to be dumped\n"
+	unset run
+    } else {
+      set test_cleanup_state 1
+      if [CATCHEXEC "/opt/dcelocal/bin/fts clone \
+		bak-dump-1.1.3.1b"] {
+	send_user "\nDanger - unable to clone fileset\n"
+	unset run
+      } else {
+        set test_cleanup_state 2
+        if [CATCHEXEC "/opt/dcelocal/bin/fts crmount \
+		 $bak_test_directory/bak-dump-1.1.3.1b \
+	         bak-dump-1.1.3.1b"] {
+	send_user "\nDanger - unable to mount fileset\n"
+	unset run
+        } else {
+	CATCHEXEC "chmod ogu+rwx $bak_test_directory/bak-dump-1.1.3.1b"
+	set test_cleanup_state 3
+	CATCHEXEC "touch $bak_test_directory/bak-dump-1.1.3.1b/1"
+        if [CATCHEXEC "/opt/dcelocal/bin/fts clone \
+		bak-dump-1.1.3.1b"] {
+	 send_user "\nDanger - unable to clone fileset\n"
+	  unset run
+        } else {
+	CATCHEXEC "/opt/dcelocal/bin/fts dump -fileset bak-dump-1.1.3.1b \
+		-time 0 -file /tmp/bak-dump-1.1.3.1b.dump" fts_out
+	if ![string match "Dumped fileset*" $fts_out] {
+	  send_user "\n Danger - unable to dump fileset to local file\n"
+	  unset run
+	} else {
+	  set test_cleanup_state 4
+	  set tmp_ftid [get_id_from_name bak-dump-1.1.3.1b backup]
+	  if [CATCHEXEC "/opt/dcelocal/bin/fts zap -ftid $tmp_ftid \
+			-server $ftserver_host -aggr $fileset_aggr"] {
+	     send_user "\n Danger - unable to zap the test fileset\n"
+	     unset run
+	  } else {
+	    # create ftfamilies and dump levels
+	    set test_cleanup_state 5
+	    send -i $bak_id "addftfamily bak-dump\r"
+	    expect {
+      		  -i $bak_id $prompt {}
+		  -i $bak_id default {unset run}
+     	    }
+	    if [info exists run] {
+            send -i $bak_id \
+		   "addftentry bak-dump $ftserver_host $fileset_aggr \
+			 bak-dump-1.1.3.1b.backup\r"
+	    expect {
+	  	-i $bak_id $prompt {}
+		-i $bak_id default {unset run}
+	    }
+	    }
+	    if [info exists run] {
+            send -i $bak_id "adddump /full\r"
+	    expect {
+	      -i $bak_id $prompt {}
+	      -i $bak_id default {unset run}
+	    }
+	    }
+	    if [info exists run] {
+            send -i $bak_id "adddump /full/incr\r"
+	    expect {
+	      -i $bak_id $prompt {}
+	      -i $bak_id default {unset run}
+	    }
+	    }
+	   # pre-label the tape to NULL
+	    if [info exists run] {
+	   if 0!=[Label_tape $bak_id $butc_id "" "" $butc_tcid] {
+	      send_user "\n Danger - Failed to prelabel the tape\n"
+	      unset run
+	   }
+	   }
+	   # incremental dump to tape
+	   if [info exists run] {
+	   set dump_output [Dump $bak_id $butc_id "bak-dump" "/full/incr" $butc_tcid]
+	   set test_cleanup_state 6
+	   set label [Read_label $bak_id $butc_id $butc_tcid]
+	   if [string match "-1" $label] {
+	      set full_dump_id 0
+	      send_user "\n Danger - Failed to write correct tape label while performing incremental dump\n"
+	      unset run
+	   } else {
+	     set full_dump_id [lindex $label [expr [llength $label]-1]]
+	   }
+	   }
+	   # overwrite tape
+	    if [info exists run] {
+	   CATCHEXEC "sleep 30"
+	   CATCHEXEC "tar cvf $butc_device /etc/hosts" tar_out
+	   if ![string match "a*" $tar_out] {
+	      send_user "\n Danger - Failed to remove label from tape\n"
+	      unset run
+	   }
+	   }
+	    if [info exists run] {
+	   CATCHEXEC "touch $bak_test_directory/bak-dump-1.1.3.1b/2"
+           if [CATCHEXEC "/opt/dcelocal/bin/fts clone \
+		bak-dump-1.1.3.1b"] {
+	     send_user "\nDanger - unable to clone fileset\n"
+	     unset run
+           } else {
+	   # pre-label the tape to NULL
+	   if 0!=[Label_tape $bak_id $butc_id "" "" $butc_tcid] {
+	      send_user "\n Danger - Failed to prelabel the tape\n"
+	      unset run
+	   }
+	   CATCHEXEC "/opt/dcelocal/bin/fts restore -ftname bak-dump-1.1.3.1b \
+		-server $ftserver_host -aggr $fileset_aggr \
+		-file /tmp/bak-dump-1.1.3.1b.dump -overwrite" fts_out
+	   if ![string match "*Restored fileset *" $fts_out] {
+	      send_user "\n Danger - Failed to restore fileset before dump to tape\n"
+	      unset run
+	   } else {
+	     set test_cleanup_state 7
+	   }
+	  }
+	 }
+	 }
+        }
+       }
+      }
+     }
+    }
+
+TEST-PRE
+
+    # Check if bak and butc are in known state
+    if 0==[verifydb_p $bak_id] {
+	send_user "\nDanger - db is corrupted\n"
+	unset run
+    } else {
+      if 0==[is_butc_ready_p $bak_id $butc_tcid] {
+	# log message here and set error code
+	send_user "\nDanger - butc is not listening\n"
+	unset run
+      } else {
+       # check if the fileset and the mount point exist
+       if [CATCHEXEC "/opt/dcelocal/bin/fts lsft -file \
+		 bak-dump-1.1.3.1b.backup"] {
+	send_user "\n Danger - Failed to create and clone fileset\n"
+	unset run
+       } else {
+        if [CATCHEXEC "/opt/dcelocal/bin/fts lsmount $bak_test_directory/bak-dump-1.1.3.1b"] {
+	 send_user "\n Danger - Failed to mount fileset\n"
+	 unset run
+        } else {
+         # check if fileset family and dump level exist
+         if 0!=[string compare "bak-dump" [lindex [lindex \
+	          [save_fileset_families $bak_id] 0] 0]] {
+	   send_user "\n Danger - Failed to create fileset family bak-dump\n"
+	   unset run
+         } else {
+          if 0!=[string compare "/full/incr" [lindex \
+	          [save_dump_schedule $bak_id] 1]] {
+	    send_user "\n Danger - Failed to create dump level /full/incr\n"
+	    unset run
+          } else {
+	   if 0==[string match \
+		    [lindex [Read_label $bak_id $butc_id $butc_tcid] 0] \
+		  "<NULL>"] {
+	    send_user "\n Danger - Failed to create <NULL> tape label\n"
+	    unset run
+           } else {
+send_user "\n dump_output: $dump_output\n"
+	    if 0==[string match "-1" $dump_output] {
+	     send_user "\n Danger - Unexpected success performing dump\n"
+      	     unset run
+            } elseif [verify_dump_p $bak_id $butc_id "bak-dump" "/full/incr" \
+		$butc_tcid [lindex $dump_output 0] [lindex $dump_output 1]] {
+	     send_user "\n Danger - Unexpected success performing dump\n"
+	     unset run
+            } elseif [verify_fset_in_dump_p $bak_id $butc_id "bak-dump" \
+			"/full/incr" $butc_tcid bak-dump-1.1.3.1b.backup] {
+send_user "\n Backup in database \n"
+	      send_user "\n Danger - Unexpected success performing dump\n"
+	      unset run
+	    }
+           }
+	  }
+	}
+       }
+      }
+     }
+    }
+
+TEST-EXEC
+    
+    # incremental dump to tape
+    set dump_output [Dump $bak_id $butc_id "bak-dump" "/full" $butc_tcid]
+
+TEST-POST
+
+    # check if bakserver and butc are back in known state
+    if 0==[verifydb_p $bak_id] {
+	send_user "\nDanger - db is corrupted\n"
+	unset pass
+    }
+    if 0==[is_butc_ready_p $bak_id $butc_tcid] {
+	send_user "\nDanger - butc is not listening\n"
+	unset pass
+    }
+    # check if fileset is in known state
+    if 0==[is_fileset_ok_p "bak-dump-1.1.3.1b"] {
+	send_user "\nDanger - fileset inconsistent\n"
+	unset pass
+    }
+    if [CATCHEXEC "/opt/dcelocal/bin/fts lsmount \
+		 $bak_test_directory/bak-dump-1.1.3.1b"] {
+	send_user "\nDanger - fileset mount point inconsistent\n"
+	unset pass
+    }
+
+TEST-EVAL
+
+    # make sure dump has been done successfully by parsing dump output
+    if [string match "-1" $dump_output] {
+      	unset pass
+    } elseif 0==[verify_dump_p $bak_id $butc_id "bak-dump" "/full" \
+		$butc_tcid [lindex $dump_output 0] [lindex $dump_output 1]] {
+	send_user "\nDanger - failed to dump fileset\n"
+	unset pass
+    } elseif 0==[verify_fset_in_dump_p $bak_id $butc_id "bak-dump" \
+		"/full" $butc_tcid bak-dump-1.1.3.1b.backup] {
+	send_user "\nDanger - fileset entry not in database\n"
+	unset pass
+    }
+
+TEST-CLEANUP
+    case $test_cleanup_state in {
+      {1 2} {
+    	if [CATCHEXEC "/opt/dcelocal/bin/fts delete bak-dump-1.1.3.1b \
+	-server $ftserver_host -aggr $fileset_aggr"] {
+	   send_user "\nDanger - could not delete fileset\n"
+        }
+      }
+      {3} {
+    	if [CATCHEXEC "/opt/dcelocal/bin/fts delete bak-dump-1.1.3.1b \
+	-server $ftserver_host -aggr $fileset_aggr"] {
+	   send_user "\nDanger - could not delete fileset\n"
+        }
+        if [CATCHEXEC "/opt/dcelocal/bin/fts delmount \
+		  $bak_test_directory/bak-dump-1.1.3.1b"] {
+           send_user "\nDanger - could not delete fileset mount point\n"
+        }
+        remove_fileset_families_p $bak_id
+        remove_dump_schedule_p $bak_id
+      }
+      {4} {
+    	if [CATCHEXEC "/opt/dcelocal/bin/fts delete bak-dump-1.1.3.1b \
+	-server $ftserver_host -aggr $fileset_aggr"] {
+	   send_user "\nDanger - could not delete fileset\n"
+        }
+        if [CATCHEXEC "/opt/dcelocal/bin/fts delmount \
+		  $bak_test_directory/bak-dump-1.1.3.1b"] {
+           send_user "\nDanger - could not delete fileset mount point\n"
+        }
+        remove_fileset_families_p $bak_id
+        remove_dump_schedule_p $bak_id
+      }
+      {5} {
+    	if [CATCHEXEC "/opt/dcelocal/bin/fts delfldbentry  \
+		bak-dump-1.1.3.1b.backup"] {
+	   send_user "\nDanger - could not delete backup fldb entry\n"
+        }
+    	if [CATCHEXEC "/opt/dcelocal/bin/fts delete bak-dump-1.1.3.1b \
+	-server $ftserver_host -aggr $fileset_aggr"] {
+	   send_user "\nDanger - could not delete fileset\n"
+        }
+        if [CATCHEXEC "/opt/dcelocal/bin/fts delmount \
+		  $bak_test_directory/bak-dump-1.1.3.1b"] {
+           send_user "\nDanger - could not delete fileset mount point\n"
+        }
+        remove_fileset_families_p $bak_id
+        remove_dump_schedule_p $bak_id
+        Label_tape $bak_id $butc_id "" "" $butc_tcid
+      }
+      {6} {
+    	if [CATCHEXEC "/opt/dcelocal/bin/fts delfldbentry \
+		bak-dump-1.1.3.1b.backup"] {
+	   send_user "\nDanger - could not delete backup fldb entry\n"
+        }
+    	if [CATCHEXEC "/opt/dcelocal/bin/fts delete bak-dump-1.1.3.1b \
+	-server $ftserver_host -aggr $fileset_aggr"] {
+	   send_user "\nDanger - could not delete fileset\n"
+        }
+        if [CATCHEXEC "/opt/dcelocal/bin/fts delmount \
+		  $bak_test_directory/bak-dump-1.1.3.1b"] {
+           send_user "\nDanger - could not delete fileset mount point\n"
+        }
+        remove_fileset_families_p $bak_id
+        remove_dump_schedule_p $bak_id
+	Delete_dump_p $bak_id "all"
+        Label_tape $bak_id $butc_id "" "" $butc_tcid
+      }
+      {7} {
+    	if [CATCHEXEC "/opt/dcelocal/bin/fts delete bak-dump-1.1.3.1b \
+	-server $ftserver_host -aggr $fileset_aggr"] {
+	   send_user "\nDanger - could not delete fileset\n"
+        }
+        if [CATCHEXEC "/opt/dcelocal/bin/fts delmount \
+		  $bak_test_directory/bak-dump-1.1.3.1b"] {
+           send_user "\nDanger - could not delete fileset mount point\n"
+        }
+        remove_fileset_families_p $bak_id
+        remove_dump_schedule_p $bak_id
+	Delete_dump_p $bak_id "all"
+        Label_tape $bak_id $butc_id "" "" $butc_tcid
+      }
+    }

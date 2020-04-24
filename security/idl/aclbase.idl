@@ -1,0 +1,405 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: aclbase.idl,v $
+ * Revision 1.1.82.2  1996/03/09  23:27:43  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:10  marty]
+ *
+ * Revision 1.1.82.1  1995/12/08  17:30:52  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:54:46  root]
+ * 
+ * Revision 1.1.80.2  1994/06/02  21:28:22  mdf
+ * 	hp_sec_to_osf_3 drop, merge up with latest.
+ * 	[1994/05/24  15:15:53  mdf]
+ * 
+ * 	hp_sec_to_osf_3 drop
+ * 
+ * Revision 1.1.80.1  1994/01/28  23:10:38  burati
+ * 	Delegation changes (dlg_bl1)
+ * 	[1994/01/18  20:51:36  burati]
+ * 
+ * Revision 1.1.78.2  1993/10/13  20:39:48  burati
+ * 	CR9104 Remove 'default' tag from sec_acl_entry_t union
+ * 	[1993/10/13  18:50:51  burati]
+ * 
+ * Revision 1.1.78.1  1993/10/05  22:30:41  mccann
+ * 	CR8651 64 bit porting changes
+ * 	[1993/10/04  19:11:34  mccann]
+ * 
+ * Revision 1.1.6.2  1993/07/07  20:13:07  ganni
+ * 	reduced stub idl sources
+ * 	[1993/07/07  19:40:55  ganni]
+ * 
+ * Revision 1.1.4.2  1992/12/29  13:28:50  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:47:58  zeliff]
+ * 
+ * Revision 1.1.2.3  1992/05/08  14:47:49  burati
+ * 	Added sec_acl_posix_semantics
+ * 	[1992/04/29  03:04:12  burati]
+ * 
+ * Revision 1.1.2.2  1992/03/24  20:31:01  burati
+ * 	CR2387 Change sec_acl_perm_owner to sec_acl_perm_control
+ * 	[1992/03/24  19:21:01  burati]
+ * 
+ * Revision 1.1  1992/01/19  14:55:34  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+
+/*
+** Copyright (c) Hewlett-Packard Company 1991, 1994
+** Unpublished work. All Rights Reserved.
+**
+*/
+/*
+**      SEC_ACL manager base type definitions
+*/
+
+[
+    uuid(47AEE3EA-F000-0000-0D00-01DC6C000000)
+]
+
+interface sec_acl_base {
+
+    import "dce/secsts.idl";
+    import "dce/id_base.idl";
+
+    /*
+     * External representation of a sec_acl_handle_t
+     */
+    typedef void  *sec_acl_handle_t;
+    const   void  *sec_acl_default_handle = NULL;
+
+    /*  s e c _ a c l _ e x t e n d e d _ i n f o _ t
+     *
+     *  An extended info block is provided for future extensibility.  Primarily
+     *  this allows an out-of-date client to read an acl from a newer manager
+     *  and apply it to another (up-to-date) manager.  The data cannot be
+     *  interpreted without access to the appropriate pickling routines, which
+     *  presumably are unavailable to the out-of-date client).
+     *
+     *  In general acl managers should not accept acl's which contain entries
+     *  that the manager does not understand.  The manager clearly cannot
+     *  perform the security service requested by an uninterpretable entry and
+     *  it is considered a security breach to lead a client to believe that the
+     *  manager is performing a particular class of service if the manager
+     *  cannot do so.
+     */
+
+    typedef struct {
+        uuid_t          extension_type;
+        ndr_format_t    format_label;
+        unsigned32      num_bytes;
+        [size_is(num_bytes)]
+            byte        pickled_data[];
+    } sec_acl_extend_info_t;
+
+    /*  s e c _ a c l _ p e r m s e t _ t
+     *
+     *  Permissions are encoded in a permission set type, currently the
+     *  conventional file system permissions (read, write, execute) and the
+     *  extended AFS permissions (owner, insert, delete) are defined.  These
+     *  permissions can only be interpreted by the manager for the object
+     *  i.e. sec_acl_perm_unused_00000080 may mean 'withdrawls' are OK for the
+     *  'bank' manager, while it may mean 'rebooting' is OK to a 'CPU' manager.
+     */
+
+    typedef unsigned32 sec_acl_permset_t;
+        const unsigned32 sec_acl_perm_read            = 0x00000001;
+        const unsigned32 sec_acl_perm_write           = 0x00000002;
+        const unsigned32 sec_acl_perm_execute         = 0x00000004;
+        const unsigned32 sec_acl_perm_control         = 0x00000008;
+        const unsigned32 sec_acl_perm_insert          = 0x00000010;
+        const unsigned32 sec_acl_perm_delete          = 0x00000020;
+        const unsigned32 sec_acl_perm_test            = 0x00000040;
+        const unsigned32 sec_acl_perm_unused_00000080 = 0x00000080;
+        const unsigned32 sec_acl_perm_unused_00000100 = 0x00000100;
+        const unsigned32 sec_acl_perm_unused_00000200 = 0x00000200;
+        const unsigned32 sec_acl_perm_unused_00000400 = 0x00000400;
+        const unsigned32 sec_acl_perm_unused_00000800 = 0x00000800;
+        const unsigned32 sec_acl_perm_unused_00001000 = 0x00001000;
+        const unsigned32 sec_acl_perm_unused_00002000 = 0x00002000;
+        const unsigned32 sec_acl_perm_unused_00004000 = 0x00004000;
+        const unsigned32 sec_acl_perm_unused_00008000 = 0x00008000;
+        const unsigned32 sec_acl_perm_unused_00010000 = 0x00010000;
+        const unsigned32 sec_acl_perm_unused_00020000 = 0x00020000;
+        const unsigned32 sec_acl_perm_unused_00040000 = 0x00040000;
+        const unsigned32 sec_acl_perm_unused_00080000 = 0x00080000;
+        const unsigned32 sec_acl_perm_unused_00100000 = 0x00100000;
+        const unsigned32 sec_acl_perm_unused_00200000 = 0x00200000;
+        const unsigned32 sec_acl_perm_unused_00400000 = 0x00400000;
+        const unsigned32 sec_acl_perm_unused_00800000 = 0x00800000;
+        const unsigned32 sec_acl_perm_unused_01000000 = 0x01000000;
+        const unsigned32 sec_acl_perm_unused_02000000 = 0x02000000;
+        const unsigned32 sec_acl_perm_unused_04000000 = 0x04000000;
+        const unsigned32 sec_acl_perm_unused_08000000 = 0x08000000;
+        const unsigned32 sec_acl_perm_unused_10000000 = 0x10000000;
+        const unsigned32 sec_acl_perm_unused_20000000 = 0x20000000;
+        const unsigned32 sec_acl_perm_unused_40000000 = 0x40000000;
+        const unsigned32 sec_acl_perm_unused_80000000 = 0x80000000;
+        /* For backwards compatibility */
+        const unsigned32 sec_acl_perm_owner           = 0x00000008;
+
+    /*  s e c _ a c l _ p o s i x _ s e m a n t i c s _ t
+     *
+     *  An ACL manager may support 0 or more POSIX ACL semantics.
+     *  In order for a client to determine which if any semantics
+     *  an ACL manager supports, a flag of type sec_acl_posix_semantics_t
+     *  is passed back with the manager types in the API call
+     *  sec_acl_get_mgr_types_semantics(...)
+     */
+    typedef unsigned32 sec_acl_posix_semantics_t;
+        const unsigned32 sec_acl_posix_no_semantics   = 0x00000000;
+        const unsigned32 sec_acl_posix_mask_obj       = 0x00000001;
+        const unsigned32 sec_acl_posix_unused_0000002 = 0x00000002;
+        const unsigned32 sec_acl_posix_unused_0000004 = 0x00000004;
+        const unsigned32 sec_acl_posix_unused_0000008 = 0x00000008;
+
+    /*  s e c _ a c l _ e n t r y _ t y p e _ t
+     *
+     *  A sec_acl_entry_t is an individual entry contained in an acl.  Each
+     *  entry contains a type tag (identifying the role for the entries data)
+     *  a sec_acl_entry_type_t defines these types.
+     *
+     */
+
+    typedef enum {
+        sec_acl_e_type_user_obj,            /* POSIX 1003.6 */
+            /* SEC_ACL entry contains permissions for the implied user
+             * object.
+             *
+             */
+        sec_acl_e_type_group_obj,           /* POSIX 1003.6 */
+            /* SEC_ACL entry contains permissions for the implied group
+             * object.
+             */
+        sec_acl_e_type_other_obj,           /* POSIX 1003.6 */
+            /* Entry contains permissions for principals not otherwise
+             * named through user or group entries.
+             */
+        sec_acl_e_type_user,                /* POSIX 1003.6 */
+            /* Entry contains a key identifying a user
+            */
+        sec_acl_e_type_group,               /* POSIX 1003.6 */
+            /* Entry contains a key identifying a group
+            */
+        sec_acl_e_type_mask_obj,            /* POSIX 1003.6 */
+            /* Entry contains the maximum permissions for all entries
+             * other than mask_obj, unauthenticated, user_obj, other_obj.
+             */
+        sec_acl_e_type_foreign_user,
+            /* Entry contains a key identifying a user and the foreign realm
+            */
+        sec_acl_e_type_foreign_group,
+            /* Entry contains a key identifying a group and the foreign realm
+            */
+        sec_acl_e_type_foreign_other,
+            /* Entry contains a key identifying a foreign realm.  Any user that
+             * can authenticate to the foreign realm will be allowed access.
+             */
+        sec_acl_e_type_unauthenticated,
+            /* The entry contains permissions to be applied when the accessor
+             * does not pass authentication procedures.  A privilege attribute
+             * certificate will indicate that the caller's identity is not
+             * authenticated.  The identity is used to match against the
+             * standard entries, but the access rights are masked by this mask.
+             * If this mask does not exist on an acl, it is assumed to grant no
+             * access and all unauthenticated access attempts will be denied.
+             *
+             * Great care should be exercised when allowing unauthenticated
+             * access to an object.  By its very nature unauthenticated access
+             * is very easy to spoof.  The presence of this mask on an acl
+             * essentially means that anyone can get at least as much access
+             * as allowed by the mask.
+             */
+        sec_acl_e_type_extended,
+            /* The Entry contains extended data - formatted as pickled data.
+             */
+        sec_acl_e_type_any_other,
+            /* Any user that can authenticate to any foreign realm will be
+             * allowed access.
+             */
+        sec_acl_e_type_user_obj_deleg,
+            /* Identity that owns object, acting as a delegate */
+        sec_acl_e_type_user_deleg,
+            /* Specific principal, identified by cell relative principal name,
+             * acting as a delegate
+             */
+        sec_acl_e_type_for_user_deleg,
+            /* Specific principal, identified by global principal name,
+             * acting as a delegate
+             */
+        sec_acl_e_type_group_obj_deleg,
+            /* Identify of group that's listed as owner of object,
+             * acting as a delegate
+             */
+        sec_acl_e_type_group_deleg,
+            /* Specific group, identified by cell relative group name,
+             * acting as a delegate
+             */
+        sec_acl_e_type_for_group_deleg,
+            /* Specific group, identified by global group name,
+             * acting as a delegate
+             */
+        sec_acl_e_type_other_obj_deleg,
+            /* Any principal in the local cell, acting as a delegate */
+        sec_acl_e_type_for_other_deleg,
+            /* Any principal in the specified cell, acting as a delegate */
+        sec_acl_e_type_any_other_deleg
+            /* Any principal in any cell, acting as a delegate */
+    } sec_acl_entry_type_t;
+
+
+    /* Number of entry types in above list; must be updated for new types */
+    const unsigned32 sec_acl_e_type_max_nbr =
+        (sec_acl_e_type_any_other_deleg + 1);
+
+    /*  s e c _ a c l _ e n t r y _ t
+     *
+     *  A sec_acl_entry_t contains a set of permissions, and other optional
+     *  information.  The optional information currently divides into
+     *  three categories:
+     *      1) Keys - identifier for the entry (principal or group name - uuid)
+     *      2) Foreign Keys -   same as above with the addition of the
+     *                          uuid identifying the foreign realm.
+     *      3) extended data -  additional 'pickled' data.  This kind of entry
+     *                          cannot be interpreted, but can be used by an
+     *                          out-of-date client when copying an acl from
+     *                          one manager to another (assuming that the two
+     *                          managers each understand the data).
+     *
+     */
+
+    typedef sec_id_t sec_acl_id_t;
+
+    typedef struct {
+        sec_acl_permset_t       perms;
+        union sec_acl_entry_u
+                switch (sec_acl_entry_type_t entry_type) tagged_union {
+
+            case sec_acl_e_type_mask_obj:
+            case sec_acl_e_type_user_obj:
+            case sec_acl_e_type_group_obj:
+            case sec_acl_e_type_other_obj:
+            case sec_acl_e_type_unauthenticated:
+            case sec_acl_e_type_any_other:
+            case sec_acl_e_type_user_obj_deleg:
+            case sec_acl_e_type_group_obj_deleg:
+            case sec_acl_e_type_other_obj_deleg:
+            case sec_acl_e_type_any_other_deleg:
+                /* ... just the permset_t ... */;
+
+            case sec_acl_e_type_user:
+            case sec_acl_e_type_group:
+            case sec_acl_e_type_foreign_other:
+            case sec_acl_e_type_user_deleg:
+            case sec_acl_e_type_group_deleg:
+            case sec_acl_e_type_for_other_deleg:
+                sec_id_t        id;
+
+            case sec_acl_e_type_foreign_user:
+            case sec_acl_e_type_foreign_group:
+            case sec_acl_e_type_for_user_deleg:
+            case sec_acl_e_type_for_group_deleg:
+                sec_id_foreign_t foreign_id;
+
+            case sec_acl_e_type_extended:
+                [ptr] sec_acl_extend_info_t *extended_info;
+        } entry_info;
+    } sec_acl_entry_t;
+
+    /*  s e c _ a c l _ t
+     *
+     *  A sec_acl_t is a complete sec_acl containing a set of sec_acl_entry_t
+     *  fields.  The default realm identifies the authentication authority
+     *  for simple acl entries (foreign entries already identify the foreign
+     *  realms.  The sec_acl_manager_type identifies the manager that is
+     *  interpreting this sec_acl.  (It is probably a bad idea to allow one
+     *  manager to create a sec_acl to be interpreted by an independent
+     *  (disinterested) manager).
+     */
+
+    typedef struct {
+        sec_acl_id_t            default_realm;
+        uuid_t                  sec_acl_manager_type;
+        unsigned32              num_entries;
+        [ptr, size_is(num_entries)]
+            sec_acl_entry_t     *sec_acl_entries;
+    } sec_acl_t;
+    typedef [ptr] sec_acl_t *sec_acl_p_t;
+
+    /*  s e c _ a c l _ t y p e _ t
+     *
+     *  A sec_acl_type_t differentiates between the different types of sec_acls
+     *  that an object can possess.  e.g., a directory can have three types of
+     *  acls, the directory acl which controls access to the directory, the
+     *  initial object (or default object) acl which serves as a mask when
+     *  creating new objects in the directory, and the initial directory (or
+     *  default dir) acl which serves as a mask when creating new directories
+     *  (containers).  All objects that have acls will have the normal acl,
+     *  and objects that control the creation of other objects (containers)
+     *  will have the other 'default' acls.
+     */
+
+    typedef enum {
+        sec_acl_type_object,
+            /* The sec_acl for the specified object */
+        sec_acl_type_default_object,
+            /* The sec_acl to be used when creating objects in the container */
+        sec_acl_type_default_container,
+            /* The sec_acl to be used when creating nested containers */
+        sec_acl_type_unspecified_3,
+        sec_acl_type_unspecified_4,
+        sec_acl_type_unspecified_5,
+        sec_acl_type_unspecified_6,
+        sec_acl_type_unspecified_7
+    } sec_acl_type_t;
+
+    /* s e c _ a c l _ p r i n t s t r i n g _ t
+     *
+     *  A sec_acl_printstring_t structure contains a printable representation
+     *  for a permission in a sec_acl_permset_t that the sec_acl manager will
+     *  support.  This allows a generic sec_acl editing tool to be used for
+     *  application specific sec_acls.  The tool does not need to know the
+     *  printable representation for each permission - it determines that
+     *  information from the sec_acl manager through a call to the
+     *  get_printstring operation which will return an array of these -
+     *  1 for each permission that the sec_acl manager is willing to deal with.
+     *  The helpstring field can be used to provide help data for the entry.
+     */
+    const signed32  sec_acl_printstring_len         = 16;
+    const signed32  sec_acl_printstring_help_len    = 64;
+
+    typedef struct {
+        [string] char       printstring[sec_acl_printstring_len];
+        [string] char       helpstring[sec_acl_printstring_help_len];
+        sec_acl_permset_t   permissions;
+    } sec_acl_printstring_t;
+
+    /* s e c _ a c l _ c o m p o n e n t _ n a m e _ t
+     *
+     *  A string for disambiguating operations on objects.  The component name
+     *  further specifies the entity that the sec_acl is protecting.
+     */
+    typedef [string, ptr] unsigned char *sec_acl_component_name_t;
+
+    /* s e c _ a c l _ l i s t _ t
+     *
+     * List of acls, passed to/from replace/lookup interfaces.
+     */
+    typedef struct {
+        unsigned32              num_acls;
+        [size_is(num_acls)]
+        sec_acl_p_t             sec_acls[];
+    } sec_acl_list_t;
+}

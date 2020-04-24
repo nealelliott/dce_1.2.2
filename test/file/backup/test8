@@ -1,0 +1,294 @@
+#! /bin/sh 
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# test8
+#
+# tests dump, dumpinfo, ftinfo, lsdumps, lsftfamilies, lshosts, 
+#       adddump, addftentry, addftfamily, addhost, jobs, kill, labeltape,
+#       quit, restoreft, rmdupm, rmftentry, rmftfamily, rmhost, scantape,
+#       setexp, status.
+#
+# This script exercises bak commands that result in
+# any tape drive operations.
+#
+#
+# HISTORY
+# $Log: test8,v $
+# Revision 1.1.12.1  1996/10/17  18:12:28  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:47:55  damon]
+#
+# Revision 1.1.5.2  1993/01/11  17:37:23  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  16:53:43  htf]
+# 
+# Revision 1.1.2.2  1992/05/21  12:32:52  jaffe
+# 	To convert the /bin/csh backup test scripts to /bin/sh.
+# 	To change the scripts to use the recommended style of variable names.
+# 
+# 	$TALog: test8,v $
+# 	Revision 4.4  1994/06/01  17:25:16  andi
+# 	None of the files existed in the configuration!  Checked them all out
+# 	and added them.
+# 	[added by delta andi-db5496-checkout-backup-tests, r1.1]
+# 
+# Revision 4.3  1993/01/14  17:32:18  jaffe
+# 	revdrop of latest OSF copyright changes to these files
+# 	[from r4.2 by delta osf-revdrop-01-12-92, r1.1]
+# 
+# 	[1992/05/20  16:20:03  jaffe]
+# 
+# $EndLog$
+#
+
+: ${BAK_BIN_DIR=$1}
+: ${TCID=$2}
+: ${BAKHOST=$3}
+: ${HOSTNAME=`hostname`}
+: ${FILESET="test.tape"}
+: ${TAPE_NAME="test.tape.1"}
+
+PATH=$PATH":"$BAK_BIN_DIR
+#export PATH
+
+echo ""
+echo "**************** TEST8 **************"
+echo ""
+echo "INSERT SCRATCH TAPE"
+echo "press return to continue"
+read a 
+echo bak labeltape -tape $TAPE_NAME
+bak labeltape -tape $TAPE_NAME
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.0 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi 
+
+echo ""
+echo bak addhost -tapehost $BAKHOST -tcid $TCID
+bak addhost -tapehost $BAKHOST -tcid $TCID
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.1 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi 
+
+
+echo ""
+echo bak adddump -level /$HOSTNAME
+bak adddump -level /$HOSTNAME
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.2 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi 
+
+echo ""
+echo bak addftfamily -family $BAKHOST
+bak addftfamily -family $BAKHOST
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.3 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi 
+
+echo ""
+echo bak addftentry -family $BAKHOST -server .* -aggregate .* -fileset $FILESET
+bak addftentry -family $BAKHOST -server .* -aggregate .* -fileset $FILESET
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.4 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi 
+
+echo ""
+echo "FILESETS TO BE INCLUDED IN THE DUMP ARE AS FOLLOWS"
+echo bak dump -family $FILESET -level /$HOSTNAME -tcid $TCID -noaction
+bak dump -family $FILESET -level /$HOSTNAME -tcid $TCID -noaction
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.5 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi 
+
+echo ""
+echo bak dump -family $FILESET -level /$HOSTNAME -tcid $TCID 
+bak dump -family $FILESET -level /$HOSTNAME -tcid $TCID 
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.6 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi 
+
+echo ""
+echo "ENTERING INTERACTIVE MODE.  YOU SHOULD NOW TEST THE INTERACTIVE"
+echo "COMMANDS SUCH AS status, jobs, *kill* - carefully, AND FINALLY quit"
+echo "BE AWARE THAT KILLING ANY RUNNING JOBS WILL CAUSE THE REST OF THE 
+echo "SCRIPT TO FAIL."
+
+echo ""
+echo bak
+bak
+
+echo bak scantape -tcid $TCID
+bak scantape -tcid $TCID
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.7 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi 
+
+# should conduct more thorough checking of the date parsing logic here
+# later.
+
+echo ""
+echo bak setexp -level /$HOSTNAME -expires at "12/01/91 00:00"
+bak setexp -level /$HOSTNAME -expires at "12/01/91 00:00"
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.8 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi 
+
+echo ""
+echo bak dumpinfo -verbose
+bak dumpinfo -verbose
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.9 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi 
+
+echo ""
+echo bak dumpinfo -id
+echo Testing the -id option on dumpinfo
+echo -n Enter dumpID :
+read dumpID
+echo bak dumpinfo -id $dumpID
+bak dumpinfo -id $dumpID
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.10 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi 
+
+echo ""
+echo bak dumpinfo -ndumps 
+echo Testing the -ndumps option on dumpinfo
+echo -n  Enter number of dumps to display :
+read ndumps
+echo bak dumpinfo -ndumps $ndumps
+bak dumpinfo -ndumps $ndumps
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.10 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi
+
+echo ""
+echo bak ftinfo -fileset $FILESET
+bak ftinfo -fileset $FILESET
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.11 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi 
+
+# insert code to delete the stuff just backed up.
+echo "DELETING VOLUME JUST DUMPED TO TAPE"
+
+echo ""
+echo bak restoreft -server $BAKSERVER -aggregate .* -fileset $FILESET -tcid $TCID 
+bak restoreft -server $BAKSERVER -aggregate .* -fileset $FILESET -tcid $TCID 
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.11 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi
+
+# insert code here to verify that contents of fileset have been restored
+
+echo ""
+echo bak rmdump -level /$HOSTNAME
+bak rmdump -level /$HOSTNAME
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.12 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi
+
+echo ""
+echo bak rmftfamily -family $FILESET
+bak rmftfamily -family $FILESET
+if [ $? -ne 1 ] 
+then
+  echo "Case 8.13 WORKED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi
+
+echo ""
+echo bak rmftentry -family $FILESET -entry 1
+bak rmftentry -family $FILESET -entry 1
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.14 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi
+
+echo ""
+echo bak rmftfamily -family $FILESET
+bak rmftfamily -family $FILESET
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.15 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi
+
+echo ""
+echo bak rmhost -tapehost $BAKHOST -tcid $TCID
+bak rmhost -tapehost $BAKHOST -tcid $TCID
+if [ $? -ne 0 ] 
+then
+  echo "Case 8.16 FAILED unexpectedly" 
+  echo "Cannot continue until this case passes"
+  exit 1
+fi
+
+echo ""
+echo "ALL SHOULD BE EMPTY"
+echo ""
+echo bak lshosts
+bak lshosts
+echo ""
+echo bak lsftfamilies
+bak lsftfamilies
+echo ""
+echo bak lsdumps
+bak lsdumps
+
+echo ""
+echo "**************** TEST8 END **************"

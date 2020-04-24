@@ -1,0 +1,180 @@
+>> owning group tests
+-- Add princ to owning group for server
+++ See that princ has capability to do operation
+-- Remove owning group
+++ See that princ no longer has perms
+
+>> Server entries GetServer() run on a command that takes a server name
+-- Try three different addres formats: name, IP address, family:byte.byte... address
+** CacheServerConnection doesn't really do lru
+
+>> Aggregate entries run on a command that takes a aggregate name
+-- Create more than 30 aggregates on server
+
+>> fts crmount
+-- Run without PX running
+** Specify a directory ending in /
+** Specify a mountpoint w/ only beginning /
+** vldb_InitUbikHandle incorrect comment re cellP at beginning
+-- Try creating a mount point outside of DFS
+-- Try creating mount point for fileset from different cell
+-- Try creating global mount point
+-- Try creating rw mount point
+++ Verify that symlink was created
+
+>> fts delmount
+-- Run without PX running
+-- Specify multiple directories
+-- Specify a mount point ending in /
+++ Verify that symlink was deleted
+-- Try deleting ordinary directory
+
+>> fts lsmount
+-- Specify a large number of filesets (enough to cause recycling of
+	cm_volume structures in the CM
+-- Try on a mount point for a non-existent fileset
+-- Try on a symlink to a fileset (try with absolute and relative path
+	names in symlink).
+-- Put trailing '/' on mount point
+** Doesn't currently work
+
+>> fts crserverentry
+-- Enter principal 64 characters long
+-- Enter non-numeric argument for quota
+-- Specify an invalid group name for -owner
+-- Specify a foreign group for -owner
+-- Try with no admin.fl 
+-- Try with no perms
+-- Create entry twice
+++ verify entry created
+-- Create server entry for host in different cell
+-- Try to set owner to be group in a different cell (should fail)
+
+>> fts delserverentry
+-- Delete server entry
+++ verify entry deleted
+-- delete entry again
+-- delete bogus entry
+
+>> fts lsserverentry
+++ verify that owning group is properly printed
+
+>> fts edserverentry
+-- Make server principal name 64 characters
+-- Make quota non-zero, try to violate by creating fldb entries
+-- Set owner of entry, then remove owner & verify
+++ Verify owner can create fldb entries for server
+++ Verify perms go away when owner removed/changed
+-- Remote group tests (see crserverentry)
+-- Set owner to bogus group
+** Code implies -addadd and -rmaddr can both appear on command line
+-- Add more than 4 addresses for a server
+-- Change server's address
+-- Delete server address
+-- Try to delete last address
+-- Do server entry owner checks
+-- Try to set owner to be group in a different cell (should fail)
+
+>> fts crfldbentry
+-- Attempt to create an entry with a fileset 103 characters long
+-- owner group tests
+-- Try to create an entry for an LFS fileset
+-- Attempt to create entry with invalid fileset name (e.g., 0,,1)
+-- Create fileset entry that hashes to the same value as existing entry
+++ Verify both entries still there
+
+>> fts delfldbentry
+-- owner group tests
+-- delete entry, verify entry is gone
+-- delete entry that hash to same value as another, see second still there
+	repeat in reverse.
+-- delete replicated entry with no replicas available
+
+>> fts lsfldb
+++ use to verify crfldbentry/delfldbentry/lock/unlock
+-- list entries in remote cell
+++ verify it prints owning group properly
+
+>> fts lsft
+-- use to list remote cell
+
+>> fts setrepinfo
+-- Try on a non-LFS fileset -- should fail
+-- Try on an LFS fileset
+++ verify with lsft -- see that 0x8000000 is set in states
+-- Change from released to scheduled replication, and do the reverse
+++ Verify that proper defaults are set after 
+	(for rel -> sched, make sure distinguished rep nuked)
+-- Verify the following invariants are maintained:
+	maxage >= 2m
+	failage >= maxage
+	reclaimage >= 90m
+	for sched rep: rep default ages <= maxage, >= minrepdelay
+	defaultsiteage <= maxage
+
+>> fts addsite
+-- Try with bogus server/aggregate
+-- Try with a fileset that's not setrepinfo'd
+-- Try on a fileset that's locked
+-- Try on a fileset with a missing RW or RO
+-- Try with both scheduled and release reps
+-- Specify a maxsiteage of 0 for scheduled replication
+-- Specify a maxsiteage < minrepdelay
+-- Specify a maxsiteage > maxage
+-- Add a site twice (using different net addresses if possible)
+-- Add more than 16 sites (first w/ multiple addrs per host, then without)
+-- Add site in another cell
+++ Verify with lsft
+
+>> fts rmsite
+-- Try with bogus server/aggregate
+-- Try to remove a server/aggregate that's not really a site
+-- Try on a locked entry
+++ Verify that the site is removed with lsft
+-- Remove all sites
+++ Verify that when last RO is deleted, the 0x8000000 state bit is turned off
+-- Zap RW, remove replicas
+
+>> fts lsreplicas
+-- Specify bogus fileset
+-- Specify a non-replicated fileset
+-- Specify a release-replicated fileset (should fail)
+-- Specify a server not holding a scheduled replica
+-- try on foreign cell
+
+>> fts statrepserver
+-- Specify a bogus server
+-- Specify a server without a repserver running
+-- Specify a server in a foreign cell
+++ Verify that the number of replicas on site is valid
+
+>> fts update
+-- Do for both release and scheduled replication
+-- Specify server not containing replica
+-- Specify real server
+-- Specify a server in foreign cell
+
+>> fts lock
+-- owner group tests
+-- attempt to lock an already locked entry
+-- attempt to lock an entry that's been locked for over 8 hours (should succeed)
+-- try on foreign cell
+
+>> fts unlock
+-- owner group tests
+-- unlock foreign fldb entry
+++ verify that lock is released
+
+>> fts unlockfldb
+-- owner group tests
+-- lock a number of entries, unlockfldb, see that right number unlocked.
+++ verify with lsfldb
+-- try on foreign cell
+
+>> fts syncfldb
+-- Specify server and aggregate not on that server
+-- remove fldb entries and then sync for:
+	-- RW gone, RO or BACK present
+	-- replicated fileset
+-- syncfldb an aggregate from another machine
+	-- make sure replication site updated

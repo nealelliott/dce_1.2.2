@@ -1,0 +1,332 @@
+#  @OSF_COPYRIGHT@
+#  COPYRIGHT NOTICE
+#  Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+#  ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+#  src directory for the full copyright text.
+#
+
+###############################################################################
+#    Copyright (C) 1995, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+#
+#  This file contains a utility function for checking return codes
+#  from the DFS fts commands.  It is intended to be used by the fts
+#  tests suite.  It is sourced into the appropriate scripts.
+#
+
+# This is the setup for the script.
+: ${DFS_WORKS_ON_BOTH="BOTH"}
+export DFS_WORKS_ON_BOTH
+: ${DFS_PASS_EQ_ZERO=1}
+: ${DFS_PASS_EQ_NONZERO=2}
+: ${DFS_WORKS_ON_UFS="UFS"}
+: ${DFS_WORKS_ON_LFS="LFS"}
+export DFS_WORKS_ON_UFS DFS_WORKS_ON_LFS DFS_PASS_EQ_ZERO DFS_PASS_EQ_NONZERO
+
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+if test "$CELL_NAME" = ""
+    then 
+	echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting."
+	exit 2
+fi
+
+: ${dns_cell_name="/.../$CELL_NAME"}
+: ${bin_dir=/opt/dcelocal/bin}
+: ${export_root=/.../$CELL_NAME/fs}
+
+: ${AUTH_ARG=""}
+: ${CELL_ARG=""}
+: ${VERB_ARG=""}
+cav_arg="$CELL_ARG $AUTH_ARG $VERB_ARG"
+av_arg="$AUTH_ARG $VERB_ARG"
+
+PATH=":"$bin_dir":"$PATH
+
+###############################################################################
+# We do all our tests under /.:/fs/mtest. So make sure this directory is present
+# and if not create it.
+
+: ${test_root="$export_root/mtest"}
+if [ -d $test_root ]
+then 
+    chmod 777 $test_root
+else
+    mkdir $test_root
+    chmod 777 $test_root
+fi
+
+hn=`hostname|cut -f1 -d"." 2>/dev/null`
+
+# Determine server names if necessary.
+if test ${SERVER_1-""} = ""
+    then
+	cat > /tmp/RGYED.$$ << EOF
+view subsys/dce/dfs-admin -m
+quit
+EOF
+	xSNS=`rgy_edit -g < /tmp/RGYED.$$ | grep '^   ' | tr ', ' '\012' | grep '/dfs-server' | sed -e 's;/dfs-server;;'`
+	/bin/rm -f /tmp/RGYED.$$
+# Preferentially choose this host, if it's available, as one of the servers.
+	MYSN=""
+	SNS=""
+	for host in $xSNS
+	    do
+		htail=`echo $host | sed -e 's;.*/\([^/]*\);\1;'`
+		if test "$htail" = "$hn"
+		    then
+			MYSN="$host"
+		    else
+			SNS="$SNS $host"
+		fi
+	done
+	SNS="$MYSN $SNS"
+	for host in $SNS
+	    do
+		if test ${SERVER_1-""}
+		    then
+			if test ${SERVER_2-""} = ""
+			    then
+				SERVER_2=$host;
+			fi
+			break;
+		    else
+			SERVER_1="$host"
+		fi
+	done
+	if test ${SERVER_1-""} = ""
+	    then
+		SERVER_1=$hn
+	fi
+	if test ${SERVER_2-""} = ""
+	    then
+		SERVER_2=$SERVER_1
+	fi
+	SERVER_1="$dns_cell_name/$SERVER_1"
+	SERVER_2="$dns_cell_name/$SERVER_2"
+fi
+if test ${SERVER_1=""} = ""
+    then
+	echo "NO VALUE FOR SERVER_1 variable--ABORTING."
+	exit 3;
+fi
+if test ${SERVER_2=""} = ""
+    then
+	echo "NO VALUE FOR SERVER_2 variable--ABORTING."
+	exit 3;
+fi
+
+S1_AGS=""
+if test ${SERV1_AGGR1-""} = ""
+    then
+	S1_AGS=`fts aggrinfo $SERVER_1 | egrep '^LFS' | sort +4nr -5 | awk '{print $3}'`
+	for xx in $S1_AGS
+	    do
+		SERV1_AGGR1=$xx
+		break
+	done
+fi
+if test ${SERV1_AGGR1=""} = ""
+    then
+	echo "NO VALUE FOR SERV1_AGGR1 variable--ABORTING."
+	exit 3;
+fi
+if test ${SERV2_AGGR2-""} = ""
+    then
+	if test "$SERVER_1" = "$SERVER_2"
+	    then
+		if test "${S1_AGS}" = ""
+		    then
+			S1_AGS=`fts aggrinfo $SERVER_1 | egrep '^LFS' | sort +4nr -5 | awk '{print $3}'`
+		fi
+		for xx in $S1_AGS
+		    do
+			if test "$xx" != "$SERV1_AGGR1"
+			    then
+				SERV2_AGGR2=$xx
+				break
+			fi
+		done
+		if test "$SERV2_AGGR2" = ""
+		    then
+			SERV2_AGGR2=$SERV1_AGGR1
+		fi
+	    else
+		SERV2_AGGR2=`fts aggrinfo $SERVER_2 | egrep '^LFS' | sort +4nr -5 | awk '{print $3; exit}'`
+	fi
+fi
+if test ${SERV2_AGGR2=""} = ""
+    then
+	echo "NO VALUE FOR SERV2_AGGR2 variable--ABORTING."
+	exit 3;
+fi
+if test ${SERV1_AGGR3-""} = ""
+    then
+	if test "${S1_AGS}" = ""
+	    then
+		S1_AGS=`fts aggrinfo $SERVER_1 | egrep '^LFS' | sort +4nr -5 | awk '{print $3}'`
+	fi
+	if test "$SERVER_1" = "$SERVER_2"
+	    then
+# SERV1_AGGR3 should just be SERV2_AGGR2.
+		SERV1_AGGR3=$SERV2_AGGR2
+	    else
+# SERV1_AGGR3 should be the second-biggest aggr on SERV1.
+		for xx in $S1_AGS
+		    do
+			if test "$xx" != "$SERV1_AGGR1"
+			    then
+				SERV1_AGGR3=$xx
+				break
+			fi
+		done
+		if test "$SERV1_AGGR3" = ""
+		    then
+			SERV1_AGGR3=$SERV1_AGGR1
+		fi
+	fi
+fi
+if test ${SERV1_AGGR3=""} = ""
+    then
+	echo "NO VALUE FOR SERV1_AGGR3 variable--ABORTING."
+	exit 3;
+fi
+
+#
+#  Determine what file system we are working under.  Check for UFS under
+#  DFS or LFS under DFS.
+#
+xxx=`(cd ${test_root}; pwd)`
+echo ${xxx} | grep -s '^/\.\.\./' > /dev/null
+if [ $? -eq 0 ]
+then
+    #
+    #  Now that we know we are in DFS check for UFS or LFS.  Use the 
+    #  WORKS_ON constants to simplify checking in the dfs_checkResults
+    #  function.
+    #
+    fts lsquota ${test_root} | grep 'non-LFS' > /dev/null
+    if [ $? -eq 0 ]
+    then
+	dfs_FileSysType=$DFS_WORKS_ON_UFS
+    else
+	dfs_FileSysType=$DFS_WORKS_ON_LFS
+    fi
+else
+    echo "ERROR: Invalid test execution location (${xxx})."
+    echo "       ${test_root} MUST reside inside a DFS file system."
+    exit 1
+fi
+export dfs_FileSysType
+
+###############################################################################
+# Tell the log file the configuration.
+echo "$ty/$p running on $hn at `date`"
+echo "   in cell $CELL_NAME."
+echo "Servers are $SERVER_1 and $SERVER_2."
+###############################################################################
+
+#
+#  dfs_checkResult()
+#
+#  This function verifies the return code of an fts command.  It works
+#  on both LFS and UFS file systems.
+#
+#  Arguments:
+#	$1 - status to compare against
+#	$2 - flag to indicate if a 0 status means the test passed.
+#	$3 - flag to indicate if the test is expected to work on UFS, LFS
+#	     or both.
+#	$4 - test program name
+#	$5 - test case number
+#	$6 - error counter, incremented if status is failure.
+#
+dfs_checkResult()
+{
+    ftsTestResult="Passed"
+
+    #
+    #  Check to see what comparison to do.  The opposite comparison is
+    #  done, since we assume the test passes and only need to change to
+    #  failure if this is NOT the case.
+    #
+    if [ $2 -eq $DFS_PASS_EQ_ZERO ]
+    then
+	if [ $1 -ne 0 ]
+	then
+	    if [ "$3" = "$DFS_WORKS_ON_BOTH" -o "$3" = "$dfs_FileSysType" ]
+	    then
+		ftsTestResult="FAILED"
+	    fi
+	fi
+    else
+	if [ $1 -eq 0 ]
+	then
+	    if [ "$3" = "$DFS_WORKS_ON_BOTH" -o "$3" = "$dfs_FileSysType" ]
+	    then
+		ftsTestResult="FAILED"
+	    fi
+	fi
+    fi
+
+    if [ "$ftsTestResult" = "FAILED" ]
+    then
+#
+#  OK, to get the value of the error counter variable, $6, we
+#  need to evaluate it twice; once to get the variable name, and
+#  once to get its value.  I found no other way to do this, then
+#  what you see here.  Maybe I'm missing something, but this works.
+#  1. Create a variable that is the value of argument $6 with a
+#     $ in front of it.
+#  2. Evaluate that variable to get the value of the variable that
+#     was passed as argument $6.
+#
+      	errCounterVar=`echo "\$ $6" | tr -d ' '`
+	localErrorCount=`eval "echo $errCounterVar"`
+	eval $6=`expr $localErrorCount + 1`
+        echo "$4: Test case, $5: $ftsTestResult"
+    else 
+        echo "$ftsTestResult"
+    fi
+
+}
+
+
+getUserId()
+{
+    t=`klist | grep "^[ 	]*Principal"`
+    testuser=`echo $t | cut -f3 -d' '`
+    testuid=`echo $t | cut -f2 -d' ' | cut -f1 -d-`
+    testuid=`bc -l << EOF
+ib=16
+$testuid
+EOF`
+}
+
+# Set the protections on fileset root dir
+#
+# setFsetRootProt(fsetRootDir, ownerId, error)
+#
+setFsetRootProt()
+{
+ 	fsetRootDir=$1
+	ownerId=$2
+	error=$3
+
+	perm=0777
+
+	chown $ownerId $fsetRootDir; rf=$?
+	if test $rf -ne 0 
+	then 
+		echo "- chown $ownerId $fsetRootDir failed (errno $rf) ($p: $error)"
+	        rc=`expr $rc + 1`; 
+	
+	else 
+		chmod $perm $fsetRootDir; rf=$?
+		if test $rf -ne 0 
+		then 
+			echo "- chmod $perm $fsetRootDir failed (errno $rf) ($p: $error)"
+		        rc=`expr $rc + 1`; 
+		fi
+	fi
+	return $rf
+}

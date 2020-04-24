@@ -1,0 +1,171 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: dfs.clean,v $
+# Revision 1.1.19.3  1996/03/09  23:10:09  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:28:10  marty]
+#
+# Revision 1.1.19.2  1995/12/07  21:41:19  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/07  20:57:31  root]
+# 
+# Revision 1.1.14.1  1994/10/13  19:17:55  maunsell_c
+# 	don't just daemon_slayer dfsgwd, let
+# 	bos try to do it, if bos not used it
+# 	will then get slay'd anyway
+# 	[1994/10/13  19:17:33  maunsell_c]
+# 
+# Revision 1.1.12.3  1994/08/10  20:46:54  mckeen
+# 	Added dfsgwd to list of deamons to be stopped
+# 	[1994/08/10  20:07:10  mckeen]
+# 
+# Revision 1.1.12.2  1994/07/13  22:30:58  devsrc
+# 	merged with bl-10
+# 	[1994/06/29  12:14:18  devsrc]
+# 
+# 	Use -localauth instead of having the user authenticate
+# 	to cell_admin.  Check to ensure running as root instead. (9680)
+# 	[1994/04/28  18:16:26  mckeen]
+# 
+# 	Added dfsexport -detach -all before bringing down deamons
+# 	[1994/04/25  12:52:17  mckeen]
+# 
+# Revision 1.1.12.1  1994/06/09  16:05:25  devsrc
+# 	cr10892 - fix copyright
+# 	[1994/06/09  15:50:08  devsrc]
+# 
+# Revision 1.1.8.3  1993/10/06  21:43:02  rsarbo
+# 	only remove the dcelogin_noexec_link if it wasn't there
+# 	when we started.
+# 	[1993/10/06  21:21:57  rsarbo]
+# 
+# Revision 1.1.8.2  1993/10/04  21:30:07  rsarbo
+# 	Prompt for dce_login only if needed to shutdown a DFS server, and
+# 	only if the user is not logged in already.
+# 	[1993/10/04  21:29:43  rsarbo]
+# 
+# Revision 1.1.8.1  1993/10/01  19:40:51  rsarbo
+# 	OT8685: Use bos shutdown, not bos stop.  dcelogin beforehand
+# 	[1993/10/01  19:26:45  rsarbo]
+# 
+# Revision 1.1.6.2  1993/07/19  19:27:04  zeliff
+# 	HP port of DFS
+# 	[1993/07/19  18:20:42  zeliff]
+# 
+# Revision 1.1.4.4  1993/07/16  18:58:08  kissel
+# 	Reference Port Madness
+# 	[1993/07/09  19:57:36  jake]
+# 
+# 	*** empty log message ***
+# 	[1993/06/21  14:17:26  kissel]
+# 
+# 	Initial GAMERA branch
+# 	[1993/04/23  11:22:54  mgm]
+# 
+# Revision 1.1.2.2  1993/06/04  01:11:30  kissel
+# 	Initial HPUX RP version.
+# 	[1993/06/03  20:22:37  kissel]
+# 
+# Revision 1.1.2.2  1993/02/05  20:36:00  kissel
+# 	Created to stop DFS daemons (similar to dce.clean).  This script,
+# 	if it exists. is called by dce.clean.
+# 	[1993/02/05  19:45:03  kissel]
+# 
+# $EndLog$
+#
+
+#------------------------------------------------------
+# Must be running as root
+ID=`id -u`
+if [ ${ID} -ne 0 ]; then
+    echo "You must be id=0 to execute \"dfs.clean\"."
+    exit 1
+fi
+
+
+#------------------------------------------------------
+# Source the common utility functions
+#------------------------------------------------------
+: ${ETC:="/etc"}
+
+if [ -z "$SOURCE_COM_UTILS" ]
+then
+	. ${ETC}/dce_com_utils
+fi
+
+err_found=0
+MADE_NOEXEC_LINK=0
+
+####################################################################
+# dfs.clean - 
+#	stops DFS daemons
+####################################################################
+log_msg VERBOSE "dfs.clean: Stopping DFS daemons."
+
+ps $PSARGS > $PSFILE
+
+#
+# Detach any exported aggregates before bringing down deamons.  Do this 
+# only if this machine is a ftserver
+#
+grep -q ftserver $PSFILE
+if [ $? -eq 0 ]
+then
+	log_msg DETAIL "dfs.clean: Executing: $DCELOCAL/bin/dfsexport -detach -all -force >/dev/null 2>&1"
+	$DCELOCAL/bin/dfsexport -detach -all -force >/dev/null 2>&1
+	if [ $? != 0 ]
+	then
+	  log_msg VERBOSE "dfs.clean: Error while detaching aggregates with dfsexport -detach"
+	  log_msg VERBOSE "dfs.clean: Continuing anyway."
+	fi
+fi
+
+DAEMONS="bakserver flserver ftserver repserver upclient upserver dfsgwd"
+# Kill ordinary daemons.  We don't have a way to really stop DFS in the kernel,
+# so we will leave around the dfsbind, dfsd, and fxd daemons.  The others can be
+# managed by bos, so let it.
+#
+for daemon in $DAEMONS
+do
+	grep -q ${daemon} $PSFILE 
+	if [ $? -eq 0 ]
+	then
+    		log_msg DETAIL "dfs.clean: Executing: $DCELOCAL/bin/bos shutdown -server /.:/hosts/$HOSTNAME -process $daemon -wait -localauth >/dev/null 2>&1"
+    		$DCELOCAL/bin/bos shutdown -server /.:/hosts/$HOSTNAME -process $daemon -wait -localauth >/dev/null 2>&1
+    		if [ $? != 0 ]; then
+			# The bos command failed, try a kill...
+			daemon_slayer $daemon
+    		fi
+	fi
+done
+
+# Kill off the bosserver, too.
+#
+daemon_slayer bosserver
+
+DAEMONS="$DAEMONS bosserver"
+
+log_msg VERBOSE "dfs.clean: Executing: sleep 5"
+sleep 5
+ps $PSARGS > $PSFILE
+
+for daemon in ${DAEMONS}
+do
+	( grep -q ${daemon} $PSFILE ) && \
+		log_msg WARNING "${daemon} not killed"
+done
+
+if [ $err_found = 0 ]; then
+    log_msg VERBOSE "dfs.clean: Successfully stopped all DFS daemons."
+else
+    log_msg VERBOSE "dfs.clean: Failed to stop DFS all daemons."
+fi
+
+exit $err_found

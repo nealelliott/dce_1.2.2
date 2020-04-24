@@ -1,0 +1,467 @@
+#!/bin/sh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# @HP_DCE_VERSION@
+# @(#)Module: dce_config_env $Revision: 1.1.18.1 $ $Date: 1996/07/08 18:22:03 $
+#
+# HISTORY 
+# $Log: dce_config_env,v $
+# Revision 1.1.18.1  1996/07/08  18:22:03  arvind
+# 	DCE 1.2.2 work
+# 	[1996/06/14  20:42 UTC  mullan_s  /main/mullan_dce122_bugs_1/1]
+#
+# 	Add DOMAIN_NAME variable for krb5 host principal configuration.
+# 	[1996/03/09  23:10:02  marty  1.1.13.3]
+#
+# Revision 1.1.13.3  1996/03/09  23:10:02  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:28:06  marty]
+# 
+# Revision 1.1.13.2  1996/02/07  17:47:53  parul
+# 	DCE 1.2.1 final drop from HP
+# 	[1996/02/07  16:13:39  parul]
+# 
+# 	DCE 1.2.1 final drop from HP
+# 
+# Revision 1.1.11.6  1994/08/29  19:45:15  baum
+# 	dced is default
+# 	[1994/08/29  19:44:58  baum]
+# 
+# Revision 1.1.11.5  1994/08/25  21:21:25  tom
+# 	Add TIME_SERVER variable.
+# 	[1994/08/25  19:51:38  tom]
+# 
+# Revision 1.1.11.4  1994/08/24  16:29:06  baum
+# 	dced secval is now startable from config
+# 	[1994/08/24  16:25:04  baum]
+# 
+# Revision 1.1.11.3  1994/06/23  16:56:26  tom
+# 	Export CELL_ADMIN and CELL_ADMIN_PW so dce_shutdown can use them.
+# 	[1994/06/23  16:55:54  tom]
+# 
+# Revision 1.1.11.2  1994/06/01  15:58:50  rsalz
+# 	Add dced support (OT CR 9768).
+# 	[1994/06/01  13:27:10  rsalz]
+# 
+# Revision 1.1.11.1  1994/03/30  15:33:44  tom
+# 	Bug 9504 - Add DIR_REPLICATE variable.
+# 	[1994/03/30  15:26:51  tom]
+# 
+# Revision 1.1.9.1  1993/09/17  21:27:15  tom
+# 	Automation: read CONFIG_FILE for environment variable settings.
+# 	Get rid of CONFIG_DFS_CLIENT, now has its own menu item.
+# 	[1993/09/17  21:26:26  tom]
+# 
+# Revision 1.1.6.5  1993/08/26  22:33:07  tom
+# 	Bug 8408 - Add SEC_REPLICA here, remove from dce_com_env.
+# 	Create a list of environment variables to be printed out
+# 	by log_env_values. Only one place for additions now.
+# 	[1993/08/26  22:29:40  tom]
+# 
+# Revision 1.1.6.4  1993/07/22  16:37:53  tom
+# 	Remove the setting of SHLIB_SUF, it gets done in dce_com_env.
+# 	[1993/07/22  16:35:18  tom]
+# 
+# Revision 1.1.6.3  1993/07/20  22:46:36  tom
+# 	Add DTS_CONFIG, CP_OR_SYMLINK, FILESYSTEM, MEDIA,
+# 	USE_DEF_MSG_PATH, USE_ETHER_FILE, and DO_LIB_ADMIN varaiables.
+# 	[1993/07/20  22:31:57  tom]
+# 
+# Revision 1.1.6.2  1993/07/19  19:26:53  zeliff
+# 	HP port of DFS
+# 	[1993/07/19  18:20:33  zeliff]
+# 
+# Revision 1.1.4.5  1993/07/16  22:40:15  kissel
+# 	Conditionalized SHLIB suffix
+# 	[1993/07/15  01:20:31  jake]
+# 
+# 	put the ETC argument in place for install
+# 	[1993/07/06  18:17:58  jake]
+# 
+# 	Changed CHECK_TIME reference to check_time, as the capitalized
+# 	version is never used.
+# 	[1993/06/28  14:15:14  jake]
+# 
+# Revision 1.1.2.3  1993/06/16  21:25:47  jake
+# 	HP Reference Port dce_config_env first offering
+# 	[1993/06/16  21:23:50  jake]
+# 
+# Revision 1.1.2.2  1993/06/04  01:11:06  kissel
+# 	Initial HPUX RP version.
+# 	[1993/06/03  20:20:55  kissel]
+# 
+# Revision 1.1.2.2  1993/04/27  22:21:30  jake
+# 	Checkin for first Bsubmit
+# 	[1993/04/27  22:20:46  jake]
+# 
+# 	Fixes for gamera
+# 	[1993/04/22  20:54:14  jake]
+# 
+# 	first entry for dce_config environment variables file
+# 	[1993/04/22  15:39:45  jake]
+# 
+# $EndLog$
+#
+if [ "$D" = "D" ]
+then
+	set -x
+fi
+
+#
+# If the user provided a config file to set up, use it
+# otherwise look in a 'standard' place for it
+#
+: ${DCE_ETC:="/etc"}
+export DCE_ETC
+
+: ${CONFIG_FILE:="${DCE_ETC}/dce_config.conf"}
+if [ -f ${CONFIG_FILE} ]; then
+	. ${CONFIG_FILE}
+fi
+
+SOURCE_CONFIG_ENV=1
+
+if [ -z "$SOURCE_COM_ENV" ]
+then
+	if [ -f ${DCE_ETC}/dce_com_env ]
+	then
+		. ${DCE_ETC}/dce_com_env
+	else
+		echo Cannot source "${DCE_ETC}/dce_com_env"
+		exit 1
+	fi
+fi
+
+: ${BIND_PE_SITE:="1"}
+
+#
+# Here is the list of variables that gets printed out by dce_config upon
+# startup.  Document what each variable is used for here and add to the
+# list.
+DCE_VAR_LIST="EXIT_ON_ERROR	DO_CHECKS	REMOVE_PREV_INSTALL
+	REMOVE_PREV_CONFIG	SEC_SERVER	SEC_SERVER_IP
+	UNCONFIG_HOST_PRESET	CELL_NAME	CACHE_CDS_SERVER
+	CACHE_CDS_SERVER_IP	check_time	REP_CLEARINGHOUSE
+	NTP_HOST		MULTIPLE_LAN	LAN_NAME
+	CELL_ADMIN		TOLERANCE_SEC	TOLERANCE_SEC_MAX
+	TOLERANCE_SEC_MIN	DEFAULT_MAX_ID	UID_GAP
+	LOW_UID			GID_GAP		LOW_GID
+	SYNC_CLOCKS		HPDCE_DEBUG	FILESYSTEM
+	MEDIA			DTS_CONFIG	CP_OR_SYMLINK
+	USE_DEF_MSG_PATH	SEC_REPLICA	DIR_REPLICATE
+	NTP_PROVIDER_POLL	NTP_PROVIDER_INACCURACY
+	NULL_PROVIDER_POLL	NULL_PROVIDER_INACCURACY
+ 	EPMAP			TIME_SERVER	SPEC_DEV
+	DCEAUDITFILTERON	DOMAIN_NAME"
+
+
+# These are password variables that shouldn't be printed out
+# but are interesting to know if they have been set.
+DCE_PASS_LIST="KEYSEED CELL_ADMIN_PW DEFAULT_PW"
+
+if [ "$UNAME" = "OSF1" ]; then
+	DCE_VAR_LIST="$DCE_VAR_LIST USE_ETHER_FILE DO_LIB_ADMIN"
+fi
+
+exit_on_err="${EXIT_ON_ERROR:=n}"
+export exit_on_err
+# EXIT_ON_ERROR "y" if user wants to exit from dce_config if a fatal
+#    error is encountered.  The function "err_exit" must be called on
+#    every fatal error within this script for this to be effective.
+#    "n" otherwise.  Default: "n".
+
+do_checks="${DO_CHECKS:=y}"
+export do_checks
+# DO_CHECKS: "y" if user wishes to be prompted to continue on
+#    non-fatal warnings; "n" if user wishes to by-pass non-fatal
+#    warnings
+
+export DIR_REPLICATE
+# DIR_REPLICATE: "n" if user does not wish to replicate more 
+# directories in an additional CDS server at configuration time
+
+export REMOVE_PREV_INSTALL
+# REMOVE_PREV_INSTALL "y" if user wants to remove all remnants of
+#    previous DCE installations for all components before installing a
+#    SEC SERVER; "n" otherwise.  Used only in installing the security
+#    server software.
+
+export REMOVE_PREV_CONFIG
+# REMOVE_PREV_CONFIG "y" if user wants to remove all remnants of
+#    previous DCE configurations for all components before configuring
+#    a client or an initial CDS server.  "n" otherwise.
+
+export SEC_SERVER
+# SEC_SERVER: name of the security server for this cell (used as
+#    default value for "sec_server" in auth_login() and written to
+#    /krb5/krb.conf in config_secclient())
+
+export SEC_SERVER_IP
+# SEC_SERVER_IP: IP address for $SEC_SERVER (used as default value for
+#    "ip" in auth_login() in call to "rpccp show mapping
+#    ncadg_ip_udp:$ip"; also used as default value for "ip" in
+#    config_secclient(), but value is never used in that path.
+
+export SEC_REPLICA
+# SEC_REPLICA: The name of the security replica database.  Used only
+#    when configuring a Replicated Security Server.
+
+export DOMAIN_NAME
+# DOMAIN_NAME: The name of the host's Internet domain for use in a 
+# fully qualified hostname. Used as a default in check_for_krb_client 
+# if /etc/resolv.conf does not already contain a domain name. It is
+# appended to the hostname to get the fully qualified name in this 
+# format: hostname.domain_name (ex: if DOMAIN_NAME=foo.bar.com
+# and hostname=abc, the fully qualified hostname will be
+# abc.foo.bar.com)
+
+export UNCONFIG_HOST_PRESET
+# UNCONFIG_HOST_PRESET: hostname of node to be unconfigured (used as
+#    default value for "UNCONFIG_HOST".  Note: UNCONFIG_HOST_PRESET
+#    (is not in the environment, then the default value is $HOSTNAME
+
+export CELL_NAME
+# CELL_NAME: name of your cell (used as default for "tmpcellname" in
+#    create_dcecfdb() for writing as "cellname /.../$tmpcellname" to
+#    dce_cf.db)
+
+export KEYSEED
+# KEYSEED: keyseed for initial database master key (used as default
+#    for -keyseed input to sec_create_db call in config_sec())
+
+export CACHE_CDS_SERVER
+# CACHE_CDS_SERVER: name of a CDS server in cell to cache - need not
+#    be the initial CDS server (used as default for "cdsserver" in
+#    "cdscp define cached server $cdsserver" call in config_morecds()
+#    and ns_client_init(); used only if node can not broadcast to a
+#    cdsd in $cellname)
+
+export CACHE_CDS_SERVER_IP
+# CACHE_CDS_SERVER_IP: IP address of $CACHE_CDS_SERVER (used as
+#    default for "ip" in "cdscp define cached server $cdsserver" call
+#    in config_morecds() and ns_client_init(); used only if node can
+#    not broadcast to a cdsd in $cellname)
+
+export REP_CLEARINGHOUSE
+# REP_CLEARINGHOUSE: name for new clearinghouse (used as default for
+#    "newchname" in cds_replicate() call to "cdscp create
+#    clearinghouse /.:/$newchname"; also used as default for
+#    "newchname" in replicate_more() call to "cdscp create replica
+#    /.:/$i clearinghouse /.:/$newchname") XXX
+
+export EPMAP
+# EPMAP: should be "rpcd" or "dced", depending on which endpoint
+#	mapper you want to use.
+
+export NTP_HOST
+# NTP_HOST: hostname where the NTP server is running (used as default
+#    for "ntp_host" in config_ntptimeprovider())
+
+export MULTIPLE_LAN
+# MULTIPLE_LAN: "y" if user wants to configure this node with multiple
+#    lan capability; "n" otherwise.  Used when configuring a cds server.
+
+export LAN_NAME
+# LAN_NAME: internal name of the lan (for use in the lan profile) when
+# a user wishes to use multiple lans.  Used when configuring a cds server.
+
+celladmin=${CELL_ADMIN:="NULL"}
+export CELL_ADMIN
+export celladmin
+# CELL_ADMIN: principal name of the Cell Administrator, either already
+#    existing or to be configured.
+
+if [ ! -z "$CELL_ADMIN_PW" ]; then
+	cellpw=$CELL_ADMIN_PW
+else
+	cellpw="NULL"
+fi
+export CELL_ADMIN_PW
+export cellpw
+# CELL_ADMIN_PW: password for the Cell Administrator, either already
+#    existing, or to be configured
+
+tol_sec=${TOLERANCE_SEC:=120}
+export tol_sec
+# TOLERANCE_SEC: number of seconds client node system clock is allowed
+#    to differ from security server system clock before warning that
+#    clocks are not in sync and allowing input to synchronize.
+#    Default: 120 seconds (2 minutes + or -).  Note: Security Service
+#    and CDS require no more than a 5 minute difference between any
+#    two nodes in the cell.
+
+tol_sec_max=${TOLERANCE_SEC_MAX:=1000}
+export tol_sec_max
+# TOLERANCE_SEC_MAX: This variable is only used when the checktime function
+# is called with the (-b) boot time parameter.  If the difference in time
+# with the machine you wish to synchronize with is greater than this variable,
+# then we do not synchronize.
+
+tol_sec_min=${TOLERANCE_SEC_MIN:=35}
+export tol_sec_min
+# TOLERANCE_SEC_MIN: This variable is only used when the checktime function
+# is called with the (-b) boot time parameter.  We use this value instead of
+# tol_sec at boot time because DFS requires tighter clock tolerance.
+
+: ${check_time:=y}
+export check_time
+# check_time: "y" if user wishes to have time checked and possibly
+#    synchronized; "n" otherwise.  Default "y".
+
+export SYNC_CLOCKS
+# SYNC_CLOCKS: "y" if user wishes to synchronize client clock with
+#    the dtsd server on ${TIME_SERVER}; "n" otherwise.
+
+export TIME_SERVER
+# TIME_SERVER: the host to which a security client will try
+#    to syncronize its clock against, usually the securty server.
+#    Must have a dtsd server running at the time of config.
+#    A good choice is ${SEC_SERVER}
+
+default_max_id=${DEFAULT_MAX_ID:-32767}
+export default_max_id
+# DEFAULT_MAX_ID: The maximum UNIX ID value to be supported by the DCE Security Registry.
+#    This may be set to any value, but 32767 is the DCE default.  If the value is set to a
+#    number larger than this, then accounts with ID's larger than 32767 will not be able
+#    to access DCE cells that use the default.  If the value is set lower than this, then
+#    foreign accounts with ID's larger than the value set will not be able to access this
+#    cell.
+
+uid_gap=${UID_GAP:=100}
+export UID_GAP
+# UID_GAP: When a new principal is added to the Registry with
+#    rgy_edit, the Security Service automatically assigns a UID.  The
+#    starting point for these automatically assigned UID's is
+#    specified when the Registry is created.  By default, the starting
+#    point is set to the highest UID currently in use (from
+#    "/etc/passwd" and/or "ypcat passwd") plus $UID_GAP.  The default
+#    UID gap is 100.  If $DO_CHECKS is not set or is "y", the user
+#    will be prompted to confirm the selected starting point or to
+#    select another one.
+
+export LOW_UID
+# LOW_UID: When a new principal is added to the Registry with
+#    rgy_edit, the Security Service automatically assigns a UID.  The
+#    starting point for these automatically assigned UID's is
+#    specified when the Registry is created.  By default, the starting
+#    point is set to the highest UID currently in use (from
+#    "/etc/passwd" and/or "ypcat passwd") plus $UID_GAP.  If LOW_UID
+#    is set, however, normally UID_GAP is ignored and $LOW_UID is used
+#    as the starting point.  But, if $LOW_UID is less than or equal to
+#    the highest UID currently in use, a WARNING is displayed, and the
+#    user is prompted to confirm the selected starting point, with
+#    current highest+$UID_GAP as the suggested value
+
+gid_gap=${GID_GAP:=100}
+export GID_GAP
+# GID_GAP: When a new group is added to the Registry, the Security
+#    Service automatically assigns a Group ID.  The starting point for
+#    these automatically assigned GID's is specified when the Registry
+#    is created.  By default, the starting point is set to the highest
+#    GID currently in use (from "/etc/group" and/or "ypcat group")
+#    plus $GID_GAP.  The default GID gap is 100.
+
+export LOW_GID
+# LOW_GID: When a new group is added to the Registry with rgy_edit,
+#    the Security Service automatically assigns a GID.  The starting
+#    point for these automatically assigned GID's is specified when
+#    the Registry is created.  By default, the starting point is set
+#    to the highest GID currently in use (from "/etc/group" and/or
+#    "ypcat group") plus $GID_GAP.  If LOW_GID is set, however,
+#    normally GID_GAP is ignored and $LOW_GID is used as the starting
+#    point.  But, if $LOW_GID is less than or equal to the highest GID
+#    currently in use, a WARNING is displayed, and the user is
+#    prompted to confirm the selected starting point.
+
+hpdce_debug=${HPDCE_DEBUG:=0}
+export hpdce_debug
+# HPDCE_DEBUG: "1" to start daemons in foreground.
+
+if [ ! -z "$DEFAULT_PW" ]; then
+	default_pw=${DEFAULT_PW}
+else
+	default_pw="-dce-"
+fi
+export default_pw
+# DEFAULT_PW: The default password that is used when the registry is
+#    created.  This password is used only for logging in the Cell
+#    Administrator for the first time (within dce_config).  A Cell
+#    Administrator can change the default by editing the value of
+#    DEFAULT_PW in this script.  HP uses the "standard" default of
+#    "-dce-".
+#
+#    When the Registry is created, the user is prompted to enter a
+#    name and password for the Cell Administrator.  If the password
+#    entered is the same as the default password in $DEFAULT_PW, then
+#    a warning will be displayed every time the Cell Administrator
+#    logs in to DCE advising that the password must be changed.  A
+#    warning is also displayed when exiting from dce_config.
+
+CHANGE_PW="n"
+export CHANGE_PW
+# CHANGE_PW: Do not alter this initial value!  CHANGE_PW is an
+#    internal variable used to keep track of whether dce_config has
+#    received a "Password must be changed" warning, indicating that
+#    the Cell Administrator password is still the same as the default
+#    password.  When the user exits from dce_config, a warning is
+#    displayed if $CHANGE_PW is then "y".
+
+export DTS_CONFIG
+# DTS_CONFIG: Setting this value will choose a DTS configuration
+#    use when configuring a DCE client.  Possible values are:
+#    clerk (DTS clerk), local (DTS local server), global (DTS global server)
+#    or none (no DTS).
+
+export FILESYSTEM
+export MEDIA
+# FILESYSTEM: If you are installing DCE from a filesystem,
+#    set this variable to the pathname of the install tree.
+# MEDIA: If you are installing DCE from media,
+#    set the variable to the device name of the media (ie /dev/rmt0).
+
+export CP_OR_SYMLINK
+# CP_OR_SYMLINK: Indicated if you want dce_config to use symbolic links
+#    in installing certain elements of dce.  This would save disk space.
+#    possible values are: 'copy' - to copy install targets, 'link' to use
+#    symbolic links.
+
+export USE_DEF_MSG_PATH
+# USE_DEF_MSG_PATH: "y" if the user want to use the default path
+#    to install the message catalogs. If it is unset or "n"
+#    the user will be prompted.
+#    The default path is set on a per machine basis in dce_com_env.  
+
+export USE_ETHER_FILE
+# USE_ETHER_FILE: "y" if the user want the /etc/ieee_802_addr file
+#    which exists on their system to be used by default. If it is
+#    unset or "n", the user will be prompted.  OSF1 only.
+
+export DO_LIB_ADMIN
+# DO_LIB_ADMIN: "y" if the user wants the to execute lib_admin to 
+#    install the libdce shared library by default.  If it is unset
+#    or "n", the user is prompted.  OSF1 only.
+
+NTP_PROVIDER_INACCURACY=${NTP_PROVIDER_INACCURACY:=30}
+export NTP_PROVIDER_INACCURACY
+# NTP_PROVIDER_INACCURACY: The default value is set to 30.
+
+NTP_PROVIDER_POLL=${NTP_PROVIDER_POLL:=600}
+export NTP_PROVIDER_POLL
+# NTP_PROVIDER_POLL: The default value is set to 600.
+
+NULL_PROVIDER_INACCURACY=${NULL_PROVIDER_INACCURACY:=100}
+export NULL_PROVIDER_INACCURACY
+# NULL_PROVIDER_INACCURACY: The default value is set to 100.
+
+NULL_PROVIDER_POLL=${NULL_PROVIDER_POLL:=60}
+export NULL_PROVIDER_POLL
+# NULL_PROVIDER_POLL: The default value is set to 60.
+
+DCEAUDITFILTERON=${DCEAUDITFILTERON:=1}
+export DCEAUDITFILTERON
+# DCEAUDITFILTERON: This variable is only used when the audit daemon
+# is configured on a node.  It must be set prior to starting secd.

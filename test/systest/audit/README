@@ -1,0 +1,125 @@
+
+Note: These tests assume that the auditing functionality can be built
+      installed and the audit daemon can be started successfully.
+
+Test Name: AUDSTR001
+
+	- Test many users logging in simultaneously
+	  Procedure:
+	   - Start auditd
+	   - Add AUDIT_ACCTS DCE users to the registry
+	   - Fork off AUDIT_ACCTS processes
+	   - AUDIT_ACCTS processes wait on a shared variable
+	   - When shared variable reaches AUDIT_ACCTS all process login simultaneously
+	   - manually verify there are audit log entries
+	   - Stop auditd
+
+	   Note: AUDIT_ACCTS is an integer configuration variable read in 
+	      from the tetexec.cfg file.  The default value is 5.
+
+
+Test Name: AUDREL001
+
+
+	- Have client(s) sending events to the same log
+	   Procedure:
+
+	   This test will make use of an application
+	   which will have the following defineable parameters
+
+	   AUDIT_DURATION	"How long to run the test"	(minutes)
+	   AUDIT_EVENT_DELAY	"Period for issuing events"	(seconds)
+	   AUDIT_NUM_OF_CLIENTS    "Number of clients to run"	(whole number)
+
+	   AUDIT_DURATION will have the default 60 minutes and
+	   AUDIT_EVENT_DELAY will have the default 5 seconds
+	   AUDIT_NUM_OF_CLIENTS will have the default 1
+
+	    - Start the auditd using auditcp
+	    - Start AUDIT_NUM_OF_CLIENTS 
+	    - Emit an event every AUDIT_EVENT_DELAY from each of the 1 clients
+	    - Use auditcp to verify that there are 
+	      1*[60*AUDIT_DURATION] / AUDIT_EVENT_DELAY events which are logged
+
+	     Note: Currently only a single client is supported for this test.
+		   Values of AUDIT_NUM_OF_CLIENTS other than 1 are ignored.
+
+Installing the Tests
+- ---------------------
+
+Run dcetest_config and choose option 9 Audit 
+off the DCE Test Installation (System Tests) Menu
+
+
+Running the Tests
+- -----------------
+
+Note: The audit tests assume you have the audit daemon configured
+      and running on your node
+
+To run the tests without the use of  run scripts, do the following:
+
+su to root
+
+Set the environment variable TET_ROOT to /dcetest/dcelocal/test/tet
+
+Change directory to $TET_ROOT/bin
+
+To run the audstr001 test:
+
+./tcc -e system/audit audstr001
+
+To run the audrel001 test (must dce_login as cell_admin first):
+
+dce_login cell_admin -dce-
+
+./tcc -e system/audit audrel001
+
+To run both tests:
+
+./tcc -e system/audit all
+
+
+To run the tests with the run scripts do the following:
+
+Set the environment variable TET_ROOT to /dcetest/dcelocal/test/tet
+
+$ cd/dcetest/dcelocal/test/tet/system
+$ . profile.dcest.tet
+$ run.aud -l 1 audrel001
+
+      or
+$ run.aud -l audstr001
+
+Note: If you run the audrel001 test repeatedly and are getting
+      "Unknown signal 20" errors in your TET journal.
+      Add the following line to the beginning of your tetexec.cfg file.
+      The file is /dcetest/dcelocal/test/tet/system/audit/tetexec.cfg
+
+	TET_SIG_IGN=20
+
+
+Examining the results
+- ---------------------
+
+
+Check the TET journal file for results
+
+If the tests succeed, the string "PASS" will be entered into the TET journal.
+
+The tests could fail because of any of the following reasons:
+
+-Could not clear audit databases
+-Could not start audit daemon
+-Could not make registry entries
+-Could not login to DCE accounts
+-Could not issue events to the audit trail
+-Could not use auditcp to examine audit trail
+
+If the tests fail, the string "FAIL" will be entered into the TET journal.
+
+
+
+
+
+

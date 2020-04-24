@@ -1,0 +1,130 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+#
+# (C) Copyright 1993 Transarc Corporation.
+# All Rights Reserved.
+#
+#
+# HISTORY
+# $Log: adversemove,v $
+# $EndLog$
+#
+#
+#
+
+#
+# Automated Adverse Fileset Move Test Driver
+#
+###############################################################################
+#         Copyright (C) 1993 Transarc Corporation - All rights reserved       #
+###############################################################################
+#
+#
+# Define Local Variables
+#
+FILE_TEST=/opt/dcelocal/bin/file_test
+WORKING_DIR=/tmp
+CDS_DIR=/.:/adverse
+CDS_OBJECT=move
+TEMPLOG=/tmp/adversemove.log
+OUTLOG=/tmp/advsermove.out
+TEST_NAME=adverse_move
+#
+# Define local variables for test programs
+TESTSETS="1 1a 1b 2 2a 3 3a 3b 4 4a"
+#
+#
+# Do a cleanup first. 
+# Note that file $TEMPLOG MUST be the same name used in adverse_move.setup
+#
+/bin/rm -rf $TEMOLOG
+/bin/rm -rf $OUTLOG
+touch $OUTLOG
+#
+# TEST_SETUP is to configure which machine to run which test
+#
+TEST_SETUP=$WORKING_DIR/adverse_move.setup
+#
+# Make sure that ITL program exists !
+#
+if [ ! -x $FILE_TEST  ] 
+then
+	echo "ERROR: $FILE_TEST does not exist !"
+	exit 2
+fi
+#
+# Make sure that the Test tree is registered in CDS naming space
+#
+cdscp show dir $CDS_DIR > /dev/null 2>&1
+if test $? -ne 0
+then 
+	#
+	# Create a cds object for the user
+	#
+	cdscp create dir $CDS_DIR > /dev/null 2>&1
+	if test $? -ne 0 
+		echo " ERROR: $CDS_DIR is not registered in CDS naming space !"
+		exit 2
+	fi
+	#
+	#
+fi
+#
+#
+if [ ! -f $TEST_SETUP  ] 
+then
+	echo "ERROR: $TEST_SETUP does not exist !"
+	exit 2
+fi
+#
+#
+#  
+echo " "
+echo "cd to $WORKING_DIR"
+echo " "
+#
+cd $WORKING_DIR
+#
+for x in $TESTSETS
+   do 
+	TEST_PROGRAM=$TEST_NAME$x.itl
+	#
+	# Make sure that test program and test setup exist!
+	#
+	if [ ! -f $TEST_PROGRAM  ] 
+	then
+		echo "ERROR: $TEST_PROGRAM does not exist !"
+		exit 2
+	fi
+
+	echo >> $OUTLOG
+	echo "Adverse Fileset Move Test Results:" >> $OUTLOG
+	echo >> $OUTLOG  
+	echo >> $OUTLOG  
+	echo "*************************************************************************" >> $OUTLOG  
+	echo "                $TEST_PROGRAM" >> $OUTLOG
+	echo "*************************************************************************" >> $OUTLOG  
+	echo >> $OUTLOG  
+	date >> $OUTLOG
+	echo >> $OUTLOG  
+	$FILE_TEST -l $CDS_DIR/$CDS_OBJECT -C $TEST_SETUP -I $TEST_PROGRAM
+	if test $? -ne 0
+	then
+	        echo " ERROR: $TEST_PROGRAM Failed !"
+	        exit 2
+	fi
+	cat $TEMPLOG >> $OUTLOG
+	echo >> $OUTLOG  
+	date >> $OUTLOG
+  done
+#
+#
+
+
+exit

@@ -1,0 +1,103 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: recover_tests,v $
+# Revision 1.1.9.1  1996/10/02  17:25:34  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:32:44  damon]
+#
+# Revision 1.1.4.1  1994/06/09  14:01:24  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:36:40  annie]
+# 
+# Revision 1.1.2.3  1993/01/19  15:30:00  cjd
+# 	embedded copyright notice
+# 	[1993/01/19  13:50:43  cjd]
+# 
+# Revision 1.1.2.2  1992/12/09  19:51:30  jaffe
+# 	Transarc delta: mason-ot5976-defer-io-during-recovery 1.2
+# 	  Selected comments:
+# 	    The NBS changes meant that there could be many pages which didn't really n
+# 	eed
+# 	    I/O.  The existing simplistic algorithm was merrily reading and writing th
+# 	ose
+# 	    pages even though no data on the pages was modified.  To fix this, we mere
+# 	ly
+# 	    defer the I/O until we find a transaction really needing to write on the d
+# 	ata
+# 	    page; once found we keep it around.  At the end we check to see if we ever
+# 	    read it.  If so, we write it back to disk. If not, we just go to the next
+# 	    modified disk block.
+# 	    This first delta is a checkpoint.
+# 	    Complete work here.  This version completes the delta.  Add several
+# 	    regression tests and enhance the testing language to support better
+# 	    concurrency guarantees.
+# 	    Test script for running recovery regression tests.
+# 
+# 	$TALog: recover_tests,v $
+# 	Revision 1.3  1994/11/01  21:28:21  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r1.2 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	Revision 1.1  1992/11/17  16:02:53  mason
+# 	Complete work here.  This version completes the delta.  Add several
+# 	regression tests and enhance the testing language to support better
+# 	concurrency guarantees.
+# 
+# 	Test script for running recovery regression tests.
+# 	[added by delta mason-ot5976-defer-io-during-recovery, r1.2]
+# 
+# $EndLog$
+#
+# (C) Copyright 1992 Transarc Corporation - All Rights Reserved.
+#
+# NOTES:
+#
+#   This is a simple shell wrapper around a series of simple regression
+#   tests used to verify that changes to recovery do not break the system.
+#   The system itself is fragile - bad scripts can generate arbitrary core
+#   dumps, and there are implicit assumptions within the code about the
+#   multi-threadedness of the caller (e.g. it assumes many active trans
+#   means it is OK to block waiting for another tran to end).  Writing new
+#   scripts is doable, just don't be surprised if they are difficult to debug
+#
+#   This script assumes that there is an executable program called "testbuf"
+#   in the current directory.  If it isn't here, create a symbolic link to
+#   it or copy it to here.
+#
+TESTBUF=./testbuf
+TESTLIST="basiclog.test undo-redo.test defer-io.test defer-io.2.test defer-io.3.test"
+LOGFILE=recover_test.$$.log
+
+echo -n "Test run of " > $LOGFILE
+date >> $LOGFILE
+for script in $TESTLIST
+do
+	echo "**********************************" >> $LOGFILE
+	echo "Starting TEST $script" >> $LOGFILE
+	echo "**********************************" >> $LOGFILE
+	FAILED=0
+	if ($TESTBUF $script >> $LOGFILE) ; then
+		echo "test $script PASSED" >> $LOGFILE
+		echo "test $script PASSED"
+	else
+		echo "test $script FAILED" >> $LOGFILE
+		FAILED=1
+	fi
+	echo "" >> $LOGFILE
+	echo "" >> $LOGFILE
+done
+if [ $FAILED = 1 ]; then 
+	echo "one or more tests FAILED"
+	echo "one or more tests FAILED" >> $LOGFILE
+else 
+	echo "All tests passed!"
+	echo "All tests passed!" >> $LOGFILE
+fi

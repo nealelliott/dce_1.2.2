@@ -1,0 +1,203 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: basiclog.test,v $
+# Revision 1.1.11.1  1996/10/02  17:24:41  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:32:11  damon]
+#
+# Revision 1.1.6.1  1994/06/09  14:00:44  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:36:01  annie]
+# 
+# Revision 1.1.4.4  1993/01/19  15:27:32  cjd
+# 	embedded copyright notice
+# 	[1993/01/19  13:48:09  cjd]
+# 
+# Revision 1.1.4.3  1992/12/09  19:49:38  jaffe
+# 	Transarc delta: mason-ot5976-defer-io-during-recovery 1.2
+# 	  Selected comments:
+# 	    The NBS changes meant that there could be many pages which didn't really need
+# 	    I/O.  The existing simplistic algorithm was merrily reading and writing those
+# 	    pages even though no data on the pages was modified.  To fix this, we merely
+# 	    defer the I/O until we find a transaction really needing to write on the data
+# 	    page; once found we keep it around.  At the end we check to see if we ever
+# 	    read it.  If so, we write it back to disk. If not, we just go to the next
+# 	    modified disk block.
+# 	    This first delta is a checkpoint.
+# 	    Complete work here.  This version completes the delta.  Add several
+# 	    regression tests and enhance the testing language to support better
+# 	    concurrency guarantees.
+# 	    Changed test language, changed usage.
+# 	[1992/12/03  21:44:02  jaffe]
+# 
+# Revision 1.1.4.2  1992/09/15  17:36:40  jaffe
+# 	Transarc delta: jdp-epimerge-1.0-to-1.0.1b9-into-2.17 1.20
+# 	  Selected comments:
+# 	    This revision of this delta contains changes made to episode/async by the OSF
+# 	    between dce1.0 and dce1.0.1b9.  Subsequent revisions will contain merges
+# 	    for other episode subdirectories.
+# 	    This revision of this delta contains changes made to episode/dir by the OSF
+# 	    This revision of this delta contains changes made to episode/lobguf by the OSF
+# 	    Merged in changes made by the OSF between dce1.0 and dce1.0.1b9.
+# 	    This revision of this delta contains changes made to episode/salvage by the OSF
+# 	    This revision of this delta contains changes made to episode/sautils by the OSF
+# 	    This revision of this delta contains changes made to episode/tools by the OSF
+# 	    This revision of this delta contains changes made to episode/utils by the OSF
+# 	    This revision of this delta contains changes made to episode/vnops by the OSF
+# 	    between dce1.0 and dce1.0.1b9.
+# 	    This revision fixes some problems in the logbuf layer that occurred after
+# 	    the merge.
+# 	    This delta adds anode/epi_errs.msf.
+# 	    This delta fixes problems in the logbuf layer.
+# 	    This revision fixes some problems in the vnode layer.
+# 	    Fix more vnode layer problems.
+# 	    Add files that were introduced after DCE 1.0 to the .klib Makefiles.
+# 	    This delta fixes various problems that caused undefined references
+# 	    while building the AIX kernel extension.
+# 	    This revision fixes random problems encountered under OSF/1.
+# 	    This revision fixes some problems encountered when compiling test_vnodeops
+# 	    on OSF/1.
+# 	    This revision includes the OSF's changes to epimount.
+# 	Transarc delta: mason-ot3721-start-tran-not-required 1.6
+# 	  Selected comments:
+# 	    When a transaction has an end record, it should always be redone; I'm
+# 	    sure I've previously made this fix (long, long ago in a world far, far
+# 	    away).  This requires changing MarkCommitted in recovery and getting the
+# 	    regression test suite built again.  This is a CHECKPOINT only.
+# 	    Get right version of this test from RCS archives.  Make it work.
+# 	    Checkpoint first system which shows signs of really working.
+# 	    This checkpoint notes the first place where the regression test suite
+# 	    works again.  Additional work is required to verify that the original
+# 	    bug (as found by OTA) is really gone.
+# 	    This is another checkpoint.  I'm working on building the regression test.
+# 	    Make changes in readlog so it is easier to use.
+# 	    Oops.  Calling wrong log record printer. [tony, not ted]
+# 	Transarc delta: mason-tran-0033 1.11
+# 	  Selected comments:
+# 	    Checkpoint for the year-end.
+# 	    Changes made earlier were lost - I carried them forward.
+# 	    Intermediate snapshot - single threaded code now working correctly.
+# 	    SHOULD NOT BE USED IN PRODUCTION.
+# 	    Moved lost changes from backup volume into main tree.
+# 	    Forced close to fix a different problem. This delta still does not work; do
+# 	    not use in production!
+# 	    Snapshot - passes all_tests.
+# 	    More work - now fixing bugs.
+# 	    Final round of testing; appears to be production quality now.
+# 	    Update internal development records.
+# 	    Found single-threaded case in TranForce which would block.
+# 	    Macro removed in delta 1.9 was used in multiple files.
+# 	    Found race condition where tran was referenced before initialization.
+# 	[1992/09/14  20:31:12  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/05  19:08:56  jdp
+# 	delta jdp-epimerge-1.0-to-1.0.1b9-into-2.17 1.20
+# 	delta mason-tran-0033 1.11
+# 	[1992/05/05  15:31:33  jdp]
+# 
+# 	Added copyright and history.
+# 	[1992/05/05  15:30:02  jdp]
+# 
+# $EndLog$
+#
+
+# basic log functionality test.
+#
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/logbuf/basiclog.test,v 1.1.11.1 1996/10/02 17:24:41 damon Exp $
+
+# we want a fake aggregate with 20 data blocks and 80 log blocks.
+# we want a fake aggregate with 20 data blocks and enough log for 10 trans
+set logsize 20 10
+
+opendata /tmp/dev-one 1024
+createlog /tmp/dev-two 1024
+openlog /tmp/dev-two 1024
+
+# pageclear bzeros the pages.
+pageclear 0 19
+
+# write a small string
+start 1                     # create a transaction
+data 1 0 0 tran-one         # modify a bit of memory
+end 1                       # end the transaction
+
+# non-overlapping with transaction 1
+start 2
+data 2 0   6 transaction-two-call-1
+data 2 0  58 transaction-two-call-2
+data 2 0 110 transaction-two-call-3 
+data 2 0 162 transaction-two-call-4
+data 2 0 214 transaction-two-call-5 
+data 2 0 266 transaction-two-call-6 
+data 2 0 318 transaction-two-call-7 
+data 2 0 370 transaction-two-call-8 
+data 2 0 422 transaction-two-call-9 
+data 2 0 474 transaction-two-call-10 
+data 2 0 526 transaction-two-call-11
+data 2 0 578 transaction-two-call-12
+data 2 0 630 transaction-two-call-13
+data 2 0 682 transaction-two-call-14
+
+# overlapping with transaction 2
+start 3
+data 3 1 0 transaction-three
+end 3
+
+# now two transactions we can merge
+start 4
+data 4 2 0 transaction-four
+
+start 5
+data 5 2 17 TRANSACTION-FIVE
+merge 4 5 
+
+# and write some more data under each of the merged transactions
+data 4 3 0 transaction-four-again
+data 5 4 0 transaction-five-again
+
+# and end them
+end 4
+end 5
+
+# now a simple one just to make sure the lsn sequencing is OK.
+
+start 6
+data 6 5 0 transaction-six
+end 6
+
+# clean up the log state
+force 6
+
+# test fill code
+
+start 7
+fill 7 7 0 0x61 1024
+end 7
+
+# finally, a new EC where only one member commits.
+
+start 8
+start 9
+data 8 6 0 tran8-should-not-see
+data 9 6 0 tran9-should-not-see
+merge 8 9
+end 8
+
+# we force the last transaction written so we know what the state should be
+force 9
+
+# this dumps the contents of the log to the screen
+# dumplog
+
+#set rcvrdebug -1           # if we want to see what is going on.
+recover                     # forced recovery of system
+
+quit
+
+
+# done

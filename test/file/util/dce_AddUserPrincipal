@@ -1,0 +1,188 @@
+#!/bin/sh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: dce_AddUserPrincipal,v $
+# Revision 1.1.8.1  1996/10/17  18:37:39  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:58:23  damon]
+#
+# Revision 1.1.2.4  1993/01/11  18:38:07  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:23:29  htf]
+# 
+# Revision 1.1.2.3  1992/10/28  18:16:15  jaffe
+# 	Transarc delta: rajesh-ot5113-fix-bos-test0-key-commands-usage 1.4
+# 	  Selected comments:
+# 	    Fix bos tests to use addkey and rmkey correctly and also to
+# 	    use a principal other than the default principal (which
+# 	    is the dfs-server principal on the server machine).
+# 	    This is only a checkpoint.
+# 	    Add a -passwd <passwd> optional parameter.
+# 	    The main changes introduced by this delta is now tested.
+# 	    However, since this delta was opened in the same sandbox as
+# 	    the delta for OT 5060, and this delta does affect some of
+# 	    portion changed by the OT5060 delta, this delta should
+# 	    not be exported until OT50560 delta is exported.
+# 	    Adding the user to each of the key commands was not enough. The -principal
+# 	    switch needs to be supplied also. Not specifying the -principal switch
+# 	    caused problems for bos rmkey which treated the username as another
+# 	    key version number (for the default principal dfs-server) to be deleted.
+# 	    Mike C. pointed out that the bos addkey command does not
+# 	    work for a principal that has no key yet in the security
+# 	    database. So instead of using dce_AddUserPrincipal, used
+# 	    an rgy_edit script to create the DCE principal and keys
+# 	    for the principal.
+# 	Transarc delta: rajesh-ot5367-salvage-recovery-authorization-check-tests 1.8
+# 	  Selected comments:
+# 	    To add authorization check tests for salvage/recovery. This is
+# 	    the initial checkpoint.
+# 	    Just a checkpoint.
+# 	    Another checkpoint.
+# 	    Checkpoint.
+# 	    This delta version has been tested.
+# 	    Changed permissions.
+# 	    Update makefiles.
+# 	    Fixed logical errors in the script pertaining to requiring read/write
+# 	    access to aggregate to perform salvage and/or recovery, handling
+# 	    of error counts generated in the AuthCheckTest.noroot script.
+# 	    Fix a build-time error.
+# 	[1992/10/28  15:10:00  jaffe]
+# 
+# Revision 1.1.2.2  1992/08/28  18:42:11  jaffe
+# 	Transarc delta: rajesh-ot4450-bos-tests-create-dce-user-principals 1.1
+# 	  Selected comments:
+# 	    Create the DCE user principals needed for the tests.
+# 	    The shell script to create a DCE user principal.
+# 	[1992/08/28  12:38:17  jaffe]
+# 
+# $EndLog$
+#
+###  Copyright (C) 1992 Transarc Corporation - All rights reserved  ###
+#
+#  dce_AddUserPrincipal - 
+#	Adds a user to the DFS test cell. 
+#       It does not create an account on the local machine for the user. 
+#
+#  Usage:
+#       dce_AddUserPrincipal -user <login-id> [-passwd <passwd>]
+#			     [-cellAdminPasswd <passwd>]
+# 		   	     [-group <group>] [-org <organisation>] 
+#
+#  Defaults:
+#       -password	        username
+# 	-cellAdminPasswd 	-dce-
+#	-group 			system
+#	-org			none
+#
+#  PRIVILEGES REQUIRED: 
+#       You should be cell_admin.
+#
+
+#
+# PrintUsage() -
+#	Prints the usage message for this script.
+#
+PrintUsage()
+{
+    echo "Usage: $programName -user <login-id> [-passwd <passwd>] [-group <group-name>] [ -org <org-name>]"
+    echo "       [-cellAdminPasswd <passwd>] [output-file-name]"
+    echo "\t-user         - DCE principal name of use."
+    echo "\t-passwd       - User's password"
+    echo "\t-group 	  - Group of which the user is a member."
+    echo "\t-org          - Organization of user."
+    echo "\t-cellAdminPasswd  - Cell Adminstrator's passwd"
+    echo "\t-help         - print this usage message."
+}
+
+programName=`basename $0`
+hostName=`hostname`
+rgyEdit=/opt/dcelocal/bin/rgy_edit    
+
+successExit=0
+failureExit=1
+scriptErrExit=2
+
+CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`
+if [  "$CELL_NAME" = "" ]
+then 
+    echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting."
+    exit 1
+fi
+
+#
+# Input validation
+#
+if [ $# -lt 2 ] 
+then
+    PrintUsage;
+    exit $failureExit
+fi    
+
+#
+#  Parse the command line.
+#
+while [ "$1" != "" ] 
+do
+    case $1 in
+      -user) 	user=$2;
+		;;
+      -passwd)  userPasswd=$2;
+		;;
+      -group)   group=$2;
+		;;
+      -org)     org=$2
+                ;;
+      -cellAdminPasswd)     cellAdminPasswd=$2;
+	 	;;
+      -help)    PrintUsage;
+                exit $successExit;
+                ;;
+      *)        echo "${programName}: Invalid option, $1." 
+                PrintUsage;
+                exit $scriptErrExit;
+                ;;
+      esac
+      shift; shift;
+done
+
+userPasswd=${userPasswd:-"$user"}
+secGroup=${secGroup:-system}
+secOrg=${secOrg:-none}
+cellAdminPasswd=${cellAdminPasswd:-"-dce-"}
+echo "Login ID will be $user, real name is $name"
+
+#
+# Remove DCE registry account 
+#
+echo "Attempting to delete old registry account for $user..."
+$rgyEdit << ==END==
+domain principal
+delete $user
+quit
+==END==
+    
+    echo ""; echo "All remnants of old user $user have been deleted."
+
+#    
+# Create account for user in DCE 
+#
+echo ""; echo "Making DCE user account..."
+$rgyEdit << ==END==
+domain principal
+add $user 
+domain group
+mem $secGroup -a $user
+domain org
+mem $secOrg -a $user
+domain account
+add $user -g $secGroup -o $secOrg  -mp $cellAdminPasswd -pw $userPasswd
+quit
+==END==
+
+echo "Addition of user, $user, is complete."
+

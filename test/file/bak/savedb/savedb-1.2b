@@ -1,0 +1,189 @@
+#
+# ID: $Id: savedb-1.2b,v 1.3 1996/01/21 09:48:44 hyer Exp $
+#
+# COMPONENT_NAME: bak
+#
+# The following functions list may not be complete.
+# Functions defined by/via macros may not be included.
+#
+# FUNCTIONS:
+#
+#
+# ORIGINS: Transarc Corp.
+#
+# (C) COPYRIGHT Transarc Corp. 1994
+# All Rights Reserved
+# Licensed Materials - Property of Transarc
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+#
+# HISTORY
+# $TALog: savedb-1.2b,v $
+# Revision 1.3  1996/01/21  09:48:44  hyer
+# Changes to make the backup test scripts with the callout routines for
+# mount and unmount in DCE 1.2.
+#
+# Added cm checkfilesets and cleaned up test to run with callout routines
+# [from r1.2 by delta hyer-7265-backup-test-mods-for-callout-routines, r1.1]
+#
+# Revision 1.2  1994/01/10  18:27:40  davecarr
+# Upgraded tests to work with expect-5.1.3.  Also moved some configuration
+# dependencies from savedb-cmd to generic.exp.  In the process, some
+# variables had "sa_" prepended to them to indicate that they are used only
+# for the savedb tests.
+#
+# Upgraded test to work with expect-5.1.3.  Some variables had "sa_" prepended
+# to them to indicate that they are used only for the savedb tests.
+# [from r1.1 by delta davecarr-db4737-bak-savedb-tests, r1.2]
+#
+# Revision 1.1  1993/11/24  19:04:32  davecarr
+#    This is the first pass at automating tests for the bak savedb command.
+# They work with expect-4.3.  They will need to be updated to work with
+# expect, version 5.
+#
+# Initial checkin.  Test works with expect-4.3.
+# [added by delta davecarr-db4737-bak-savedb-tests, r1.1]
+#
+#
+
+# defined in savedb-cmd or generic.exp:
+#     sa_server, bak_id, butc_id, butc_host,
+#     lshosts_savedb, lsftfamilies_savedb, lsdumps_savedb
+#
+
+TEST-SETUP
+
+    CATCHEXEC "cm checkfilesets"
+    # Remove the db info
+    if ![expr "[remove_host_info_p $bak_id] &&\
+               [remove_fileset_families_p $bak_id] &&\
+               [remove_dump_schedule_p $bak_id]"] {
+        send_user "Problem deleting db info.\n"
+        send_user "Test setup failed.\n"
+        unset run
+    }
+
+    # Add db info saved in command setup.
+    if [info exists run] {
+        if ![expr "[add_host_info_p $bak_id $lshosts_savedb] &&\
+                   [add_fileset_families_p $bak_id $lsftfamilies_savedb] &&\
+                   [add_dump_schedule_p $bak_id $lsdumps_savedb]"] {
+            send_user "Problem adding db info.\n"
+            send_user "Test setup failed.\n"
+            unset run
+        }
+    }
+
+    # necessary to quit butc because the db entry for it has been deleted
+    # and it is now unreachable, even after you add the entry back to the db.
+    if [info exists run] {
+        quit_butc $butc_id $butc_host
+        set butc_id [run_butc "" 0]
+        if ![is_butc_ready_p $bak_id 0] {
+            send_user "Test setup failed.  butc did not start.\n"
+            unset run
+        } else {
+            if [Label_tape $bak_id $butc_id "" "" 0] {
+                send_user "Could not label tape as NULL.\n"
+                send_user "Test setup failed.\n"
+                unset run
+            }
+        }
+    }
+
+TEST-PRE
+    if [info exists run] {
+        if ![expr "[verifydb_p $bak_id] && [is_butc_ready_p $bak_id 0]"] {
+            send_user "Test preconditions failed.\n"
+            unset run
+        }
+    }
+    # Check db info.
+    if [info exists run] {
+        if [string compare $lshosts_savedb [save_host_info $bak_id]] {
+            send_user "Host info incorrect.\n"
+            send_user "Test preconditions failed.\n"
+            unset run
+        }
+        if [string compare $lsftfamilies_savedb\
+                           [save_fileset_families $bak_id]] {
+            send_user "Fileset info incorrect.\n"
+            send_user "Test preconditions failed.\n"
+            unset run
+        }
+        if [string compare $lsdumps_savedb [save_dump_schedule $bak_id]] {
+            send_user "Dump schedule info incorrect.\n"
+            send_user "Test preconditions failed.\n"
+            unset run
+        }
+    }
+
+TEST-EXEC
+    if ![Save_db_p $bak_id $butc_id ""] {
+        unset pass
+    }
+
+TEST-POST
+
+TEST-EVAL
+    # Remove the db info
+    if [info exists pass] {
+        if ![expr "[remove_host_info_p $bak_id] &&\
+                   [remove_fileset_families_p $bak_id] &&\
+                   [remove_dump_schedule_p $bak_id]"] {
+            send_user "Problem deleting db info.\n"
+            send_user "Test eval failed.\n"
+            unset pass
+        }
+    }
+
+    # necessary to quit butc because the db entry for it has been deleted
+    # and it is now unreachable, even after you add the entry back to the db.
+    if [info exists pass] {
+        quit_butc $butc_id $butc_host
+        set tmp_list [list "$sa_server 0"]
+        if ![add_host_info_p $bak_id $tmp_list] {
+            send_user "Problem adding host/tcid entry.\n"
+            send_user "Test eval failed.\n"
+            unset pass
+        } else {
+            set butc_id [run_butc "" 0]
+            if ![is_butc_ready_p $bak_id 0] {
+                send_user "Test eval failed.\n"
+                unset pass
+            }
+        }
+    }
+
+    if [info exists pass] {
+        if ![Restore_db_p $bak_id $butc_id ""] {
+            send_user "Problem restoring db.\n"
+            send_user "Test eval failed.\n"
+            # unable to evaluate, easiest just to indicate failure.
+            unset pass
+        }
+    }
+
+    if [info exists pass] {
+        # At this point we know that the restore completed, now check the
+        # contents of the data base against what was saved in command setup
+        # to be sure it is correct.
+        if [string compare $lshosts_savedb [save_host_info $bak_id]] {
+            send_user "Host info was restored incorrectly\n"
+            unset pass
+        }
+        if [string compare $lsftfamilies_savedb\
+                           [save_fileset_families $bak_id]] {
+            send_user "Fileset info was restored incorrectly\n"
+            unset pass
+        }
+        if [string compare $lsdumps_savedb [save_dump_schedule $bak_id]] {
+            send_user "Dump schedule info was restored incorrectly\n"
+            unset pass
+        }
+    }
+
+TEST-CLEANUP
+    # Don't worrying about getting db correct - test setup for each test
+    # will do this.

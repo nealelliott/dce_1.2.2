@@ -1,0 +1,214 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+#
+# HISTORY
+# $Log: dcetmudt,v $
+# Revision 1.1.9.2  1996/03/09  20:52:41  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:30:13  marty]
+#
+# Revision 1.1.9.1  1995/12/13  21:56:19  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/13  21:45:39  root]
+# 
+# 	Initial King Kong branch
+# 	[1993/07/09  15:31:21  root]
+# 
+# Revision 1.1.6.3  1993/04/05  13:40:03  truitt
+# 	Modifications to work in new systest environment.
+# 	[1993/04/05  13:39:44  truitt]
+# 
+# Revision 1.1.6.2  1993/03/26  16:24:38  truitt
+# 	OSF wants to defunct this test, but we have it working.  So,
+# 	a GAMERA branch is being created.  Also enhanced some of the
+# 	error reporting.
+# 	[1993/03/26  16:22:40  truitt]
+# 
+# Revision 1.1.3.3  1992/11/03  20:20:22  mgm
+# 	Ported to TET by Bob Fritz.
+# 	Bci'd and bsubmit'd by Mary MacGregor
+# 	[1992/11/03  20:19:45  mgm]
+# 
+# Revision 1.1.3.2  1992/06/11  20:05:28  mcfarland
+# 	changed files from test_latest
+# 	[1992/06/09  13:11:56  mcfarland]
+# 
+# 	new systest changes
+# 	[1992/05/08  15:18:25  bmw]
+# 
+# 	      Adding changes from defect_fixes archive.
+# 	      [1992/01/22  22:32:39  melman]
+# 	[1992/01/22  23:07:11  melman]
+# 
+# Revision 1.1.1.2  1992/05/28  15:18:24  root
+# 	    Loading drop Dce1_0_1b15
+# 
+# $EndLog$
+#
+#
+#   TEST_NAME: dcetmudt
+#
+#   COMPONENT_NAME: dce.systest
+#
+#   FUNCTIONS: setup_dcetmudt
+#	       check_RC_severe
+#	       check_RC_warning
+#	       get_starttime
+#	       update_time
+#	       length_time
+#	       cleanup
+#
+#   ORIGINS: 27
+#
+#
+#   (C) COPYRIGHT International Business Machines Corp. 1991
+#   All Rights Reserved
+#
+#
+#   FILES: dcetmudt	(this file)
+#          time/addtime.c
+#          time/subtime.c
+#
+#   REQUIREMENTS:
+#   	Requires DTS to be running on a server.  Requires the REMHOST
+#	variable to be set with the name of a machine which is not running DTS.
+#
+#   RESTRICTIONS:
+#	Only one copy of this should run on a machine at any one time.
+#
+#   USAGE:
+#
+#      dcetmudt
+#
+#      Note:  It is highly recommended that this test be started
+#      from the its driver (dcetmall).
+#
+#
+#  TESTCASE OVERVIEW
+#
+#	The purpose of this testcase is to test DECdts' ability to
+#	correctly update the time using the "dtscp update" command.
+#
+#	Design: The server will be instructed update itself to 60
+#       seconds ahead of its current time.  Since the process
+#	speeds the clock up by 1 percent, the clock should reach its
+#	new time in 100 real-time minutes while counting off 101 minutes
+#	at its increased rate. This is verified executing an "rsh
+#	sleep 6000" on a machine with a trusted time. (One not
+#	participating in dts, which has been input by the user.)
+#	After 6000 seconds, 100 minutes will have elapsed, and then we 
+#	return execution to the test machine, to verify that 101
+#	minutes of speeded up time occured while 100 minutes of 
+#	constant time elapsed.
+#
+#
+#  CHANGE HISTORY
+#  11/05/90	Clissold/Flake 	Initial design.  
+#  11/25/90	Leslie Flake	Design complete
+#  12/07/90	Leslie Flake	Initial code
+#  08/05/91	John Currey		Revisions
+#  03/12/92			Update dtscp command to current interface
+#				Add make.time
+#				Add dce_login_noexec for the operations
+#				on remote machine
+#  11/03/92	Bob Fritz	Ported to TET
+#		Mary MacGregor	Bci'd and bsubmit'd
+
+#dcetmudt : test case for time
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="dcetmudt"
+
+# preparation for dcetmudt test
+startup() {
+
+	print "START DCE time systest: dcetmudt; DATE: `date`"
+	tet_infoline "START DCE time systest: ${TET_PNAME}; DATE: `date`"
+	#-----------------------------------------------------------------------
+	# WPHI:       combination/substition - $WS.$PID.$HOST.$ITERATION
+	# WSTMPDIR:   the workstation temporary directory
+	# WSLOGDIR:   directory where our JOURNALs are kept during the run
+	# JOURNAL:    file containing output from the standard library commands
+	# CMDFILE:    file containing all output from workstation commands
+	# STATUSFILE: file containing other log information from the workstation
+	# SPOOLFILE:  file containing all information written to stdout
+	#-----------------------------------------------------------------------
+
+	WSTMPDIR=/tmp
+	export WSTMPDIR
+        rm $WSTMPDIR/epochfile >/dev/null 2>&1
+	cp ${TET_ROOT}/time/ts/addtime ${WSTMPDIR}
+	cp ${TET_ROOT}/time/ts/subtime ${WSTMPDIR}
+        return
+}
+
+dcetmudt() {
+#set -x
+	sleep 5 
+	setup_dcetmudt
+        if (( $? == 0 )); then
+		get_starttime
+	else
+		tet_result FAIL
+		print "ERROR: dcetmudt failed in function setup_dcetmudt"
+		tet_infoline "ERROR: dcetmudt failed in function setup_dcetmudt"
+		return
+	fi
+
+        if (( $? == 0 )); then
+		update_time
+	else
+		tet_result FAIL
+		print "ERROR: dcetmudt failed in function get_starttime"
+		tet_infoline "ERROR: dcetmudt failed in function get_starttime"
+		return
+	fi
+
+        if (( $? == 0 )); then
+		length_time
+	else
+		tet_result FAIL
+		print "ERROR: dcetmudt failed in function update_time"
+		tet_infoline "ERROR: dcetmudt failed in function update_time"
+		return
+	fi
+
+
+        if (( $? == 0 )); then
+		cleanup_dcetmudt
+	else
+		tet_result FAIL
+                print "ERROR: dcetmudt failed in function length_time"
+		tet_infoline "ERROR: dcetmudt failed in function length_time"
+		return
+	fi
+
+        if (( $? == 0 )); then
+		tet_result PASS
+		print "PASS: dcetmudt test passed"
+		tet_infoline "PASS: dcetmudt test passed"
+	else
+		tet_result FAIL
+                print "ERROR: dcetmudt failed in function cleanup_dcetmudt"
+                tet_infoline "ERROR: dcetmudt failed in function cleanup_dcetmudt"
+	fi
+}
+
+# cleanup of DCE time test
+cleanup() {
+
+	print "END DCE time systest: dcetmudt; DATE: `date`"
+	tet_infoline "END DCE time systest: ${TET_PNAME}; DATE: `date`"
+}
+
+#source tcm
+. ${TET_ROOT}/profile.dcest
+. ${TET_ROOT}/time/ts/dcetm.ksh
+. ${TCM}

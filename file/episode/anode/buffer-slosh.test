@@ -1,0 +1,166 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: buffer-slosh.test,v $
+# Revision 1.1.12.1  1996/10/02  17:16:51  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:26:48  damon]
+#
+# Revision 1.1.6.1  1994/06/09  13:57:08  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:32:02  annie]
+# 
+# Revision 1.1.4.3  1993/01/18  22:02:13  cjd
+# 	embedded copyright notice
+# 	[1993/01/18  21:41:42  cjd]
+# 
+# Revision 1.1.4.2  1992/09/15  17:30:53  jaffe
+# 	Transarc delta: mason-ot2930-logbuf-parts-of-nbs 1.14
+# 	  Selected comments:
+# 	    This is the logbuf portion of new block security (making sure someone
+# 	    else's data does not appear in your file across a system crash.)  For
+# 	    details, see the OT report, the postings to transarc.afs.episode, and
+# 	    the white paper on this subject.  Not done yet.  SNAPSHOT ONLY.
+# 	    Just wanted to fix a small nit in test_res.
+# 	    More work on NBS.  This is only a snapshot.
+# 	    Another snapshot; this time we make the interfaces between anode & buffer
+# 	    uniform (each was using a different convention).  Clean up names at the same
+# 	    time.  SNAPSHOT ONLY.
+# 	    Another snapshot.  NBS now works in the forward direction for basic.test!
+# 	    This part of this delta was removed and added to delta
+# 	    mason-ot5070-gc-tran-in-logfull-avoidance
+# 	    Snapshot of code working in the forward path in mp.test.
+# 	    Removed the contents of revision 1.6
+# 	    Checkpoint.  No work done here, just made sure that the other new
+# 	    delta works OK (mason-ot5070-gc-tran-in-logfull-avoidance).
+# 	    Make all_tests work again.
+# 	    Finish making all the tests run now.
+# 	    Log size must increase.
+# 	    Cleanup compilation on OSF/1.
+# 	    Continue work to get new block security going.
+# 	    Add a script for the nbs tests.
+# 	[1992/09/14  19:21:44  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/13  21:54:35  jdp
+# 	Transarc delta: ota-buffer-mem-deadlock-2673 1.5
+# 	  Files modified:
+# 	    anode: all_tests, buffer-slosh.test
+# 	    anode: multi-block-frag.int.test, test_anode.c
+# 	    logbuf: buffer.c, elb.h
+# 	  Selected comments:
+# 	    Yet another deadlock in the buffer memory management code caused me to
+# 	    embark on a complete rewrite of this code.  This should effectively be
+# 	    the completion of the work item from Episode_TODO.text called "buffer
+# 	    pool 1.0".
+# 	    It actually seems to work and has many neat reporting and tuning values.
+# 	    Create four aggregates with different block sizes (including 1K and 64K)
+# 	    and run multi-block-frag.int.test twice in each serially so that the
+# 	    buffer memory is sloshed from one pool to the next on demand.
+# 	    Spelling error.
+# 	    Additional cleanup.
+# 	    Found a bug in Reclaim where a variable was uninitialized.
+# 	    This bug only showed up when I changed from a 32K to 16K aggregate,
+# 	    which I was planning to do anyway.
+# 	    Another bug fix.
+# 	Transarc delta: ota-perfileset-acl-tlock-2254 1.2
+# 	  Files modified:
+# 	    anode: all_tests, auxquota.test, block_alloc.c
+# 	    anode: buffer-slosh.test, file.c, multi-block-frag.int.test
+# 	    anode: volume.c, volume.h
+# 	  Selected comments:
+# 	    Modify the file module to use a per fileset tlock for auxiliary
+# 	    containers instead of the global tlock that is currently used.  The
+# 	    current code is incorrect because the global tlock would sometimes try
+# 	    to merge transactions that are in different aggregates.  This can't work
+# 	    and in fact leads to a panic in the logbuf layer.
+# 	    Several other cleanups were also made in the handling of auxiliary
+# 	    containers.  The comments around this code mentioned several TODO items.
+# 	    Most of these were attended to.
+# 	    One of these items regarded handling errors caused by quota and space
+# 	    errors when copying ACLs.  I wrote a new script to expose this error.
+# 	    In the course of looking a this problem I discovered that the limitation
+# 	    of MAX_FREEDBLOCKS_PER_TRANS (10) was insufficient to recover from a
+# 	    quota error while copying initial acls (because it has to delete 2+ aux
+# 	    containers each up to 8 1K blocks in size).  This necessitated changes
+# 	    to block_alloc.c.
+# 	    I was also unable to avoid further changes to all_tests and the disk
+# 	    space tracking code in there.  Of course, auxquota.test was added.
+# 	    Fork a the internal script in each aggregate simultaneously.  This
+# 	    triggers the global aux tlock bug.
+# 	    Reduce the disk space requirements of the 64K tests somewhat (now that
+# 	    multi-block-frag.int takes up less space, see which).
+# 	    Inexplicable problem with all_tests script.
+# 	[1992/05/13  19:37:30  jdp]
+# 
+# $EndLog$
+# /* Copyright (C) 1992 Transarc Corporation - All rights reserved */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/buffer-slosh.test,v 1.1.12.1 1996/10/02 17:16:51 damon Exp $
+
+# Exercise four aggregates with multiple block sizes is series.  It is
+# designed to "slosh" the buffer memory from one pool to another.
+
+buffer-slosh 1
+modify_afsdb anode on 31		# turn on code block counting
+modify_afsdb anode on 29		# turn on preempts
+
+open_device 0 1024 1024 2500		# 1K/1K
+create_aggregate
+exist_vol dev0 0,,0 104000
+mount dev0.root
+
+open_device 1 4096 1024 600		# 4K/1K
+create_aggregate 30
+exist_vol dev1 0,,0 104000
+mount dev1.root
+
+open_device 2 16384 1024 150		# 16K/1K
+create_aggregate 20
+exist_vol dev2 0,,0 104000
+mount dev2.root
+
+open_device 3 65536 1024 75		# 64K/1K
+create_aggregate 15
+exist_vol dev3 0,,0 10000000
+mount dev3.root
+
+fork multi-block-frag.int.test
+wait
+fork multi-block-frag.int.test
+wait
+
+open_file dev2.root
+fork multi-block-frag.int.test
+wait
+fork multi-block-frag.int.test
+wait
+
+open_file dev1.root
+fork multi-block-frag.int.test
+wait
+fork multi-block-frag.int.test
+wait
+
+open_file dev0.root
+fork multi-block-frag.int.test
+wait
+fork multi-block-frag.int.test
+wait
+
+# This last phase triggers the global tlock bug (2254).
+
+fork multi-block-frag.int.test
+open_file dev1.root
+fork multi-block-frag.int.test
+open_file dev2.root
+fork multi-block-frag.int.test
+open_file dev3.root
+fork multi-block-frag.int.test
+wait
+
+check_device
+
+end

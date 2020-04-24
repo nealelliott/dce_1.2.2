@@ -1,0 +1,230 @@
+*
+* @OSF_COPYRIGHT@
+* COPYRIGHT NOTICE
+* Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+* ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+* the full copyright text.
+*
+* HISTORY
+* $Log: destroy_error.itl,v $
+* Revision 1.1.124.1  1996/10/17  18:21:16  damon
+* 	Submitting on behalf of Transarc
+* 	[1996/10/17  16:51:12  damon]
+*
+* Revision 1.1.119.1  1994/02/04  20:41:31  devsrc
+* 	Merged from 1.0.3a to 1.1
+* 	[1994/02/04  15:22:51  devsrc]
+* 
+* Revision 1.1.117.2  1994/01/20  18:43:45  annie
+* 	added copyright header
+* 	[1994/01/20  18:39:58  annie]
+* 
+* Revision 1.1.117.1  1993/12/07  17:42:30  jaffe
+* 	New File from Transarc 1.0.3a
+* 	[1993/12/02  21:59:21  jaffe]
+* 
+* $EndLog$
+*
+
+!**********************************************************
+!*** Simulate errors during a destroy
+!**********************************************************
+
+include "defaults.itl"
+
+!*** Initialize variables
+
+set deplete_func "ftutil_VolDepleteAux"
+set destroy_func "DestroyFset"
+set error $ENOTTY
+set fset_id_high	$ITL_ProcessId
+set fset_id_low		1
+set fset_id string	("" + $fset_id_high + ",," + $fset_id_low)
+set fset_name ("fzappa." + $ITL_ProcessId)
+set mp ("/tmp/fset." + $ITL_ProcessId)
+set num_deplete_bps 6
+set num_unclone_bps 8
+set orig_fset_id $fset_id
+set orig_sum_file ("/tmp/fset_orig_sum." + $ITL_ProcessId)
+set sum_cmd ("find " + $mp + " -type f -print | xargs sum")
+set tmp_sum_file ("/tmp/fset_tmp_sum." + $ITL_ProcessId)
+set unclone_func "ftutil_VolUnCloneAux"
+
+set crank_fset_id proc END
+	set fset_id_low (@fset_id_low + 1)
+	set fset_id ("" + @fset_id_high + ",," + @fset_id_low)
+END
+
+*** Initialize the user-level destroy bomb points, with one bomb point 
+*** description for each unique bomb point in the code
+set destroy_bp_desc[1] ($destroy_func + ".1:error=" + $error + ":count=1+0")
+set destroy_bp_desc[2] ($destroy_func + ".3:error=" + $error + ":count=1+0")
+set destroy_bp_desc[3] ($destroy_func + ".4:error=" + $error + ":count=1+0")
+set destroy_bp_desc[4] ($destroy_func + ".5:error=" + $error + ":count=1+0")
+set destroy_bp_desc[5] ($destroy_func + ".6:error=" + $error + ":count=1+0")
+set destroy_bp_desc[6] ($destroy_func + ".7:error=" + $error + ":count=1+0")
+set destroy_bp_desc[7] ($destroy_func + ".11:error=" + $error + ":count=1+0")
+set destroy_bp_desc[8] ($destroy_func + ".12:error=" + $error + ":count=1+0")
+set destroy_bp_desc[9] ($destroy_func + ".13:error=" + $error + ":count=1+0")
+set destroy_bp_desc[10] ($destroy_func + ".14:error=" + $error + ":count=1+0")
+set destroy_bp_desc[11] ($destroy_func + ".15:error=" + $error + ":count=1+0")
+set destroy_bp_desc[12] ($destroy_func + ".16:error=" + $error + ":count=1+0")
+set destroy_bp_desc[13] ($destroy_func + ".17:error=" + $error + ":count=1+0")
+set destroy_bp_desc[14] ($destroy_func + ".18:error=" + $error + ":count=1+0")
+set destroy_bp_desc[15] ($destroy_func + ".21:error=" + $error + ":count=1+0")
+set destroy_bp_desc[16] ($destroy_func + ".22:error=" + $error + ":count=1+0")
+
+set num_destroy_bps 16
+
+*** Initialize the unclone bomb points, where each bomb point
+*** description has its 'count' value set to one greater than the previous
+*** description
+loop i 1 1 $num_unclone_bps
+	set destroy_bp_desc[$i + $num_destroy_bps]
+		 ($unclone_func + ".1:error=" + $error
+		  + ":count=" + $i + "+0")
+endLoop
+
+*** Initialize the deplete bomb points, where each bomb point
+*** description has its 'count' value set to one greater than the previous
+*** description
+loop i 1 1 $num_deplete_bps
+	set destroy_bp_desc[$i + $num_destroy_bps + $num_unclone_bps]
+		 ($deplete_func + ".1:error=" + $error
+		  + ":count=" + $i + "+0")
+endLoop
+
+set total_destroy_bps ($num_destroy_bps + $num_unclone_bps + $num_deplete_bps)
+
+!*** Verify and attach aggregate number $aggr_id ($device)
+verifyAggr $device
+attachAggr $device $aggr_type $aggr_name $aggr_id
+
+!*** Create and mount fileset $fset_name on $mp
+createFset $aggr_id $fset_id $fset_name
+mkdir $mp 0755
+mountFset $fset_name $mp
+
+!*** Create a temporary clone
+***  just to have an existing backing fileset.
+***  This allows us to hit all of the clone bomb points.
+exec crank_fset_id
+set tmp_clone_id $fset_id 
+set tmp_clone_name ($fset_name + ".tmp")
+cloneFset $aggr_id $orig_fset_id $tmp_clone_id $tmp_clone_name
+
+!*** Populate the fileset
+set create_file proc END
+	set path_name ($mp + "/" + @file_name)
+	open @path_name ($O_CREAT|$O_RDWR) 0666 fd
+	write @fd @data
+	close @fd
+END
+
+set file_name "little"
+set data "Joe got a good job working at the Utility Muffin Research Kitchen, where he stands arrogantly twisting the sterile canvas snoot of a fully charged icing anointment utensil,"
+exec create_file
+
+set file_name "green"
+set data "and every time a nice little muffin comes by on the belt, he puts forth:"
+exec create_file
+
+set file_name "rosette"
+set data "a little green rosette!"
+exec create_file
+
+mkdir ($mp + "/junk") 0755
+set file_name "/junk/bag-o-bits"
+set data ("JDP" * ($block_size + 13))
+exec create_file
+
+*** Save and ID and name for the clone
+exec crank_fset_id
+set clone_id $fset_id
+set clone_name ($fset_name + ".clone")
+
+!*** Compute a checksum on the contents of $mp
+set orig_sum_cmd ($sum_cmd + " >" + $orig_sum_file)
+shellExec orig_sum_cmd
+
+*** This procedure will be used after each aborted operation to ensure that
+*** the checksum matches the one computed above.
+set tmp_sum_cmd ($sum_cmd + " >" + $tmp_sum_file)
+set cmp_sum_cmd ("cmp -s " + $orig_sum_file + " " + $tmp_sum_file)
+set cmp_sums proc END
+	!*** See if checksum of $mp matches the original
+	shellExec tmp_sum_cmd
+	shellExec cmp_sum_cmd
+END
+
+loop i 1 1 $total_destroy_bps
+	set file_name "poncho"
+	!*** Create another file ($file_name)
+	set data "Mexican or Sears?"
+	exec create_file
+	
+	!*** Clone the fileset ($orig_fset_id => $clone_id)
+	cloneFset $aggr_id $orig_fset_id $clone_id $clone_name
+
+	!*** Remove $file_name so that it doesn't exist in the R/W fileset
+	***  This forces efsSomeClone() into the case where there is no
+	***  anode in the front fileset but one exists in the backing fileset,
+	***  so it deletes the anode in the backing fileset to save work in
+	***  vol_efsDeplete()
+	unlink $path_name
+
+	!*** Remove a file and recreate it
+	***  This forces efsSomeClone() into the case where the front
+	***  anode is not copy-on-write while there is an orphaned anode
+	***  at the same slot in the backing fileset, so it deletes the anode
+	***  in the backing fileset to save work in vol_efsDeplete().
+	set file_name "rosette"
+	unlink ($mp + "/" + $file_name)
+	set data "a little green rosette!"
+	exec create_file
+
+	set file_name "utensil"
+	!*** Create another file ($file_name)
+	***  This forces efsSomeClone() into the case where a an anode exists
+	***  in the front fileset but not in the backing one.
+	set data "cosmic"
+	exec create_file
+
+	!*** Set $destroy_bp_desc[$i]
+	setBomb $destroy_bp_desc[$i]
+
+	!*** Execute the doomed destroy operation
+	verifyStatus false
+	destroyFset $aggr_id $clone_id
+	if ($ITL_Status != $error) {
+		error Code ($ITL_Status) != expected error ($error)
+	}
+	verifyStatus true
+
+	if ($i != 16) {
+		!*** Retry the destroy
+		destroyFset $aggr_id $clone_id
+	}
+	
+	!*** Remove $file_name so that the checksums match
+	unlink $path_name
+
+	*** Make sure that the fileset contents are the same
+	exec cmp_sums
+endLoop
+
+!*** Remove the checksum files
+set rm_sum_cmd ("rm -f " + $orig_sum_file + " " + $tmp_sum_file)
+shellExec rm_sum_cmd
+
+!*** Unmount and destroy the filesets
+unmountFset $mp
+unlink $mp
+destroyFset $aggr_id $tmp_clone_id
+destroyFset $aggr_id $orig_fset_id
+
+!*** Detach and verify the aggregate
+detachAggr $aggr_id
+verifyAggr $device
+
+echo !!! The test passed !!!

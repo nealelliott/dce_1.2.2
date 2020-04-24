@@ -1,0 +1,2316 @@
+#
+# ID: $Id: util.exp,v 1.17 1996/04/26 19:30:38 hyer Exp $
+#
+# COMPONENT_NAME: bak tests
+#
+# The following functions list may not be complete.
+# Functions defined by/via macros may not be included.
+#
+# FUNCTIONS:
+#    Utility procedures used by the backup tests
+#
+# ORIGINS: Transarc Corp.
+#
+# (C) COPYRIGHT Transarc Corp. 1993
+# All Rights Reserved
+# Licensed Materials - Property of Transarc
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+#
+# HISTORY
+# $TALog: util.exp,v $
+# Revision 1.17  1996/04/26  19:30:38  hyer
+# Reopened delta to fix problems found testing callout routines
+# for mount/unmount in savedb and restoredb.
+#
+# Added code to handle the callout responses for savedb and restoredb.
+# [from r1.16 by delta hyer-7283-backup-throughput-mods, r1.4]
+#
+# Revision 1.16  1996/01/21  09:48:54  hyer
+# Changes to make the backup test scripts with the callout routines for
+# mount and unmount in DCE 1.2.
+#
+# Added cm checkfilesets and cleaned up test to run with callout routines
+# [from r1.15 by delta hyer-7265-backup-test-mods-for-callout-routines, r1.1]
+#
+# Revision 1.15  1995/12/06  15:25:39  hyer
+# The backup test scripts were not working. Most of the tests either
+# failed or never ran. Made significant changes to all scripts to make
+# them work:
+#
+# Added function CATCHEXEC that does the same thing as catch "exec ..."
+# but also displays each command and the response as well as any error codes
+# that are returned from the exec.
+#
+# Added a loop in is_butc_ready to wait up to 200 seconds for the butc
+# process to start, sleeping 10 seconds between checks.
+#
+# Changed the expected command output to match the messages generated
+# by the current version of the code.
+#
+# Added sleeps around some of the tape I/O commands to keep them from
+# failing because the device wasn't ready.
+#
+# Added chmod ogu+rwx commands after each fts crmount to give the test
+# scripts access to the test filesets
+#
+#
+# [from r1.13 by delta hyer-7109-backup-test-changes, r1.1]
+#
+# Revision 1.14  1995/11/29  17:14:14  hyer
+# Delta for changes made to the backup scripts to get the backup tests running.
+# Several changes were made to get the tests to run:
+#
+# 1. A loop was added to is_butc_ready to retry the status command
+#    every 10 seconds, and time out after 200 seconds. The tests were
+#    not being run because it can take over 1 minute for butc to start.
+#
+# 2. The directory permissions needed to be changed to allow R/W access
+#    on the test filesets after they were created with fts crmount.
+#
+# 3. The error checking code in restore_disk and restore_ft, and dump
+#    was reworked to make sure that the success or failure of the
+#    operation was detected during the test.
+#
+# 4. The calls to "fts dump" and "fts restore" were returing error status
+#    even though the operation succeeded. Changed the script to read the
+#    response from the command to decide whether or not the command worked.
+#
+# 5. Added a EXEC routine that calls exec, but prints out each command and
+#    the response.
+#
+# 6. Several other minor changes were made to address verious problems
+#    with how the scripts were checking the success or failure of the
+#    tests. The tests have run successfully start to finish on
+#    Solaris with the changes reflected in this delta.
+#
+# see above
+# [from r1.13 by delta hyer_7109_fixes_to_backup_test_scripts, r1.1]
+#
+# Revision 1.13  1994/02/25  15:23:23  andi
+# [merge of changes from 1.8 to 1.11 into 1.12]
+#
+# Revision 1.11  1994/01/10  18:27:50  davecarr
+# Upgraded tests to work with expect-5.1.3.  Also moved some configuration
+# dependencies from savedb-cmd to generic.exp.  In the process, some
+# variables had "sa_" prepended to them to indicate that they are used only
+# for the savedb tests.
+#
+# Cleaned up erroneous use of dbr_ prefix from the variables backup_dir,
+# bkdb_file1 and bkdb_file2 in procedure delete_db_files_p.
+# [from r1.10 by delta davecarr-db4737-bak-savedb-tests, r1.2]
+#
+# Revision 1.10  1994/01/07  18:02:39  davecarr
+# Upgraded tests to work with expect-5.1.3.  Also moved some configuration
+# dependencies from restoredb-cmd to generic.exp.  In the process, some
+# variables had "dbr_" prepended to them to indicate that they are used only
+# for the restoredb tests.
+#
+# Changed some global variables in procedure delete_db_files_p that had been
+# renamed in generic.exp.
+# [from r1.9 by delta davecarr-db4736-bak-restoredb-tests, r1.2]
+#
+# Revision 1.9  1993/12/13  16:51:09  davecarr
+# Updated to expect version 5.1.3.  There were some interface changes to
+# expect from version 4 to version 5.  Hopefully there will be no more.
+#
+# Updated to expect version 5.1.3.
+# [from r1.8 by delta vijay-db3516-add-bak-test-driver, r1.7]
+#
+# Revision 1.12  1994/02/24  21:02:06  andi
+# [merge of changes from 1.1 to 1.7 into 1.2]
+#
+# Revision 1.7  1993/11/24  15:21:46  vijay
+# The kill_job routine needed some work because it wasn't expecting output on
+# butc, but it should. Also made backup_driver.exp executable by adding
+# expect on the first line. Explained alternate methods of running the driver
+# in the README file.
+#
+# modify kill_job
+# [from r1.5 by delta vijay-db3516-add-bak-test-driver, r1.6]
+#
+# Revision 1.5  1993/11/23  19:19:45  vijay
+# tweaks to the util functions to make them more reliable
+# [from r1.4 by delta vijay-db3516-add-bak-test-driver, r1.5]
+#
+# Revision 1.4  1993/11/19  16:53:38  vijay
+# a small delay after butc starts up to let it catch up
+# [from r1.3 by delta vijay-db3516-add-bak-test-driver, r1.4]
+#
+# Revision 1.3  1993/11/15  21:20:10  vijay
+# This revision checks in a working set of scripts to test the DFS backup
+# system. The files checked in for this delta are high level scripts to
+# configure and run the test suite. Separate deltas would export the scripts
+# to test individual bak commands.
+#
+# The README file provides a description on how to configure and run these tests.
+#
+# lots of changes to support the bak command test scripts
+# [from r1.1 by delta vijay-db3516-add-bak-test-driver, r1.2]
+#
+# Revision 1.2  1993/06/10  18:32:44  davecarr
+#    This delta adds the first set of expect-based tests for bak restoredisk.
+#
+#    Major changes.  Added many new functions that came out of testing
+# restoredisk.
+# [from r1.1 by delta davecarr-db3672-bak-restoredisk-tests-I, r1.1]
+#
+# Revision 1.1  1993/05/05  17:47:13  vijay
+# This delta is the first in a series of changes that add a new backup test
+# suite to the DFS test tree. This delta includes the backup test harness driver,
+# a report generator and a file containing utility procedures. The tests are
+# aimed at testing the functionality of the bak command suite. They are written
+# in Expect and Tcl. For more information on the test harness design and the
+# structure of the test suite, please refer to the document "Automated Testing
+# for the DFS Backup System" by Dave Carr, and the backup test checklist.
+#
+# File containing utility procedures
+# [added by delta vijay-db3516-add-bak-test-driver, r1.1]
+#
+
+# Utility procedures used by the backup tests
+
+#
+# display a command, execute the command and display the results
+#
+
+	proc CATCHEXEC { command {output catch_private_tmp} } {
+	    global $output
+	    send_user "$command\n"
+	    set result [catch "eval exec $command" catch_private_tmp]
+	    if 0!=[string length $catch_private_tmp] {
+		send_user "$catch_private_tmp\n"
+	    }
+	    set $output $catch_private_tmp
+	    if 0!=$result {
+		send_user "CATCHEXEC: status = $result\n"
+	    }
+	    return $result
+	}
+
+	#
+	# read_generic_file_p
+	#
+	proc read_generic_file_p {generic_file} {
+	    global timeout
+	    global generic_setup_code
+	    global generic_pre_code
+	    global generic_post_code
+	    global generic_cleanup_code
+
+	    # "open pops stack on failure" - from kibitz
+	    # hence the need for the catch
+	    if [catch {set fileId [open $generic_file]} msg]!=0 {
+		send_user $msg
+		return 0
+	    }
+	    set contents [split [read -nonewline $fileId] "\n"]
+	    close $fileId
+
+	    # added * to end of pattern - otherwise a blank or tab would cause no
+	    # match and this could be difficult to discover.
+	    set generic_setup_index [lsearch $contents "GENERIC-SETUP*"]
+	    set generic_pre_index [lsearch $contents "GENERIC-PRE*"]
+	    set generic_post_index [lsearch $contents "GENERIC-POST*"]
+	    set generic_cleanup_index [lsearch $contents "GENERIC-CLEANUP*"]
+
+	    if { $generic_setup_index>$generic_pre_index ||\
+		 $generic_pre_index>$generic_post_index ||\
+		 $generic_post_index>$generic_cleanup_index ||\
+		 $generic_setup_index==-1 } {
+		send_user "\nError in placement or spelling of headings in file:"
+		send_user " $generic_file\n"
+		return 0
+	    }
+	    set generic_setup_code\
+		[join [lrange $contents [expr $generic_setup_index+1]\
+		       [expr $generic_pre_index-1]] "\n"]
+	    set generic_pre_code\
+		[join [lrange $contents [expr $generic_pre_index+1]\
+		       [expr $generic_post_index-1]] "\n"]
+	    set generic_post_code\
+		[join [lrange $contents [expr $generic_post_index+1]\
+		       [expr $generic_cleanup_index-1]] "\n"]
+	    set generic_cleanup_code\
+		[join [lrange $contents [expr $generic_cleanup_index+1]\
+		       end] "\n"]
+	    return 1
+	}
+
+	#
+	# read_cmd_file_p
+	#
+	proc read_cmd_file_p {cmd_file} {
+	    global timeout
+	    global cmd_setup_code
+	    global cmd_pre_code
+	    global cmd_post_code
+	    global cmd_cleanup_code
+	    # "open pops stack on failure" - from kibitz
+	    # hence the need for the catch
+	    if [catch {set fileId [open $cmd_file]} msg]!=0 {
+		send_user $msg
+		return 0
+	    }
+	    set contents [split [read -nonewline $fileId] "\n"]
+	    close $fileId
+
+	    # added * to end of pattern - otherwise a blank or tab would cause no
+	    # match and this could be difficult to discover.
+	    set cmd_setup_index [lsearch $contents "CMD-SETUP*"]
+	    set cmd_pre_index [lsearch $contents "CMD-PRE*"]
+	    set cmd_post_index [lsearch $contents "CMD-POST*"]
+	    set cmd_cleanup_index [lsearch $contents "CMD-CLEANUP*"]
+
+	    if { $cmd_setup_index>$cmd_pre_index ||\
+		 $cmd_pre_index>$cmd_post_index ||\
+		 $cmd_post_index>$cmd_cleanup_index ||\
+		 $cmd_setup_index==-1 } {
+		send_user "\nError in placement or spelling of headings in file:"
+		send_user " $cmd_file\n"
+		return 0
+	    }
+	    set cmd_setup_code\
+		[join [lrange $contents [expr $cmd_setup_index+1]\
+		       [expr $cmd_pre_index-1]] "\n"]
+	    set cmd_pre_code\
+		[join [lrange $contents [expr $cmd_pre_index+1]\
+		       [expr $cmd_post_index-1]] "\n"]
+	    set cmd_post_code\
+		[join [lrange $contents [expr $cmd_post_index+1]\
+		       [expr $cmd_cleanup_index-1]] "\n"]
+	    set cmd_cleanup_code\
+		[join [lrange $contents [expr $cmd_cleanup_index+1]\
+		       end] "\n"]
+	    return 1
+	}
+
+	#
+	# read_test_file_p
+	#
+	proc read_test_file_p {test_file} {
+	    global timeout
+	    global test_setup_code
+	    global test_pre_code
+	    global test_exec_code
+	    global test_post_code
+	    global test_eval_code
+	    global test_cleanup_code
+	    # "open pops stack on failure" - from kibitz
+	    # hence the need for the catch
+	    if [catch {set fileId [open $test_file]} msg]!=0 {
+		send_user $msg
+		return 0
+	    }
+
+	    set contents [split [read -nonewline $fileId] "\n"]
+	    close $fileId
+
+	    # added * to end of pattern - otherwise a blank or tab would cause no
+	    # match and this could be difficult to discover.
+	    set test_setup_index [lsearch $contents "TEST-SETUP*"]
+	    set test_pre_index [lsearch $contents "TEST-PRE*"]
+	    set test_exec_index [lsearch $contents "TEST-EXEC*"]
+	    set test_post_index [lsearch $contents "TEST-POST*"]
+	    set test_eval_index [lsearch $contents "TEST-EVAL*"]
+	    set test_cleanup_index [lsearch $contents "TEST-CLEANUP*"]
+
+	    if { $test_setup_index>$test_pre_index ||\
+		 $test_pre_index>$test_exec_index ||\
+		 $test_exec_index>$test_post_index ||\
+		 $test_post_index>$test_eval_index ||\
+		 $test_eval_index>$test_cleanup_index ||\
+		 $test_setup_index==-1 } {
+		send_user "\nError in placement or spelling of headings in file:"
+		send_user " $test_file\n"
+		return 0
+	    }
+	    set test_setup_code\
+		[join [lrange $contents [expr $test_setup_index+1]\
+		       [expr $test_pre_index-1]] "\n"]
+	    set test_pre_code\
+		[join [lrange $contents [expr $test_pre_index+1]\
+		       [expr $test_exec_index-1]] "\n"]
+	    set test_exec_code\
+		[join [lrange $contents [expr $test_exec_index+1]\
+		       [expr $test_post_index-1]] "\n"]
+	    set test_post_code\
+		[join [lrange $contents [expr $test_post_index+1]\
+		       [expr $test_eval_index-1]] "\n"]
+	    set test_eval_code\
+		[join [lrange $contents [expr $test_eval_index+1]\
+		       [expr $test_cleanup_index-1]] "\n"]
+	    set test_cleanup_code\
+		[join [lrange $contents [expr $test_cleanup_index+1]\
+		       end] "\n"]
+	    return 1
+	}
+
+	#
+	# procedures to return user/password info from configuration information
+	#
+	# get_unix_user
+	#
+	proc get_unix_user { host } {
+		global unix_user
+		return $unix_user
+	}
+
+	#
+	# get_afs_user
+	#
+	proc get_afs_user { host } {
+		global afs_user
+		return $afs_user
+	}
+
+	#
+	# get_dce_user
+	#
+	proc get_dce_user { host } {
+		global dce_user
+		return $dce_user
+	}
+
+	#
+	# get_unix_password
+	#
+	proc get_unix_password { host } {
+		global unix_password
+		return $unix_password
+	}
+
+	#
+	# get_afs_password
+	#
+	proc get_afs_password { host } {
+		global afs_password
+		return $afs_password
+	}
+
+	#
+	# get_dce_password
+	#
+	proc get_dce_password { host } {
+		global dce_password
+		return $dce_password
+	}
+
+	#
+	# get_password 
+	#       A password prompter can be used to get three types of passwords
+	#   UNIX login password for rootl (for remote butc)
+	#   AFS  login password for user  (for binaries in AFS)
+	#   DCE  login password for user  (for starting up bak and butc)
+	#
+	proc get_password { user type } {
+	    global timeout
+
+		send_user "\n"
+		case $type in {
+		  "UNIX" { send_user "Unix password for $user on remote machine: "}
+		  "AFS"  { send_user "AFS password for $user on remote machine: " }
+		  "DCE"  { send_user "DCE password for $user on remote machine: " }
+		}
+		system stty -echo
+		expect_user -re "(.*)\n"
+		system stty echo
+		send_user "\n"
+		return $expect_out(1,string)
+	}
+
+	#
+	# Telnet
+	#       telnet to a host and login as well
+	#
+	#       returns the spawn_id of the telnet process
+	#
+	proc Telnet { host user passwd } {
+
+		global timeout telnet_timeout
+		global remote_prompt remote_shell bak_timeout remote_prompt_cmd
+
+		set tmp_timeout $timeout
+		set timeout $telnet_timeout
+		set is_dce_login_p 0
+		spawn telnet $host
+		set pid $spawn_id
+		set tmp_match_max [match_max -i $pid]
+		match_max -i $pid 10000
+		expect {
+			{*login:*}      	{send "$user\n"; exp_continue}
+			-nocase {*password*}    {send "$passwd\n"; set exit_code 0}
+			-nocase {*invalid*}     {set exit_code -1}
+			-nocase {*incorrect*}   {set exit_code -1}
+			-nocase {*unknown*}     {set exit_code -1}  
+			-nocase {*unable*}      {set exit_code -1}  
+			-nocase {*refused*}     {set exit_code -1}
+			default                 {set exit_code -1}
+		}
+		if 0==$exit_code {
+		  expect {
+			-nocase {*term*}        {send "dumb\n"; exp_continue}
+			-nocase {*invalid*}     {set exit_code -1}
+			-nocase {*incorrect*}   {set exit_code -1}
+			default                 {set exit_code 0}
+		  }
+		}
+
+		if 0==$exit_code {
+			# flush output buffer (without reading any more input - there
+			# should be none).
+			expect {
+			    * {}
+			}
+			send -i $pid "$remote_shell\r"
+			CATCHEXEC "sleep 10"
+			send -i $pid $remote_prompt_cmd="$remote_prompt"\r
+			expect {
+			  -i $pid -re\
+			  $remote_prompt_cmd="$remote_prompt"(.*)$remote_prompt {
+				set exit_code 0
+			  }
+			  default { set exit_code -1 }
+			}
+		}
+		set timeout $tmp_timeout
+		match_max -i $pid $tmp_match_max
+		if 0==$exit_code {
+		  return $pid
+		} else {
+		  return $exit_code
+		}
+	}
+
+	#
+	# Klog
+	#       get afs credentials. This might be necessary in a AFS environment
+	#       where the backup programs could reside in AFS.
+	#
+	proc Klog { pid user password } {
+		global timeout
+		global remote_prompt
+		global KLOG
+
+		send -i $pid "$KLOG $user\r"
+		expect {
+		  -i $pid -nocase {password:}   {send -i $pid $password\n
+						 set exit_code 0}
+		  default                       {set exit_code -1}
+		}
+		if 0==$exit_code {
+		  expect {
+		    -i $pid $remote_prompt      {set exit_code 0}
+		    default                     {set exit_code -1}
+		  }
+		}
+		return $exit_code
+	}
+
+	#
+	# dce_login
+	#       get dce credentials (will put us into a new shell)
+	#
+	proc dce_login { pid user password } {
+		global timeout
+		global remote_prompt_cmd remote_prompt
+		global DCE_LOGIN
+
+		send -i $pid "$DCE_LOGIN $user $password\r"
+		expect {
+		  -i $pid -nocase -re\
+			 "$DCE_LOGIN $user $password\r\n" {
+		      set exit_code 0
+		  }
+		  -i $pid -nocase {*Sorry*}     {set exit_code -1}
+		  default                       {set exit_code -1}
+		}
+		if 0==$exit_code {
+		   # flush output buffer (without reading any more input - there
+		   # should be none).
+		   expect {
+		       * {}
+		   }
+		   # set the remote prompt to some known entity
+		   send -i $pid $remote_prompt_cmd="$remote_prompt"\r
+		   expect {
+		       -i $pid -re $remote_prompt_cmd="$remote_prompt"(.*)$remote_prompt {set exit_code 0}
+		       default { set exit_code -1 }
+		   }
+		}
+
+		if 0==$exit_code {
+		    # We have not failed in a manner that we were able to catch.
+		    # Do a klist to be sure the dce_login really worked.
+		    # Specifically we look for a last line like the following:
+		    #       Principal: <some long id> $user
+		    # Obviously if, at some future time, the output of klist changes
+		    # significantly, this will break.
+		    send -i $pid "klist | egrep 'Principal:.*\ $user\$'\r"
+		    expect {
+			-i $pid $remote_prompt {
+			    if ![string match *$user\r\n$remote_prompt\
+					      $expect_out(buffer)] {
+				set exit_code -1
+			    }
+			}
+			default {set exit_code -1}
+		    }
+		}
+		return $exit_code
+	}
+
+	#
+	# run_butc
+	#       startup butc at the specified host and tcid. Running butc may require
+	#       proper access and authorization. This is why the user name and password
+	#       are required. If butc is to be run locally, host is "". This would
+	#       avoid telnet and any authentication steps.
+	#
+	#       returns the $spawn_id of the created process
+	#
+	proc run_butc { host tcid } {
+
+		global timeout
+		global BUTC
+		global remote_shell
+		global remote_prompt remote_prompt_cmd
+
+
+		# get all login names and associated passwords
+		set afs_user  [get_afs_user $host]
+		set dce_user  [get_dce_user $host]
+		set afs_pwd   [get_afs_password $afs_user]
+		set dce_pwd   [get_dce_password $dce_user]
+
+		# the fast path
+		if 0==[string compare $host ""] {
+		  eval spawn $BUTC -tcid $tcid
+		  set butc_id $spawn_id
+		  expect {
+		     -i $butc_id -nocase -re "tape coordinator: (.*)\n" {
+			send_log "Butc started on $host at tcid $tcid\r"
+		     }
+		     -i $butc_id default { return -1 }
+		  }
+		  CATCHEXEC "sleep 15"
+		  return $butc_id
+		}
+
+		# remote login
+		set unix_user [get_unix_user $host]
+		set unix_pwd  [get_unix_password $host]
+		set status [Telnet $host $unix_user $unix_pwd]
+		if -1==$status { return $status }
+		set butc_id $status
+		set status [dce_login $butc_id $dce_user $dce_pwd]
+		if -1==$status { return $status }
+		send -i $butc_id $remote_prompt_cmd="$remote_prompt"\r
+		expect {
+		  -i $butc_id \n$remote_prompt {}
+		  -i $butc_id default {return -1}
+		}
+	#       set status [Klog $butc_id $afs_user $afs_pwd]
+	#       if -1==$status { return $status }
+
+		# start butc
+		send -i $butc_id "$BUTC -tcid $tcid\r"
+		expect {
+		 -i $butc_id -nocase -re "tape coordinator: (.*)\n" {
+			send_log "Butc started on $host at tcid $tcid\r"
+		 }
+		 default {return -1}
+		}
+		CATCHEXEC "sleep 15"
+		return $butc_id
+	}
+
+	#
+	# quit_butc
+	#       exit butc and if necessary, the telnet connection
+	#
+	proc quit_butc { sp_id host } {
+
+		global timeout
+		send -i $sp_id \003
+		if 0==[string compare $host ""] {
+		  close -i $sp_id
+		} else {
+		  # exit dce_login and telnet
+		  send -i $sp_id "exit\rexit\r"
+		  close -i $sp_id
+		}
+		return 0
+	}
+
+	#
+	# is_butc_ready_p
+	#       check if butc is up and listening to incoming request and the correct
+	#       tcid. The parameter is the spawn id of the bak process.
+	#
+	proc is_butc_ready_p { sp_id tcid {max_wait 200} } {
+	    global timeout
+	    global prompt
+
+	    set tmp_timeout $timeout
+	    set time_spent 0
+	    set timeout 120
+	    while { $time_spent < $max_wait } {
+	      send -i $sp_id "status -tcid $tcid\r"
+	      expect {
+		-i $sp_id -nocase "tape coordinator is idle\r\n$prompt" {
+		   set timeout $tmp_timeout
+		   return 1}
+		-i $sp_id -nocase "*unable to connect to tape coordinator*$prompt" {}
+		-i $sp_id -nocase "*unable to contact tape coordinator*$prompt" {}
+		-i $sp_id default {}
+	      }
+	      CATCHEXEC "sleep 10"
+	      set time_spent [expr $time_spent + 10]
+	    }
+	    set timeout $tmp_timeout
+	    return 0
+	}
+
+	#
+	# run_bak
+	#       startup bak at the specified host. Running bak may require
+	#       proper access and authorization. This is why the user name and password
+	#       are required. If bak is to be run locally, host is "". This would
+	#       avoid telnet and any authentication steps.
+	#
+	#       returns the $spawn_id of the created process
+	#
+	proc run_bak { host } {
+
+		global timeout
+		global BAK
+		global prompt
+		global remote_shell
+		global remote_prompt remote_prompt_cmd
+
+		# get all login names and associated passwords
+		set afs_user  [get_afs_user $host]
+		set dce_user  [get_dce_user $host]
+		set afs_pwd   [get_afs_password $afs_user]
+		set dce_pwd   [get_dce_password $dce_user]
+
+		# the fast path
+		if 0==[string compare $host ""] {
+		  eval spawn $BAK
+		  set bak_id $spawn_id
+		  expect {
+		    -i $bak_id $prompt {}
+		    -i $bak_id default { return -1 }
+		  }
+		  send -i $bak_id jobs\r
+		  expect {
+		    -i $bak_id $prompt {return $bak_id}
+		    -i $bak_id default { return -1 }
+		  }
+		  return -1
+		}
+
+		# remote login
+		set unix_user [get_unix_user $host]
+		set unix_pwd  [get_unix_password $host]
+		set status [Telnet $host $unix_user $unix_pwd]
+		if -1==$status { return $status }
+		set bak_id $status
+		set status [dce_login $bak_id $dce_user $dce_pwd]
+		if -1==$status { return $status }
+		send -i $bak_id $remote_prompt_cmd="$remote_prompt"\r
+		expect {
+		  -i $bak_id -re\
+			$remote_prompt_cmd="$remote_prompt"(.*)$remote_prompt {}
+		  -i $bak_id default {return -1}
+		}
+	#        set status [Klog $bak_id $afs_user $afs_pwd]
+	#        if -1==$status { return $status }
+
+		# start bak
+		send -i $bak_id "$BAK\r"
+		expect {
+		   -i $bak_id $prompt {}
+		   default { return -1 }
+		}
+
+		# check if bak is really responding
+		send -i $bak_id jobs\r
+		expect {
+		   -i $bak_id $prompt {return $bak_id}
+		   -i $bak_id default { return -1 }
+		}
+		return -1
+	}
+
+	#
+	# quit_bak
+	#       exit bak and if necessary, the telnet connection. 
+	#
+	proc quit_bak { sp_id host } {
+
+		global timeout
+		send -i $sp_id quit\r
+		if 0==[string compare $host ""] {
+		  close -i $sp_id
+		} else {
+		  # exit dce_login and telnet
+		  send -i $sp_id "exit\rexit\r"
+		  close -i $sp_id
+		}
+		return 0
+	}
+
+	#
+	# verifydb_p
+	#       make sure the database is not corrupted.
+	#
+	#       return 1 if ok, 0 if not ok
+	#
+	proc verifydb_p { bak_id } {
+		global timeout
+		global prompt
+
+		set boolean_code 1
+		# flush buffer
+		expect {
+		   -i $bak_id * {}
+		}
+		send -i $bak_id "verifydb\r"
+		expect {
+		 -i $bak_id $prompt {
+		 if -1==[lsearch [split $expect_out(buffer) "\n"] "*Database OK\r*" ] {
+		    set boolean_code 0
+		  }
+		 }
+		 -i $bak_id default {
+		    send_user "Buffer: $expect_out(buffer)\n"
+		    set boolean_code 0
+		  }
+		}
+		
+		return $boolean_code
+	}
+
+	#
+	# Label_tape
+	#       label the tape with the given name and size
+	#
+	#       return 0 if ok
+	#
+	proc Label_tape { bak_id butc_id name size tcid } {
+	    global timeout
+	    global prompt
+
+	    # initialize error code
+	    set status_code 0
+	    set name_spec [expr {[string compare $name ""]?"-tape $name":""}]
+	    set size_spec [expr {[string compare $size ""]?"-size $size":""}]
+	    set tcid_spec [expr {[string compare $tcid ""]?"-tcid $tcid":""}]
+	    send -i $bak_id "labeltape $name_spec $size_spec $tcid_spec\r"
+	    expect {
+		-i $bak_id $prompt {}
+		-i $bak_id default { set status_code -1 }
+	    }
+	    if 0==$status_code {
+	      expect {
+		-i $butc_id -nocase "*hit return when done\r\n" {
+		   send -i $butc_id "\r"
+		   exp_continue
+		}
+		-i $butc_id -nocase "*thanks, * operation.\r\n" {}
+		-i $butc_id default {set status_code -1}
+	      }
+	    }
+	    if 0==$status_code {
+	      if [string match "" $name] { set name "<null>" }
+	      expect {
+		-i $butc_id -nocase "this tape has not expired - proceed? (y/n)" {
+		    send -i $butc_id "y\r"
+		    exp_continue
+		}
+		-i $butc_id -nocase -re "labelled tape $name size (.*) kbytes\r\n" {}
+		-i $butc_id default {set status_code -1}
+	      }
+
+	      if 0==$status_code {
+		expect {
+		    -i $bak_id -nocase "labeltape ($name) finished\r\n" {
+		       send -i $bak_id "\r"
+		       expect {
+			  -i $bak_id $prompt {}
+			  -i $bak_id default {set status_code -1}
+		       }
+		    }
+		    -i $bak_id default {set status_code -1}
+		}
+	      }
+	    }
+	    return $status_code
+	}
+
+	#
+	# Read_label
+	#       read the label of the indicated tape
+	#       return list [name size create_time dump_path dump_id] if ok, else -1
+	#
+	# 	checks if label printed by both bak and butc, and if they agree
+	#
+	proc Read_label { bak_id butc_id tcid } {
+	    global timeout
+	    global prompt
+
+	    # initialize the error code
+	    set status_code 0
+
+	    send -i $bak_id "readlabel -tcid $tcid\r"
+	    expect {
+		-i $bak_id ?* {}
+	    }
+	    expect {
+	      -i $butc_id -nocase "*hit return when done\r\n" {
+		 send -i $butc_id "\r"
+		 exp_continue
+	      }
+	      -i $butc_id -nocase "*thanks, * operation.\r\n" {}
+	      -i $butc_id default {set status_code -1}
+	    }
+	    # extract the tape label name and size
+	    if 0==$status_code {
+	      expect {
+		-i $bak_id -nocase "tape read was labelled" {}
+		-i $bak_id -nocase -re "unable(.*)\r\n$prompt" {set status_code -1}
+		-i $bak_id default {set status_code -1}
+	      }
+	      if 0==$status_code {
+		expect {
+		  -i $butc_id -nocase "end of tape label" {
+		     set butc_label [split $expect_out(buffer) "="]
+		     set name [lindex [split [lindex $butc_label 1] "\n"] 0]
+		     set create_time [lindex [split [lindex $butc_label 2] "\n"] 0]
+		     set size [lindex [split [lindex $butc_label 4] "\n"] 0]
+		     set dump_path [lindex [split [lindex $butc_label 5] "\n"] 0]
+		     set dump_id [lindex [split [lindex $butc_label 6] "\n"] 0]
+		  }
+		  -i $butc_id default { set status_code -1 }
+		}
+	      }
+	      if 0==$status_code {
+		expect {
+		  -i $bak_id $prompt {
+		     set bak_label [list [lindex [lindex\
+			 [split $expect_out(buffer) ':'] 1] 0]\
+				[lindex [lindex [split $expect_out(buffer) ':'] 2] 0]]
+		  }
+		  -i $bak_id default {set status_code -1}
+		}
+		if 0==$status_code {
+		   if -1==[string compare \
+				[lindex $bak_label 0] $name] {set status_code -1}
+		   if -1==[string compare \
+				[lindex $bak_label 1] $size] {set status_code -1}
+		}
+	      }
+	    }
+	    if -1==$status_code {
+		return $status_code
+	    } else {
+		return [concat $name $size $create_time $dump_path $dump_id]
+	    }
+	}
+
+	#
+	# delete_lines
+	#    Generic procedure to delete lines at the front and back of a multi-line
+	#    string.  Note that if num_from_front is <0 it is treated as zero.  Also
+	#    if [expr $strlen-$num_from_back-1] - $num_from_front <=0, the null string
+	#    is returned.
+	#
+	proc delete_lines {str num_from_front num_from_back} {
+	    global timeout
+	    set tmp [split $str "\n"]
+	    set strlen [llength $tmp]
+	    return\
+		[join [lrange $tmp $num_from_front\
+			      [expr $strlen-$num_from_back-1]]\
+		       "\n"]
+	}
+
+	#
+	# delete_first_line
+	#
+	proc delete_first_line {str} {
+	    return [delete_lines $str 1 0]
+	}
+
+	#
+	# delete_last_line
+	#
+	proc delete_last_line {str} {
+	    return [delete_lines $str 0 1]
+	}
+
+	#
+	# delete_first_and_last_lines
+	#
+	proc delete_first_and_last_lines {str} {
+	    return [delete_lines $str 1 1]
+	}
+
+	#
+	# save_host_info
+	#     Returns the pertinent information from bak lshosts.
+	#     i.e. Strips off the first one (or two) line(s) and leaves a list
+	#     where each element has the format: {<hostname> <tcid>}
+	#     If there are no host/tcid entries, the null list is returned.
+	#
+	proc save_host_info {bak_id} {
+	    global timeout
+	    global prompt
+
+	    set status_code 0
+	    set host_list ""
+	    send -i $bak_id "lshosts\r"
+	    expect {
+		-i $bak_id $prompt {
+		    set lshosts_list [split $expect_out(buffer) "\n"]
+		    foreach entry $lshosts_list {
+			# Each entry is on a line with the following format:
+			# "    Host <host name>, port offset <tcid>"
+			if 0==[string compare "Host" [lindex $entry 0]] {
+			    lappend host_list\
+				    [list [string trimright [lindex $entry 1] ","]\
+					  [lindex $entry 4]]
+			}
+		    }
+		}
+		-i $bak_id default {set status_code -1}
+	    }
+	    if $status_code==-1 {
+		return $status_code
+	    } else {
+		return $host_list
+	    }
+	}
+
+	#
+	# remove_host_info_p
+	#     Removes all host/tcid entries from the database.
+	#
+	proc remove_host_info_p {bak_id} {
+	    global timeout
+	    global prompt
+
+	    set boolean_code 1
+	    send -i $bak_id "lshosts\r"
+	    expect {
+		-i $bak_id $prompt {
+		    set lshosts_list [split $expect_out(buffer) "\n"]
+		    foreach entry $lshosts_list {
+			# Each entry is on a line with the following format:
+			# "    Host <host name>, port offset <tcid>"
+			if 0==[string compare "Host" [lindex $entry 0]] {
+			    set tcid [lindex $entry 4]
+			    send -i $bak_id "rmhost $tcid\r"
+			    expect {
+				-i $bak_id $prompt {
+				    if -1==[string first "Deleting offset $tcid from tape list...done" $expect_out(buffer)] {
+				       set boolean_code 0
+				       break
+				    }
+				}
+				-i $bak_id default {
+				    set boolean_code 0
+				    break
+				}
+			    }
+			}
+		    }
+		}
+		-i $bak_id default {set boolean_code 0}
+	    }
+	    return $boolean_code
+	}
+
+	#
+	# add_host_info_p
+	#     Adds host/tcid entries, possibly saved from a previous bak lshosts.
+	#     The input is assumed to be a list that, if non-null, has entries
+	#     with the following format: {<host name> <tcid>}
+	#
+	proc add_host_info_p {bak_id host_list} {
+	    global timeout
+	    global prompt
+
+	    set boolean_code 1
+	    foreach entry $host_list {
+		set host [lindex $entry 0]
+		set tcid [lindex $entry 1]
+		send -i $bak_id "addhost $host $tcid\r"
+		expect {
+		    -i $bak_id $prompt {
+			if -1==[string first "Adding host '$host' offset $tcid to tape list...done" $expect_out(buffer)] {
+			  set boolean_code 0
+			}
+		    }
+		    -i $bak_id default {set boolean_code 0}
+		}
+	    }
+	    return $boolean_code
+	}
+
+	#
+	# remove_specific_host_info_p
+	#     Removes tcid entries.
+	#     The input is assumed to be a list that, if non-null, has entries
+	#     with the following format: {<tcid>}
+	#
+	proc remove_specific_host_info_p {bak_id tcid_list} {
+	    global timeout
+	    global prompt
+
+	    set boolean_code 1
+	    foreach tcid $tcid_list {
+		send -i $bak_id "rmhost $tcid\r"
+		expect {
+		    -i $bak_id $prompt {
+		       if -1==[string first "Deleting offset $tcid from tape list...done" $expect_out(buffer)] {
+			  set boolean_code 0
+			}
+		    }
+		    -i $bak_id default {set boolean_code 0}
+		}
+	    }
+	    return $boolean_code
+	}
+
+	#
+	# save_fileset_families
+	#     Returns the pertinent information from bak lsftfamilies
+	#     If information to save, saves it in the following format:
+	#         [{<fileset family name>} 
+	#          [{<server name> <aggregate name> <fileset name>}]]*
+	#     That is, zero or more entries with each entry consisting of a fileset
+	#     family name followed by zero or more server/aggregate/fileset tuples.
+	#
+	proc save_fileset_families {bak_id} {
+	    global prompt
+
+	    set status_code 0
+	    set fileset_families ""
+	    set fam_name ""
+	    send -i $bak_id "lsftfamilies\r"
+	    expect {
+		-i $bak_id $prompt {
+		    set lsftfam_list [split $expect_out(buffer) "\n"]
+		    foreach entry $lsftfam_list {
+			if 0==[string compare "Fileset" [lindex $entry 0]] {
+			    lappend fileset_families\
+				    [string trimright [lindex $entry 2] ":"]
+			} elseif 0==[string compare "Entry" [lindex $entry 0]] {
+			    lappend fileset_families [concat\
+				    [string trimright [lindex $entry 3] ","]\
+				    [string trimright [lindex $entry 5] ","]\
+				    [lindex $entry 7]]
+			} else {
+			}
+		    }
+		}
+		-i $bak_id default {set status_code -1}
+	    }
+	    if $status_code==-1 {
+		return $status_code
+	    } else {
+		return $fileset_families
+	    }
+	}
+
+	#
+	# remove_fileset_families_p
+	#     Removes all fileset families
+	#
+	proc remove_fileset_families_p {bak_id} {
+	    global timeout
+	    global prompt
+
+
+	    set boolean_code 1
+	    send -i $bak_id "lsftfamilies\r"
+	    expect {
+	      -i $bak_id $prompt {
+		set lsftfam_list [split $expect_out(buffer) "\n"]
+		foreach entry $lsftfam_list {
+		  if 0==[string compare "Fileset" [lindex $entry 0]] {
+		    send -i $bak_id "rmftfamily \
+		       [string trimright [lindex $entry 2] ":"]\r"
+		    expect {
+		      -i $bak_id $prompt {
+			if -1==[string first "bak: deleted fileset family"\
+				$expect_out(buffer)] {
+			    set boolean_code 0
+			}
+		      }
+		      -i $bak_id default {set boolean_code 0}
+		    }
+		 }
+	       }
+	     }
+	     -i $bak_id default { set boolean_code 0 }
+	   }
+	   return $boolean_code
+	}
+
+	#
+	# add_fileset_families_p
+	#     Adds fileset family entries, saved from a previous bak lsfamilies.
+	#     The input is assumed to be a list of lists that, if non-null, has
+	#     the following format:
+	#         [{<fileset family name>} 
+	#          [{<server name> <aggregate name> <fileset name>}]]*
+	#     That is, zero or more entries with each entry consisting of a fileset
+	#     family name followed by zero or more server/aggregate/fileset tuples.
+	#
+	proc add_fileset_families_p {bak_id fam_list} {
+	    global prompt
+
+	    set boolean_code 1
+	    foreach entry $fam_list {
+		if [llength $entry]==1 {
+		    set fam_name $entry
+		    send -i $bak_id "addftfamily $fam_name\r"
+		    expect {
+			-i $bak_id $prompt {
+			}
+			default {
+			    set boolean_code 0
+			}
+		    }
+		} elseif [llength $entry]==3 {
+		    set serv_name [lindex $entry 0]
+		    set aggr_name [lindex $entry 1]
+		    set fset_name [lindex $entry 2]
+		    send -i $bak_id\
+			"addftentry $fam_name $serv_name $aggr_name $fset_name\r"
+		    expect {
+			-i $bak_id $prompt {
+			}
+			default {
+			    set boolean_code 0
+			}
+		    }
+		} else {
+		}
+	    }
+	    return $boolean_code
+	}
+
+	#
+	# save_dump_schedule
+	#     Returns the pertinent information from bak lsdumps
+	#
+	proc save_dump_schedule {bak_id} {
+	    global prompt
+
+	    set status_code 0
+	    send -i $bak_id "lsdumps\r"
+	    expect {
+		-i $bak_id $prompt {
+		    set lsd_output [split $expect_out(buffer) "\n"]
+		    set active_levels ""
+		    set active_indents ""
+		    set dump_schedule ""
+		    foreach entry $lsd_output {
+			set current_indent [string first "/" $entry]
+			if $current_indent>=0 {
+			    set expires_info [lrange $entry 1 end]
+			    set current_level [lrange $entry 0 0]
+			    if $current_indent==0 {
+			    # This is a full dump
+				set active_levels [lrange $entry 0 0]
+				set active_indents 0
+			    } else {
+				set last_indent [lindex $active_indents\
+						 [expr [llength $active_indents]-1]]
+				if $current_indent>$last_indent {
+				# The easy case - a deeper incremental level
+				    lappend active_levels $current_level
+				    lappend active_indents $current_indent
+				} else {
+				# remove one or more levels/indents and replace
+				# by this one.
+				    if -1!=[set index [lsearch $active_indents\
+							       $current_indent]] {
+					set active_levels [lreplace $active_levels\
+							   $index end $current_level]
+					set active_indents [lreplace $active_indents\
+							    $index end $current_indent]
+				    }
+				}
+			    }
+			    if [string length $expires_info]>0 {
+				lappend dump_schedule\
+					[concat [join [join $active_levels ""] ""]\
+							    $expires_info]
+			    } else {
+			    # no expires information for this level
+				lappend dump_schedule\
+					[join [join $active_levels ""] ""]
+			    }
+			}
+		    }
+		}
+		-i $bak_id default {set status_code -1}
+	    }
+	    if -1==$status_code {return $status_code}\
+	    else {return $dump_schedule}
+	}
+
+	#
+	# remove_dump_schedule_p
+	#     Removes the dump schedules
+	#
+	proc remove_dump_schedule_p {bak_id} {
+	    global timeout
+	    global prompt
+
+	    set boolean_code 1
+	    send -i $bak_id "lsdumps\r"
+	    expect {
+	     -i $bak_id $prompt {
+		set lsd_output [split $expect_out(buffer) "\n"]
+		foreach entry $lsd_output {
+		  if 0==[string first "/" $entry] {
+		     send -i $bak_id "rmdump [lindex $entry 0]\r"
+		     expect {
+		       -i $bak_id $prompt {
+			  set boolean_code 1
+		       }
+		       -i $bak_id default { set boolean_code 0 }
+		     }
+		 }
+	       }
+	     }
+	     -i $bak_id default { set boolean_code 0 }
+	    }
+	    return $boolean_code
+	}
+
+	#
+	# add_dump_schedule_p
+	#     Adds dump level entries, saved from a previous bak lsdumps
+	#     The input is assumed to be a list of lists that, if non-null, has entries
+	#     with the following format:
+	#       <dump_level>+
+	#
+	#    If there is an expires date associated with a dump level it will be one
+	#    of the following two forms:
+	#        <level> expires at <absolute date>
+	#        <level> expires in <relative date>
+	#
+	#    In either case, it is only necessary to delete the word "expires"
+	#    before passing it along to the bak adddump command.
+
+	proc add_dump_schedule_p {bak_id dump_list} {
+	    global prompt
+
+	    set boolean_code 1
+	    foreach entry $dump_list {
+	      send -i $bak_id "adddump [concat [lindex $entry 0]\
+					       [lrange $entry 2 end]]\r"
+	      expect {
+		-i $bak_id $prompt {
+		   if -1==[string first "bak: Created new dump schedule $entry"\
+			   $expect_out(buffer)] {
+		      set boolean_code 0
+		   }
+		}
+		-i $bak_id default { set boolean_code 0 }
+	      }
+	   }
+	   return $boolean_code
+	}
+
+	#
+	# get_id_from_name
+	#	return the fileset id(RW) for a given fileset name       
+	#
+	proc get_id_from_name { ftname {fttype readWrite} } {
+	   global timeout
+	   global fts_verbose
+	   global fts_out
+
+	  if [CATCHEXEC "/opt/dcelocal/bin/fts lsfldb $ftname \
+		$fts_verbose" fts_out] {
+	    return -1
+	  }
+	  set fts_index [lsearch $fts_out "$fttype"]
+	  if -1==$fts_index {
+	    return -1
+	  }
+	  set id [lindex $fts_out [expr $fts_index + 2]]
+          return $id
+	}
+
+	#
+	# get_date
+	#	return current date in format
+	# 	1. mm/dd/yy
+	#	2. mm/dd/yy hh:mm
+	#	3. " mm/dd/yy hh:mm "
+	#
+	proc get_date { format } {
+	  if 1==$format {
+	     return [exec date "+%D"]
+	  } elseif 2==$format {
+	     return [exec date "+%D %H:%M"]
+	  } elseif 3==$format {
+	     return [concat "\"" [exec date "+%D %H:%M"] "\""]
+	  } else {
+	     return -1
+	  }
+	}
+
+	#
+	# manip_date
+	#     increment/decrement year/month/day/hour/minute
+	#
+	#     The first parameter should of form mm/dd/yy or mm/dd/yy hh:mm without
+	#     surrounding quotes.
+	#     direction - increment:1, decrement:0
+	#     field - month:0, day:1, year:2, hour:3, minute:4
+	#     field can take values 3 or 4 only if date is of form mm/dd/yy hh:mm
+	#
+	proc manip_date { date direction field} {
+	   global timeout
+	   if $direction {
+	      set inter_date [lreplace [split $date "/ :"] $field $field [expr [string trimleft [lindex [split $date "/ :"] $field] "0"]+1]]
+	      return [concat "\"" [concat [join [lrange $inter_date 0 2] "/"] [join [lrange $inter_date 3 4] ":"]] "\""]
+	   } else {
+	      set inter_date [lreplace [split $date "/ :"] $field $field [expr [string trimleft [lindex [split $date "/ :"] $field] "0"]-1]]
+	      return [concat "\"" [concat [join [lrange $inter_date 0 2] "/"] [join [lrange $inter_date 3 4] ":"]] "\""]
+	   }
+	}
+
+	#
+	# is_fileset_ok_p
+	#	Make sure fileset is in consistent state
+	#
+	proc is_fileset_ok_p {fset} {
+	   global timeout
+	   global fts_out
+	    if [CATCHEXEC "/opt/dcelocal/bin/fts lsft -file $fset" fts_out] {
+	        return 0
+	    }
+	    if -1==[string first "On-line" $fts_out] {
+	        return 0
+	    }
+	   return 1
+	}
+
+	#
+	# verify_dump_in_db_p
+	#	given the label of tape containing dump, check if this dump made it 
+	#	into the database correctly.
+	#
+	proc verify_dump_in_db_p { bak_id label } {
+	   global timeout
+	   global prompt
+
+	   send -i $bak_id "dumpinfo\r"
+	   expect {
+	      -i $bak_id -nocase $prompt {
+		set dumpinfo_o $expect_out(buffer)
+		return [string match *[string range [lindex $label 0] 0 [expr [string last "." [lindex $label 0]]-1]]* [lindex [split [string range $dumpinfo_o [string first [lindex $label [expr [llength $label]-1]] $dumpinfo_o] end] "\n"] 0]]
+	      }
+	      -i $bak_id default { return 0 }
+	   }
+	   return 0
+	}
+
+	#
+	# tail_level
+	#	return the last component of the dump level
+	#
+	proc tail_level { dump_lvl } {
+	  return [string range $dump_lvl [expr [string last "/" $dump_lvl]+1] end]
+	}
+
+	#
+	# verify_dump_p
+	#	Verify if the dump succeeded
+	#
+	proc verify_dump_p { bak_id butc_id fset_fam dump_lvl tcid bak_o butc_o } {
+	   global timeout
+	   if { -1==[string first "finished" $bak_o] ||\
+		-1==[string first "Finished" $butc_o] ||\
+		-1==[string first "successful" $butc_o] } {return 0}
+	   set label [Read_label $bak_id $butc_id $tcid ]
+	   if -1==[string compare "$fset_fam.[tail_level $dump_lvl].1"\
+			  [lindex $label 0]] { return 0 }
+	   return [verify_dump_in_db_p $bak_id $label]
+	}
+
+	#
+	# verify_fset_in_dump_p
+	#	verify if a particular fileset that is part of the fileset family
+	#	actually got dumped and entered into the database. This can be done
+	#	using scantape and dumpinfo. Before calling this make sure the dump
+	#	has been successfully done using verify_dump_p.       
+	#
+	proc verify_fset_in_dump_p {bak_id butc_id fset_fam dump_lvl tcid fset_name} {
+	   global timeout
+	  global prompt
+
+	  set boolean_code 1
+	  set dump_set [join "$fset_fam . [tail_level $dump_lvl]" ""]
+	  send -i $bak_id "ftinfo $fset_name\r"
+	  expect {
+	     -i $bak_id $prompt {
+		set ftinfo_o [split $expect_out(buffer) "\n"]
+	     } -i $bak_id default { set boolean_code 0 }
+	  }
+	  if $boolean_code {
+	    if -1==[lsearch $ftinfo_o "*$dump_set.1*"] {
+	       set boolean_code 0
+	    }
+	  }
+	  return $boolean_code
+	}
+
+	#
+	# Dump_noaction
+	#
+	proc Dump_noaction { bak_id butc_id fset_fam dump_lvl tcid } {
+	   global timeout
+	   global prompt
+
+	   set status_code 0  
+	   send -i $bak_id "dump $fset_fam $dump_lvl $tcid -noaction\r"
+	   expect {
+	    -i $bak_id -nocase "would have dumped the following filesets:" {}
+	    -i $bak_id default { set status_code -1 }
+	   }
+	   expect {
+	    -i $bak_id $prompt { return $expect_out(buffer) }
+	    -i $bak_id default { set status_code -1 }
+	   }
+	   return $status_code
+	}
+
+	#
+	# Dump
+	#	Perform a dump to tape
+	#
+	proc Dump { bak_id butc_id fset_fam dump_lvl tcid } {
+	   global timeout
+	   global prompt
+
+	   set status_code 0
+	   set bak_output ""
+	   set butc_output ""
+
+	   send -i $bak_id "dump $fset_fam $dump_lvl $tcid\r"
+	   expect {
+	     -i $bak_id -nocase "starting dump\r\n" {
+		set dump_buf [split $expect_out(buffer) "\n"]
+		set fset_count -1
+		foreach entry $dump_buf {
+		  if [string match "Total number of filesets : *" $entry] {
+		    set fset_count [string trimright [lindex $entry 5] "\r\n"]
+		    break
+		  }
+		}
+		if -1==$fset_count { set status_code -1 }
+	     }
+	     -i $bak_id -nocase "*unable to parse" { set status_code -1 }
+	     -i $bak_id -nocase "*missing required parameter" { set status_code -1 }
+	     -i $bak_id default { set status_code -1 }
+	   }
+	   expect {
+		-i $bak_id $prompt {}
+		-i $bak_id default {set status code -1}
+	   }
+	   if 0==$status_code {
+	     expect {
+	       -i $butc_id -nocase -re ".*dump (.*) started" {set status_code 0}
+	       -i $butc_id default {set status_code -1}
+	     }
+	   }
+	    if 0==$status_code {
+	      expect {
+		-i $butc_id -nocase "*hit return when done\r\n" {
+		   send -i $butc_id "\r"
+		   exp_continue
+		}
+		-i $butc_id -nocase "*thanks, * operation.\r\n" {}
+		-i $butc_id default {set status_code -1}
+	      }
+	    }
+	   if 0==$status_code {
+	     expect {
+	       -i $butc_id -nocase -re "dump (.*) successful (.*)\n" {
+		  set butc_format_output [split $expect_out(buffer) "\n"]
+		  foreach entry $butc_output {
+		    if [string match\
+			 "Task *: dump * successful : * filesets dumped\r" $entry] {
+		       if 0==[string match $fset_count [lindex $entry 6]] {
+			  set status_code -1
+		       }
+		    }
+		  }
+		  lappend butc_output [join $butc_format_output "\n"]
+	       }
+	       -i $butc_id -nocase -re "dump (.*) fileset dumps failed (.*)\n" {
+		  set status_code -1
+	       }
+	       -i $butc_id default { set status_code -1}
+	     }
+	   }
+	   if 0==$status_code {
+	     expect {
+		-i $bak_id -nocase -re ".*job (.*) dump (.*) finished\r\n" {
+		   set status_code 0
+		   lappend bak_output $expect_out(buffer)
+		}
+		-i $bak_id -nocase -re ".*job (.*) dump (.*) aborted\r\n" {
+		   set status_code -1
+		}
+		-i $bak_id -nocase -re ".*job (.*) failed with errors\r\n" {
+		   set status_code -1
+		}
+		-i $bak_id default { set status_code -1 }
+	    }
+	  }
+	  if 0==$status_code {
+	      return [list $bak_output $butc_output]
+	   } else { return $status_code }
+	}
+
+	#
+	# Restore_fileset
+	#	restore a fileset from tape
+	#
+	proc Restore_fileset { bak_id butc_id fset1 fset2 server aggr ext date butc_tcid noaction} {
+	   global timeout
+	   global prompt
+
+	   set status_code 0
+	   set bak_output ""
+	   set butc_output ""
+	   set butc_started 0
+
+	   if [string match $ext ""] {
+		set extString ""
+	   } else {
+		set extString "-ext $ext "
+	   }
+	   if [string match $date ""] {
+		set dateString ""
+	   } else {
+		set dateString "-date $date "
+	   }
+	   if 0==[string match $noaction ""] {
+	      send -i $bak_id "restoreft $server $aggr $fset1 $fset2 $extString \
+			 $dateString -tcid $butc_tcid -noaction\r"
+	      expect {
+		-i $bak_id -nocase -re "restore fileset (.*)position (.*) as (.*)\r\n(.*)" {set status_code 0}
+		-i $bak_id -nocase "*can't find any dump for fileset" { set status_code -1}
+		-i $bak_id -nocase "*unable to parse" { set status_code -1 }
+		-i $bak_id -nocase "*bad tape coordinator id" { set status_code -1 }
+		-i $bak_id -nocase "*unable to connect to tape coordinator" { set status_code -1 }
+		-i $bak_id -nocase "*unable to locate destination host" { set status_code -1 }
+		-i $bak_id -nocase "*unable to contact tape coordinator" { set status_code -1 }
+		-i $bak_id default { set status_code -1 }
+	      }
+	     set tmp_timeout $timeout
+	     set timeout 10
+	     expect {
+		-i $bak_id $prompt {}
+		-i $bak_id default {}
+	     }
+	     set timeout $tmp_timeout
+	     return $status_code
+	   }
+	   send -i $bak_id "restoreft $server $aggr $fset1 $fset2 $extString $dateString \
+			 -tcid $butc_tcid\r"
+	   expect {
+		-i $bak_id -nocase "*can't find any dump for fileset" { set status_code -1}
+		-i $bak_id -nocase "*unable to connect to tape coordinator" { set status_code -1 }
+		-i $bak_id -nocase "*bad tape coordinator id" { set status_code -1 }
+		-i $bak_id -nocase "*unable to parse" { set status_code -1 }
+		-i $bak_id -nocase "*unable to contact tape coordinator" { set status_code -1 }
+		-i $bak_id -nocase "*unable to locate destination host" { set status_code -1 }
+		-i $butc_id -nocase "*hit return when done\r\n" {
+		   send -i $butc_id "\r"
+		   set butc_started 1
+		   exp_continue
+		}
+		-i $butc_id -nocase "*thanks, * operation.\r\n" {
+		   set butc_started 1
+		   }
+		-i $butc_id -nocase "*unable to restore fileset (.*)\r\n(.*)" {
+		   set status_code -1
+		}
+		-i $butc_id default { set status_code -1 }
+	   }
+	   set tmp_timeout $timeout
+	   set timeout 10
+	   expect {
+		-i $bak_id $prompt {}
+		-i $bak_id default {}
+	   }
+	   set timeout $tmp_timeout
+	   if $butc_started {
+	      expect {
+		-i $butc_id -nocase "restore finished\r\n" {}
+		-i $butc_id default { set status_code -1 }
+	      }
+	      expect {
+		-i $bak_id -nocase "restore finished\r\n" {}
+		-i $bak_id default {set status_code -1}
+	      }
+	   }
+	   return $status_code
+	}
+
+	#
+	# Delete_dump_p
+	#	delete specified entry (or keyword) from the database
+	#	usage: Delete_dump_p <dump id>|<keyword>
+	#	keyword accepted - "all" to delete all entries from database
+	proc Delete_dump_p { bak_id dump_id } {
+	   global timeout
+	  global prompt
+
+	  set boolean_code 1
+	  if 0==[string compare "all" $dump_id] {
+	     send -i $bak_id "dumpinfo\r"
+	     expect {
+		-i $bak_id $prompt {
+		set dumpinfo_o [lrange [split $expect_out(buffer) "\n"] 3 end]
+		set dumpinfo_o [lrange $dumpinfo_o 0 [expr [llength $dumpinfo_o]-2]]
+		} -i $bak_id default { set boolean_code 0 }
+	     }
+	     if $boolean_code {
+	      set list_of_ids ""
+	      for {set i 0} { $i<[llength $dumpinfo_o] } {set i [expr $i+1]} {
+		lappend list_of_ids [lindex [lindex $dumpinfo_o $i] 0]
+	      }
+	      foreach i $list_of_ids {
+		send -i $bak_id "deletedump $i\r"
+		expect {
+		   -i $bak_id $prompt {}
+		   -i $bak_id default {
+		      set boolean_code 0
+		      break
+		   }
+		 }
+	       }
+	    }
+	  } else {
+	     send -i $bak_id "deletedump $i\r"
+	     expect {
+	       -i $bak_id $prompt {}
+	       -i $bak_id default {set boolean_code 0}
+	     }
+	  }
+	  return $boolean_code
+	}
+
+	#
+	# find_job
+	#	Get job number of specified job
+	#
+	proc find_job { bak_id job_name } {
+	   global timeout
+	  global prompt
+
+	  set job_num -1
+	  send -i $bak_id "jobs\r"
+	  expect {
+	    -i $bak_id $prompt { 
+	      set job_list [split [delete_first_and_last_lines $expect_out(buffer)] "\n"]
+	      scan [lindex $job_list [lsearch $job_list *$job_name*]] "Job %d:" job_num
+	    }
+	    -i $bak_id default {}
+	  }
+	  return $job_num
+	}
+
+	#
+	# kill_job
+	#	Kill specified job
+	#
+	proc kill_job { bak_id butc_id job_name } {
+	  global timeout
+	  global prompt
+
+	  set status_code 0
+	  send -i $bak_id "kill [find_job $bak_id $job_name]\r"
+	  expect {
+	    -i $bak_id $prompt {
+	      send -i $bak_id "jobs\r"
+	      expect {
+		-i $bak_id $prompt {
+	   set job_list [split [delete_first_and_last_lines $expect_out(buffer)] "\n"]
+		  if -1==[string first "abort" [lindex $job_list \
+			[lsearch $job_list *$job_name*]]] { set status_code -1 }
+		}
+		-i $bak_id default { set status_code -1 }
+	      }
+	    }
+	    -i $bak_id default { set status_code -1 }
+	  }
+	  if 0==$status_code {
+	     expect {
+		-i $bak_id -re "Job (.*) Aborted" {}
+		-i $bak_id default { set status_code -1 }
+	     }
+	  }
+	  if 0==$status_code {
+	     expect {
+		-i $butc_id -nocase -re "this tape operation has been aborted by the coordinator(.*)\r\n(.*)" {}
+		-i $butc_id default { set status_code -1 }
+	     }
+	     # flush buffer
+	     expect {
+		-i $butc_id * {}
+	     }
+	  }
+	  return $status_code
+	}
+
+	#
+	# save_tapeconfig
+	#	Save the existing TapeConfig file and open a new one
+	#
+	proc save_tapeconfig {} {
+	   global timeout
+	    global tapeconfig_file
+
+	    if [file exists $tapeconfig_file] {
+		system /bin/mv -f $tapeconfig_file \
+			[join [concat $tapeconfig_file ".orig"] ""]
+	    }
+	    if [catch {set fid [open $tapeconfig_file a+]} msg]!=0 {
+		return -1
+	    } else {
+		catch [close $fid]
+		return 0
+	    }
+	}
+
+	#
+	# restore_tapeconfig
+	#	Delete the TapeConfig used by the tests, and put the old file back
+	#
+	proc restore_tapeconfig {} {
+	   global timeout
+	    global tapeconfig_file
+
+	    if [file exists $tapeconfig_file] {
+		system /bin/rm -f $tapeconfig_file
+	    }
+	    if [file exists [join [concat $tapeconfig_file ".orig"] ""]] {
+		system /bin/mv -f [join [concat $tapeconfig_file ".orig"] ""] \
+			$tapeconfig_file
+	    }
+	    return 0
+	}
+
+	#
+	# add_tapeconfig_entry
+	#	Add a new entry to the TapeConfig file
+	#
+	proc add_tapeconfig_entry { tape_size mark_size device tcid } {
+	   global timeout
+	    global tapeconfig_file
+
+	    if [catch {set fid [open $tapeconfig_file a+]} msg]!=0 {
+		return -1
+	    }
+	    if [file exists $tapeconfig_file] {
+		puts $fid [format "%s %s %s %-4d" $tape_size $mark_size $device $tcid]
+		flush $fid
+		catch [close $fid]
+		return 0
+	    } else {
+		catch [close $fid]
+		return -1
+	    }
+	}
+
+	#
+	# job_done_p
+	#
+	#     Wait for any background jobs to finish before proceeding.
+	proc job_done_p {bak_id} {
+	    global prompt
+	    global timeout
+
+	    # need to pause a bit
+	    CATCHEXEC "sleep 2"
+	    send -i $bak_id "jobs\r"
+	    expect {
+		-i $bak_id $prompt {
+		    if ![string match "jobs\r\n$prompt" $expect_out(buffer)] {
+			CATCHEXEC "sleep 10"
+			send -i $bak_id "jobs\r"
+			exp_continue
+		    } else {}
+		}
+	    }
+	}
+
+	#
+	# Restore_disk
+	#
+	#     Procedure assumes all command  paramaters are 'optional'.
+
+	proc Restore_disk {bak_id butc_id server aggr tcid\
+			   newserver newaggr noaction} {
+
+	    global prompt
+	    global timeout
+
+	    set status_code 0
+	    set useOption 0
+	    set butc_started 0
+
+	    #
+	    # generate the command to do the restore
+	    # using positional paramaters as much as possible
+	    #
+
+	    if [string length $server] {
+		if 0==$useOption {
+		    set serverString "$server" 
+		} else {
+		    set serverString "-server $server" 
+		}
+	    } else {
+		set serverString ""
+		set useOption 1
+	    }
+
+	    if [string length $aggr] {
+		if 0==$useOption {
+		    set aggrString "$aggr" 
+		} else {
+		    set aggrString "-aggregate $aggr" 
+		}
+	    } else {
+		set aggrString ""
+		set useOption 1
+	    }
+
+	    if [string length $tcid] {
+		if 0==$useOption {
+		    set tcidString "$tcid" 
+		} else {
+		    set tcidString "-tcid $tcid" 
+		}
+	    } else {
+		set tcidString ""
+		set useOption 1
+	    }
+
+	    if [string length $newserver] {
+		if 0==$useOption {
+		    set newserverString "$newserver"
+		} else {
+		    set newserverString "-newserver $newserver"
+		}
+	    } else {
+		set newserverString ""
+		set useOption 1
+	    }
+
+	    if [string length $newaggr] {
+		if 0==$useOption {
+		    set newaggrString "$newaggr"
+		} else {
+		    set newaggrString "-newaggregate $newaggr"
+		}
+	    } else {
+		set newaggrString ""
+		set useOption 1
+	    }
+
+	    #
+	    # there are two cases, noaction just prints a list of tapes
+	    # required to do the restore, otherwise butc needs a tape
+	    #
+
+	    if [string length $noaction] {
+		send -i $bak_id "restoredisk $serverString $aggrString $tcidString \
+		    $newserverString $newaggrString -noaction\r"
+		expect {
+		  -i $bak_id -nocase -re "restore fileset(.*)position(.*)\r\n(.*)" {
+		      set status_code 0
+		  }
+		  -i $bak_id -nocase -re "(.*)can't find(.*)\r\n(.*)" { 
+		      set status_code $expect_out(buffer)
+		  }
+		  -i $bak_id -nocase -re "(.*)missing required(.*)\r\n(.*)" { 
+		      set status_code $expect_out(buffer)
+		  }
+		  -i $bak_id -nocase -re "(.*)bad tape(.*)\r\n(.*)" { 
+		      set status_code $expect_out(buffer)
+		  }
+		  -i $bak_id -nocase -re "(.*)unable to(.*)\r\n(.*)" { 
+		      set status_code $expect_out(buffer)
+		  }
+		  -i $bak_id -nocase -re "(.*)exceeds max(.*)\r\n(.*)" { 
+		      set status_code $expect_out(buffer)
+		  }
+		  -i $bak_id -nocase -re "(.*)failed to(.*)\r\n(.*)" { 
+		      set status_code $expect_out(buffer)
+		  }
+		  -i $bak_id default { 
+		      set status_code $expect_out(buffer)
+		  }
+		}
+	       set tmp_timeout $timeout
+	       set timeout 10
+	       expect {
+		  -i $bak_id $prompt {}
+		  -i $bak_id default {}
+	       }
+	       set timeout $tmp_timeout
+	    } else {
+		send -i $bak_id "restoredisk $serverString $aggrString $tcidString \
+		    $newserverString $newaggrString\r"
+		expect {
+		  -i $bak_id -nocase -re "(.*)can't find(.*)\r\n(.*)" { 
+		      set status_code $expect_out(buffer)
+		  }
+		  -i $bak_id -nocase -re "(.*)missing required(.*)\r\n(.*)" { 
+		      set status_code $expect_out(buffer)
+		  }
+		  -i $bak_id -nocase -re "(.*)bad tape(.*)\r\n(.*)" { 
+		      set status_code $expect_out(buffer)
+		  }
+		  -i $bak_id -nocase -re "(.*)unable to(.*)\r\n(.*)" { 
+		      set status_code $expect_out(buffer)
+		  }
+		  -i $bak_id -nocase -re "(.*)exceeds max(.*)\r\n(.*)" { 
+		      set status_code $expect_out(buffer)
+		  }
+		  -i $bak_id -nocase -re "(.*)failed to(.*)\r\n(.*)" { 
+		      set status_code $expect_out(buffer)
+		  }
+		  -i $bak_id -nocase -re "(.*)total number of filesets : 0(.*)\r\n(.*)" {
+		     set butc_started 1
+		  }
+		  -i $butc_id -nocase "*hit return when done\r\n" {
+		      send -i $butc_id "\r"
+		      set butc_started 1
+		      exp_continue
+		  }
+		  -i $butc_id -nocase "*thanks, * operation.\r\n" {
+		      set butc_started 1
+		      }
+		  -i $butc_id -nocase -re "(.*)unable to(.*)\r\n(.*)" { 
+		      set status_code $expect_out(buffer)
+		  }
+		  -i $butc_id default { 
+		      set status_code -1
+		  }
+	       }
+	       set tmp_timeout $timeout
+	       set timeout 10
+	       expect {
+		    -i $bak_id $prompt {}
+		    -i $bak_id default {}
+	       }
+	       set timeout $tmp_timeout
+	       if $butc_started {
+		  expect {
+		    -i $butc_id -nocase "restore finished\r\n" {}
+		    -i $butc_id default { set status_code -1 }
+		  }
+		  expect {
+		    -i $bak_id -nocase "restore finished\r\n" {}
+		    -i $bak_id default { set status_code -1 }
+		  }
+	       }
+	    }
+
+	    return $status_code
+	}
+
+	#
+	# check_fldb_p
+	#
+	#     Check to be sure the fldb has the correct server and aggr info for
+	#     a given fileset.
+	#     The last line of the fts output is expected to be:
+	#     <machine>.<blah,blah> <read/write status> <aggregate> ...
+	#
+	#     Assumes server argument can have one of three formats:
+	#     1. dce pathname
+	#            e.g. /.../<cellname>/hosts/<server>
+	#     2. internet name
+	#            e.g. <server>.<company>.com
+	#     3. short name
+	#            e.g. <server>
+	#
+	#     Aggregate argument could be of two formats: <aggr> or /dev/<aggr> (or
+	#     something similar.
+	#
+	proc check_fldb_p {fileset server aggr} {
+	   global fts_out
+	   set boolean_code 1
+	   if [CATCHEXEC "/opt/dcelocal/bin/fts lsfldb $fileset" fts_out] {
+	       set boolean_code 0
+	   } else {
+	       # get the server short name from $server
+	       if [string match {/.../*/hosts/*} $server] {
+		   set server_short_name [string range $server\
+					  [expr [string last "/" $server]+1] end]
+	       } elseif [string match {[a-zA-Z]*.?*.?*} $server] {
+		   set server_short_name [lindex [split $server "."] 0]
+	       } else {
+		   set server_short_name $server
+	       }
+	       # Be sure you have aggregate name and not device name.
+	       # (This is idempotent - so don't really need the if.)
+	       if [string match {/?*/?*} $aggr] {
+		   set aggr [string range $aggr\
+			     [expr [string last "/" $aggr]+1] end]
+	       }
+	       set fts_out_split [split $fts_out "\n"]
+	       set line [lindex $fts_out_split [expr [llength $fts_out_split]-1]]
+	       set fldb_server_short_name [lindex [split [lindex $line 0] "."] 0]
+	       if {![string match $fldb_server_short_name $server_short_name] ||
+		   ![string match [lindex $line 2] $aggr]} {
+		   set boolean_code 0
+	       }
+	   }
+	   return $boolean_code
+	}
+
+	#
+	# get_server_from_lsft
+	#
+	#     Given output from fts lsft, extract the server name.
+	#     The next to last line of the fts output is expected to be:
+	#     <machine>.<blah,blah> <read/write status> <aggregate> ...
+	#
+
+	proc get_server_from_lsft {fts_lsft_out} {
+	   set fts_lsft_out_split [split $fts_lsft_out "\n"]
+	   set line [lindex $fts_lsft_out_split [expr [llength $fts_lsft_out_split]-2]]
+	   return [lindex [split [lindex $line 0] "."] 0]
+	}
+
+	#
+	# get_aggr_from_lsft
+	#
+	#     Given output from fts lsft, extract the aggregate name.
+	#     The next to last line of the fts output is expected to be:
+	#     <machine>.<blah,blah> <read/write status> <aggregate> ...
+	#
+
+	proc get_aggr_from_lsft {fts_lsft_out} {
+	   set fts_lsft_out_split [split $fts_lsft_out "\n"]
+	   set line [lindex $fts_lsft_out_split [expr [llength $fts_lsft_out_split]-2]]
+	   return [lindex $line 2]
+	}
+
+	#
+	# delete_db_files_p
+	#
+	#     telnet to a bakserver machine and delete the relevant database files.
+	#
+	proc delete_db_files_p {server id passwd} {
+
+	    global remote_prompt
+	    global backup_dir
+	    global bkdb_file1
+	    global bkdb_file2
+
+	    set boolean_code 1
+
+	    set pid [Telnet $server $id $passwd]
+	    if -1==$pid {
+		set boolean_code 0
+	    } else {
+		send -i $pid "/bin/rm $backup_dir/$bkdb_file1\
+	 $backup_dir/$bkdb_file2\r"
+		expect {
+		    -i $pid "$remote_prompt" {}
+		    default {set boolean_code 0}
+		}
+		send -i $pid "/bin/echo \$status\r"
+		expect {
+		    -i $pid "$remote_prompt" {}
+		    default {set boolean_code 0}
+		}
+		if ![string match "*0\r\n$remote_prompt" $expect_out(buffer)] {
+		    set boolean_code 0
+		}
+	    }
+	    return $boolean_code
+	}
+
+	#
+	# proc stop_bakservers_p
+	#
+	#     Stop all bakservers running in cell.
+	#
+
+	proc stop_bakservers_p {bakservlist} {
+
+	    global BAKSERVER
+	    global bos_out
+
+	    set boolean_code 1
+
+	    foreach entry $bakservlist {
+		if [CATCHEXEC "/opt/dcelocal/bin/bos stop\
+			   /.:/hosts/$entry $BAKSERVER" bos_out] {
+		    send_user "\nCan't stop $BAKSERVER on $entry.\n"
+		    send_user "\n$bos_out\n"
+		    set boolean_code 0
+		}
+	    }
+	    return $boolean_code
+	}
+
+	#
+	# proc del_db_all_machines_p
+	#
+	#     Delete database files on each machine that was running a bakserver.
+	#
+
+	proc del_db_all_machines_p {bakservlist} {
+	    global unix_user
+	    global unix_password
+
+	    set boolean_code 1
+
+	    foreach entry $bakservlist {
+		if ![delete_db_files_p $entry $unix_user $unix_password] {
+		    send_user "\nCouldn't delete backup db files on $entry.\n"
+		    set boolean_code 0
+		}
+	    }
+	    return $boolean_code
+	}
+
+	#
+	# proc start_bakservers_p
+	#
+	#     Start all bakservers cell.
+	#
+
+	proc start_bakservers_p {bakservlist} {
+
+	    global BAKSERVER
+	    global bos_out
+
+	    set boolean_code 1
+
+	    foreach entry $bakservlist {
+		if [CATCHEXEC "/opt/dcelocal/bin/bos start\
+			   /.:/hosts/$entry $BAKSERVER" bos_out] {
+		    send_user "\nCan't start $BAKSERVER on $entry.\n"
+		    send_user "\n$bos_out\n"
+		    set boolean_code 0
+		}
+	    }
+	    # After starting the bakservers, it takes ubik some time to establish
+	    # quorum (hard-coded max of 140 seconds) so sleep to let this occur.
+	    if $boolean_code {
+		CATCHEXEC "sleep 200"
+    }
+    return $boolean_code
+}
+
+#
+# Restore_db_p
+#
+#     Procedure assumes tcid is 'optional.'
+#
+
+proc Restore_db_p {bak_id butc_id tcid} {
+    global prompt
+    global timeout
+
+    set boolean_code 1
+
+    send -i $bak_id "restoredb $tcid\r"
+    expect {
+        -i $bak_id $prompt {
+        }
+        default {set boolean_code 0}
+    }
+    if $boolean_code {
+	expect {
+	    -i $butc_id -nocase "*hit return when done\r\n" {
+	       send -i $butc_id "\r"
+	       exp_continue
+	    }
+	    -i $butc_id -nocase "*thanks, * operation.\r\n" {}
+	    -i $butc_id default {set boolean_code 0}
+	}
+    }
+    if {$boolean_code} {
+        # See if butc thinks the restore completed successfully.  This isn't
+        # proof positive but is at least a reasonable indication.  Restoredb
+        # testing is more thorough.
+        expect {
+            -i $butc_id "*Database restoration complete*" {}
+            default {set boolean_code 0}
+        }
+        job_done_p $bak_id
+    }
+    return $boolean_code
+}
+
+#
+# Save_db_p
+#
+#     Procedure assumes tcid is 'optional.'
+#
+
+proc Save_db_p {bak_id butc_id tcid} {
+    global prompt
+    global timeout
+
+    set boolean_code 1
+
+    send -i $bak_id "savedb $tcid\r"
+    expect {
+        -i $bak_id $prompt {
+        }
+        default {set boolean_code 0}
+    }
+    if $boolean_code {
+	expect {
+	    -i $butc_id -nocase "*hit return when done\r\n" {
+	       send -i $butc_id "\r"
+	       exp_continue
+	    }
+	    -i $butc_id -nocase "*thanks, * operation.\r\n" {}
+	    -i $butc_id default {set boolean_code 0}
+	}
+    }
+    if {$boolean_code} {
+        # See if butc thinks the save completed successfully.  This isn't
+        # proof positive but is at least a reasonable indication.  savedb
+        # testing is more thorough.
+        expect {
+            -i $butc_id "*Database dump complete*" {}
+            default {set boolean_code 0}
+        }
+        job_done_p $bak_id
+    }
+    return $boolean_code
+}
+
+

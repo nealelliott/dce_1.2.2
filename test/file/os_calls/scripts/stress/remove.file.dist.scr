@@ -1,0 +1,224 @@
+
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* This script is almost same as the readdir2.dist.scr.
+* this test is intended to test token revokation in two machine cell.
+*
+
+*
+* Note: Try this test on both single machin cell and multi-machine cell.
+*       Try this from both DFS and local path so that it will also test 
+*       xvnode layer. This test realy needs to be run from the combination
+*       of DFS and local path (remove via CM or remove form local path).
+*
+
+* 
+* USAGE: ./file_test -l {HUBNAME} -I {this_script} ; For HUB
+*        ./file_test -c {HUBNAME} : For other spokes
+*
+
+* Include config file.
+include config
+
+set numEntry 1000
+set loopTimes 10
+
+*
+* This procedure tests remove file call.
+*
+
+set stress1_Proc proc END_PROC
+  echo
+  echo Delete file.
+
+  getwd workDir
+  chdir $testDir
+
+  sync_join "begin_sync" $timeout
+
+  sync_join "deleted_half" $timeout
+* Delete a dirent every four dirents.
+
+  set flag false
+  loop x 1 4 $numEntry
+    set fileName string ( $testFile  + @x )
+    echo @x
+    remove @fileName
+  endloop
+
+  sync_join "deleted_half_done" $timeout
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo Delete file done.
+  echo 
+END_PROC
+
+*
+* This procedure lokks up the test dir.
+*
+
+set stress2_Proc proc END_PROC
+  echo
+  echo Delete file.
+
+
+  getwd workDir
+  chdir $testDir 
+
+  sync_join "begin_sync" $timeout
+  sync_join "deleted_half" $timeout
+
+  set flag false
+  loop x 2 4 $numEntry
+    set fileName string ( $testFile + @x )
+    echo @x
+    remove @fileName
+  endloop
+
+  sync_join "deleted_half_done" $timeout
+  
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo Delete file process done.
+  echo 
+END_PROC
+
+*
+* This procedure checks if the consistency in the file system.
+*
+
+set test_Proc proc END_PROC
+
+  echo
+  echo This procedure check existence of files.
+
+  echo This procedure is running on $ITL_HostName
+
+  echo This test procedure is running on $ITL_HostName
+  sync_join "begin_sync" $timeout
+
+  opendir $testDir dirPtr
+  readdir @dirPtr dirInfo
+  readdir @dirPtr dirInfo
+  loop x 1 1 $numEntry
+    set fileName string ( $testFile + @x )
+    readdir @dirPtr dirInfo
+    if ( @dirInfo.d_name != @fileName ) {
+      echo "FAILED: The file is not there."
+    }
+  endloop
+  closedir @dirPtr
+
+  sync_join "deleted_half" $timeout
+  sync_join "deleted_half_done" $timeout
+
+* This is the final lookup. Should not see any names unlinked.
+
+  opendir $testDir dirPtr
+  readdir @dirPtr dirInfo
+  readdir @dirPtr dirInfo
+  set x 3
+  do 
+    set fileName string ( $testFile + @x )
+    readdir @dirPtr dirInfo
+    if ( @dirInfo.d_name != @fileName ) {
+      echo "FAILED: Lookup dir failed after half of entres deleted."
+    }
+    set x ( @x + 1 )
+    set fileName string ( $testFile + @x )
+    readdir @dirPtr dirInfo
+    if ( @dirInfo.d_name != @fileName ) {
+      echo "FAILED: Lookup dir failed after half of entries deleted."
+    }
+    set x ( @x + 3 )
+  while ( @CommandResult != 1 && @x <= $numEntry )
+  closedir @dirPtr
+  
+  sync_join "finish_sync" $timeout
+  echo Test process done.
+  echo
+END_PROC
+
+
+****************************************************************************
+* Check spokes.
+if ( $ITL_nspokes < 3 ) {
+  echo FAILED: You need at least three spokes to run the test.
+  quit
+}
+
+loop loopVar 1 1 $loopTimes
+
+* Create a huge dir.
+chdir $testDir
+loop x 1 1 $numEntry
+  set fileName string ( $testFile + $x )
+  open $fileName ($O_CREAT|$O_RDWR) 0777 fileId[$x]
+  write $fileId[$x] $fileName
+  close $fileId[$x]
+endloop
+
+!* Dispatch test procedures among spokes.
+rexec_async $ITL_spoke[0] stress1_Proc result[0] asyncVar[0]
+rexec_async $ITL_spoke[1] stress2_Proc result[1] asyncVar[1]
+
+loop x 2 1 ($ITL_nspokes-1)
+  rexec_async $ITL_spoke[$x] test_Proc result[$x] asyncVar[$x]
+endloop
+
+sync_create "begin_sync" $ITL_nspokes $timeout
+sync_release "begin_sync"
+
+sync_create "deleted_half" $ITL_nspokes $timeout
+sync_release "deleted_half"
+sync_create "deleted_half_done" $ITL_nspokes $timeout
+sync_release "deleted_half_done"
+
+sync_create "finish_sync" $ITL_nspokes $timeout
+sync_release "finish_sync"
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+loop x 3 4 $numEntry
+  set fileName string ( $testFile + $x )
+  remove $fileName
+endloop
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+mkdir $testDir 0777
+
+endloop
+
+quit
+

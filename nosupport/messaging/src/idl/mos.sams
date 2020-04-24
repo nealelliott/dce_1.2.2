@@ -1,0 +1,948 @@
+# ________________________________________________________________________
+# Copyright (c) 1996 The Open Group, Inc., Cambridge, MA USA
+# All rights reserved.
+# ________________________________________________________________________
+#
+# Serviceability messages for Message-Oriented Services.
+# ________________________________________________________________________
+#
+# $Log: mos.sams,v $
+# Revision 1.19  1996/11/20  11:40:03  salamone
+# Provide support for callers to explicitly decode msgs
+#
+# Revision 1.18  96/11/12  15:07:36  15:07:36  salamone (Julie Salamone)
+# Added conversion function error msgs
+# 
+# Revision 1.17  96/11/07  18:04:22  18:04:22  salamone (Julie Salamone)
+# Add msg move and que move support
+# 
+# Revision 1.16  96/10/25  14:09:41  14:09:41  salamone (Julie Salamone)
+# Set dflt quemgr support
+# 
+# Revision 1.15  96/10/23  16:11:21  16:11:21  salamone (Julie Salamone)
+# Add selection filter support
+# 
+# Revision 1.14  96/10/18  10:59:13  10:59:13  salamone (Julie Salamone)
+# Added notice opts/dest error codes
+# 
+# Revision 1.13  96/10/16  17:50:13  17:50:13  salamone (Julie Salamone)
+# Added mos_s_no_dflt_quemgr_cfg
+# 
+# Revision 1.12  96/10/16  17:04:01  17:04:01  salamone (Julie Salamone)
+# Added resource error codes
+# 
+# Revision 1.11  96/10/16  16:06:11  16:06:11  salamone (Julie Salamone)
+# Added datatype error codes
+# 
+# Revision 1.10  96/10/16  14:43:18  14:43:18  salamone (Julie Salamone)
+# Added msg and que attr codes
+# 
+# Revision 1.9  96/10/14  18:00:40  18:00:40  bowe (John Bowe)
+# Add mos_s_misc_acl_error.
+# 
+# Revision 1.8  1996/10/03  18:54:21  bowe
+# Added mos_s_queue_created
+#
+# Revision 1.7  1996/10/01  17:04:44  bowe
+# Added mos_s_idle_queue_removed, mos_s_msg_expired
+#
+# Revision 1.6  1996/09/26  20:24:23  bowe
+# Added mos_s_sec_function_fail
+#
+# Revision 1.5  1996/09/19  14:56:52  bowe
+# Added mos_queue_not_empty, mos_s_cant_{fetch,store}_data.
+#
+# Revision 1.4  1996/09/13  20:48:59  bowe
+# Added mos_s_shutdown_function_fail, mos_s_no_server_keytab,
+# mos_s_no_server_prin, mos_s_no_export_location.
+#
+# Revision 1.3  1996/09/13  15:14:41  bowe
+# Clarify mos_s_init_function_fail.
+#
+# Revision 1.2  1996/09/13  14:00:20  bowe
+# Corrected typo in mos_i_svc_q_api.
+#
+# Revision 1.1  1996/09/12  15:42:58  bowe
+# Initial revision
+#
+# $EndLog$
+# ________________________________________________________________________
+
+component       mos
+table           mos_svc_g_table
+technology      dce
+#collection size 50
+
+serviceability table mos_svc_table handle mos_svc_handle
+start
+    #             Index		Name		Message code
+    sub-component mos_s_qmgr	"qmgr"		mos_i_svc_qmgr
+    sub-component mos_s_q_data	"mos-data"	mos_i_svc_q_data
+    sub-component mos_s_q_mgmt	"mos-mgmt"	mos_i_svc_q_mgmt
+    sub-component mos_s_api	"mos-api"	mos_i_svc_api
+end
+
+# ________________________________________________________________________
+start collection 1	# qmgr
+
+start
+code		mos_ok
+text		"OK"
+explanation	"Things are A-OK"
+action		"No action"
+attributes	svc_c_sev_notice
+sub-component	mos_s_qmgr
+end
+
+start		undocumented intable incatalog
+code		mos_s_svc_fail
+text		"Call to svc function failed in '%s', status=<0x%8.8lx|code>"
+attributes	svc_c_sev_error
+sub-component	mos_s_qmgr
+end
+
+start
+code		mos_s_no_memory
+text		"Cannot allocate memory"
+explanation	"Memory allocation operation failed"
+action		"Check memory limits on your machine, and increase
+		available memory, if possible."
+attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+sub-component	mos_s_qmgr
+end
+
+
+
+start		undocumented intable incatalog
+code		mos_s_init_function_fail
+text		"Function <%s|func> failed during init phase, status=<0x%8.8lx|code>"
+explanation	"The specified function failed while the server was initializing
+		itself.
+		The status code \*Lcode\*O specifies additional information.
+		This may cause a fatal error later on."
+attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+sub-component   mos_s_qmgr
+end
+
+# same as above, but with errno
+start		undocumented intable incatalog
+code		mos_s_init_function_fail_er
+text		"Function <%s|func> failed during init phase, errno=<%ld|errno>"
+explanation	"The specified function failed while the server was setting
+		up its data structures.
+		The global variable \*Lerrno\*O specifies additional information.
+		This may cause a fatal error later on."
+attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+sub-component   mos_s_qmgr
+end
+
+start		undocumented intable incatalog
+code		mos_s_shutdown_function_fail
+text		"Function <%s|func> failed during cleanup/shutdown phase, status=<0x%8.8lx|code>"
+explanation	"The specified function failed while the server was shutting
+		down and cleaning up.
+		The status code \*Lcode\*O specifies additional information.
+		This may cause a fatal error later on."
+# XXX - What is the correct action to take here?  Continue cleaning up?  Exit?
+#attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+attributes	"svc_c_sev_error"
+sub-component   mos_s_qmgr
+end
+
+start		undocumented intable incatalog
+code		mos_s_no_server_keytab
+text		"No server keytab specified"
+explanation	"No server keytab file was specified for the queue manager."
+action		"Specify, and possibly create, a keytab file."
+attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+sub-component	mos_s_qmgr
+end
+
+start		undocumented intable incatalog
+code		mos_s_no_server_prin
+text		"No server principal specified"
+explanation	"No server principal was specified for the queue manager."
+action		"Specify, and possibly create, a server principal.
+		It must agree with the principal in the keytab file."
+attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+sub-component	mos_s_qmgr
+end
+
+start		undocumented intable incatalog
+code		mos_s_no_export_location
+text		"No NSI export locataion specified"
+explanation	"No NSI export locataion specified was specified for the queue
+		manager's RPC bindings."
+action		"Specify an NSI export locataion."
+attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+sub-component	mos_s_qmgr
+end
+
+
+start		undocumented intable incatalog
+code		mos_s_mutex_init_fail
+text		"Could not initialize mutex"
+explanation	"A resource required for proper concurrency could not
+		be created.
+		The global variable \*Lerrno\*O may provide more specific
+		information."
+action		"This is a fatal error.  No recovery is possible."
+attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+sub-component	mos_s_qmgr
+end
+
+start
+code		mos_s_cond_init_fail
+text		"Could not initialize condition variable"
+explanation	"A resource required for proper concurrency could not
+		be created.
+		The global variable \*Lerrno\*O may provide more specific
+		information."
+action		"This is a fatal error.  No recovery is possible."
+attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+sub-component	mos_s_qmgr
+end
+
+start
+code		mos_s_mutex_lock_failed
+text		"Could not lock mutex"
+explanation	"A resource required for proper concurrency could not be locked.
+		The global variable \*Lerrno\*O may provide more specific
+		information."
+action		"This is a fatal error.  No recovery is possible."
+attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+sub-component	mos_s_qmgr
+end
+
+start
+code		mos_s_mutex_unlock_failed
+text		"Could not unlock mutex"
+explanation	"A resource required for proper concurrency could not
+		be unlocked.
+		The global variable \*Lerrno\*O may provide more specific
+		information."
+action		"This is a fatal error.  No recovery is possible."
+attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+sub-component	mos_s_qmgr
+end
+
+start
+code		mos_s_cond_wait_failed
+text		"Could not wait on condition variable"
+explanation	"A resource required for proper concurrency could not
+		be accessed.
+		The global variable \*Lerrno\*O may provide more specific
+		information."
+action		"This is a fatal error.  No recovery is possible."
+attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+sub-component	mos_s_qmgr
+end
+
+start
+code		mos_s_cond_signal_failed
+text		"Could not signal condition variable"
+explanation	"A resource required for proper concurrency could not
+		be released.
+		The global variable \*Lerrno\*O may provide more specific
+		information."
+action		"This is a fatal error.  No recovery is possible."
+attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+sub-component	mos_s_qmgr
+end
+
+start
+code		mos_s_cond_bcast_failed
+text		"Could not broadcast condition variable"
+explanation	"A resource required for proper concurrency could not
+		be released.
+		The global variable \*Lerrno\*O may provide more specific
+		information."
+action		"This is a fatal error.  No recovery is possible."
+attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+sub-component	mos_s_qmgr
+end
+
+start		undocumented intable incatalog
+code		mos_s_usage
+text            "Usage: q-mgr [-p prin] [-k keytab] [-e ns-entry] [-b string-binding] [-ih] [-w svc-info]"
+attributes      "svc_c_sev_fatal | svc_c_action_exit_bad"
+sub-component   mos_s_qmgr
+end
+
+start		undocumented intable incatalog
+code		mos_s_unimplemented
+text		"Functionality not yet implemented"
+explanation	"A  functionality not yet implemented"
+action		"Complete the implementation."
+attributes	svc_c_sev_notice
+sub-component	mos_s_qmgr
+end
+
+start		undocumented intable incatalog
+code		mos_s_cant_store_acl
+text		"Failed to store ACL in '%s', status=<0x%8.8lx|code>"
+attributes	svc_c_sev_error
+sub-component	mos_s_qmgr
+end
+
+start		undocumented intable incatalog
+code		mos_s_cant_fetch_acl
+text		"Failed to fetch ACL in '%s', status=<0x%8.8lx|code>"
+attributes	svc_c_sev_error
+sub-component	mos_s_qmgr
+end
+
+start		undocumented intable incatalog
+code		mos_s_misc_acl_error
+text		"ACL library function '%s' failed, status=<0x%8.8lx|code>"
+attributes	svc_c_sev_error
+sub-component	mos_s_qmgr
+end
+
+start		undocumented intable incatalog
+code		mos_s_cant_store_data
+text		"Failed to store data into backing store in '%s', status=<0x%8.8lx|code>"
+attributes	svc_c_sev_error
+sub-component	mos_s_qmgr
+end
+
+start		undocumented intable incatalog
+code		mos_s_cant_fetch_data
+text		"Failed to fetch data from backing store in '%s', status=<0x%8.8lx|code>"
+attributes	svc_c_sev_error
+sub-component	mos_s_qmgr
+end
+
+start		undocumented intable incatalog
+code		mos_s_sec_function_fail
+text		"Security function <%s|func> failed during normal operation,
+		status=<0x%8.8lx|code>"
+explanation	"The specified security function failed during a server operation.
+		The status code \*Lcode\*O specifies additional information.
+		(This may cause a fatal error later on.)"
+attributes	svc_c_sev_error
+sub-component   mos_s_qmgr
+end
+
+start		undocumented intable incatalog
+code		mos_s_idle_queue_removed
+text		"Empty, idle queue '<%s|queuename>' was removed"
+explanation	"An empty, idle queue was removed after reaching the set
+		limit of inactivity."
+action		"No action"
+attributes	svc_c_sev_notice
+sub-component	mos_s_qmgr
+end
+
+start		undocumented intable incatalog
+code		mos_s_msg_expired
+text		"A message from queue '<%s|queuename>' expired and was removed"
+explanation	"A message reached it expiration time and was removed."
+action		"No action"
+attributes	svc_c_sev_notice_verbose
+sub-component	mos_s_qmgr
+end
+
+start		undocumented intable incatalog
+code		mos_s_queue_created
+text		"A queue '<%s|queuename>' was created."
+explanation	"A queue was created with the given name."
+action		"No action"
+attributes	svc_c_sev_notice_verbose
+sub-component	mos_s_qmgr
+end
+
+# --------------  queue-related (data aspects)
+
+start collection 2
+
+start
+code		mos_empty_queue
+text		"The queue is empty"
+explanation	"The queue is empty; nothing to dequeue."
+action		"No action"
+attributes	svc_c_sev_notice
+sub-component	mos_s_q_data
+end
+
+start
+code		mos_queue_not_found
+text		"queue not found"
+explanation	"The queue by that name was not found on this queue manager."
+action		"No action"
+attributes	svc_c_sev_notice
+sub-component	mos_s_q_data
+end
+
+start
+code		mos_item_not_found
+text		"queue item not found"
+explanation	"The item in the specified queue was not found on this queue manager."
+action		"No action"
+attributes	svc_c_sev_notice
+sub-component	mos_s_q_data
+end
+
+start
+code		mos_queue_full
+text		"queue is full"
+explanation	"The queue is full; there are max_len elements in it."
+action		"Dequeue some elements, send to another queue, or increase
+		 the maximum size of the queue."
+attributes	svc_c_sev_notice
+sub-component   mos_s_q_data
+end
+
+start
+code		mos_msg_too_big
+text		"message is too big"
+explanation	"The message is larger than the maximum allowed for this queue."
+action		"Either increase the \*Lmax_size\*O attribute of the queue
+		or send this message to a queue that can accomodate it."
+attributes	svc_c_sev_notice
+sub-component   mos_s_q_data
+end
+
+start
+code		mos_enqueue_disabled
+text		"enqueuing is disabled"
+explanation	"Enqueuing is disabled for this queue."
+action		"Enable enqueuing."
+attributes	svc_c_sev_notice
+sub-component   mos_s_q_data
+end
+
+start
+code		mos_dequeue_disabled
+text		"dequeuing is disabled"
+explanation	"Dequeuing is disabled for this queue."
+action		"Enable dequeuing."
+attributes	svc_c_sev_notice
+sub-component   mos_s_q_data
+end
+
+start
+code		mos_no_persistence
+text		"persistence is not allowed for this queue"
+explanation	"Persistent queue items are not allowed for this queue.
+		 Item was enqueued as non-persistent."
+action		"Non required.  You can enable persistence or specify
+		 non-persistent messages to stop this warning."
+attributes	svc_c_sev_warning
+sub-component   mos_s_q_data
+end
+
+start
+code		mos_queue_not_empty
+text		"The queue is not empty"
+explanation	"The queue is not empty.  A non-empty queue will not be
+		deleted unless the 'force' flag is set."
+action		"Empty the queue or use the 'force' flag for the delete
+		operations."
+attributes	svc_c_sev_notice
+sub-component	mos_s_q_data
+end
+
+# --------------  management
+
+start collection 3
+
+start
+code		mos_queue_already_exists
+text		"queue already exists"
+explanation	"A queue by that name (or an alias) already exists on this
+		queue manager."
+action		"Choose another name."
+attributes	svc_c_sev_notice
+sub-component	mos_s_q_mgmt
+end
+
+
+# --------------  API
+
+start collection 4
+
+start
+code		mos_s_rsrc_handle_inv
+text		"Invalid resource handle."
+explanation	"The resource handle is not properly obtained."
+action		"Obtain a proper resource handle via mos_rsrc_attach(),
+                 mos_rsrc_dflt_quemgr_get(), mos_rsrc_dflt_quemgr_set(),
+                 mos_que_mgmt_create(), or mos_msg_attr_notice_set()."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_rsrc_already_attached
+text		"The specified resource is already attached."
+explanation	"The specified resource is already maintained by the API."
+action		"Specify another resource."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_no_rsrc_attached
+text		"The specified resource is not attached."
+explanation	"The specified resource is not maintained by the API."
+action		"Specify an existing resource."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_no_dflt_quemgr_cfg
+text		"A default queue manager is not configured."
+explanation	"A default queue manager is not specified by 
+                 MOS_DFLT_QUEMGR_NAME, in /.:/hosts/$HOSTNAME/msg.profile,
+                 or in /.:/cell-profile."
+action		"Set environment variable MOS_DFLT_QUEMGR_NAME to a queue
+                 manager name to be used as the default."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_rsrc_not_queue
+text		"The specified resource must be a queue."
+explanation	"A resource is a name in the namespace that may be a queue, 
+                 a Q-mgr, a destination peer application, a specific NSI 
+                 entry, group, or profile name."
+action		"Obtain a proper resource handle to a queue via 
+                 mos_rsrc_attach(), mos_que_mgmt_create(), or 
+                 mos_msg_attr_notice_set()."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_que_attr_inv
+text		"Invalid queue attributes structure."
+explanation	"The queue attributes structure is not allocated properly."
+action		"Allocate memory via mos_que_attr_alloc() or 
+                 mos_que_attr_peek()."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_que_attr_idletimeout_null
+text		"Empty queue idle timeout is NULL."
+explanation	"An empty queue idle timeout of NULL indicates that a queue 
+                 remains indefinitely until explicitly deleted."
+action		"None, it's a valid value."
+attributes	svc_c_sev_notice
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_rsrcname_null
+text		"Resource name is NULL."
+explanation	"The value specified for the resource name is NULL."
+action		"Specify another resource name."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_quename_null
+text		"Queue name or alias is NULL."
+explanation	"The value specified for the queue name or alias is NULL."
+action		"Specify another queue name or alias."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_quename_not_simple
+text		"Queue name or alias is not a simple name."
+explanation	"The value specified for the queue name or alias is not
+                 a simple name."
+action		"Specify another queue name or alias."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_quename_already_exists
+text		"The specified queue name or alias already exists."
+explanation	"A queue by that name (or an alias) already exists on this
+		 queue manager."
+action		"Specify another queue name or alias."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_no_quename_exists
+text		"The specified queue name or alias does not exist."
+explanation	"A queue by that name (or an alias) does not exist on this
+		 queue manager."
+action		"Specify an existing queue name or alias."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_deqmode_inv
+text		"Invalid dequeue mode."
+explanation	"The value specified for the dequeue mode is invalid."
+action		"Specify a valid dequeue mode."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_enqmode_inv
+text		"Invalid enqueue mode."
+explanation	"The value specified for the enqueue mode is invalid."
+action		"Specify a valid enqueue mode."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_enqmode_mp
+text		"Enqueue mode not valid in Message Queuing model."
+explanation	"The value specified for the enqueue mode is only valid
+                 in a Message Passing model."
+action		"Specify a valid enqueue mode."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_que_delop_inv
+text		"Invalid queue deletion option."
+explanation	"The value specified for the queue deletion option is invalid."
+action		"Specify a valid queue deletion option."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_que_mvop_inv
+text		"Invalid queue move/rename option."
+explanation	"The value specified for the queue move/rename option is 
+                 invalid."
+action		"Specify a valid queue move/rename option."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_no_uuid
+text		"No UUID specified."
+explanation	"The parameter is NULL."
+action		"Specify a valid UUID."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_nil_uuid
+text		"A nil UUID is reserved."
+explanation	"A datatype of NIL is reserved for an array of bytes."
+action		"Specify a valid UUID."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_datatype_already_reg
+text		"The specified datatype is already registered."
+explanation	"The datatype is already registered with the API."
+action		"Specify another datatype."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_no_datatype_reg
+text		"The specified datatype is not registered."
+explanation	"The datatype is not registered with the API."
+action		"Specify an existing datatype."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_no_convfn
+text		"No conversion function specified."
+explanation	"The parameter is NULL."
+action		"Specify a valid conversion function."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_convfn_already_reg
+text		"The specified conversion function is already registered."
+explanation	"The conversion function is already registered with the API."
+action		"Specify another conversion function."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_space_avail_req
+text		"Memory for at least one element in the list is required."
+explanation	"The 'space_avail' parameter is zero."
+action		"Specify a 'space_avail' value greater than zero and allocate 
+                 a list with 'space_avail' element(s)."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_que_attr_persistence_inv
+text		"Invalid queue persistence."
+explanation	"The value specified for the queue persistence is invalid."
+action		"Specify a valid queue persistence."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_boolean_inv
+text		"Invalid boolean value."
+explanation	"The value specified for the boolean is invalid."
+action		"Specify a valid boolean: 0 or 1."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_msg_buf_inv
+text		"Invalid message buffer structure."
+explanation	"The message buffer structure is NULL."
+action		"mos_msg_dequeue() or mos_msg_peek() failed; check status."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_msg_appbuf_inv
+text		"Invalid application-specific message buffer."
+explanation	"The application-specific message buffer is NULL."
+action		"Allocate memory to hold application-specific message."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_msg_attr_inv
+text		"Invalid message attributes structure."
+explanation	"The message attributes structure is not allocated properly."
+action		"Allocate memory via mos_msg_attr_alloc() or 
+                 mos_msg_attr_peek()."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_msg_attr_msgtype_inv
+text		"Invalid message type."
+explanation	"The value specified for the message type is invalid."
+action		"Specify a valid message type."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_msg_attr_persistence_inv
+text		"Invalid message persistence."
+explanation	"The value specified for the message persistence is invalid."
+action		"Specify a valid message persistence."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_msg_attr_protectlvl_inv
+text		"Invalid message end-to-end protection level."
+explanation	"The value specified for the message end-to-end protection 
+                 level is invalid."
+action		"Specify a valid message end-to-end protection level."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_msg_attr_noticedest_noopts
+text		"A notice destination is specified with no notice options."
+explanation	"Notice options are none but a notice destination is specified."
+action		"Specify a notice destination along with the notice options 
+                 or set notice destination to NULL."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_msg_attr_noticedest_opts
+text		"A notice destination is required with notice options."
+explanation	"Notice options are specified without a notice destination."
+action		"Specify a notice destination along with the notice options."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_msg_attr_noticedest_handle
+text		"A notice destination is required with a resource handle 
+                 request."
+explanation	"A resource handle is requested without a notice destination."
+action		"Specify a notice destination."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_msg_attr_ttl_null
+text		"Message expiration is NULL."
+explanation	"A message expiration of NULL indicates that a message 
+                 remains indefinitely until explicitly dequeued."
+action		"None, it's a valid value."
+attributes	svc_c_sev_notice
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_msg_attr_ttr_null
+text		"Message time-to-receive is NULL."
+explanation	"A message ttr of NULL indicates that a message 
+                 is allowed to be retrieved now."
+action		"None, it's a valid value."
+attributes	svc_c_sev_notice
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_msg_selfilter_inv
+text		"Invalid message selection filter structure."
+explanation	"The message selection filter structure is not allocated 
+                 properly."
+action		"Allocate memory via mos_msg_selfilter_alloc()."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_mask_type_inv
+text		"Invalid selection mask type."
+explanation	"The value specified for the selection mask type is invalid."
+action		"Specify a valid selection mask type."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_mask_op_inv
+text		"Invalid selection mask operation."
+explanation	"The value specified for the selection mask operation is 
+                 invalid."
+action		"Specify a valid selection mask operation."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_mask_op_none
+text		"Only ttr selection criteria is allowed for specified
+                 mask operation."
+explanation	"The value specified for the selection mask type is 
+                 not compatible with the selection mask operation."
+action		"Specify another mask operation for specified mask type."
+attributes	svc_c_sev_notice
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_mask_op_equal
+text		"All selection criteria, except ttr, is allowed for 
+                 specified mask operation."
+explanation	"The value specified for the selection mask type is 
+                 not compatible with the selection mask operation."
+action		"Specify another mask operation for specified mask type."
+attributes	svc_c_sev_notice
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_mask_op_not_equal
+text		"All selection criteria, except protectlvl and ttr, is 
+                 allowed for specified mask operation."
+explanation	"The value specified for the selection mask type is 
+                 not compatible with the selection mask operation."
+action		"Specify another mask operation for specified mask type."
+attributes	svc_c_sev_notice
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_mask_op_priority
+text		"Only priority selection criteria is allowed for 
+                 specified mask operation."
+explanation	"The value specified for the selection mask type is 
+                 not compatible with the selection mask operation."
+action		"Specify another mask operation for specified mask type."
+attributes	svc_c_sev_notice
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_mask_op_eq_greater_than
+text		"Only priority and protectlvl selection criteria is 
+                 allowed for specified mask operation."
+explanation	"The value specified for the selection mask type is 
+                 not compatible with the selection mask operation."
+action		"Specify another mask operation for specified mask type."
+attributes	svc_c_sev_notice
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_mask_ttr_value
+text		"Mask value specified on message time-to-receive selection
+                 criteria."
+explanation	"No mask value or operation may be specified on a message
+                 time-to-receive selection criteria."
+action		"Specify NULL for mask value."
+attributes	svc_c_sev_notice
+sub-component	mos_s_api
+end
+
+start
+code		mos_s_mask_sender_null
+text		"The sender's principal name in the selection criteria is NULL."
+explanation	"The value specified for the name is NULL."
+action		"Specify a sender's principal name."
+attributes	svc_c_sev_error
+sub-component	mos_s_api
+end
+
+# ________________________________________________________________________
+
+start collection 10
+
+start   !intable undocumented
+code    mos_i_svc_qmgr
+text    "General Message-Oriented Services"
+end
+
+start   !intable undocumented
+code    mos_i_svc_q_data
+text    "Message-Oriented Services - Queue data facilities"
+end
+
+start   !intable undocumented
+code    mos_i_svc_q_mgmt
+text    "Message-Oriented Services - Queue management facilities"
+end
+
+start   !intable undocumented
+code    mos_i_svc_api
+text    "Message-Oriented Services - API"
+end
+

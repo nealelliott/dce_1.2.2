@@ -1,0 +1,191 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rs_misc.idl,v $
+ * Revision 1.1.9.2  1996/03/09  23:28:29  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:57  marty]
+ *
+ * Revision 1.1.9.1  1995/12/08  17:34:37  root
+ * 	Submit OSF/DCE 1.2.1
+ * 
+ * 	HP revision /main/HPDCE02/1  1994/12/08  17:29 UTC  hanfei
+ * 	merge
+ * 
+ * 	HP revision /main/hanfei_cpi_bl2/1  1994/12/07  19:31 UTC  hanfei
+ * 	merge
+ * 
+ * 	HP revision /main/hanfei_cpi_bl1/2  1994/12/07  17:07 UTC  hanfei
+ * 	change rs_checkpt_reset_interval interface
+ * 
+ * 	HP revision /main/hanfei_cpi_bl1/1  1994/12/05  14:48 UTC  hanfei
+ * 	work for rgy checkpoint to be configurable
+ * 	[1995/12/08  16:55:28  root]
+ * 
+ * Revision 1.1.7.1  1994/09/20  20:14:38  rps
+ * 	[OT11944] add rs_check_consistency
+ * 	[1994/09/20  20:09:12  rps]
+ * 
+ * Revision 1.1.4.2  1993/08/04  13:36:24  cuti
+ * 	Insert dce/ in front of imported file name
+ * 	[1993/08/03  20:50:11  cuti]
+ * 
+ * Revision 1.1.2.2  1992/12/29  13:30:55  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:17:24  zeliff]
+ * 
+ * Revision 1.1  1992/01/19  14:55:02  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+
+/*  rs_misc.idl V=13 08/22/91 //littl/prgy/src/idl
+**
+** Copyright (c) Hewlett-Packard Company 1991
+** Unpublished work. All Rights Reserved.
+**
+*/
+/*
+ *      Miscellaneous registry operations
+ * 
+ */
+
+[
+    /* V1 format UUID: 4c8782805000.0d.00.02.87.14.00.00.00 */
+    uuid(4C878280-5000-0000-0D00-028714000000),
+    version(1)
+]
+
+interface rs_misc
+
+{
+    import "dce/rsbase.idl";
+    import "dce/rplbase.idl";
+
+
+    /*
+     * r s _ l o g i n _ g e t _ i n f o 
+     *
+     * Errors 
+     *  Object not found 
+     */
+
+    /* 
+     * union type to avoid marshalling of arguments in the error case.
+     * We'd like to include the projlist info as well, but conformant 
+     * arrays are not legal in union arms
+     */
+    typedef union switch (long status) tagged_union {
+        case error_status_ok:
+            struct {
+                sec_rgy_acct_key_t      key_parts;
+                sec_rgy_sid_t           sid;
+                sec_rgy_unix_sid_t      unix_sid;
+                sec_rgy_acct_user_t     user_part;
+                sec_rgy_acct_admin_t    admin_part;
+                sec_rgy_plcy_t          policy_data; 
+                sec_rgy_name_t          cell_name;
+                uuid_t                  cell_uuid;
+            }       result;
+
+        default:
+            ;
+
+    } rs_login_info_t;
+
+    [idempotent] void rs_login_get_info (
+        [in]        handle_t                h,
+        [in, out]   sec_rgy_login_name_t    *login_name,
+        [out]       rs_cache_data_t         *cache_info,
+        [out]       rs_login_info_t         *result,
+        [in]        signed32                max_number,
+        [out]       signed32                *supplied_number,
+        [out, length_is(*supplied_number), size_is(max_number)] 
+                    uuid_t                  id_projlist[],
+        [out, length_is(*supplied_number), size_is(max_number)] 
+                    signed32                unix_projlist[],
+        [out]       signed32                *num_projects
+    );
+
+    /*
+     * r s _ w a i t _ u n t i l _ c o n s i s t e n t
+     *
+     * For compatibility only; actual semantic is "nonblocking check".  If
+     * the function returns true then all replicas received the updates,
+     * otherwise at least one replica was incommunicado. 
+     *
+     * Errors 
+     *  readonly            specified site is not the master, or the master is in
+     *                      maintenance mode 
+     *  server unavailable 
+     */
+    boolean32 rs_wait_until_consistent (
+        [in]        handle_t        h,
+        [out]       rs_cache_data_t *cache_info,
+        [out]       error_status_t  *status
+    );
+
+    /*
+     * r s _ c h e c k _ c o n s i s t e n c y
+     *
+     * Remote interface optimized for common case & to not block
+     * (which would consume resources) in the master registry server.
+     * Caller starts with NULL seqno; return retry=true iff any
+     * responsive replica is out of sync, and provide the current
+     * reference sequence number for subsequent polling attempts.
+     * Function return value is true iff no replica is incommunicado.
+     *
+     * Errors
+     *  read_only	    specified site is not the master, or
+     *			    the master is in maintenance mode
+     *  server_unavailable
+     */
+    boolean32 rs_check_consistency (
+	[in]	    handle_t		h,
+	[out]	    boolean32		*retry,
+	[in,out]    rs_update_seqno_t	*seqno,
+	[out]	    rs_cache_data_t	*cache_info,
+	[out]	    error_status_t	*status
+    );
+
+    /*
+     * r s _ c h e c k p t _ r e s e t _ i n t e r v a l
+     *
+     * For reset rgy database checkpoint interval.  Expected operation
+     * can be one of the following and their parameter values are :
+     * 	  - do a checkpoint now, no change for interval.
+     *			do_checkpt_now       = true
+     *			new_checkpt_interval = 0 then ignored
+     *                  wait_interval        = 0 then ignored
+     *    - change interval with or without checkpointing immediately
+     *			do_checkpt_now	     = true/false
+     *			new_checkpt_interval = new interval value in seconds
+     *			wait_interval	     = 0 ignored
+     *    - changed interval based on time of the day
+     *			do_checkpt_now	     = true/false
+     *			new_checkpt_interval = new interval value in seconds
+     *			wait_interval	     = time to the first checkpoint  
+     *
+     * Errors
+     *  operation failure ...
+     *  server_unavailable
+     */
+    void rs_checkpt_reset_interval (
+	[in]	    handle_t		h,
+	[in]	    boolean32		do_checkpt_now,
+	[in]	    signed32            new_checkpt_interval,
+	[in, string, ptr] char		*at_time_str,
+	[out]	    rs_cache_data_t	*cache_info,
+	[out]	    error_status_t	*status
+    );
+
+}

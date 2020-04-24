@@ -1,0 +1,1809 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: dts.sams,v $
+# Revision 1.1.16.2  1996/03/09  23:31:10  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:46:23  marty]
+#
+# Revision 1.1.16.1  1995/12/08  18:06:04  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/2  1995/06/06  16:56 UTC  wesfrost
+# 	Merge changes to mothra
+# 
+# 	HP revision /main/HPDCE02/wesfrost_man1/1  1995/06/05  12:41 UTC  wesfrost
+# 	Correct typos.
+# 
+# 	HP revision /main/HPDCE02/1  1995/02/02  21:15 UTC  pare
+# 	Create HPDCE02 branch
+# 
+# 	HP revision /main/pare_mothra/1  1995/02/02  21:09 UTC  pare
+# 	Correct explanation field for dts_s_get_profile_name error
+# 	[1995/12/08  17:23:41  root]
+# 
+# Revision 1.1.14.13  1994/08/31  19:55:13  cbrooks
+# 	CR11290 dce_shutdown -f causes dtsd to print out errors
+# 	[1994/08/31  19:54:23  cbrooks]
+# 
+# Revision 1.1.14.12  1994/08/24  21:39:54  cbrooks
+# 	CR10282 Error messages need cleanup
+# 	[1994/08/24  21:39:23  cbrooks]
+# 
+# Revision 1.1.14.11  1994/08/23  20:31:47  cbrooks
+# 	CR11495 - remove fprintfs in code; use serviceability
+# 	[1994/08/19  19:43:51  cbrooks]
+# 
+# Revision 1.1.14.10  1994/08/05  20:47:36  cbrooks
+# 	CR11240 - add dced config functionality
+# 	[1994/08/05  20:23:34  cbrooks]
+# 
+# Revision 1.1.14.9  1994/07/29  18:27:12  cbrooks
+# 	CR11466 - new functions for read/write bindings file
+# 	[1994/07/29  18:25:07  cbrooks]
+# 
+# Revision 1.1.14.8  1994/07/20  20:24:33  cbrooks
+# 	CR10945 fix Time Provider errors
+# 	[1994/07/20  18:25:42  cbrooks]
+# 
+# Revision 1.1.14.7  1994/07/18  19:01:17  cbrooks
+# 	CR 11254 - spelling error - too fews servers
+# 	[1994/07/18  18:10:05  cbrooks]
+# 
+# Revision 1.1.14.6  1994/07/11  18:27:41  cbrooks
+# 	CR11223 - better error message for timeout
+# 	[1994/07/11  18:27:26  cbrooks]
+# 
+# Revision 1.1.14.5  1994/06/30  19:45:22  cbrooks
+# 	CR11112 new serviceability messages required
+# 	[1994/06/30  19:44:29  cbrooks]
+# 
+# 	CR 11112 - New serviceability messages required
+# 	[1994/06/28  17:47:15  cbrooks]
+# 
+# Revision 1.1.14.4  1994/06/24  19:33:57  cbrooks
+# 	CR 10792 - new messages for dtsdate command
+# 	[1994/06/24  19:31:53  cbrooks]
+# 
+# 	CR10792 - add dtstime message
+# 	[1994/06/23  16:28:24  cbrooks]
+# 
+# Revision 1.1.14.3  1994/06/10  20:51:51  devsrc
+# 	cr10872 - fixed copyright
+# 	[1994/06/10  16:48:42  devsrc]
+# 
+# Revision 1.1.14.2  1994/01/21  22:13:05  rsalz
+# 	OT CR 9747:  Add SVC and AUD to dtsd
+# 	[1994/01/21  21:07:23  rsalz]
+# 
+# $EndLog$
+component       dts
+table           dts__table
+technology      dce
+
+serviceability  table dts_svc_table handle dts_svc_handle
+start
+    sub-component dts_s_general "general"       dts_i_svc_general
+    sub-component dts_s_events  "events"        dts_i_svc_events
+    sub-component dts_s_arith   "arith"         dts_i_svc_arith
+    sub-component dts_s_ctlmsgs "ctlmsgs"       dts_i_svc_ctlmsgs
+    sub-component dts_s_msgs    "msgs"          dts_i_svc_msgs
+    sub-component dts_s_states  "states"        dts_i_svc_states
+    sub-component dts_s_threads "threads"       dts_i_svc_threads
+    sub-component dts_s_config	"config"	dts_i_svc_config
+    sub-component dts_s_sync	"sync"		dts_i_svc_sync
+    sub-component dts_s_dtsdate "dtsdate"       dts_i_svc_dtsdate
+    sub-component dts_s_error   "dtserror"      dts_i_svc_error
+end
+
+start
+code	dts_s_normal
+text	"Successful completion"
+explanation	"Operation performed"
+action		"None required."
+end
+
+start
+code	dts_s_synching
+text	"Command illegal while synchronization in progress"
+explanation	"An attempt was made to issue a command that is
+illegal during a synchronization"
+action		"Wait until synchronization completes and retry the command"
+end
+
+start
+code	dts_s_updating_time
+text	"Command illegal while update time is in progress"
+explanation	"An attempt was made to issue a command that is illegal during an update time operation"
+action		"Wait until the update completes and retry the command"
+end
+
+start
+code	dts_s_epoch_range
+text	"Epoch out of range or not different from current epoch"
+explanation	"An attempt was made to change the epoch, but the number given was out of range"
+action		"Re-enter the command using an integer from 0 to 255"
+end
+
+start
+code	dts_s_has_provider
+text	"Command illegal while a time provider is present"
+explanation	"An attempt was made to set the \*Lcourier role\*O to
+\*Lcourier.\*O The server system, however, is connect to a time
+provider, which means the \*Lcourier role\*O must be \*Lnoncourier.\*O
+This is set automatically and cannot be changed" 
+action		"None required."
+end
+
+start
+code	dts_s_is_started
+text	"Time service has already been started"
+explanation	"An attempt was made to enable a DTS entity that is
+already functioning" 
+action		"None required."
+end
+
+start
+code	dts_s_servers_range
+text	"Server value out of range"
+explanation	"An attempt was made to set the \*Lminservers\*O
+attribute; however, the value was not within the legal range"
+action		"Retry the command using a value from 1-10 for the
+\*Lminservers\*O attribute. It is recommended that you set
+the value to 3 or more. The default setting is 3. A smaller value wil
+cause the synchronized time to be a less reliable measure of the
+Coordinated Universal Time (UTC)."
+end
+
+start
+code	dts_s_read_only
+text	"Attempt to modify a read-only attribute"
+explanation	"An attempt was made to issue the \*Ldts modify\*O command an
+attribute that is read-only."
+action		"Retry the command with an acceptable attribute and
+value. Check the \*Ldts modify\* man page to determine those attribute
+that are acceptable"
+end
+
+start
+code	dts_s_nopriv
+text	"Access denied for attempted operation"
+explanation  "An attempt was made to execute a dts command for which you
+do not have permission.  Generally, you need write
+permission on the ACL associated with the DTS entity in
+order to execute a dts command.  The \*Ldtsd\*O command
+can only be started by the local host machine principal."
+action  "Ensure that you have write access on the ACL associated with
+the desired DTS entity and retry the operation.  If you need
+to run \*Ldtsd\*O, you must be the machine principal on the
+local host on which you are trying to run \*Ldtsd\*O."
+end
+
+start
+code	dts_s_created
+text	"Time service already created"
+explanation  "An attempt was made to create a time server or time
+clerk entity on a system where one already existed."
+action		"None required."
+end
+
+start
+code	dts_s_not_created
+text	"Time service has not been created"
+explanation  "An attempt was made to issue the \*Ldts activate\*O command
+for a DTS entity; however, the entity has not been created."
+action  "Create the DTS entity and then issue the \*Ldts activate\*O command."
+end
+
+start
+code	dts_s_not_enabled
+text	"Time service has not been enabled"
+explanation  "An attempt was made to issue a command for a DTS entity
+              that is not enabled."
+action  "Issue the \*Ldts activate\*O command for the DTS entity and retry
+         the desired operation"
+end
+
+start
+code	dts_s_no_time_updated
+text	"New time not contained in current time interval"
+explanation  "An attempt was made to adjust the system clock to a new
+              time; however, the new time would be less accurate than
+              the current time."
+action  "Retry the operation making sure that the new time and
+         inaccuracy you specify forms a smaller interval than the
+         current system interval.  That is, the new setting must be
+         more accurate than the current setting.  The minimum
+         inaccuracy achievable with the \*Lupdate\*O command is
+         approximately 1 second. Any lower setting is not recommended."
+end
+
+start
+code	dts_s_not_server
+text	"Command only valid for servers"
+explanation  "An attempt was made to issue a command against a DTS
+	clerk entity: the command is only valid for a DTS server entity."
+action		"None required."
+end
+
+start
+code	dts_s_another_time_serv
+text	"Time service already running on this node"
+explanation  "An attempt was made to create a time server or time
+              clerk entity on a system where one is already running."
+action		"None required."
+end
+
+start
+code	dts_s_alloc_virt
+text	"Memory allocation failure"
+explanation	"An error was encountered when attempting to allocate
+	more memory"
+action		"None required."
+end
+
+start
+code	dts_s_error_create
+text	"An error occurred while creating the time service"
+explanation	"?"
+action		"Fix and restart."
+end
+
+start
+code	dts_s_open_ethernet
+text	"Cannot open ethernet port"
+explanation  "An attempt was made to access a node through an ethernet
+              port; however, the port was unavailable"
+action		"Wait and retry the operation"
+end
+
+start
+code	dts_s_open_decnet
+text	"Cannot open decnet port"
+explanation  "An attempt was made to access a node through an decnet
+              port; however, the port was unavailable."
+action  "Wait and retry the operation."
+end
+
+start
+code	dts_s_set_error
+text	"Cannot set value"
+explanation  "An attempt was made to modify a attribute of a DTS
+              entity, but an error occurred (invalid value, or out of range."
+action  "Ensure that the value is acceptable for the attribute
+         and retry the operation.  Check the \*Ldts modify\*O man page for
+         legal values for each attribute."
+end
+
+start
+code	dts_s_failed
+text	"Failure"
+explanation	"General failure code"
+action		"None required."
+end
+
+start
+code	dts_s_wrong_state
+text	"Time service in wrong state"
+explanation  "An attempt was made to delete an entity, but the state
+              was \*Lon;\*O or an attempt was made to disable or
+              synchronize an entity, but the state was \*Loff.\*O"
+action  "To delete an entity, first be sure you have disabled it.  To
+         disable or synchronize and entity, first be sure you have
+         enabled it.  Then retry the desired command."
+
+end
+
+start
+code	dts_s_comm_failure
+text	"Communication failure with time service"
+explanation	"General communications failure"
+action		"Check that DCE is running correctly on your node."
+end
+
+start
+code	dts_s_shut_down
+text	"The time service has shut down"
+explanation	"The time service has shut down and is not responding
+to requests."
+action		"None required."
+end
+
+start
+code	dts_s_not_global_server
+text	"Not a global time server "
+explanation  "An attempt was made to issue the \*Ldts configure\*O
+              command to remove a global server.  The server, however,
+              was not a global server."
+action  "To determine which global servers are known to the node,
+         issue the \*Ldts show\*O command.  You can then
+         use \*Ldts configure\*O to remove those you no longer want."
+end
+
+#
+# parser error messages - dtscp - do we care anymore?
+#
+
+start
+code	dts_s_cp_init_rpc
+text	"Control program cannot get rpc binding to DTS daemon - reason:"
+explanation	"?"
+action		"None required."
+end
+
+start
+code	dts_s_cp_init_prs
+text	"Cannot initialize DTS command parser - reason:"
+explanation	"?"
+action		"None required."
+end
+
+start
+code	dts_s_prsfile_open
+text	"Cannot open parse table file %s"
+explanation	"An attempt to open a parse table file failed."
+action		"None required."
+end
+
+start
+code	dts_s_prsfile_read
+text	"Cannot read parse table file %s"
+explanation	"An attempt to read a parse table file failed."
+action		"None required."
+end
+
+start
+code	dts_s_prsfile_version
+text	"Obsolete command parse table %s"
+explanation	"An obsolete command parse table file was discovered."
+action		"None required."
+end
+
+start
+code	dts_s_prsfile_fatal
+text	"Fatal command parser error reading table %s"
+explanation	"A fatal error occurred while reading the indicated table."
+action		"None required."
+end
+
+start
+code	dts_s_prsfile_format
+text	"Illegal format - parse table file %s"
+explanation	"A format error was discovered in the named parse
+	table file"
+action		"None required."
+end
+
+start
+code	dts_s_prsact_fatal
+text	"Fatal error parsing command:"
+explanation	"A fatal error was detected while parsing the
+specified command"
+action		"None required."
+end
+
+start
+code	dts_s_bad_command
+text	"Illegal dts command:"
+explanation  "An attempt was made to issue a command that is not a
+              legal DTS command."
+action  "See the dcecp man page for a list of legal dts commands."
+
+end
+
+start
+code	dts_s_prs_unknown
+text	"Unknown fatal command parser error"
+explanation	"An unknown error occurred whilst parsing."
+action		"None required."
+end
+
+start
+code	dts_s_dtsd_comm
+text	"Cannot contact dts daemon - rpc failure:"
+explanation  "An attempt was made to restart the DTS daemon; however,
+              an rpc error occurred."
+action "Make sure that the dts daemon is running: if not, see the DTS
+	Administration documentation on how to restart" 
+end
+
+start
+code	dts_s_cp_error
+text	"Error executing command:"
+explanation	"An error occurred executing a \*Ldts\*O command."
+action		"Re-issue the command"
+end
+
+start	undocumented	undocumented
+code	dts_acl_p_control
+text	"c"
+explanation	"?"
+action		"None required."
+end
+
+start	undocumented
+code	dts_acl_p_read
+text	"r"
+explanation	"?"
+action		"None required."
+end
+
+start	undocumented
+code	dts_acl_p_write
+text	"w"
+explanation	"?"
+action		"None required."
+end
+
+start	undocumented	
+code	dts_acl_p_mgr
+text	"crw"
+explanation	"?"
+action		"None required."
+end
+
+start	undocumented	
+code	dts_acl_h_control
+text	"control"
+explanation	"?"
+action		"None required."
+end
+
+start	undocumented	
+code	dts_acl_h_read
+text	"read"
+explanation	"?"
+action		"None required."
+end
+
+start	undocumented	
+code	dts_acl_h_write
+text	"write"
+explanation	"?"
+action		"None required."
+end
+
+start	undocumented
+code	dts_acl_h_mgr
+text	"DTS Management Interface ACL Manager"
+explanation	"?"
+action		"None required."
+end
+
+start	undocumented
+code	dts_s_acl_corrupt
+text	"The DTS ACL file is corrupt"
+explanation	"?"
+action		"None required."
+end
+
+start	undocumented
+code	dts_s_acl_no_file
+text	"The DTS ACL file does not exist"
+explanation	"?"
+action		"None required."
+end
+
+start	undocumented
+code	dts_s_acl_no_access
+text	"Cannot access DTS ACL file"
+explanation	"?"
+action		"None required."
+end
+
+start	undocumented
+code	dts_s_acl_open_error
+text	"Error opening DTS ACL file"
+explanation	"?"
+action		"None required."
+end
+
+start	undocumented
+code	dts_s_acl_read_error
+text	"Error reading DTS ACL file"
+explanation	"?"
+action		"None required."
+end
+
+start	undocumented
+code	dts_s_acl_write_error
+text	"Error writing DTS ACL file"
+explanation	"?"
+action		"None required."
+end
+
+start
+code	dts_s_mgt_no_read
+text	"Must have read permission for the DTS entity"
+explanation  "The attempted operation requires read permission, which
+              the user does not have for this DTS entity."
+action  "You cannot perform the operation unless you acquire read
+         permission for the entity."
+end
+
+start
+code	dts_s_mgt_no_write
+text	"Must have write permission for the DTS entity"
+explanation  "An attempt was made to execute a command on a DTS
+              entity.  The operation, however, requires write
+              permission on the ACL associated with the DTS entity."
+
+action  "Ensure that you have write access on the ACL associated with
+         the desired DTS entity and retry the operation.  If you need
+         to run \*Ldtsd\*O, you must be the machine principal on the
+         local host on which you are trying to run \*Ldtsd\*O."
+
+end
+
+start
+code	dts_s_mgt_unauthn
+text	"The DTS control program is not authenticated:"
+explanation	"The DTS control program does not have the proper DCE authentication"
+action		"None required."
+end
+
+start
+code	dts_s_serv_not_in_ts_group
+text	"Server not a member of time servers security group"
+explanation	"The specified time server is not a member of the time
+servers security group" 
+action		"Fix and restart"
+end
+
+start
+code		dts_s_starting
+text		"Server started"
+explanation	"The server is ready to process requests."
+action		"None required."
+end
+
+start
+code		dts_s_aud_open_file_failed
+text		"Cannot open the audit trail file"
+explanation  "An attempt to open the audit-trail file failed because
+              the file does not have write permission."
+action  "Check the file permissions and correct it to allow for write
+         access."
+end
+
+start
+code		dts_s_aud_open_daemon_failed
+text		"Cannot reach the audit daemon"
+explanation	"There may be no audit daemon running"
+action		"Start an audit daemon."
+end
+
+start
+code		dts_s_cannot_open_audit_trail
+text		"Cannot open the audit trail file"
+explanation  "An attempt to open the audit-trail file failed because
+              the file does not have write permission."
+
+action  "Check the file permissions and correct it to allow for write
+         access."
+end
+
+start
+code		dts_s_exiting
+text		"Server exiting"
+explanation	"Server received interrupt or shut down request."
+action		"None required."
+end
+
+#
+# dts time 
+# remote time interface messages 
+#
+
+
+start
+code 		dts_s_superuser 
+text 		"You must be superuser to adjust the clock"
+explanation 	"You must have special privileges to set the system clock"
+action 		"Obtain appropriate privileges and re-run the command"
+notes		"Superuser, systems administrator, system privileges"
+sub-component	dts_s_dtsdate
+attributes	"svc_c_sev_error"
+end
+
+
+start
+code		dts_s_dtsdate_usage
+text		"Usage: dtsdate [-s] [-q] [-u] hostname [skew-seconds]"
+explanation	"This is the appropriate set of command line arguments" 
+action		"Re-run command with appropriate arguments"
+sub-component	dts_s_dtsdate
+attributes	"svc_c_sev_error "
+end
+
+start
+code		dts_s_interface_id
+text		"Couldn't extract interface ID from time service interface: %s"
+explanation 	"The rpc_if_inq_id() function returned a DCE status code indicating failure"
+action		"Determine cause of failure and re-run the command"
+sub-component	dts_s_dtsdate
+attributes	"svc_c_sev_error "
+end
+
+start
+code		dts_s_uuid_to_string
+text		"Couldn't convert time service interface UUID to string: %s"
+explanation	"The RPC function uuid_to_string() failed" 
+action		"Determine cause of failure and re-run the command"
+sub-component	dts_s_dtsdate
+attributes	"svc_c_sev_error "
+end
+
+start
+code		dts_s_ep_resolve_binding
+text		"Couldn't obtain binding to remote time server %s using protocol %s: %s"
+explanation	"A complete binding handle couldn't be obtained from the server requested"
+action		"See if the remote host is running a DTS time server"
+sub-component	dts_s_dtsdate
+attributes	"svc_c_sev_error "
+end
+
+start
+code		dts_s_clerk_request
+text		"RPC call ClerkRequstTime() to remote server failed: %s"
+explanation	"The ClerkRequestTime RPC call failed to the requested remote server"
+action		"Determine cause of failure and correct"
+sub-component	dts_s_dtsdate
+attributes	"svc_c_sev_error "
+end
+
+# end DTStime error messages
+
+start
+code		dts_s_clockset
+text		"Clock was set: old time = %s, new time = %s"
+explanation	"The server has set the clock."
+action		"None required."
+sub-component	dts_s_events
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_adjustlocal
+text		"Local clock was not intersecting: local time = %s, computed time = %s. It will be adjusted."
+explanation  "During an attempted synchronization, DTS detected that a
+              clock's value and its inaccuracy did not intersect with
+              those servers used for synchronization.  Since the
+              faulty time interval supplied by the clock was within
+              the bounds of the attribute \*Ltolerance\*O, DTS
+              gradually adjusts the clock."
+action  "If you wish to have the clock set abruptly in the future,
+         increase the \*Ltolerance.\*O attribute.  If you are satisfied
+         with the adjustment, then no action is required."
+sub-component	dts_s_events
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_resetlocal
+text		"Local clock was not intersecting: local time = %s, computed time = %s. It has been reset."
+explanation  "During an attempted synchronization, DTS detected that
+              the local clock's value and its inaccuracy did not
+              intersect with those servers used for synchronization.
+              Since the faulty time interval supplied by the clock was
+              outside the bounds of the attribute \*Ltolerance,\*O, DTS
+              immediately resets the clock."
+action  "If you wish to have the clock set gradually in the future,
+         increase the \*Ltolerance.\*O attribute.  If you are satisfied
+         with the adjustment, then no action is required."
+sub-component	dts_s_events
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_global_nointersect
+text		"Global server %s returned time %s which does not intersect computed time %s"
+explanation  "During synchronization, the time-provider (TP) server
+              detected that the time for a global server does not
+              intersect with the TP."
+action  "None required."
+sub-component	dts_s_events
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_local_nointersect
+text		"Local server %s returned time %s which does not intersect computed time %s"
+explanation  "During synchronization, the time-provider (TP) server
+              detected that the time for a local server does not
+              intersect with the TP."
+action  	"None required."
+sub-component	dts_s_events
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_sync_complete
+text		"Synchronization completed, computed time = %s, adjustment = %s"
+explanation	"Time synchronization done."
+action		"None required."
+sub-component	dts_s_sync
+attributes	svc_c_sev_notice
+end
+
+start
+code		dts_s_update_complete
+text		"Update command executed, old time = %s, new time = %s"
+explanation	"Time update done."
+action		"None required."
+sub-component	dts_s_sync
+attributes	svc_c_sev_notice
+end
+
+start
+code		dts_s_too_few_servers
+text		"Too few servers (%ld), need %ld servers"
+explanation  "An attempt was made to synchronize the clocks, but
+              fewer than three servers were available.  To compute a
+              reliable time, a minimum of three servers is required.
+              If \*Lminservers\*O is set to more than three and
+              you receive this error, then the required number were
+              not available for synchronization."
+action  "Correct the cell configuration to include at least three
+         servers.  If \*Lminservers\*O is set to more than
+         three, then the link to a server must be down.  Either wait
+         until the link is restored, or reconfigure your network so
+         that three will always be available.  See the section on
+         'Configuration Planning for WANs and WAN Links' in the \*VOSF
+         DCE Administration Guide--Core Components\*L for additional
+         information on configuring your time servers."
+sub-component	dts_s_config
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_startup_done
+text		"Startup completed"
+explanation	"Server initialization done."
+action		"None required."
+sub-component	dts_s_general
+attributes	svc_c_sev_notice
+end
+
+start
+code		dts_s_shutdown_complete
+text		"Shutdown complete"
+explanation	"Server shutdown done."
+action		"None required."
+sub-component	dts_s_general
+attributes	svc_c_sev_notice
+end
+
+start
+code		dts_s_startup_done_set
+text		"Startup completed"
+explanation	"Server initialization done; clock set."
+action		"None required."
+sub-component	dts_s_general
+attributes	svc_c_sev_notice
+end
+
+start
+code		dts_s_different_epoch
+text		"Current epoch %d, differs from epoch %d of server %s"
+explanation  "While attempting a synchronization, a server encountered
+              a server whose epoch number did not match its own.  The
+              clock value from this differing server was ignored."
+action  "Verify the epoch number of the server by using the \*Ldts
+show\*O command.  To change a server's epoch number issue the command
+\*Lclock set -epoch\*O \*Vinteger.\*O"
+sub-component  dts_s_general
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_toomany_servers
+text		"Too many servers (%d), only %d supported"
+explanation	"Ignoring extra servers"
+action		"Verify cell configuration."
+sub-component	dts_s_config
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_bad_timestamp
+text		"Server %s returned invalid timestamp."
+explanation	"Invalid data received."
+action		"Check configuration on the server."
+sub-component	dts_s_config
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_no_global_servers
+text		"No global servers detected"
+explanation  "An attempted synchronization that required a global
+              server failed.  No global server was detected.  This may
+              occur because you have not advertised a server as a
+              global server or because the link is down to the global
+              server."
+
+action  "Use the \*Ldts catalog\*O command to confirm that
+         there is a global server configured.  If there is not, then
+         use the \*Ldts configure\**O command to set one.  If there is,
+         then there must be a problem with the link to the network
+         where the global server is located.   Check for network
+         problems."
+sub-component	dts_s_events
+attributes	svc_c_sev_notice
+end
+
+start
+code		dts_server_not_responding
+text		"Server %s not responding, error return is %s"
+explanation  "An attempt was made to query a global server and the
+              time-out setting elapsed the number of times specified
+              by the \*Lqueryattempts\*O attribute.  The server
+              is removed from the system list of global servers."
+
+action  "The default setting for the \*Lglobaltimeout\*O
+         attribute is 15 seconds.  Because of communications
+         delays on WAN links, you may need to adjust this setting to
+         avoid this error.  Advertise the server as a global server.
+         Increase the \*Lglobal set timeout setting.  If the error
+         persists, check for problems with the communications link."
+
+sub-component	dts_s_events
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_server_no_memory
+text		"Insufficient virtual memory"
+explanation	"Memory allocation failed."
+action		"Try increasing swap space."
+sub-component	dts_s_events
+attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+end
+
+start
+code		dts_server_epoch_changed
+text		"Epoch Change completed, old epoch = %d, new epoch = %d"
+explanation	"Time epoch modified."
+action		"None required."
+sub-component	dts_s_events
+attributes	svc_c_sev_notice
+end
+
+start
+code		dts_s_provider_failed
+text		"Time provider failure detected"
+explanation	"Time provider error found."
+action		"Verify time provider configuration"
+sub-component	dts_s_events
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_provider_timeout
+text		"Time provider timeout detected"
+explanation  "An attempt was made to query a local server and the
+              time-out setting elapsed the number of times specified
+              by the \*Lqueryattempts\*O attribute."
+
+action  "Increase the number specified in the \*Lqueryattempts\*O
+         attribute.  The default is 3."
+
+sub-component	dts_s_events
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_system_error
+text		"Local system error %s"
+explanation	"Local operating system error occurred."
+action		"Verify system operation."
+sub-component	dts_s_events
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_dce_error
+text		"DCE error %s"
+explanation	"DCE error occurred."
+action		"Verify DCE operation and configuration."
+sub-component	dts_s_events
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_no_profile
+text		"LAN profile not found"
+explanation	"LAN profile not found in name service"
+action		"Verify name service and DCE operation."
+sub-component	dts_s_events
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_not_in_group
+text		"Server %s not in security group %s"
+explanation  "A global server from a remote cell was added to the
+              local cell profile; however, the name of the server was
+              not added to the security group."
+action  "You must add the name of the server to 
+         the \*L/.:/subsys/dce/dts-servers\*O security group using the
+         \*Ldcecp\*O security command \*Lgroup add\*O.  You must have write
+         permission to edit the registry database."
+sub-component	dts_s_events
+attributes	svc_c_sev_warning
+end
+
+#
+## DCE Error messages 
+#
+
+start
+code		dts_s_write_bindings
+text		"Failed to write local string bindings for dtsd to file: %s"
+explanation	"The attempt by dtsd to write it's local string bindings into the .../var/adm/time directory failed"
+action		"The OS diagnostic is printed out as part of the message. Fix and restart"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_read_bindings
+text		"Failed to read string bindings for local dts from file: %s"
+explanation	"An attempt to read the string bindings for the local dtsd from the bindings file failed"
+action		"The OS diagnostic is printed out as part of the message. Fix and restart"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_binding_file_write_error
+text		"OS call to open the file for writing"
+explanation	"The attempt to open the local binding file failed because of an OS error "
+action		"Check the OS error; fix, and restart"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_binding_file_read_error
+text		"The OS call to open the file for reading failed"
+explanation	"The attempt to open the local dtsd bindings file for reading failed with an OS error"
+action		"The OS diagnostic is printed out as part of the message. Fix and restart"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+
+start
+code		dts_s_get_cell_name
+text            "Retrieval of DCE cell name failed: %s"
+explanation	"The dce_cf_get_cell_name() function call failed."
+action		"Probably a configuration error. Look in configuration file"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_get_profile_name
+text		"Can't resolve profile name: %s" 
+explanation	"The GetProfileName() function call failed."
+action		"Probably profile found but default entry does not refer to another profile"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_binding_import
+text		"Binding import from namespace fails: %s"
+explanation	"The initial call to the RPC name space API failed"
+action		"Check namespace based on the returned error message"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_set_exp_age
+text		"Failed to set the expiration age for server binding handle: %s"
+explanation	"The call to set the expiration age of the binding handle for the specified server failed"
+action		"This is an RPC failure. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_binding_inq_name
+text		"Couldn't get remote server entry name: %s"
+explanation	"The call to retrieve the server's entry name failed"
+action		"Check the nameservice and endpoint maps for the Time Server entry"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_inq_server_princ
+text		"Couldn't get remote server's principal name: %s"
+explanation	"The call to retrieve the server's entry name failed"
+action		"Check the name service and enpoint maps"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_sec_id_parse
+text		"Couldn't parse the remote Time Server's principal name: %s"
+explanation	"The call to parse the server's principal name failed"
+action		"Determine cause of error for the error message"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_set_auth_info 
+text		"Couldn't set authorization info for server %s: %s"
+explanation	"An attempt to set security authorization for the given server failed"
+action		"Determine cause from error message; fix, and rerun"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_entry_object_inq_next
+text		"Couldn't retrieve UUID for server %s from the namespace: %s"
+explanation	"An attempt to retrieve the server's UUID failed"
+action		"Check the namespace for server's entry"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_entry_object_inq_begin
+text		"Couldn't retrieve UUID for server %s from the namespace: %s"
+explanation	"An attempt to retrieve the server's UUID failed"
+action		"Check the namespace for errors"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_binding_import_next 
+text		"Failed to retrieve server binding from the namespace: %s"
+explanation	"The call to retrieve the server's bindings from the namespace failed"
+action		"Check the namespace for errors"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_ep_register_tp
+text		"Couldn't register Global Time Server interface: %s"
+explanation	"An attempt to register the Global Time Server interface failed"
+action		"Check RPC status codes for the reason for the error"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_export_gts
+text		"Couldn't export Global Time Server entry to the namespace: %s"
+explanation	"The binding_export() call to the namespace failed"
+action		"Check the namespace for errors"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_add_profile
+text		"Couldn't add Global Time Server entry to right profile: %s"
+explanation	"The rpc_ns_profile_elt_add() failed for the Global Time Server"
+action		"See RPC error codes for error code and diagnostics"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_profile_remove
+text		"Couldn't delete server entry from LAN/Cell profile: %s"
+explanation	"The call to remove the servers entry from the LAN/WAN profile failed"
+action		"Check for namespace problems."
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_cf_hostname
+text		"Couldn't retrieve this host's name from the configuration database: %s"
+explanation	"Retrieving the local host's name from the configuration database failed"
+action		"Probably a configuration error. Fix and restart"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_register_acl_if
+text		"Couldn't register the ACL manager interface: %s"
+explanation	"An attempt to register the ACL manager interface failed"
+action		"Utilities component error. Check utilities error codes for more information"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_export_acl_if
+text		"Couldn't export the ACL manager interface: %s"
+explanation	"An attempt to export the ACL manager interface failed"
+action		"Utilities component error. Check utilities error codes for more information"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_rpc_sm_enable
+text		"Failed to initialize RPC memory allocation: %s"
+explanation	"An attempt to rpc_sm_enable_allocate() failed"
+action		"RPC error. Check RPC status codes for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_acl_dbopen_read
+text		"Couldn't open DTS acl database ( %s ) for reading: %s"
+explanation	"An attempt to open the DTS acl database failed"
+action		"DCE utilities error. Check utilities codes for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_fetch_uuid 
+text		"Couldn't retrieve the ACL for the dtsd: %s"
+explanation	"The utilities call to fetch the dtsd ACL failed"
+action		"DCE utilities error. Check utilities codes for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_acl_dbopen_create
+text		"Couldn't create DTS acl database ( %s ): %s"
+explanation	"An attempt to create the DTS ACL database failed"
+action		"DCE utilities error. Check utilities codes for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_acl_register_obj_types
+text		"Couldn't register DTS object type with ACL library: %s"
+explanation	"An attempt to register the dtsd ACL object type failed"
+action		"DCE utilities error. Check utilities codes for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_acl_create_default
+text		"Couldn't create the default DTS ACL: %s"
+explanation	"An attempt to create the default DTS ACL failed"
+action		"DCE utilities error. Check utilities codes for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_db_store_uuid
+text		"Couldn't store the dtsd ACL in the ACL file: %s"
+explanation	"An attempt to store the DTS ACL in the database failed"
+action		"DCE utilities error. Check utilities codes for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_aclv1_unregister
+text		"Couldn't unregister the version 1.0 rdacl interface from the endpoint map: %s"
+explanation	"An attempt to unregister the DTS rdacl interface failed"
+action		"This is an RPC error. Check RPC status codes for more information"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_aclv0_unregister
+text		"Couldn't unregister the Version 0 rdacl interface from the endpoint map: %s"
+explanation	"An attempt to unregister the DTS rdacl interface failed"
+action		"This is an RPC error. Check RPC status code for more information"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_aclv1_runtime_register
+text		"Couldn't register the version 1.0 rdacl interface with the RPC runtime: %s"
+explanation	"An attempt to register the DTS rdacl interface failed"
+action		"This is an RPC error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_aclv1_register
+text		"Couldn't register the Version 1 rdacl interface with the endpoint map: %s"
+explanation	"An attempt to register the DTS rdacl interface failed"
+action		"This is an RPC error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_aclv0_runtime_register
+text		"Couldn't register the version 0.0 rdacl interface with the RPC runtime: %s"
+explanation	"An attempt to register the DTS rdacl interface failed"
+action		"This is an RPC runtime error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_aclv0_register
+text		"Couldn't register the Version 0 rdacl interface with the endpoint map: %s"
+explanation	"An attempt to register the DTS rdacl interface failed"
+action		"This is an RPC error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+
+start
+code		dts_s_init_mgmt_acl
+text		"Couldn't initialize the dts daemon management ACL: %s"
+explanation	"An attempt to initialize the dts daemon management ACL failed"
+action		"This is a DCE utilities error. Check utilities error codes"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_server_reg_auth_info
+text		"Couldn't register server authentication info: %s"
+explanation	"An attempt to register the server authentication info failed"
+action		"This is a security error. Check security errors for more information"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_select_strbind
+text		"Couldn't select a string binding for the Time Provide Interface: %s"
+explanation	"The dtsd couldn't create a string binding for a local Time Provider interface"
+action		"This is an RPC error. Check RPC errors for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_tp_binding
+text		"Couldn't generate a binding for the Time Provider Interface: %s"
+explanation	"The dtsd couldn't create a string binding for a local Time Provider interface"
+action		"This is an RPC error. Check RPC errors for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_tp_ep_begin
+text		"Couldn't initiate search for Time Provider Interface in endpoint map: %s"
+explanation	"The dtsd couldn't begin the search for the Time Provider interface in the endpoint map"
+action		"This is an RPC error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_tp_ep_next
+text		"Couldn't continue search for Time Provider Interface in endpoint map: %s"
+explanation	"The search for the Time Provider interface in the endpoint map failed"
+action		"This is an RPC error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_tp_name_search
+text		"Couldn't return the server principal name for the Time Provider Interface: %s"
+explanation	"An error occurred when trying to retrieve the server principal name for the Time Provider"
+action		"This is an RPC error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_tp_auth_info 
+text		"Couldn't add authentication to the Time Provider binding: %s"
+explanation	"The attempt to add authentication to the binding handle for the Time Provider failed"
+action		"This is a DCE security error. Check Security codes for more information"
+sub-component	dts_s_error
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_mgmt_srvr_listening
+text		"Error in rpc_mgmt_is_server_listing() call: %s"
+explanation	"The RPC call rpc_mgmt_is_server_listening unexpectedly failed"
+action		"This is an RPC error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_srvr_controlv2
+text		"Failed to register Time Control Version 2.0 interface with runtime: %s"
+explanation	"The RPC call to register the Time Control V2 interface failed"
+action		"This is an RPC error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_srvr_serviceability
+text		"Failed to register Serviceability interface with runtime: %s"
+explanation	"The RPC call to register the Serviceability interface failed"
+action		"This is an RPC error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_inq_bindings
+text		"Failed to retrieve server bindings from RPC runtime: %s"
+explanation	"The RPC call rpc_server_inq_bindings failed"
+action		"This is an RPC error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_ep_register_controlv2
+text		"Failed to register Time Control Version 2.0 interface with endpoint map: %s"
+explanation	"The RPC call to register the Time Contro V2 interface with the endpoint map failed"
+action		"This is an RPC error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_ep_register_serviceability
+text		"Failed to register Serviceability interface with endpoint map: %s"
+explanation	"The RPC call to register the Serviceability interface with the endpoint map failed"
+action		"This is an RPC error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_export_control
+text		"Failed to export Time Control interface to the namespace: %s"
+explanation	"The RPC call to export the Time Control interface to
+the namespace failed"
+action		"This is an RPC namespace error. Refer to RPC codes for more information"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_sec_key_mgmt
+text		"Failure in sec_key_mgmt_manage_key() routine: %s"
+explanation	"The security call to automatically change a principal's key before it expires failed"
+action		"This is a RPC security error. Check RPC status codes for more information"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_validate_srvr_id
+text		"Failed to validate the servers identity: %s"
+explanation	"The attempt to validate the server's identity failed"
+action		"This is an RPC security error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_refresh_identity
+text		"Failed to refresh the server's identity: %s"
+explanation	"The RPC call to refresh the DTS server's identity for its login context failed"
+action		"This is a security failure. Check RPC and security failure codes"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_get_expiration
+text		"Couldn't get the expiration time of server's credentials: %s"
+explanation	"The RPC call to retrieve the TGT lifetime for the server's identity  failed"
+action		"This is an RPC error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_tservicev1_ep_register
+text		"Failed to register Time Control V1 interface with endpoint map: %s"
+explanation	"The RPC call to register the Time Service V1 interface with the endpoint map failed"
+action		"This is an RPC error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_export_tservicev1
+text		"Failed to export Time Control V1 interface to the namespace: %s"
+explanation	"The RPC call to export the Time Control V1 interface with the namespace failed"
+action		"Probably a configuration error. Fix and restart"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_tservicev1_profile_add
+text		"Failed to add Time Service entry to LAN profile %s: %s"
+explanation	"The RPC call to add the Time Service interface to the LAN profile failed"
+action		"This is an RPC error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_export_tservicev2
+text		"Failed to export Time Control V2 interface to the namespace: %s"
+explanation	"The RPC call to export the Time Control V2 interface to the namespace failed"
+action		"This is an RPC namespace error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_cf_profile_name
+text		"Failure retrieving profile entry from host: %s"
+explanation	"An attempt to retrieve the name of the default profile failed"
+action		"Probably a configuration error. Fix and restart"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_profile_begin
+text		"Couldn't initialize search of node's initial profile: %s"
+explanation	"The RPC call to initialize an element search of a profile failed"
+action		"This is an RPC error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_svc_ep_unregister
+text		"Failed to unregister Serviceability interface from the endpoint map: %s"
+explanation	"The RPC call to unregister the Serviceability interface from the endpoint map failed"
+action		"Delete entry from endpoint map; otherwise, nothing"
+sub-component	dts_s_error
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_control_ep_unregister
+text		"Failed to unregister Control interface from the endpoint map: %s"
+explanation	"The RPC call to unregister the Control interface from the endpoint map failed"
+action		"Delete entry from endpoint map; otherwise, nothing"
+sub-component	dts_s_error
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_control_unexport
+text		"Failed to unexport Control interface from the namespace: %s"
+explanation	"The RPC call to unregister the Control interface from the namespace  failed"
+action		"Delete entry from the namespace; otherwise, nothing"
+sub-component	dts_s_error
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_service_unexport
+text		"Failed to unexport Service interface from the namespace: %s"
+explanation	"The RPC call to unregister the Service interface from the namespace  failed"
+action		"Delete entry from namespace; otherwise, nothing"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_service_ep_unreister
+text		"Failed to unregister Service interface from the endpoint map: %s"
+explanation	"The RPC call to unregister the Service interface from the endpoint map failed"
+action		"This is an RPC error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_tserver_profile_remove
+text		"Failed to remove Service interface from the profile %s: %s"
+explanation	"The RPC call to remove the Service name from the specified profile failed"
+action		"Delete entry from endpoint map; otherwise, nothing"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_unregister_acl_mgr
+text		"Failed to unregister dtsd ACL manager interface: %s"
+explanation	"The attempt to unregister the ACL manager interface failed"
+action		"Delete entry from endpoint map; otherwise, nothing"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_unexport_acl_mgr
+text		"Failed to unexport dtsd ACL manager interface: %s"
+explanation	"The attempt to unexport the ACL manager interface failed"
+action		"Delete entry from namespace; otherwise, nothing"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_pgo_is_member
+text		"Failed to determine if server is in security group: %s"
+explanation	"The attempt to determine if the server is in the server group failed"
+action		"This is a Security error. Check RPC status code for more info"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_prin_host
+text		"Couldn't retrieve machine principal name: %s"
+explanation	"The attempt to retrieve the machine principals name for this host from the configuration database failed"
+action		"Check validity of local configuration database"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_cell_name
+text		"Failed to retrieve cell name: %s"
+explanation	"The attempt to retrieve the cell name from the configuration database failed"
+action		"Check validity of local configuration database"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_rgy_site_open
+text		"Couldn't open Registry site for security info: %s"
+explanation	"The attempt to open a context for the Security registry failed"
+action		"This is a Security error; check security error codes for more information" 
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_id_parse_name
+text		"Failed to retrieve Cell UUID: %s"
+explanation	"The attempt to retrieve the Cell UUID given the cell name failed"
+action		"This is a Security error: check security error codes for more information"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_pgo_name_id
+text		"Failed to convert host name to host UUID: %s"
+explanation	"The attempt to retrieve the host UUID using the host name failed"
+action		"This is a Security failure: check security error codes for more information"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_mgmt_srvr_listen_timeout
+text		"dtsd server still isn't accepting RPC connections after %d seconds"
+explanation	"The dtsd server had not issued an rpc_server_listen()
+call after the indicated number of seconds"
+action		"Check logs for problems in the dtsd initializing, or
+failures in other components, such as the directory service"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_inq_attr
+text		"Failure in retrieving DTS attributes from dced: %s"
+explanation	"A dce_server_inq_attr() call for dtsd configuration attributes failed for the stated reason"
+action		"Fix and restart the dtsd" 
+sub-component	dts_s_error
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_attr_encoding
+text		"Unexpected data type value returned for dts attributes: %s"
+explanation	"dts expects configuration attributes as an array of printstrings"
+action		"Check entered configuration attributes for the dtsd"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_server_only
+text		"The attribute %s is not settable when dtsd is running as a clerk\n"
+explanation	"Certain variables can only be set when dtsd is running as a server."
+action		"Remove this variable from the set of configuration attributes"
+sub-component	dts_s_error
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_invalid_type
+text		"Unknown attribute type found in internal table\n"
+explanation	"This is a dtsd internal error, and should never happen"
+action		"Report to your DCE provider"
+sub-component	dts_s_error
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_bad_attr
+text		"Invalid configuration attribute %s specified\n"
+explanation	"An unrecognized configuration attribute was passed to dtsd"
+action		"Remove the entry for this attribute"
+sub-component	dts_s_error
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_invalid_attr_value
+text		"An invalid value (%s) was entered for the attribute %s\n"
+explanation	"An invalid or out-of-range value was entered for the specified attribute"
+action		"Fix and restart the dtsd" 
+sub-component	dts_s_error
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_mutexattr_create
+text		"Failed to create dtsd global data mutex attribute"
+explanation	"An unexpected failure in created a mutex attribute occurred"
+action		"Fix and restart the dtsd" 
+sub-component	dts_s_error
+attributes	"svc_c_sev_fatal | svc_c_action_abort"
+end
+
+start
+code		dts_s_mutex_init
+text		"Failed to initialize dtsd global data mutex attribute"
+explanation	"An unexpected failure in initializing a mutex occurred"
+action		"Fix and restart the dtsd" 
+sub-component	dts_s_error
+attributes	"svc_c_sev_fatal | svc_c_action_abort"
+end
+
+start
+code		dts_s_mutexattr_setkind
+text		"Failed to set mutex attributed kind"
+explanation	"An unexpected failure in setting the kind of a mutex ttribute occurred"
+action		"Fix and restart the dtsd" 
+sub-component	dts_s_error
+attributes	"svc_c_sev_fatal | svc_c_action_abort"
+end
+
+start
+code		dts_s_bad_attr_type
+text		"Unknown attribute type, associated config attribute not set"
+explanation	"An invalid type was derived for a specified
+configuration attribute. The specified attribute was not set"
+action		"Only provide permitted attributes for dtsd via dced"
+sub-component	dts_s_error
+attributes	svc_c_sev_warning
+end
+
+start
+code		dts_s_usage_error
+text		"Usage: dtsd -d -c -s -g -k courier\|noncourier -o -w service"
+explanation	"An invalid command line switch was entered"
+action		"The permitted arguments are listed in the usage message"
+sub-component	dts_s_error
+attributes	"svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code		dts_s_security_init
+text		"Error retrieving security configuration information: %s"
+explanation	"An error occurred when retrieving the security
+configuration information for the dts daemon"
+action		"Fix and restart the daemon"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_routing_switch
+text		"Bad argument given to -w switch: %s"
+explanation	"An invalid serviceability routing value was given as
+an argument to the -w switch"
+action		"Fix and restart the daemon"
+sub-component	dts_s_error
+attributes	svc_c_sev_error
+end
+
+start
+code		dts_s_user_reset
+text		"User reset clock using 'clock set'"
+explanation	"A synchronization failed because a user issued a 'clock set' command during the synchronization"
+action		"None necessary. DTS will synchronize automatically"
+sub-component	dts_s_error
+attributes	svc_c_sev_warning
+end
+
+## Messages for serviceability table
+start		!intable undocumented
+code		dts_i_svc_general
+text		"General server administration"
+end
+
+start		!intable undocumented
+code		dts_i_svc_events
+text		"Events received and acted upon"
+end
+
+start		!intable undocumented
+code		dts_i_svc_arith
+text		"Math operations"
+end
+
+start		!intable undocumented
+code		dts_i_svc_ctlmsgs
+text		"Control messages received"
+end
+
+start		!intable undocumented
+code		dts_i_svc_msgs
+text		"Messages received"
+end
+
+start		!intable undocumented
+code		dts_i_svc_states
+text		"Server state transitions"
+end
+
+start		!intable undocumented
+code		dts_i_svc_threads
+text		"Thread interactions"
+end
+
+start		!intable undocumented
+code		dts_i_svc_config
+text		"Server/cell configuration"
+end
+
+start		!intable undocumented
+code		dts_i_svc_sync
+text		"Server/synchronization interactions"
+end
+
+start		!intable undocumented 
+code 		dts_i_svc_dtsdate
+text		"DTS remote time functionality"
+end
+
+start		!intable undocumented
+code		dts_i_svc_error
+text		"DTS DCE error conditions"
+end

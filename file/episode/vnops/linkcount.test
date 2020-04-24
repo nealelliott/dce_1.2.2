@@ -1,0 +1,140 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: linkcount.test,v $
+# Revision 1.1.11.1  1996/10/02  17:45:05  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:36:23  damon]
+#
+# Revision 1.1.6.1  1994/06/09  14:06:07  annie
+# 	fixed copyright in src/file
+# 	[1994/06/09  13:21:39  annie]
+# 
+# Revision 1.1.4.3  1993/01/21  18:28:05  zeliff
+# 	Embedding copyright notices
+# 	[1993/01/19  16:51:55  zeliff]
+# 
+# Revision 1.1.4.2  1992/08/31  21:15:10  jaffe
+# 	Transarc delta: bwl-ot4882-misc-test-vnodeops-fixes 1.1
+# 	  Selected comments:
+# 	    Miscellaneous improvements to the vnops-layer out-of-kernel tests.
+# 	    Use new check_links opcode.
+# 	[1992/08/30  03:42:03  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/06  14:16:57  jdp
+# 	Initial revision.
+# 	[1992/05/06  00:27:23  jdp]
+# 
+# $EndLog$
+linkcount 1
+
+# vnode tests
+
+open_device 1 4096 1024 1000
+create_aggregate
+
+exist_vol yyy 777,,888 170
+
+echo new file
+
+root_vnode
+vn_create fooprime
+check_link 1
+
+echo rename it
+
+root_vnode
+vn_rename fooprime foo
+vn_lookup foo
+check_link 1
+
+echo link to it
+
+root_vnode
+vn_link foo baz
+check_link 2
+
+echo link again
+
+root_vnode
+vn_link foo gorp
+check_link 3
+
+echo remove a link
+
+root_vnode
+vn_remove baz
+vn_lookup foo
+check_link 2
+
+echo remove a link by renaming another file
+
+root_vnode
+vn_create mung
+root_vnode
+vn_rename mung gorp
+root_vnode
+vn_lookup foo
+check_link 1
+
+echo new directory
+
+root_vnode
+vn_mkdir dirfoo
+check_link 2
+
+echo rename it
+
+root_vnode
+vn_rename dirfoo dirbaz
+vn_lookup dirbaz
+check_link 2
+
+echo create a subfile
+
+vn_create subfile
+root_vnode
+vn_lookup dirbaz
+check_link 2
+
+echo create subdirectories
+
+vn_mkdir subdir1
+vn_lookup ..
+check_link 3
+vn_mkdir subdir2
+vn_lookup ..
+check_link 4
+vn_mkdir subdir3
+vn_lookup ..
+check_link 5
+
+echo remove subfile
+
+vn_remove subfile
+check_link 5
+
+echo remove subdirectory
+
+vn_rmdir subdir1
+check_link 4
+
+echo remove subdirectory by renaming another subdirectory
+
+vn_rename subdir3 subdir2
+check_link 3
+
+echo remove subdirectory by renaming it to somewhere else
+
+vn_rename subdir2 subdir2 ..
+check_link 2
+
+release_vnode
+unmount_vol
+
+check_device
+end

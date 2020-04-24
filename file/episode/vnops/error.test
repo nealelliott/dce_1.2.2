@@ -1,0 +1,337 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: error.test,v $
+# Revision 1.1.11.1  1996/10/02  17:45:01  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:36:15  damon]
+#
+# Revision 1.1.6.1  1994/06/09  14:06:03  annie
+# 	fixed copyright in src/file
+# 	[1994/06/09  13:21:36  annie]
+# 
+# Revision 1.1.4.5  1993/01/21  18:27:54  zeliff
+# 	Embedding copyright notices
+# 	[1993/01/19  16:51:37  zeliff]
+# 
+# Revision 1.1.4.4  1992/11/09  21:38:47  jaffe
+# 	Transarc delta: bwl-ot5895-truncate-access-test 1.1
+# 	  Selected comments:
+# 	    Bug fix:  VOPX_TRUNCATE must not check access (leave this to higher layers).
+# 	    Can't get an access error with truncate any more.
+# 	[1992/11/09  18:38:37  jaffe]
+# 
+# Revision 1.1.4.3  1992/09/15  17:44:18  jaffe
+# 	Transarc delta: bwl-ot4959-user-tests-on-osf1 1.4
+# 	  Selected comments:
+# 	    Get test_vnodeops to run under OSF/1.
+# 	    This runs, but using dummy lwp.  So it doesn't support multi threading.
+# 	    This is not so important for test_vnodeops (all we miss is testing of
+# 	    asynchronous I/O) but critical for test_anode.  So we are not yet ready
+# 	    for prime time.
+# 	    EWOULDBLOCK has different values on different platforms.
+# 	    Bug fix (failing to return a value from a dummy function).
+# 	    Convert to Bob Sidebotham's new LWP, which is based on pthreads and hence
+# 	    can use CMA.  This allows us to deleted platform-specific process.s files,
+# 	    and makes us completely portable.  Also, deleted various extraneous files
+# 	    left over from earlier versions of LWP.
+# 	    any program which uses lwp now must link with -ldce
+# 	[1992/09/15  11:52:27  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/31  21:14:57  jaffe
+# 	Transarc delta: bwl-ot4882-misc-test-vnodeops-fixes 1.1
+# 	  Selected comments:
+# 	    Miscellaneous improvements to the vnops-layer out-of-kernel tests.
+# 	    Add tests for deleting, creating, and renaming dot-dot.
+# 	[1992/08/30  03:41:42  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/06  14:16:45  jdp
+# 	Initial revision.
+# 	[1992/05/06  00:24:42  jdp]
+# 
+# $EndLog$
+error 1
+
+# vnode tests
+
+open_device 1 4096 1024 1000
+create_aggregate
+
+exist_vol yyy 777,,888 170
+
+echo reading past EOF
+
+root_vnode
+vn_create foo
+vn_chmod 757
+vn_write 0 100 3
+vn_read 0 101 3
+
+echo chmod: not owner
+
+set_uid 300
+vn_chmod 0755
+check_code 1
+
+echo chown: not suser
+
+vn_chown 300
+check_code 1
+
+echo truncate: directory
+
+root_vnode
+vn_trunc 50
+check_code 21
+
+echo utimes: not owner
+
+vn_utimes mtime 4,5
+check_code 1
+
+echo lookup: access
+
+set_uid 100
+root_vnode
+vn_chmod 767
+set_uid 300
+vn_lookup foo
+check_code 13
+
+echo lookup: file not found
+
+root_vnode
+set_uid 100
+vn_lookup baz
+check_code 2
+
+echo create: creating . or ..
+
+root_vnode
+vn_create ..
+check_code 17
+
+echo create: access
+
+root_vnode
+vn_chmod 757
+set_uid 300
+vn_create baz
+check_code 13
+
+echo create: exclusive, object exists
+
+root_vnode
+set_uid 100
+vn_create foo
+check_code 17
+
+echo create: cannot overwrite dir
+
+root_vnode
+vn_mkdir baz
+root_vnode
+vn_create baz nonexclusive
+check_code 21
+
+echo create: cannot access file
+
+root_vnode
+set_uid 300
+vn_create foo nonexclusive
+check_code 13
+
+echo remove: removing . or ..
+
+root_vnode
+set_uid 100
+vn_remove ..
+check_code 22
+
+echo remove: access
+
+root_vnode
+set_uid 300
+vn_remove foo
+check_code 13
+
+echo remove: file not found
+
+root_vnode
+set_uid 100
+vn_remove gorp
+check_code 2
+
+echo mkdir: access
+
+root_vnode
+set_uid 300
+vn_mkdir baz
+check_code 13
+
+echo mkdir: object exists
+
+root_vnode
+set_uid 100
+vn_mkdir foo
+check_code 17
+
+echo rmdir: removing . or ..
+
+root_vnode
+vn_rmdir ..
+check_code 22
+
+echo rmdir: access
+
+root_vnode
+set_uid 300
+vn_rmdir baz
+check_code 13
+
+echo rmdir: dir not found
+
+root_vnode
+set_uid 100
+vn_rmdir gorp
+check_code 2
+
+echo rmdir: dir not empty; code should be 87 or 17 on AIX, 66 on other systems
+
+root_vnode
+vn_lookup baz
+vn_create subbaz
+root_vnode
+vn_rmdir baz
+# check_code XX
+
+echo link: access
+
+set_uid 300
+root_vnode
+vn_link foo mung
+check_code 13
+
+echo link: object exists
+
+set_uid 100
+root_vnode
+vn_link foo baz
+check_code 17
+
+echo symlink: access
+
+set_uid 300
+root_vnode
+vn_symlink xxx DEST/include/xxx
+check_code 13
+
+echo symlink: object exists
+
+set_uid 100
+root_vnode
+vn_symlink foo DEST/include/foo
+check_code 17
+
+echo rename: renaming . or ..
+
+root_vnode
+vn_rename .. foo
+check_code 22
+
+echo rename: renaming to . or ..
+
+root_vnode
+vn_rename foo ..
+check_code 17
+
+echo rename: access (source dir)
+
+set_uid 300
+root_vnode
+vn_rename foo foo baz
+check_code 13
+
+echo rename: access (target dir)
+
+vn_lookup baz
+vn_rename subbaz subbaz ..
+check_code 13
+
+echo rename: object not found
+
+set_uid 100
+root_vnode
+vn_rename notthere xyz
+check_code 2
+
+echo rename: source and target identical; code should be 0
+
+vn_link foo dupfoo
+root_vnode
+vn_rename foo dupfoo
+check_code 0
+
+echo rename: object is directory, cannot write it
+
+vn_mkdir newdir
+root_vnode
+vn_lookup baz
+vn_chmod 0555
+root_vnode
+vn_rename baz newbaz newdir
+check_code 13
+
+echo rename: object is ancestor of target dir
+
+vn_lookup baz
+vn_chmod 0777
+root_vnode
+vn_rename baz subbaz baz
+check_code 22
+
+echo rename: directory replacing non-directory
+
+vn_rename newdir foo
+check_code 20
+
+echo rename: non-directory replacing directory
+
+vn_rename foo newdir
+check_code 21
+
+echo rename: replacing non-empty directory; code should be 87, 17, or 66
+
+vn_rename newdir baz
+# check_code XX
+
+echo readlink: not a symbolic link
+
+root_vnode
+vn_lookup foo
+vn_readlink
+check_code 22
+
+echo lockctl: invalid flock
+
+root_vnode
+vn_lookup foo
+vn_setlock nowait read 10 -1
+check_code 22
+
+echo lockctl: blocked; error code should be 11, 35, or 54
+
+vn_setlock nowait read 10 10
+set_proc 30
+vn_setlock nowait write 10 10
+# check_code XX
+
+release_vnode
+unmount_vol
+
+check_device
+end

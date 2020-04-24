@@ -1,0 +1,142 @@
+#!/bin/sh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: dfs.rm,v $
+# Revision 1.1.10.2  1996/03/09  23:10:11  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:28:11  marty]
+#
+# Revision 1.1.10.1  1995/12/07  21:41:25  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/07  20:57:33  root]
+# 
+# Revision 1.1.8.1  1994/06/09  16:05:27  devsrc
+# 	cr10892 - fix copyright
+# 	[1994/06/09  15:50:09  devsrc]
+# 
+# Revision 1.1.6.3  1993/07/20  22:46:40  tom
+# 	Restore rc.dfs from template file, always use RC_DFS.
+# 	Get argument before sourcing dce_com_utils.
+# 	[1993/07/20  22:32:06  tom]
+# 
+# Revision 1.1.6.2  1993/07/19  19:27:09  zeliff
+# 	HP port of DFS
+# 	[1993/07/19  18:20:47  zeliff]
+# 
+# Revision 1.1.4.5  1993/07/16  18:58:16  kissel
+# 	Fixes
+# 	[1993/07/15  00:53:26  jake]
+# 
+# 	Reference Port Madness
+# 	[1993/07/09  19:57:51  jake]
+# 
+# 	Initial GAMERA branch
+# 	[1993/04/23  11:23:04  mgm]
+# 
+# Revision 1.1.2.2  1993/06/04  01:11:45  kissel
+# 	Initial HPUX RP version.
+# 	[1993/06/03  20:22:57  kissel]
+# 
+# Revision 1.1.2.2  1993/02/05  20:43:14  kissel
+# 	Created to remove DFS files (similar to dce.rm).  This script,
+# 	if it exists. is called by dce.rm.
+# 	[1993/02/05  19:45:26  kissel]
+# 
+# $EndLog$
+#
+# This shell script removes the files created
+# by DFS daemons on initial configuration,
+# allowing the initial configuration to be
+# repeated
+#
+###################################################################
+#------------------------------------------------------
+# Source the common utility functions
+#------------------------------------------------------
+: ${ETC:="/etc"}
+
+rm_param=$1
+if [ -z "$SOURCE_COM_UTILS" ]
+then
+	. ${ETC}/dce_com_utils
+fi
+
+err_found=0
+
+log_msg VERBOSE "dfs.rm: Removing files created by DFS daemons on initial configuration."
+
+if [ "$rm_param" = "install" ]
+then
+    # The list of things to remove here isn't entirely 
+    # complete, message catalogs, this script and some
+    # symlinks in /usr/bin remain, but those things will 
+    # get overwritten by a subsequent installation and
+    # are benign to a subsequent installation. We assume that dce.rm has
+    # removed most of the stuff, e.g. /opt/dcelocal.
+    #
+    log_msg DETAIL "dfs.rm: Executing: rm -f $RC_DFS"
+    rm -f $RC_DFS
+    log_msg DETAIL "dfs.rm: Executing: rm -f /etc/dfs.clean"
+    rm -f /etc/dfs.clean
+    log_msg DETAIL "dfs.rm: Executing: rm -f /etc/dfs.unconfig"
+    rm -f /etc/dfs.unconfig
+    log_msg DETAIL "dfs.rm: Executing: rm -f /etc/dfs_config"
+    rm -f /etc/dfs_config
+    log_msg DETAIL "dfs.rm: Executing: rm -f dfs_config_utils"
+else
+    # The only files created by DFS are under $DCELOCAL/var/dfs, so just delete
+    # the whole tree.  The only other things created by configuring DFS are the
+    # /... directory and links for /.: and /: These may as well stay around.  We
+    # do need to put rc.dfs back the way it was.
+    # For some reason OSF code (in dce.rm) removes individual subdirectories.
+    #    rm -rf $DCELOCAL/var/dfs/adm/*
+    #    rm -rf $DCELOCAL/var/dfs/backup/*
+    #    rm -rf $DCELOCAL/var/dfs/aggrs
+    #    rm -f  $DCELOCAL/var/dfs/* 2> /dev/null
+    #
+    log_msg DETAIL "dfs.rm: Executing: rm -rf $DCELOCAL/var/dfs"
+    rm -rf $DCELOCAL/var/dfs
+
+
+    # Use find to get all the cache chunks
+    #
+	if [ -d "$DCELOCAL/var/adm/dfs" ]
+	then
+    log_msg DETAIL "dfs.rm: Executing: find $DCELOCAL/var/adm/dfs -type f -print | xargs rm -f"
+    find $DCELOCAL/var/adm/dfs -type f -print | xargs rm -f
+	
+	fi
+    log_msg VERBOSE "dfs.rm: restoring $RC_DFS to original state (no daemons started)."
+    if [ -f $DCELOCAL/etc/rc.dfs.template ]
+    then
+	rm -f $RC_DFS
+	log_msg DETAIL "dfs.rm: Executing: cp $DCELOCAL/etc/rc.dfs.template $RC_DFS"
+	cp -p $DCELOCAL/etc/rc.dfs.template $RC_DFS
+    else
+	if [ -f  $RC_DFS ]
+	then
+		grep "\^$DCELOCAL/bin/" $RC_DFS >/dev/null
+		if [ $? -eq 0 ]; then
+	    	err_exit "dfs.rm: Unable to find $DCELOCAL/etc/rc.dfs and \
+$RC_DFS has been modified since installation.  \
+Before re-configuring this machine, the user should either re-install an \
+original version of $RC_DFS or should re-install DFS."
+			err_found=1
+		fi
+	fi
+    fi
+fi
+
+if [ $err_found = 1 ]; then
+    log_msg VERBOSE "dfs.rm: Failed to remove all files created by daemons on initial configuration."
+else
+    log_msg VERBOSE "dfs.rm: Successfully removed all files created by daemons on initial configuration."
+fi
+
+exit $err_found

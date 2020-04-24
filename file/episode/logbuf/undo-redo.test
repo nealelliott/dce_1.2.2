@@ -1,0 +1,211 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: undo-redo.test,v $
+# Revision 1.1.11.1  1996/10/02  17:25:48  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:32:56  damon]
+#
+# Revision 1.1.6.1  1994/06/09  14:01:35  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:36:51  annie]
+# 
+# Revision 1.1.4.4  1993/01/19  15:30:41  cjd
+# 	embedded copyright notice
+# 	[1993/01/19  13:51:34  cjd]
+# 
+# Revision 1.1.4.3  1992/11/09  21:38:06  jaffe
+# 	Transarc delta: ota-ot3804-new-block-security 1.1
+# 	  Selected comments:
+# 	    This is a super-delta comprising changes necessary to accomplish both
+# 	    deltas which are a very tough import and are really intertwined anyway.
+# 	    Transarc delta: mason-ot5508-wrong-comparison-in-WaitForTranFree 1.4
+# 	    Selected comments:
+# 	    WARNING: THIS DELTA HAS HAD ITS SCOPTE MASSIVELY EXTENDED
+# 	    See revision 1.2 below.
+# 	    An earlier change to the transaction activity test in elbt_TranForce
+# 	    resulted in an incorrect test.
+# 	    This resulted in aimIII test looping in the kernel trying to commit the
+# 	    transaction in a vnode being deleted.
+# 	    A long chain of complications associated with the fix for this problem
+# 	    gradually lead to more and more expansive repairs.  At some point the
+# 	    effort devolved into a new complete rewrite of most of the functions in
+# 	    the tran module and a similar fraction of the tran related functions in
+# 	    the log module.  As a side-effect other OT bugs were addressed.  Here is
+# 	    a list of the major changes made.
+# 	    o This delta effective completes implementation of new block security.
+# 	    This affects OT 3804 and OT 1020.
+# 	    o Handling of ended transactions is completely revised.  Rules of
+# 	    responsibility for trans in various states between tran and log
+# 	    modules are clarified.  This addresses the concerns raised in OT 5249.
+# 	    o The locking strategy in the tran module was extensively revised.  The
+# 	    logbuf-locking document was updated.
+# 	    o Changes in waiting and sleeping, especially when starting
+# 	    transactions, follow from the above two changes.  Deadlocks removed
+# 	    from GCTran.
+# 	    o Equivalence Class handling improved, eliminating at least one latent
+# 	    bug in when a pending transaction can be discarded.  Locking changes
+# 	    should also improve concurrency.
+# 	    o Significant enhancement of the test scripts in the stress level they
+# 	    impose on the transaction system.
+# 	    o Reimplemented FsyncForce to use unified buffer/event set handling.
+# 	    This fixes OT 5316.
+# 	    o The Quiesce operation is improved, internally to serialize, commit
+# 	    metadata and commit userdata.  It still needs an interface change when
+# 	    volops requirements are ready.
+# 	    o Now tran and log module track three reservation sizes for
+# 	    transactions: full size, undo-zero size, and end size.  This only
+# 	    partially addresses the concerns of OT 4548.
+# 	    o Macros for comparing log positions where improved and bullet proofed.
+# 	    They now replace many suspect by-hand comparisons throughout the code.
+# 	    o New test repeatedly shuts down a device when other devices with the
+# 	    same block size(s) are still active.
+# 	    o Added passno test to expose OT 5527.  Added to all_tests.
+# 	    o Improved comments throughout.
+# 	    o Added growaggr script to all_tests.  Affects OT 3216, TR 2570.
+# 	    o Added vm1.test to all_tests.
+# 	    o Move nbs_tests into all_tests.
+# 	    o Upgraded copyrights.
+# 	    After upgrading to epi 1.22 (dfs 1.53) the shutdown script stopped working.
+# 	    A few more problems noticed after upgrading to epi-1.22.
+# 	    A real bug in RecycleLogBufs was discovered, which resulted in reporting
+# 	    a more recent value for activeLogBlock than was correct if the members
+# 	    of the inTransit list were within 5 blocks of the end of the log.
+# 	    A real bug in recover was discovered, which resulted in discarding the
+# 	    last page of the log on the first pass (after log create).
+# 	    Force tran 1 so log uses two pages.  This triggers the recovery bug.
+# 	[1992/11/09  18:35:22  jaffe]
+# 
+# Revision 1.1.4.2  1992/09/15  17:38:55  jaffe
+# 	Transarc delta: mason-ot3721-start-tran-not-required 1.6
+# 	  Selected comments:
+# 	    When a transaction has an end record, it should always be redone; I'm
+# 	    sure I've previously made this fix (long, long ago in a world far, far
+# 	    away).  This requires changing MarkCommitted in recovery and getting the
+# 	    regression test suite built again.  This is a CHECKPOINT only.
+# 	    Checkpoint first system which shows signs of really working.
+# 	    This checkpoint notes the first place where the regression test suite
+# 	    works again.  Additional work is required to verify that the original
+# 	    bug (as found by OTA) is really gone.
+# 	    Fixed the log size to be the # of simultaneous transactions, not the
+# 	    number of log blocks.
+# 	    This is another checkpoint.  I'm working on building the regression test.
+# 	    Added regression lines into this script.  Now seems to be OK.
+# 	    Make changes in readlog so it is easier to use.
+# 	    Oops.  Calling wrong log record printer. [tony, not ted]
+# 	Transarc delta: mason-tran-0033 1.11
+# 	  Selected comments:
+# 	    Checkpoint for the year-end.
+# 	    Changes made earlier were lost - I carried them forward.
+# 	    Intermediate snapshot - single threaded code now working correctly.
+# 	    SHOULD NOT BE USED IN PRODUCTION.
+# 	    Forced close to fix a different problem. This delta still does not work; do
+# 	    not use in production!
+# 	    Snapshot - passes all_tests.
+# 	    More work - now fixing bugs.
+# 	    Final round of testing; appears to be production quality now.
+# 	    Update internal development records.
+# 	    Found single-threaded case in TranForce which would block.
+# 	    Macro removed in delta 1.9 was used in multiple files.
+# 	    Found race condition where tran was referenced before initialization.
+# 	[1992/09/14  21:03:44  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/05  18:26:39  jdp
+# 	delta mason-tran-0033 1.11
+# 	[1992/05/04  18:12:24  jdp]
+# 
+# $EndLog$
+#
+# test handling of overlapping undo and redo operations
+#
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/logbuf/undo-redo.test,v 1.1.11.1 1996/10/02 17:25:48 damon Exp $
+
+# we want a fake aggregate with 10 data blocks and 6 transactions.
+
+set logsize 10 6
+
+opendata /tmp/dev-one 8192
+createlog /tmp/dev-two 8192
+openlog /tmp/dev-two 8192
+
+pageclear 0 9
+
+
+#
+# the scheme here is to have a transaction modify both its own private data
+# plus some public (e.g. shared) data.
+#
+
+start 1
+start 2
+start 3
+start 4
+start 5
+
+data 1 1 0 data-from-transaction-one
+data 1 0 0 AAAA
+
+end 1
+force 1
+
+data 2 2 0 data-from-transaction-two-update-one-dangling-from-tran-one
+data 2 2 0 data-from-transaction-two-update-two
+data 2 0 0 BBBB
+
+end 2
+
+data 3 3 0 data-from-transaction-three-isnt-this-fun
+data 3 0 0 CCCC
+
+data 4 4 0 data-from-transaction-four-oh-so-much-fun
+merge 3 4
+data 4 0 0 DDDD
+
+# note we should see either B or D, but not C!
+
+data 3 3 100 more-data-from-tran-three
+
+data 3 0 0 EEEE # now we should see B or E, but not C or D!
+
+end 3
+
+data 4 0 0 FFFF # and finally, F
+
+data 5 5 0 this-is-from-transaction-five-and-it-shouldnt-matter
+end 5
+
+force 5
+
+#set rcvrdebug -1
+recover
+
+# that is it!
+#
+# we should see tran 1 data, tran 2 data, and tran 5 data, but not tran 3 or 4.
+# so we should see "BBBB".
+#
+
+compare 0 0 BBBB
+
+# check the outcome of transaction 1
+compare 1 0 data-from-transaction-one
+
+# check the outcome of transaction 2
+# it should not be the first update value
+ncompare 2 0 data-from-transaction-two-update-one-dangling-from-tran-one
+# it should be the second value
+compare 2 0 data-from-transaction-two-update-two
+
+# check the outcome of transaction 3
+# b/c 3 does not complete
+ncompare 3 0 data-from-transaction-three-isnt-this-fun
+
+#compare 2 0 BBBB
+
+
+# done
+quit

@@ -1,0 +1,123 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: tc_cm_slvdel,v $
+# Revision 1.1.2.2  1996/03/09  20:52:20  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:54  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:48  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  22:22:38  root]
+# 
+# $EndLog$
+#!/bin/ksh
+
+if [ -z "${TC_CM_SLVDEL_DEFINED}" ] ; then
+
+TC_CM_SVLDEL_DEFINED=1
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  DESCRIPTION:
+#      This test case is part of the security replication system test.
+#      It tests if a change_master can be done successfully while
+#      there is a slave marked for deletion in the master's propagation queue. 
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+tet_startup="tc_cm_slvdel_init"
+tet_cleanup="tc_cm_slvdel_cleanup"
+tet_testlist="tc_cm_slvdel"
+
+iclist="ic1"
+ic1="tc_cm_slvdel"
+
+tc_cm_slvdel_init()
+{
+    typeset st
+
+    tc_common_init ; st=$?
+    if [ $st -ne 0 ] ; then
+        tet_delete $ic1 "tc_cm_slvdel_init(): Initialization failed"
+        return 
+    fi
+    if [ $SLV_CNT -lt 2 ] ; then
+        tet_delete $ic1 "tc_cm_slvdel_init(): Test requires at least 2 slaves"
+        return 
+    fi
+}
+
+tc_cm_slvdel_cleanup()
+{
+    tc_common_cleanup
+}
+
+tc_cm_slvdel()
+{
+    typeset st
+
+    testdesc="Change master while slave marked for deletion"
+    replog_testhdr "$testdesc"
+ 
+    slvhost_1=${SLV_HOSTNAMES[0]} ; slvnm_1=${SLV_NAMES[0]}
+    slvhost_2=${SLV_HOSTNAMES[1]} ; slvnm_2=${SLV_NAMES[1]}
+
+    tc_common_q_delrep $slvhost_1 $slvnm_1 ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    sa_change_master $slvnm_2 ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #   Verify that the slave is still marked for deletion on the new 
+    #   master's replica list.
+
+    replist_tst_slv_mrkdel $MASTER_NAME $slvnm_1 ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #   Use secd_start_nobind() not secd_start to start the secd. 
+    #   (See comments in secd_start_nobind() to see why )
+
+    secd_start_nobind $slvhost_1 $slvnm_1     # Restart secd 
+ 
+    #   Verify that $slvnm_1 is deleted.
+
+    slv_v_del $slvhost_1 $slvnm_1 ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+    replist_verify_master "${REP_NAMES[*]}" $MASTER_NAME ; st=$?
+    replog_testresult "$testdesc" $st
+
+    #  Cleanup - reconfigure $slvhost_1 as a replica
+
+    slv_config $slvhost_1 $slvhost_1
+    repdb_config_print
+}
+
+. $TET_ROOT/profile.dcest
+. ./profile
+. $PHOME/replog
+. $PHOME/tc_common
+. $PHOME/secd
+. $PHOME/slv
+. $TCM
+#. $TET_ROOT/lib/xpg3sh/tcm.sh
+
+fi

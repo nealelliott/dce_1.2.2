@@ -1,0 +1,185 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ * IDL specification for remote serviceability interface.
+ */
+
+/*
+ * HISTORY
+ * $Log: service.idl,v $
+ * Revision 1.1.6.2  1996/03/09  23:11:18  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:28:42  marty]
+ *
+ * Revision 1.1.6.1  1995/12/08  21:38:00  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  18:09:51  root]
+ * 
+ * Revision 1.1.4.1  1994/06/09  16:06:12  devsrc
+ * 	cr10892 - fix copyright
+ * 	[1994/06/09  15:50:46  devsrc]
+ * 
+ * Revision 1.1.2.4  1993/11/12  20:29:30  rsalz
+ * 	Use "tagged_union" as the union tag.
+ * 	[1993/11/12  20:29:10  rsalz]
+ * 
+ * Revision 1.1.2.3  1993/09/02  17:42:57  rsalz
+ * 	Change dce_svc_routings to take a flag indicating if it
+ * 	should return standard routings or debug settings.
+ * 	Turn dce_svc_g_memory into an array of structures that keep
+ * 	the text and an "is a debug message" indicator.
+ * 	[1993/09/02  17:41:36  rsalz]
+ * 
+ * Revision 1.1.2.2  1993/08/16  18:09:12  rsalz
+ * 	Initial release
+ * 	[1993/08/16  18:04:05  rsalz]
+ * 
+ * $EndLog$
+ */
+
+[
+    uuid(000CF72E-0688-1ACB-97AD-08002B12B8F8),
+    version(1),
+    pointer_default(ptr)
+]
+
+interface serviceability
+{
+
+typedef [ref, string] char *dce_svc_string_t;
+
+typedef struct dce_svc_stringarray_s_t {
+	long			tab_size;
+    [size_is(tab_size)]
+	dce_svc_string_t	*table;
+} dce_svc_stringarray_t;
+
+typedef struct dce_svc_subcomp_s_t {
+	dce_svc_string_t	sc_name;	/* Sub-component name */
+	dce_svc_string_t	sc_descr;	/* Sub-component description */
+	unsigned long	sc_descr_msgid; /* Message catalog ID of sc_descr */
+	unsigned long	sc_level;	/* Active level for the sub-component */
+} dce_svc_subcomp_t;
+
+typedef struct dce_svc_subcomparray_s_t {
+	long			tab_size;
+    [size_is(tab_size)]
+	dce_svc_subcomp_t	*table;
+} dce_svc_subcomparray_t;
+
+/*
+**  Calls dce_svc_routing to actually set the routing.
+*/
+void dce_svc_set_route(
+    [in]	handle_t		handle,
+    [in, string]
+		char			*where,
+    [out]	error_status_t		*status
+);
+
+
+/*
+**  Calls dce_svc_debug_routing to actually set the routing.
+*/
+void dce_svc_set_dbg_route(
+    [in]	handle_t		handle,
+    [in, string]
+		char			*where,
+    [out]	error_status_t		*status
+);
+
+
+/*
+**  Calls dce_svc_debug_levels to actually set the levels.
+*/
+[idempotent] void dce_svc_set_dbg_levels(
+    [in]	handle_t		handle,
+    [in, string]
+		char			*flags,
+    [out]	error_status_t		*status
+);
+
+
+/*
+**  Returns an array of the names of all components that have been
+**  registered with the dce_svc_register routine.
+*/
+[idempotent] void dce_svc_inq_components(
+    [in]	handle_t		handle,
+    [out]	dce_svc_stringarray_t	*table,
+    [out]	error_status_t		*status
+);
+
+
+/*
+**  Returns the table registered with the indicated component name.
+*/
+[idempotent] void dce_svc_inq_table(
+    [in]	handle_t		handle,
+    [in]	dce_svc_string_t	component,
+    [out]	dce_svc_subcomparray_t	*table,
+    [out]	error_status_t		*status
+);
+
+
+/*
+**  Returns an array of all specified routines.
+*/
+[idempotent] void dce_svc_inq_routings(
+    [in]	handle_t		handle,
+    [in]	boolean32		debug_values,
+    [out]	dce_svc_stringarray_t	*table,
+    [out]	error_status_t		*status
+);
+
+
+/*
+**  Calls the filter control routine for the component.
+*/
+void dce_svc_filter_control(
+    [in]	handle_t		handle,
+    [in]	dce_svc_string_t	component,
+    [in]	long			arg_size,
+    [in, size_is(arg_size)]
+		byte			*argument,
+    [out]	error_status_t		*status
+);
+
+
+/*
+**  Operating statistics.  Mostly a place-holder.
+*/
+
+/*
+**  The "unknown" statistics.
+*/
+const long	dce_svc_stats_unknown	= 0;
+typedef struct dce_svc_stats_unknown_s_t {
+	long		data_size;
+    [size_is(data_size)]
+	byte		*data;
+} dce_svc_stats_unknown_t;
+
+
+/*
+**  A union of all possible statistics.
+*/
+typedef union switch (long stats_type) tagged_union {
+case dce_svc_stats_unknown:
+    dce_svc_stats_unknown_t stats_unknown;
+} dce_svc_stats_t;
+
+
+/*
+**  Return operating statistics.
+*/
+void dce_svc_inq_stats(
+    [in]	handle_t		handle,
+    [out]	dce_svc_stats_t		*stats,
+    [out]	error_status_t		*status
+);
+
+}

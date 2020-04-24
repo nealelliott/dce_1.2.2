@@ -1,0 +1,674 @@
+*
+* ID: $Id:
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* rename.scr -- This script tests the rename sys calls. First it will 
+*               do the basic checks at the same directory. It creates
+*               a directory and files and does renames.
+*               After that it will create those files again and rename
+*               them (make sure the existing targets were removed
+*               first. The scripts then check the old files were gone
+*               by access and readdir calls and check that the
+*               the contents were not changed as the file names changed.
+*               This script also tests the same operations between
+*               two different directories. Following the tests, it 
+*               check the "." and ".." cases and files with non-zero 
+*               link count. 
+
+*
+
+* Usage: file_test -I rename.scr 
+*        file_test -I rename.scr -D 
+*        or 
+*        or 
+*        file_test <rename.scr
+*        or
+*     	 See file_test -help 
+*
+*  Check points:
+*  1. Do a basic tests for same dir and different dir cases.
+*  2. Do basic tests with target existing and not existing.
+*  3. Check that rename of "." and ".." as source or target fails.
+*  4. Check that ".." of moved object changes when moving directory
+*     between two directories.
+*  5. Check that link count of target goes down if it exists and has 
+*     a hardlink from another file. Check that if target is open and has
+*     link count of 0, the file still exists after the rename (try
+*     write and fsync'ing file to ensure that things are still fine, or 
+*     perhaps use fchmod, or perhaps try both.
+*  6. Rename a symbolic link file.
+*
+
+*  Terminology:
+*  PASSED -- no problem for the testings.
+*  FAILED -- failed when doing basic checks.
+*  XXXXXX -- means will be enhanced later.
+
+*  Errors: 33 
+
+* Note: super user can issue unlink dir calls.
+
+
+***************************************************************************
+* This script test unlink syscalls.
+***************************************************************************
+
+*
+* Common settings.
+*
+include common2.env
+echo 
+echo Running rename.scr
+echo
+
+set numOfFilesToCreate ( $MAXDCACHEENTRY + 10 )
+
+*************************************************************************
+!*                         BASIC CASES                                   *
+*************************************************************************
+
+umask 0
+chdir $testDir
+
+*
+!* Do the basic tests for same dir (all ops are done at current dir $testDir).
+*
+* Create files to rename.
+  
+loop x 1 1 $numOfFilesToCreate
+  set fileName ($testFile+$x)
+  open $fileName ($O_CREAT|$O_RDWR) 0777 fileNameId[$x]
+  set content[$x] ("This is a test file"+$x+".")
+  write $fileNameId[$x] $content[$x]
+  close $fileNameId[$x]
+endloop
+
+set commd "cm flush -path ."
+shellexec commd
+
+
+*
+!* Check that renames are ok when the targets do not exist.
+*
+loop x 1 1 $numOfFilesToCreate
+  set fileName ($testFile+$x)
+  set newName ($testFile+$x+"."+$x)
+  rename $fileName $newName 
+endloop
+
+loop x 1 1 $numOfFilesToCreate
+  set newName string ($testFile+$x+"."+$x)
+  access $newName $accessFlagE
+endloop
+
+
+*
+!* Check that if the old files are still there.
+*
+verifyStatus false
+loop x 1 1 $numOfFilesToCreate
+  set fileName string ($testFile+$x)
+  access $fileName $accessFlagE
+  if ( $ITL_Status == 0 ) {
+    set errorMessage "FAILED: rename failed, the old file exists checked by access. --E1"
+  }
+  stat $fileName var
+  if ( $ITL_Status == 0 ) {
+    set errorMessage "FAILED: rename failed, the old file exists, checked by stat. --E2"
+  }
+endloop
+
+*
+!* Check that renames are not ok when the sources do not exist.
+*  The rename will not complaint the existence of the target.
+*  It simply will remove the target first and then try to rename.
+*  Here we will test that after the failed remove the targets are 
+*  still there.
+*
+*  The system trys to remove the existing targets first. 
+*
+loop x 1 1 $numOfFilesToCreate
+  set fileName string ($testFile+$x)
+  set newName string ($testFile+$x+"."+$x)
+  rename $fileName $newName 
+endloop
+
+* I need to check that if the newFiles have been deleted (should not be).
+
+verifyStatus true
+
+loop x 1 1 $numOfFilesToCreate
+  set newName string ($testFile+$x+"."+$x)
+  access $newName $accessFlagE
+  stat $newName var
+endloop
+
+*
+* Create those files again to test under $testDir.
+*
+set content ("This is a test file.")
+loop x 1 1 $numOfFilesToCreate
+  set fileName ($testFile+$x)
+  open $fileName ($O_CREAT|$O_RDWR) 0777 fileNameId[$x]
+  write $fileNameId[$x] $content
+  close $fileNameId[$x]
+endloop
+
+*
+!* This will check that the target files will be removed before the renames.
+*  This time it will remove the newfiles first for sure.
+*
+loop x 1 1 $numOfFilesToCreate
+  set fileName string ($testFile+$x)
+  set newName string ($testFile+$x+"."+$x)
+  rename $fileName $newName 
+endloop
+
+*
+!* Check that the contents are not changed as the names changed.
+*
+loop x 1 1 $numOfFilesToCreate
+  set newName string ($testFile+$x+"."+$x)
+  open $newName ($O_CREAT|$O_RDWR) 0777 newNameId[$x]
+  read $newNameId[$x] 20 junk
+  *
+  * Check that if the content is same as the old one's
+  *
+  if ( $junk != $content ) {
+    set errorMessage ("FAILED: The content of the new file is different form the old one. --E3" + $x )
+    exec err_Process
+  }
+  close $newNameId[$x]
+endloop
+
+*
+*  Create an array for tracking file status for renamed files.
+*
+loop x 1 1 $numOfFilesToCreate
+  set fileStatus[$x] int 0
+endLoop
+
+*
+!* Check that readdir reads right names (they were gone from listing).
+*
+
+set keepLooping int 1
+opendir . dirPtr
+do
+  readdir $dirPtr dirInfo
+  if  ($CommandResult == 0) {
+    loop x 1 1 $numOfFilesToCreate
+      set newName string ($testFile+$x+"."+$x)
+      if ($dirInfo.d_name == $newName) {
+        if ( $fileStatus[$x] == 0 ) {
+          set fileStatus[$x] 1
+        }
+        else {
+          set errorMessage "FAILED: Found file name twice. --E4"
+          exec err_Process
+        }
+      }
+    endloop
+  }
+  else {
+    set keepLooping 0
+  }
+while ($keepLooping == 1)
+closedir $dirPtr
+ 
+* Check that if all the new files found there.
+loop x 1 1 $numOfFilesToCreate
+  if ( $fileStatus[$x] != 1 ) {
+    set errorMessage "FAILED: not all the new files found there. --E5"
+    exec err_Process
+   }
+endLoop
+
+*
+!* Do the basic tests for different dirs (all ops are done at two dirs).
+*
+
+verifyStatus false 
+access junkDir1 $accessFlagE
+if ( $ITL_Status != 0 ) {
+  mkdir junkDir1 0777
+}
+access junkDir2 $accessFlagE
+if ( $ITL_Status != 0 ) {
+  mkdir junkDir2 0777
+}
+chdir junkDir1
+verifyStatus true 
+
+* Create files to rename.
+  
+loop x 1 1 $numOfFilesToCreate
+  set fileName ($testFile+$x)
+  open $fileName ($O_CREAT|$O_RDWR) 0777 fileNameId[$x]
+  set content[$x] ("This is a test file"+$x+".  ")
+  write $fileNameId[$x] $content[$x]
+  close $fileNameId[$x]
+endloop
+
+set commd "cm flush -path ."
+shellexec commd
+
+chdir ../junkDir2
+
+*
+!* Check that renames are ok when the targets do not exist.
+*
+loop x 1 1 $numOfFilesToCreate
+  set fileName ($testFile+$x)
+  set newName ($testFile+$x+"."+$x)
+  rename ("../junkDir1/"+$fileName) $newName 
+endloop
+
+
+*
+!* Check that if the old files are still there.
+*
+verifyStatus false
+loop x 1 1 $numOfFilesToCreate
+  set fileName string ($testFile+$x)
+  access ("../junkDir1/"+$fileName) $accessFlagE
+  if ( $ITL_Status == 0 ) {
+    set errorMessage "FAILED: rename failed, the old file exists, by access. --E6"
+    exec err_Process
+  }
+  stat ("../junkDir1/"+$fileName) var
+  if ( $ITL_Status == 0 ) {
+    set errorMessage "FAILED: rename failed, the old file exists, by stat. --E7"
+    exec err_Process
+  }
+endloop
+
+*
+!* Check that renames are not ok when the sources do not exist.
+*  The rename will not complaint the existence of the target.
+*  It simply will remove the target first and then try to rename.
+*  Here we will test that after the failed remove the targets are 
+*  still there.
+*
+loop x 1 1 $numOfFilesToCreate
+  set fileName string ($testFile+$x)
+  set newName string ($testFile+$x+"."+$x)
+  rename $fileName $newName 
+  if ( $ITL_Status == 0 ) {
+    set errorMessage "FAILED: rename failed, the sources do not exist, but it passed. --E8"
+    exec err_Process
+  }
+endloop
+
+verifyStatus true
+
+*
+!* Create those files again to test (create them at junkDir1).
+*
+loop x 1 1 $numOfFilesToCreate
+  set fileName ($testFile+$x)
+  open ("../junkDir1/"+$fileName) ($O_CREAT|$O_RDWR) 0777 fileNameId[$x]
+  set content ("This is a test file.")
+  write $fileNameId[$x] $content
+  close $fileNameId[$x]
+endloop
+
+*
+!* This will test the new files will be removed before the renames.
+*
+loop x 1 1 $numOfFilesToCreate
+  set fileName string ($testFile+$x)
+  set newName string ($testFile+$x+"."+$x)
+  rename ("../junkDir1/"+$fileName) $newName 
+endloop
+
+*
+!* Check that the contents are not changed as the names changed.
+*
+set junk string ""
+loop x 1 1 $numOfFilesToCreate
+  set newName string ($testFile+$x+"."+$x)
+  open $newName ($O_CREAT|$O_RDWR) 0777 newNameId[$x]
+  read $newNameId[$x] 20 junk
+  *
+  * Check that if the content is same as the old one's
+  *
+  if ( $junk != $content ) {
+    set errorMessage "FAILED: The content of the new file is different form the old one. --E9"
+    exec err_Process
+  }
+  close $newNameId[$x]
+endloop
+
+
+*
+!* Check that readdir reads right names (they were gone from listing).
+*
+loop x 1 1 $numOfFilesToCreate
+  set fileStatus[$x] 0
+endLoop
+
+set keepLooping int 1
+opendir . dirPtr
+do
+  readdir $dirPtr dirInfo
+  if  ($CommandResult == 0) {
+    loop x 1 1 $numOfFilesToCreate
+      set newName string ($testFile+$x+"."+$x)
+      if ($dirInfo.d_name == $newName) {
+        if ( $fileStatus[$x] == 0 ) {
+          set fileStatus[$x] 1
+        }
+        else {
+          set errorMessage "FAILED: Found file name twice. --E9"
+          exec err_Process
+        }
+      }
+    endloop
+  }
+  else {
+    set keepLooping 0
+  }
+while ($keepLooping == 1)
+closedir $dirPtr
+ 
+* Check that if all the new files found there.
+loop x 1 1 $numOfFilesToCreate
+  if ( $fileStatus[$x] != 1 ) {
+    set errorMessage "FAILED: not all the new files found there. --E10"
+    exec err_Process
+   }
+endLoop
+
+*
+!* Check that rename of "." and ".." as source or target.
+*
+verifyStatus false
+rename "." "junk"
+rename ".." "junk"
+open junk ($O_CREAT|$O_RDWR) 0777 junkId
+close $junkId
+rename junk "."
+if ( $ITL_Status == 0 ) {
+    set errorMessage "FAILED: Did rename a file to dot. --E11"
+    exec err_Process
+}
+rename junk ".."
+if ( $ITL_Status == 0 ) {
+    set errorMessage "FAILED: Did rename a file to dot dot. --E12"
+    exec err_Process
+}
+remove junk
+
+*
+!* Check that ".." of moved object changes when moving directory
+*  between two directories.
+*
+
+* Go back to the top of junkDir1 and junkDir2.
+chdir ..
+
+* Create a junk dir under junkDir1.
+access junkDir1/junkDir $accessFlagE
+if ( $ITL_Status != 0 ) {
+  mkdir junkDir1/junkDir 0777
+}
+verifyStatus true
+
+* Create a file under junkDir.
+open "junkDir1/junkDir/junk" ($O_CREAT|$O_RDWR) 0777 junkId
+write $junkId "junk"
+close $junkId
+
+
+* Get old information.
+opendir "junkDir1/junkDir" oldPtr
+readdir $oldPtr oldInfo
+readdir $oldPtr oldInfo
+closedir $oldPtr
+stat junkDir1 oldVar1
+stat junkDir2 oldVar2
+
+* Rename the dir (move it between the dirs).
+rename "junkDir1/junkDir" "junkDir2/junkDir"
+
+* Make sure junkDir was gone under junkDir1
+verifyStatus false
+opendir "junkDir1/junkDir" dirPtr
+if ( $ITL_Status == 0 ) {
+  set errorMessage "FAILED: The junkDir under junkDir1 is still there. --E13"
+  exec err_Process
+}
+verifyStatus true
+
+sleep $sleepTime
+
+* Make sure that the junkDir was moved under junkDir2
+
+opendir "junkDir2/junkDir" dirPtr
+closedir $dirPtr
+
+
+* Get new information.
+opendir "junkDir2/junkDir" newPtr
+readdir $newPtr newInfo
+readdir $newPtr newInfo
+closedir $newPtr
+stat junkDir1 newVar1
+stat junkDir2 newVar2
+
+* Compare the old and new information of the renamed dir for inode number.
+
+if ( $newInfo.d_ino == $oldInfo.d_ino ) {
+  set errorMessage "FAILED: The parent of the renamed dir did not changed. --14"
+  exec err_Process
+}
+
+* Check that the link count for the parent of the dir renamed should be changed.
+
+if ( ($oldVar1.st_nlink - 1 ) != $newVar1.st_nlink ) {
+  set errorMessage "FAILED: remove dir did not decrease the link count of the parent. --E15"
+  exec err_Process
+} 
+if ( ($oldVar2.st_nlink + 1 ) != $newVar2.st_nlink ) {
+  set errorMessage "FAILED: remove dir did not decrease the link count of the parent. --E16"
+  exec err_Process
+} 
+
+* Check that atime, mtime and ctime of the parent of the dir renamed.
+
+if ( $newVar1.st_atime != $oldVar1.st_atime ) {
+  set errorMessage "FAILED: move dir should not change atime of the parent dir. --E17"
+  exec err_Process
+} 
+if ( $newVar1.st_mtime == $oldVar1.st_mtime ) {
+  set errorMessage "FAILED: remove dir did not change mtime of the parent dir. --E18"
+  exec err_Process
+} 
+if ( $newVar1.st_ctime == $oldVar1.st_ctime ) {
+  set errorMessage "FAILED: remove dir did not change ctime of the parent dir. --E19"
+  exec err_Process
+} 
+if ( $newVar2.st_mtime == $oldVar2.st_mtime ) {
+  set errorMessage "FAILED: remove dir did not change mtime of the parent dir. --E20"
+  exec err_Process
+} 
+if ( $newVar2.st_ctime == $oldVar2.st_ctime ) {
+  set errorMessage "FAILED: remove dir did not change ctime of the parent dir. --E21"
+  exec err_Process
+} 
+
+* 
+!* Check that link count of target goes down if it exists and has a hardlink
+*  from another file. 
+
+open hardlink1 ($O_CREAT|$O_RDWR) 0777 linkId1
+write $linkId1 "hardlink"
+close $linkId1
+
+hardlink hardlink1 hardlink2
+stat hardlink2 var
+if ( $var.st_nlink != 2 ) {
+  set errorMessage "FAILED: hardlink call failed. -- E22"
+  exec err_Process
+}
+
+rename "junkDir2/junkDir/junk" hardlink1
+verifyStatus false
+access "junkDir2/junkDir/junk" $accessFlagE
+if ( $ITL_Status == 0 ) {
+  set errorMessage "FAILED: rename call failed to rename the file. --E23"
+  exec err_Process
+}
+verifyStatus true
+
+* Check that if the file hardlink1 has the link count 1.
+stat hardlink1 var
+if ( $var.st_nlink != 1 ) {
+  set errorMessage "FAILED: rename failed to set the link count of the file. -- E24"
+  exec err_Process
+}
+
+* Check that if the file hardlink2 has the link count 1 (drop down to 1).
+stat hardlink2 var
+if ( $var.st_nlink != 1 ) {
+  set errorMessage "FAILED: hardlink call failed. -- E25 Known as ot5881"
+  exec err_Process
+}
+
+* Check that if the content od the hardlink2 has the old content.
+open hardlink2 $O_RDONLY 0 hId
+read $hId 8 junk
+stat hardlink2 var
+if ( $var.st_size != 8 ) {
+  set errorMessage "hardlink2 has WRONG file size. --E26"
+  exec err_Process
+}
+if ( $junk != "hardlink" ) {
+  set errorMessage "FAILED: It is not the string that we expected in a link file. --E27"
+  exec err_Process.
+}
+close $hId
+
+* Check that the hardlink1 has the content of original one "junk".
+open hardlink1 $O_RDONLY 0 hId
+read $hId 4 junk
+stat hardlink1 var
+if ( $var.st_size != 4 ) {
+  set errorMessage "FAILED: hardlink2 (one of the hardlink file) file size. --E28"
+  exec err_Process
+}
+if ( $junk != "junk" ) {
+  set errorMessage "FAILED: It is not the string that we expected in a renamed file. --E29"
+  exec err_Process.
+}
+close $hId
+
+*
+!* Check that if target is open and has link count of 0, the file still exist
+*  after the rename (try write and fsync'ing file to ensure that things are 
+*  still fine, or perhaps use fchmod, or perhaps try both.
+
+* Have the file open.
+open hardlink2 $O_RDWR 0 hId
+
+* have the file with a link count of 0.
+remove hardlink2
+
+* rename a file to the target hardlink2
+rename hardlink1 hardlink2
+
+* Close the file, try to see if the zero-ref-count file has gone or not
+* in the case of a rename (should not be).
+fsync $hId
+close $hId
+
+set commd "cm flush -path hardlink2"
+shellexec commd
+
+!* Check if things are still OK after closing a zero ref count file.
+*  (Since the name is used for a new file then the file should not be
+*   gone and everything should be ok).
+
+open hardlink2 $O_RDWR 0 hId
+
+* Check everything is fine (the file exists and with right link count).
+stat hardlink2 var
+if ( $var.st_nlink != 1 ) { 
+  set errorMessage "FAILED: The file did not have a link count of 1. --E30"
+  exec err_Process.
+}
+if ( $var.st_size != 4 ) { 
+  set errorMessage "FAILED: The file did not have right size after open-rename-close ops. --E31"
+  exec err_Process.
+}
+read $hId 4 junk
+if ( $junk != "junk" ) {
+  set errorMessage "FAILED: The content of the file is not what we expected. --E32"
+  exec err_Process
+}
+close $hId
+
+*
+!* rename a symbolic link file.
+*
+symlink hardlink2 symlinkfile
+rename symlinkfile symLinkFile
+stat symLinkFile var
+if ( !( $var.st_mode & $S_IFLNK ) ) {
+  set error_Message "FAILED: This should be a symbolic link file. --E33"
+  exec err_Process
+} 
+
+
+*************************************************************************
+*                         CLEANING UP AND REPORT                        *
+*************************************************************************
+
+* remove the hard link file.
+remove hardlink2
+remove symLinkFile
+
+* remove those new files under junkDir2.
+loop x 1 1 $numOfFilesToCreate
+  set newName string ($testFile+$x+"."+$x)
+  remove ("junkDir2/"+$newName)
+endloop
+
+* remove the junkDir1 and junkDir2.
+rmdir junkDir2/junkDir
+rmdir junkDir1
+rmdir junkDir2
+
+* remove those new files under$testDir.
+loop x 1 1 $numOfFilesToCreate
+  set newName string ($testFile+$x+"."+$x)
+  remove $newName
+endloop
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+*rmdir $testDir
+exec report_Proc "rename.scr" $errorCounter
+echo 
+quit
+

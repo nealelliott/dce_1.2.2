@@ -1,0 +1,408 @@
+echo Connect to the bakserver
+
+bakServerConnect init hand
+
+* define boundary conditions
+set numdumps int 5		* Number of dumps
+set numtapes int 4 		* Number of tapes
+set numfilesets int 2 		* Number of filesets per tape
+set DUMPID int 3000
+set DUMPINCR int 100
+
+
+* define variables
+set dumpid $DUMPID
+set dumpincr int $DUMPINCR
+set maxdumpid ($dumpid  + $dumpincr * $numdumps - 1)
+set tapecount int 0
+set fscount int 0
+
+set tapeseqid int 100
+set volid int 1000
+
+
+set dumpprefix "Morpheus.full."
+set dumppath "/full"
+set tapeprefix "lucifer.full."
+set volprefix "Orion."
+
+set tapeset fs_bakTapeSet 11 "olorin" "%s" 0 1 1 1 2 3 4
+set principal fs_bakPrincipal "cell_admin" " " " " 0 1 2 3 4 
+
+echo Testing Lookups of dumps 
+
+set new int 0 
+
+echo  Add dumps
+
+repeat  
+
+set dumpname ($dumpprefix + $dumpid)
+
+set dumpentry fs_bakDumpEntry $dumpid 0 1 0 test $dumppath $dumpname  "" "" 1 $tapeset $principal 1 2 3 4
+
+
+verifyStatus false
+
+bakDeleteDump $hand $dumpid
+
+verifyStatus true
+
+* Create Dump
+
+bakCreateDump $hand dumpentry
+
+set tapecount 0
+repeat
+* set tape entry
+
+set tapename string ($tapeprefix + $dumpid + "." +  $tapecount)
+
+set tapeentry  fs_bakTapeEntry $tapename 0  "" ""  200 10 12 1 ($tapecount + 1)  $tapeseqid 1 1 $dumpid  1 2 3 4
+
+
+
+* Issue a use tape 
+
+bakUseTape $hand $tapeentry $new
+set fscount 0 
+set tapeentry  fs_bakTapeEntry $tapename $BUDB_TAPE_BEINGWRITTEN  "" ""  200 10 12 1 ($tapecount + 1)  $tapeseqid 1 1 $dumpid  1 2 3 4
+
+* Use tape done, now add volume 
+repeat 
+set volname ($volprefix + $dumpid + "." + $tapecount + "." + $fscount)
+set volentry fs_bakVolumeEntry $volname  0 1 $volid  "olorin" 1 1 12 "" "" 1 200 1000 $dumpid $tapename 1  2 3 4
+set volid ($volid  + 100)
+
+bakAddvolume $hand $volentry
+* increment filesets
+set fscount ($fscount + 1)
+while ($fscount < $numfilesets)  
+* increment tape count
+
+set tapeentry  fs_bakTapeEntry $tapename  $BUDB_TAPE_WRITTEN  "" ""  200 10 12 1 ($tapecount + 1) $tapeseqid 1 1 $dumpid  1 2 3 4
+
+bakFinishTape $hand $tapeentry
+set tapeseqid ($tapeseqid + 10)
+set tapecount ($tapecount + 1)
+while ($tapecount < $numtapes)
+
+* Now finish dump 
+
+bakFinishDump $hand dumpentry
+
+* increment dump id
+set dumpid ($dumpid + $dumpincr)
+while ($dumpid < $maxdumpid)
+
+echo Finished Adding. Now verify
+
+set status int 0
+set orphans int 0 
+set host int 0 
+
+bakDbVerify $hand status orphans host
+
+if ($status == 1) {
+	echo Insertion Failed : Database cannot be verified
+	} else {
+	echo Insertion Succeeded : Database verified
+	}
+
+
+echo Now try lookups on dump database 
+
+set flags int 0 
+set index int 0 
+set CUR_BUDB_VERSION int 1
+
+
+
+echo Look up a dump based on dumpname
+
+set flags ($BUDB_OP_DUMPNAME)
+
+set dumpid $DUMPID
+set dumpincr int $DUMPINCR
+
+repeat
+set dumpname ($dumpprefix + $dumpid)
+bakGetDumps $hand $CUR_BUDB_VERSION $flags $dumpname "" ($numdumps +1) $index nextIndex dbtime dumplist
+
+set dumpentry fs_bakDumpEntry $dumplist.val[0]
+
+if ($dumpentry.id != $dumpid)  {
+	echo Failed for dumpname $dumpname
+	}
+if ($dumpentry.name != $dumpname)  {
+	echo Failed for dumpname $dumpname
+	}
+
+* increment dump id
+set dumpid ($dumpid + $dumpincr)
+while ($dumpid < $maxdumpid)
+
+
+
+echo  Look up a dump based on dumpid
+
+set flags ($BUDB_OP_DUMPID)
+set dumpid $DUMPID
+
+repeat
+set dumpname ($dumpprefix + $dumpid)
+bakGetDumps $hand $CUR_BUDB_VERSION $flags "XXX" $dumpid ($numdumps + 1)  $index nextIndex dbtime dumplist
+
+set dumpentry fs_bakDumpEntry $dumplist.val[0]
+
+if ($dumpentry.id != $dumpid)  {
+	echo Failed for dumpname $dumpname
+	}
+if ($dumpentry.name != $dumpname)  {
+	echo Failed for dumpname $dumpname
+	}
+
+* increment dump id
+set dumpid ($dumpid + $dumpincr)
+while ($dumpid < $maxdumpid)
+
+echo Look up a list of dumps 
+set flags $BUDB_OP_NPREVIOUS
+
+bakGetDumps $hand $CUR_BUDB_VERSION $flags "XXXX" 0 $numdumps $index nextIndex dbtime dumplist
+
+if ($dumplist.len != $numdumps) {
+	echo Retrieval of list of dumps failed 
+
+	}
+
+
+set dumpid $DUMPID
+set i int 0
+
+* Now check that the all dumpids are present
+
+repeat
+set dumpname ($dumpprefix + $dumpid)
+set dumpentry fs_bakDumpEntry $dumplist.val[$i]
+
+if ($dumpentry.id != $dumpid)  {
+	echo Failed for dumpname $dumpname
+	}
+if ($dumpentry.name != $dumpname)  {
+	echo Failed for dumpname $dumpname
+	}
+
+set i ($i + 1)
+* increment dump id
+set dumpid ($dumpid + $dumpincr)
+while ($dumpid < $maxdumpid)
+
+echo Passed
+
+
+echo Look up a tape with a particular name
+
+set flags $BUDB_OP_TAPENAME
+
+set dumpid $DUMPID
+
+
+repeat
+set tapecount 0 
+repeat 
+
+set tapename string ($tapeprefix + $dumpid + "." +  $tapecount)
+
+bakGetTapes $hand $CUR_BUDB_VERSION $flags $tapename 0 0 $index nextIndex dbtime tapelist 
+
+set tapeentry  fs_bakTapeEntry $tapelist.val[0]
+
+
+if ($tapename != $tapeentry.name) {
+	echo Tape name $tapename get failed 
+	}
+if ($dumpid != $tapeentry.dump) {
+	echo Tape name $tapename get failed 
+	}
+
+
+set tapecount ($tapecount + 1)
+
+while ($tapecount < $numtapes)
+
+set dumpid ($dumpid + $dumpincr)
+while ($dumpid < $maxdumpid)
+
+* Try negative checks
+
+verifyStatus false
+
+bakGetTapes $hand $CUR_BUDB_VERSION $flags "test" 0  0 $index nextIndex dbtime tapelist 
+
+verifyStatus true
+
+if ($tapelist.len > 0) {
+	set ltapeentry  fs_bakTapeEntry $tapelist.val[0]
+	
+	if (ltapeentry.name == "test") {
+		echo "Test failed : able to do bogus lookup
+		}
+	}
+
+
+echo Lookup a tape with a name and a given dumpid.
+
+set flags ($BUDB_OP_TAPENAME | $BUDB_OP_DUMPID)
+
+set dumpid $DUMPID
+
+repeat
+set tapecount 0 
+repeat 
+
+set tapename string ($tapeprefix + $dumpid + "." +  $tapecount)
+
+
+
+bakGetTapes $hand $CUR_BUDB_VERSION $flags $tapename $dumpid 0 $index nextIndex dbtime tapelist 
+
+set tapeentry  fs_bakTapeEntry $tapelist.val[0]
+
+
+if ($tapename != $tapeentry.name) {
+	echo Tape name $tapename get failed 
+	}
+
+if ($dumpid != $tapeentry.dump) {
+	echo Tape name $tapename get failed 
+	}
+
+
+
+set tapecount ($tapecount + 1)
+
+while ($tapecount < $numtapes)
+
+set dumpid ($dumpid + $dumpincr)
+while ($dumpid < $maxdumpid)
+
+echo Passed
+
+echo Look up filesets dumped in a given dumpid
+
+set flags $BUDB_OP_DUMPID 
+set dumpid $DUMPID
+
+repeat
+
+bakGetVolumes $hand $CUR_BUDB_VERSION $flags "XXXX" $dumpid 0 $index nextIndex dbtime volsetlist
+
+if ($volsetlist.len != ($numtapes * $numfilesets)) {
+	echo Error in retrieving fileset with a given id for dumpid $dumpid
+	}
+
+
+
+* Now check this out
+Loop j 0 1 ($volsetlist.len -1)
+set volentry fs_bakVolumeEntry $volsetlist.val[$j]
+
+if ($volentry.dump != $dumpid) {
+	echo Failed to get fileset for dumpid $dumpid
+	}
+
+* Now do another lookup, using this volset name
+bakGetVolumes $hand $CUR_BUDB_VERSION $BUDB_OP_VOLUMENAME $volentry.name 0 0 $index nextIndex dbtime flsetlist
+
+set voltemp fs_bakVolumeEntry $flsetlist.val[0]
+
+if ( $voltemp.name != $volentry.name) {
+	echo Failure in getting fileset for dumpid $dumpid
+	}
+
+if ( $voltemp.dump != $volentry.dump) {
+	echo Failure in getting fileset for dumpid $dumpid
+	}
+
+
+
+endLoop
+
+* increment dump id
+set dumpid ($dumpid + $dumpincr)
+while ($dumpid < $maxdumpid)
+
+echo  Look up  a fileset with a given name
+
+set flags $BUDB_OP_VOLUMENAME 
+set dumpid $DUMPID
+
+repeat
+
+set tapecount 0
+
+repeat
+
+set fscount 0 
+
+repeat 
+set volname ($volprefix + $dumpid + "." + $tapecount + "." + $fscount)
+
+bakGetVolumes $hand $CUR_BUDB_VERSION $flags $volname 0 0 $index nextIndex dbtime volsetlist
+
+set volentry fs_bakVolumeEntry $volsetlist.val[0]
+
+if ($volsetlist.len != 1) {
+	echo Failed to get fileset $volname
+	}
+	
+if (($volentry.name != $volname) | ($volentry.dump != $dumpid)) {
+	echo Failed to get fileset $volname
+	}
+
+* increment filesets
+set fscount ($fscount + 1)
+while ($fscount < $numfilesets)  
+* increment tape count
+
+set tapecount ($tapecount + 1)
+while ($tapecount < $numtapes)
+
+* increment dump id
+set dumpid ($dumpid + $dumpincr)
+while ($dumpid < $maxdumpid)
+
+echo Passed
+
+
+bakDbVerify $hand status orphans host
+
+if ($status == 1) {
+	echo Lookups Failed : Database cannot be verified
+	} else {
+	echo Lookups Succeeded : Database verified
+	}
+
+
+echo Now delete all dumpids
+
+echo Testing Deletion
+
+set dumpincr int $DUMPINCR
+set maxdumpid ($dumpid  + $dumpincr * $numdumps + 1)
+
+Loop dmpid $dumpid $dumpincr $maxdumpid
+echo deleting dumpid $dmpid
+bakDeleteDump $hand $dumpid
+endloop
+
+bakDbVerify $hand status orphans host
+
+if ($status == 1) {
+	echo Deletion Test Failed : Database cannot be verified
+	} else {
+	echo Deletion Test Succeeded : Database verified
+	}
+
+

@@ -1,0 +1,138 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: dfaras.mkf,v $
+# Revision 1.1.2.2  1996/03/11  14:07:38  marty
+# 	Update OSF copyright years.
+# 	[1996/03/11  13:57:04  marty]
+#
+# Revision 1.1.2.1  1996/02/22  01:01:42  takano
+# 	First Submit
+# 	[1996/02/22  00:59:44  takano]
+# 
+# $EndLog$
+
+!ifdef %SILENT
+.silent
+!endif
+
+program = Distributed File Access Manager (RAS Utility)
+copyright = Copyright 1996 Hitachi, Ltd.  All Rights Reserved.  Derechos Reservados.
+
+pvmaj = 1
+pvmin = 00
+pvrev = 0
+
+!ifndef %qmkver
+!   define version d
+!else
+!   define version $(%qmkver)
+!endif
+!ifeq version d
+!   define lversion DEBUG
+!   define debug /dDEBUG
+!else
+!   define lversion PRODUCTION
+!   define debug
+!endif
+
+nlm_TYPE = Form Novell NLM '$(program)'
+nlm_NAME = Name $^&
+nlm_SCREEN = Op ScreenName 'None'
+nlm_THREAD = Op ThreadName 'DFARAS main'
+nlm_STACK = Op Stack = 32k
+nlm_NLMVER = Op Version = $(pvmaj).$(pvmin).$(pvrev)
+nlm_COPYRIGHT = Op Copyright '$(copyright)'
+linkop = $+$(linkop)$- Caseexact
+linkop = $+$(linkop)$- Map
+!ifeq version d
+!   define linkop $+$(linkop)$- Verbose
+!   define ldebug debug all debug novell
+!endif
+
+objlst = DRASMAIN.OBJ
+objlst = $+$(objlst)$- $(startup)
+
+import = $(clibimp)
+import = $+$(import)$- DFALIB.IMP
+import = $+$(import)$- DFADCE.IMP
+import = $+$(import)$- DFA.IMP
+
+module = CLib
+
+build_msg = Building a $(lversion) version of $(program)
+
+pgm_ver = /dvMAJ="$(pvmaj)" /dvMIN="$(pvmin)" /dvREV="$(pvrev)"
+
+!ifndef %ccf386
+!   define  d_wcc386opt /ms /w4 /e99 /zp1 /3s /ot /d2 $(debug)
+!   define  p_wcc386opt /ms /w4 /s /zp1 /3s /oaxt
+!   define  x_wcc386opt $($(version)_wcc386opt) $(pgm_ver)
+!else
+!   define  x_wcc386opt $(%ccf386)
+!endif
+
+compiler_cmd = $(wcc386) $(x_wcc386opt) $[*.c
+
+.BEFORE
+    echo $(build_msg)
+    set inc386=$(inc_386)
+    set lib386=$(lib_386)
+    set wcg386=$(code_386)
+
+.c.obj:
+        $(compiler_cmd)
+
+DFARAS.nlm : $(objlst) DFARAS.LNK
+        $(linker) @DFARAS
+
+DFARAS.LNK : DFARAS.MKF
+  if exist $^&.LNK del $^&.LNK
+  %append $^&.LNK $(nlm_TYPE)
+  %append $^&.LNK $(nlm_NAME)
+  %append $^&.LNK $(nlm_SCREEN)
+  %append $^&.LNK $(nlm_THREAD)
+  %append $^&.LNK $(nlm_STACK)
+  %append $^&.LNK $(nlm_NLMVER)
+!ifdef copyright
+  %append $^&.LNK $(nlm_COPYRIGHT)
+!endif
+!ifdef ldebug
+  %append $^&.LNK $(ldebug)
+!endif
+  for %i in ($(linkop)) do %append $^&.LNK Op %i
+  for %i in ($(objlst)) do %append $^&.LNK File %i
+  for %i in ($(import)) do %append $^&.LNK Import @%i
+  for %i in ($(export)) do %append $^&.LNK Export @%i
+  for %i in ($(module)) do %append $^&.LNK Module %i
+  for %i in ($(library)) do %append $^&.LNK Library %i
+
+dfaras_base_header = dfaras.mkf MAKEINIT
+dfaras_base_header = $+$(dfaras_base_header)$- dfamdef.h dfamstr.h dfamext.h dfamprt.h
+drasmain.obj    : drasmain.c    $(dfaras_base_header)  dfammsg.h
+dfaras.nlm      : dfa.imp dfadce.imp dfalib.imp
+
+clean : .symbolic
+    del *.MAP
+    del *.OBJ
+    del *.ERR
+    del *.LNK
+    del *.NLM
+
+zip : .symbolic
+    -pkzip -u DFARAS DFARAS.MKF *.c *.h
+
+unzip : .symbolic
+    -pkunzip -n -d DFARAS
+
+save : .symbolic
+    %make zip
+    %make clean
+
+ean
+

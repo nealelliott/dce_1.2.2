@@ -1,0 +1,88 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for 
+# the full copyright text.
+#
+# HISTORY
+# $Log: runtests,v $
+# Revision 1.1.6.1  1996/10/17  18:24:04  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:52:14  damon]
+#
+# Revision 1.1.2.2  1994/08/22  16:16:35  maunsell_c
+# 	disable calls to server setup,stop,unsetup,start for now
+# 	[1994/08/19  19:42:21  maunsell_c]
+# 
+# 	perform gateway add,stop,start,remove
+# 	[1994/08/10  19:21:33  maunsell_c]
+# 
+# Revision 1.1.2.1  1994/07/28  17:38:45  mckeen
+# 	Initial Revision
+# 	[1994/07/28  14:10:38  mckeen]
+# 
+# $EndLog$
+
+###############################################################################
+# This is a driver script, which runs dfsgwd/test*. The tests are applicable
+# to DFS/NFS exporter. dfsgwd funtionality is exercised by this test suite.
+###############################################################################
+
+ty=dfsgwd
+p=`basename $0`
+rc=0
+hn=`hostname`
+
+: ${lf=$ty.$p.log}
+
+rm -rf $lf
+
+(
+echo ""
+echo "$ty/$p running on $hn at `date`"
+) | tee -a $lf
+
+
+: ${dfsgwd_tests="test1 test2"}
+
+# disable for now, but turn on when config
+# uses bosserver !!!!
+#dce_login cell_admin -dce- -exec add_dfsgwd.sh
+#dce_login cell_admin -dce- -exec stop_dfsgwd
+
+for test in $dfsgwd_tests
+   do
+(
+   echo ""
+   echo "Running $test."
+) | tee -a $lf
+   $test >>$lf 2>&1
+   rf=$?
+   rc=`expr $rc + $rf`
+(
+   echo ""
+   echo "$test returned $rf."
+) | tee -a $lf
+
+   done
+
+#dce_login cell_admin -dce- -exec start_dfsgwd
+#dce_login cell_admin -dce- -exec rem_dfsgwd.sh
+
+###############################################################################
+
+(
+echo ""
+echo "Tests complete at `date`."
+echo ""
+) | tee -a $lf
+
+if [ $rc -eq 0 ]
+then
+   echo "$ty/$p PASSED" | tee -a $lf
+else
+   echo "$ty/$p FAILED ($rc total errors)" | tee -a $lf
+fi
+
+  
+exit $rc 

@@ -1,0 +1,386 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: common_data.idl,v $
+ * Revision 1.1.63.1  1996/10/02  17:14:36  damon
+ * 	Newest DFS from Transarc
+ * 	[1996/10/01  18:06:32  damon]
+ *
+ * $EndLog$
+ */
+/*
+ *      Copyright (C) 1996, 1991 Transarc Corporation
+ *      All rights reserved.
+ */
+
+/*
+ *
+ *     The Common Data Structures Required for AFS (4.0) Client/Server
+ *
+ */
+
+/* $Header: /u0/rcs_trees/dce/rcs/file/config/common_data.idl,v 1.1.63.1 1996/10/02 17:14:36 damon Exp $ */
+
+interface common_data
+
+{
+
+/* 
+ * General AFS constants
+ */
+const unsigned32 	AFS_UNDEFAFSID	= -1;	  /* Generic undefined AFS id */
+const unsigned32 	AFS_NAMEMAX	= 256;    
+const unsigned32 	AFS_PATHMAX	= 1024;
+const unsigned32 	AFS_TOKENDEAD 	= 1235;
+const unsigned32 	AFS_ACLMAX	= 8188; /* 8k - sizeof(long), so afsACL in 8k; was 1024 */
+const unsigned32 	AFS_BULKMAX 	= 32;
+const unsigned32 	AFS_DISKNAMESIZE= 32;
+const unsigned32	AFS_NAMEMAXLEN	= 112;	  /* Max len for fileset names */
+
+/*
+ * Constants for Cell/Hosts
+ */
+const unsigned32 MAXCELLCHARS = 128;
+const unsigned32 MAXHOSTCHARS = 128;
+const unsigned32 MAXHOSTSPERCELL = 64;
+
+/*
+ * AFS Object types   ???? Who else uses this beside AFS_Mount ..
+ */
+const unsigned32 Invalid = 0;
+const unsigned32 File = 1;
+const unsigned32 Directory = 2;
+const unsigned32 SymbolicLink = 3;
+const unsigned32 MountPoint = 4;
+const unsigned32 FIFO = 5;
+const unsigned32 Socket = 6;
+const unsigned32 BlockDev = 7;
+const unsigned32 CharDev = 8;
+
+const unsigned32 FETCHSTATUS_VERSION = 2;
+
+/*
+ * Quota types for quota setting commands.
+ */
+const unsigned32 AFS_FILESYS_BSD	= 1;
+const unsigned32 AFS_FILESYS_EPISODE	= 2;
+
+/*
+ * Quota opcodes for quota setting commands
+ */
+const unsigned32 AFS_QUOTA_GET	= 1;
+const unsigned32 AFS_QUOTA_SET	= 2;
+
+/*
+ * Physical file system type? ie. for afsFStype
+ */
+const unsigned32 AFS_FS = 0;
+const unsigned32 DEC_FS = 1;
+const unsigned32 UFS_FS = 2;
+const unsigned32 AIX_FS = 4;
+
+/*
+ * Used for afsVolumeType
+ */
+const unsigned32 ReadOnly = 0;
+const unsigned32 ReadWrite = 1;
+
+/* 
+ * These are values for the afsRevokeDesc flags
+ */
+const unsigned32 AFS_REVOKE_COL_A_VALID = 0x1;
+const unsigned32 AFS_REVOKE_COL_B_VALID = 0x2;
+const unsigned32 AFS_REVOKE_FORCED_REVOCATION = 0x4;
+const unsigned32 AFS_REVOKE_DUE_TO_GC = 0x8;
+
+/*
+ * Used in afsRevokeDesc's outFlags
+ */
+const unsigned32 AFS_REVOKE_LOCKDATA_VALID = 0x1;
+
+typedef uuid_t   afsUUID;
+typedef long     afsFStype;
+typedef long     afsVolumeType;
+
+typedef pipe     byte 	pipe_t;
+
+typedef unsigned32	codesetTag;
+const unsigned32 AFS_TAG_ORIGASCII = 0;
+
+/*
+ *
+ * General Definitions for AFS Data Structures 
+ *
+ */
+
+typedef [string] byte 	NameString_t[AFS_NAMEMAX];
+typedef [string] byte 	PathString_t[AFS_PATHMAX];
+typedef byte	afsDiskName[AFS_DISKNAMESIZE];
+
+/* 
+ * General tagged-name string, suitable for a pathname component.
+ * Use of the tn_tag value AFS_TAG_ORIGASCII means that the
+ * tn_length field doesn't need to be filled in: tn_chars is assumed to be
+ * null-terminated.
+ */
+typedef struct afsTaggedName {
+	codesetTag	tn_tag;
+	unsigned16	tn_length;
+	byte		tn_chars[AFS_NAMEMAX+1];
+} afsTaggedName;
+
+typedef struct afsTaggedPath {
+	codesetTag	tp_tag;
+	unsigned16	tp_length;
+	byte		tp_chars[AFS_PATHMAX+1];
+} afsTaggedPath;
+
+
+typedef struct afsNetAddr {
+	unsigned16 type;
+	unsigned8 data[14];
+} afsNetAddr;
+
+typedef struct afsTimeval {
+	unsigned32 sec;
+	unsigned32 usec;
+} afsTimeval;
+
+/*
+ * Over-the-wire 64-bit structure used by objects such as cells, volumes, etc.
+ * These are converted to in-memory afs_hypers_ts using [represent_as] via code
+ * in local_64bit_xlate.c.
+ */
+typedef struct afsHyper {
+	unsigned32 high;
+	unsigned32 low;
+} afsHyper;
+
+/*
+ * Afs Fid structure
+ */
+typedef struct afsFid {
+	afsHyper Cell;
+	afsHyper Volume;
+	unsigned32 Vnode;
+	unsigned32 Unique;
+} afsFid;
+
+
+typedef struct afsFidTaggedName {  
+	afsFid fid;
+	afsTaggedName name;
+} afsFidTaggedName;
+
+
+typedef struct afsToken {
+	afsHyper tokenID;
+	unsigned32 expirationTime;
+	afsHyper type;
+	unsigned32 beginRange;	
+	unsigned32 endRange;
+	unsigned32 beginRangeExt;	
+	unsigned32 endRangeExt;
+} afsToken;
+
+/* 
+ * Sys V Record Lock to return  blocker's info
+ */
+typedef struct afsRecordLock {
+	signed16     l_type;
+	signed16     l_whence;
+	unsigned32   l_start_pos;
+	unsigned32   l_end_pos;
+	unsigned32   l_pid;
+	unsigned32   l_sysid;
+	unsigned32   l_fstype;
+	unsigned32   l_start_pos_ext; /*was l_spare0: high 32b of l_start_pos*/
+	unsigned32   l_end_pos_ext; /*was l_spare1: high 32b of l_end_pos*/
+} afsRecordLock;
+
+/*
+ * Info about the token the cm already holds 
+ */
+typedef struct afsRevokeDesc {
+
+	afsFid fid;		/* useful hint */
+	afsHyper tokenID;
+	afsHyper type;		/* mask */
+	unsigned32 flags;	/* input flags to RPC*/
+	unsigned32 outFlags; /* output flags from RPC */
+	afsHyper errorIDs;	/* (mask[dude] == 1) <==> dude not revoked */
+	/* 
+	 * Info about the tokens to be offered for swapping 
+ 	 * The first one 
+	 */
+	afsToken columnA;	/* the offer */
+	afsHyper colAChoice;	/* the accepted token types */
+
+	/* 
+	 * the other token to be offered 
+	 */
+	afsToken columnB;	/* the offer */
+	afsHyper colBChoice;	/* the accepted token types */
+	afsRecordLock recordLock; /* the blocker's info */
+ } afsRevokeDesc;
+
+/*
+ * Info for returning tokens.
+ */
+typedef struct afsReturnDesc {
+
+	afsFid fid;		/* useful hint */
+	afsHyper tokenID;
+	afsHyper type;		/* mask */
+	unsigned32 flags;	/* just in case */
+} afsReturnDesc;
+
+/* Method of adjusting connection parameters */
+/* Low-order bit of Mask (0x1) declares that Values[0] contains info */
+/* Next bit in Mask (0x2) declares that Values[1] contains info */
+typedef struct afsConnParams {
+	unsigned32 Mask;
+	unsigned32 Values[20];
+} afsConnParams;
+const unsigned32 AFS_CONN_PARAM_HOSTLIFE = 0;
+const unsigned32 AFS_CONN_PARAM_HOSTRPC = 1;
+const unsigned32 AFS_CONN_PARAM_DEADSERVER = 2;
+const unsigned32 AFS_CONN_PARAM_EPOCH = 3;
+/* the following for 64/32-bit compatibility stuff */
+const unsigned32 AFS_CONN_PARAM_MAXFILE_CLIENT = 4;
+const unsigned32 AFS_CONN_PARAM_MAXFILE_SERVER = 5;
+const unsigned32 AFS_CONN_PARAM_HOST_TYPE_CLIENT = 6;
+const unsigned32 AFS_CONN_PARAM_HOST_TYPE_SERVER = 7;
+/* the following for client or server feature declarations */
+const unsigned32 AFS_CONN_PARAM_FT_MASK_CLIENT = 8;
+const unsigned32 AFS_CONN_PARAM_FT_MASK_SERVER = 9;
+
+/*
+ * For AFS_CONN_PARAM_MAXFILE_*:
+ *
+ * The parameter value stores two exponents that are used to determine the max
+ * file size.  If 'a' is the lowest-order byte and 'b' is the second
+ * lowest-order byte in the 4-byte parameter value, the maximum file size is
+ * (2^a - 2^b).
+ *
+ * See afs_hyper_t osi_MaxFileParmToHyper(unsigned32 value):
+ *      (1 << (0xff & value)) - (1 << (0xff & (value >> 8)));
+ *
+ * Subsequent bits are interpreted as flag bits, only one of which is presently
+ * defined.  AFS_CONN_PARAM_SUPPORTS_64BITS is set to disable various backwards
+ * compatibility features provided by 64-bit hosts to avoid bugs and
+ * shortcoming in older systems.  The other bits are presently zero.
+ */
+
+const unsigned32 AFS_CONN_PARAM_SUPPORTS_64BITS = 0x10000;
+
+
+/*
+ * For debugging purposes (temporary)
+ */
+typedef struct afsDBLockDesc {
+	unsigned8 waitStates;
+	unsigned8 exclLocked;
+	unsigned8 readersReading;
+	unsigned8 numWaiting;
+} afsDBLockDesc;
+
+typedef struct afsDBCacheEntry {
+	unsigned32 addr;
+	afsFid fid;			  /* network part of the fid */
+	afsHyper length;
+	afsHyper dataVersion;
+	afsDBLockDesc lock;
+	unsigned32 tokenBaseID;
+	unsigned32 tokenMask;
+	unsigned32 tokenExpiration;
+	signed16 refCount;
+	signed16 opens;
+	signed16 writers;
+	signed16 readers;
+	signed16 shareds;
+	signed16 exclusives;
+	unsigned8 mvstat;
+	unsigned8 states;
+} afsDBCacheEntry;
+
+typedef struct afsDBLock {
+	byte name[16];
+	afsDBLockDesc lock;
+} afsDBLock;
+
+/*
+ *
+ * Various bulk typedefs from primitive structs above
+ *
+ */
+
+typedef struct afsRevokes {    /* needed also by tkn4int.idl  */
+	long afsRevokes_len;
+	[length_is(afsRevokes_len)] afsRevokeDesc afsRevokes_val[AFS_BULKMAX];
+} afsRevokes;
+
+typedef struct afsReturns {    /* needed also by tkn4int.idl  */
+	long afsReturns_len;
+	[length_is(afsReturns_len)] afsReturnDesc afsReturns_val[AFS_BULKMAX];
+} afsReturns;
+
+typedef struct afsFids {
+	unsigned32 afsFids_len;
+	[length_is(afsFids_len)] afsFid afsFids_val[AFS_BULKMAX];
+} afsFids;
+
+typedef struct afsTokens {
+	unsigned32 afsTokens_len;
+	[length_is(afsTokens_len)] afsToken afsTokens[AFS_BULKMAX];
+} afsTokens;
+
+/* afsStrings, used in AFS_BulkLookup, used to be identical to NameString_t itself */
+typedef struct afsStrings {
+	unsigned32 afsStrings_len;
+	[length_is(afsStrings_len)] afsTaggedName afsStrings_val[AFS_BULKMAX];
+} afsStrings;
+
+/* 
+ * Constants for RPC Versioning Scheme 
+ */
+
+const unsigned32 MAXSPARETEXT = 50;
+const unsigned32 MAXINTERFACESPERVERSION = 10;
+
+typedef struct dfs_interfaceDescription {
+
+	uuid_t      interface_uuid;  /* i/f UUID of the supported i/f */
+	unsigned16  vers_major;      /* i/f major version number */
+	unsigned16  vers_minor;      /* i/f minor version number */
+	unsigned32  vers_provider;   /* provider_version number */
+
+	unsigned32 spare0;	/* some long spares */
+	unsigned32 spare1;
+	unsigned32 spare2;
+	unsigned32 spare3;
+	unsigned32 spare4;
+	unsigned32 spare5;
+	unsigned32 spare6;
+	unsigned32 spare7;
+	unsigned32 spare8;
+	unsigned32 spare9;
+
+	byte spareText[MAXSPARETEXT]; /* spare text */
+
+} dfs_interfaceDescription;
+
+typedef struct dfs_interfaceList  {
+
+	unsigned32 dfs_interfaceList_len;
+	[length_is(dfs_interfaceList_len)] dfs_interfaceDescription dfs_interfaceList_val[MAXINTERFACESPERVERSION];
+
+} dfs_interfaceList;
+
+}

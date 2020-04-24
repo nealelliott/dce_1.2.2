@@ -1,0 +1,1087 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dfs.read_write_all.main,v $
+# Revision 1.1.10.2  1996/03/11  02:44:01  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:07:23  marty]
+#
+# Revision 1.1.10.1  1995/12/11  21:59:32  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/jrr_1.2_mothra/1  1995/12/06  16:12 UTC  bell_d
+# 	additions to make test operate on non-LFS dfs
+# 
+# 	      Insert Checks for Machines, Aggregates, and Servers using DFS commands
+# 	      to locate the information and extract it for use, rather than require
+# 	the fixed information in the dfs.read.write.data file
+# 	[1995/12/11  20:58:48  root]
+# 
+# Revision 1.1.8.1  1994/02/04  20:48:32  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:26:06  devsrc]
+# 
+# Revision 1.1.6.2  1994/01/20  18:44:22  annie
+# 	added copyright header
+# 	[1994/01/20  18:40:45  annie]
+# 
+# Revision 1.1.6.1  1994/01/10  21:20:34  gmd
+# 	Moved sourcing of $TROOT/check_RC.ksh below read_datafile_export_variables
+# 	so that TROOT defined before we reference it!
+# 	[1994/01/10  21:20:07  gmd]
+# 
+# Revision 1.1.4.2  1993/11/03  19:05:34  gmd
+# 	Look for check_RC.ksh in TROOT.
+# 	[1993/10/27  19:02:07  gmd]
+# 
+# 	Check for datafile - exit if not found.
+# 	Print and check results of fts create, crmount,
+# 	delmount and setquota commands.
+# 	Load check_RC function.
+# 	Output PASSED or FAILED in addition to 0 or 1
+# 	exit.
+# 	[1993/10/27  18:57:36  gmd]
+# 
+# Revision 1.1.4.1  1993/10/01  21:04:54  gmd
+# 	CR 8891 - Removed routines for setting up UNIX accounts
+# 		Added check_aggr_data()
+# 		Added check_uids()
+# 		Added check_dirs()
+# 		Added wait_and_see()
+# 		Turned on CLEANUP options
+# 	[1993/10/01  20:57:10  gmd]
+# 
+# 	CR 8891 Porting changes plus cleanup:
+# 	        Removed UNIX user setup code
+# 	        Added variables for HP-UX commands/syntax
+# 	        Added more verification routines
+# 	        Changed exitting code
+# 	[1993/10/01  20:42:48  gmd]
+# 
+# Revision 1.1.2.4  1993/08/02  19:34:12  dassarma
+# 	Added support for atomatic UNIX account set up on RIOS
+# 	platforms. The test is designed to run on a homogeneous
+# 	DCE cell; all RIOS or PMAX.
+# 	[1993/08/02  19:22:46  dassarma]
+# 
+# Revision 1.1.2.3  1993/07/20  14:58:36  dassarma
+# 	Reworked some parts of the script to make this script run better
+# 	on an all RIOS cell and to fix the problem described in OT 8284.
+# 	[1993/07/20  14:58:12  dassarma]
+# 
+# Revision 1.1.2.2  1993/07/09  20:21:01  dassarma
+# 	This is the driver script for the system test dfs.read.write_all.
+# 	[1993/07/09  20:14:44  dassarma]
+# 
+# $EndLog$
+#=========================================================================
+# Function: initialize
+# Purpose: This function initializes global variables that will remain 
+#	   constant during the execution of the script.
+#=========================================================================
+
+initialize()
+{
+
+   print "Entering $0 ..."
+   START_DATE=`date`
+   HOSTNAME=`hostname`
+   HOSTTYPE=`uname`
+   # The MAX_USER_ID is the largest signed integer in the same word.
+   MAX_RGY_USER_ID=32767
+   # DCE programs the script will be using, excluding DFS
+   # dce_login, acl_edit, rgy_edit
+   RGY_EDIT=${rgy_edit:-"/opt/dcelocal/bin/rgy_edit"}
+   DCE_LOGIN=${dce_login:-"/opt/dcelocal/bin/dce_login"}
+   ACL_EDIT=${acl_edit:-"/opt/dcelocal/bin/acl_edit"}
+   # UNIX commands used in this script
+   CHGRP="chgrp"
+   CHMOD="chmod"
+   CHOWN="chown"
+   COPY="cp"
+   MKDIR="mkdir"
+   TOUCH="touch"
+   RM="rm"
+   if [[ $HOSTTYPE = HP-UX ]]
+   then
+     RSH="remsh"
+   else
+     RSH="rsh"
+   fi
+   print "... Exiting $0"
+}
+
+#==============================================================
+# Function: read_arguments
+# Purpose:  This function reads the arguments from the command
+#  	    list, validates them, and proceeds accordingly.
+#==============================================================
+
+read_arguments() 
+{
+
+   print "Entering $0 ..."
+   USAGE="USAGE: ${PROGNAME} -f <datafile> -t <execution_time>"
+
+   set -- `getopt f:t: $COMMAND_LINE_PARAMETERS` 
+   if (($? != 0 || ${NUMBER_OF_ARGS} != 4))
+   then
+      print ${USAGE}
+      print "$PROGNAME exiting."
+      exit 1
+   fi
+
+   while getopts :f:t: param ${COMMAND_LINE_PARAMETERS}
+   do
+      case ${param} in
+         f) DATA_FILE=$OPTARG
+	    validate_input;;
+         t) TIME_TO_RUN=$OPTARG;;
+	/?) print ${USAGE};;
+      esac
+   done
+   print "... Exiting $0"
+}
+
+#=============================================================
+# Function: set_trap
+# Purpose: This function executes when the script receives a
+#	   signal to terminate. It cleans up and exits.
+#============================================================
+
+setup_trap () 
+{
+
+   trap '  
+	print 
+        print "==============================================="
+	print "Trap signal received ..."
+	print "==============================================="
+	print
+	cleanup
+	print "Start date and time was ${START_DATE}"
+	print "End date and time is `date`"
+	exit 1'	
+}
+
+#============================================================
+# Function: read_datafile_export_variables
+# Purpose:  This function invokes a dot script, the datafile,
+#	    and export all the variables defined in it.
+#	    This data will be used to setup the DFS environment
+#	    used by the core of the test.
+#============================================================
+
+read_datafile_export_variables()
+{
+
+   print "Entering $0 ..."
+   if [ ! -f ${DATA_FILE} ]
+   then
+       print "${PROGNAME}: no such file ${DATA_FILE}"
+       print "$PROGNAME exiting."
+       exit 1
+   fi
+. ${DATA_FILE}
+
+   if (($? != 0)) 
+   then
+       print "${PROGNAME}: file ${DATA_FILE} is not readable"
+       print "$PROGNAME exiting."
+       exit 1
+   fi
+
+# Export all variables set in the datafile
+
+   for i in `grep "^ *[A-Z]" < ${DATA_FILE} | \
+		awk '{split ($1,word,"="); print word[1]}'`
+   do
+      export ${i}
+   done
+
+#  Now set the machines names variable based on the set in the hosts file
+
+MACHINES=`cdscp list dir /.:/hosts/* |awk '{print $1}' |sed 's/LIST//'|\
+  sed 's/DIRECTORY//' |sed 's/AT//'`
+
+x=0
+for i in ${MACHINES}
+do
+  ((x = x + 1))
+done
+NUMBER_OF_USERS=$x
+
+  
+#
+#   At this point we've found the list of machines possible for testing.
+#   Now get the number of sites from the fts lsfldb data and use it to determine
+#   how many possible servers there may be.
+#   Also get the server names from the FLDB listing, as well as the aggregate
+#   names associated with each server.
+#
+
+numb_sites=`fts lsfldb|grep "number of sites"| awk '{print $4}'`
+
+## Locate the servers and their aggregates for testing 
+#
+
+
+  AGGR_SERVERS=`fts lsfldb |grep ".ch." |awk '{print $1}'|sed 's/.cell//'\
+    |sed 's/.ch//'|sed 's/.apollo//' |sed 's/.hp//'|sed 's/.com//'|sed 's/.c//'\
+    |sed 's/.co//'`
+echo " $AGGR_SERVERS "
+  AGGR_NAMES=`fts lsfldb |grep ".ch." |awk '{print $3}'`
+
+echo "Aggregates:   $AGGR_NAMES "
+
+
+# Make sure that the first part of the datafile looks ok, as far as the script can tell. 
+# That the first set of variables have the same number of entries.
+   
+   i=0
+   for x in ${AGGR_NAMES}
+   do
+     (( i = i + 1 ))
+   done
+   
+   j=0
+   for x in ${AGGR_SIZES}
+   do
+     (( j = j + 1 ))
+   done
+
+   k=0
+   for x in ${AGGR_SERVERS}
+   do
+     (( k = k + 1 ))
+   done
+
+   l=0
+   for x in ${BASE_MOUNT_POINTS}
+   do
+     (( l = l + 1 ))
+   done
+ 
+   m=0
+   for x in ${FILESETS_PER_AGGR}
+   do
+     (( m = m + 1 ))
+   done
+ 
+   n=0
+   for x in ${FILESETS_QUOTA}
+   do
+     (( n = n + 1 ))
+   done
+
+   if ( (( i == j )) && (( i == k)) && (( i == l )) && (( i == m )) && (( i == n )) )
+   then 
+ 	:
+   else
+      print "The first set of variables in the datafile do not have the same number of values. "
+      print "Revise the datafile and start the test again."
+      print "AGGR_NAMES -> has $i entries."
+      print "AGGR_SIZES -> has $j entries."
+      print "AGGR_SERVERS -> has $k entries."
+      print "BASE_MOUNT_POINTS -> has $l entries."
+      print "FILESETS_PER_AGGR -> has $m entries."
+      print "FILESETS_QUOTA -> has $n entries."
+      print "$PROGNAME exiting."
+      exit 1
+    fi
+
+   print "... Exiting $0"
+}
+
+#==============================================================================
+# Function: ping_machines
+# Purpose: To make sure that all the machines listed in the datafile are
+#	   reachable.
+#	   Note: The ping command may vary in syntax across different platforms,
+#		 if the need arises this functions should be enhanced to evaluate
+#	         the command before it is issued.
+#===============================================================================
+ping_machines()
+{
+   print "Entering $0 ..."
+
+   if [[ $HOSTTYPE = HP-UX ]]
+   then
+       ping_command='eval ping $rhost 8 1'
+   else
+       ping_command='eval ping -p 1 -c 1 $rhost'
+   fi
+
+# First ping all the machines where the test is to run.
+   for rhost in ${MACHINES}
+   do 
+      $ping_command > /dev/null
+      if (( $? != 0 ))
+      then
+	 print "Host $rhost not responding  - $ping_command "
+	 print "$PROGNAME exiting."
+	 exit 1
+      else
+	 print "Host $rhost reachable."
+      fi
+   done
+
+# Second ping all the servers where the aggregates live.
+
+   for rhost in ${AGGR_SERVERS}
+   do
+      $ping_command > /dev/null
+      if (( $? != 0 ))
+      then
+         print "server $rhost not responding  - $ping_command "
+         print "$PROGNAME exiting."
+         exit 1
+      else
+         print "Host $rhost reachable."
+      fi
+   done
+
+   print "... Exiting $0"
+}
+#=============================================================
+# Function: check_disk_space_alloted
+# Purpose:  This function calculates the total aggregate space
+#	    available and checks if there is enough space to
+#	    create filesets for each of the test users.
+#
+#============================================================
+
+check_disk_space_alloted() 
+{
+
+   print "Entering $0 ..."
+   integer total_filesets=0
+   integer filesets_per_aggr=0
+   integer fs_wanted=0
+   integer fs_quota=0 
+   integer i
+
+   # Calculate how many filesets can be created in each aggregate with the quota specified.
+
+   quotas="${FILESETS_QUOTA}"
+   fsets="${FILESETS_PER_AGGR}"
+   aggrs="${AGGR_NAMES}"
+   for i in ${AGGR_SIZES}
+   do
+        fs_quota=`print ${quotas} | sed 's/ .*$//'`
+        fs_wanted=`print ${fsets} | sed 's/ .*$//'`
+	aggrs=`print ${aggrs} | sed 's/ .*$//'`
+        (( filesets_per_aggr = i / fs_quota ))
+        if (( fs_wanted > filesets_per_aggr ))
+	then
+	   print "The number of filesets specified in the datafile for aggregate $i is too large."
+  	   print "Aggregate $aggr_name can only hold $filesets_per_aggr filesets with a quota of $fs_quota."
+           print "$PROGNAME exiting."
+	   exit 1
+	fi
+	(( total_filesets = total_filesets + filesets_per_aggr ))
+        quotas=`print ${quotas} | sed 's/^[^ ]* *//'`  
+	fsets=`print ${fsets} | sed 's/^[^ ]* *//'`
+	aggrs=`print ${aggrs} | sed 's/^[^ ]* *//'`
+   done
+
+   # If the number of users is greater than the possible number of filesets 
+   # than can be created then print an error an exit.
+
+   if (( ${NUMBER_OF_USERS} > total_filesets ))
+   then
+      print "There is insufficient aggregate space to create ${NUMBER_OF_USERS} filesets."    
+      print "$PROGNAME exiting."
+      exit 1
+   fi
+   print "... Exiting $0"
+}
+
+#==========================================================================
+# Function: setup_user_data
+# Purpose: To set up some general information about the users that will be
+#          needed throught the test.
+#==========================================================================
+setup_user_data()
+{
+
+  print "Entering $0 ..."
+# compose a list of the home filesets
+  get_home_filesets
+# compose a list of the user names
+  get_user_names
+# verify max registry user id to use
+ (( max_dfs_user_uid = ${BASE_UID} + ${NUMBER_OF_USERS} ))
+  if (( ${max_dfs_user_uid} >= ${MAX_RGY_USER_ID} ))
+  then
+      print "${PROGNAME}: FAILED in setting up the registry database, the user ids will \
+                          exceed the maximun value allowed ${MAX_RGY_USER_ID} by the registry."
+      exit 1
+  fi
+  print "Exiting $0 ..."
+}
+
+#===============================================================================
+# Function: users_filesets
+# Purpose:  This function creates and mounts one fileset per user
+#
+# ${1} : indicates operation - create or delete
+#===============================================================================
+
+users_filesets()
+{
+
+   print "Entering $0 ...."
+   running_count=0 
+   n=0
+
+   quotas="${FILESETS_QUOTA}"
+   aggrs="${AGGR_NAMES}"
+   aservers="${AGGR_SERVERS}"
+   aggr_filesets="${FILESETS_PER_AGGR}"
+ 
+   for i in ${BASE_MOUNT_POINTS}
+   do
+      agger_name=`print ${aggrs} | sed 's/ .*$//'`
+      agger_server=`print ${aservers} | sed 's/ .*$//'`
+      fts_per_aggr=`print ${aggr_filesets} | sed 's/ .*$//'`
+      fs_quota=`print ${quotas} | sed 's/ .*$//'`
+      while (( n <= ${NUMBER_OF_USERS} && fts_per_aggr >= 1 ))
+      do
+         (( fts_per_aggr = fts_per_aggr - 1 ))
+         (( n = n + 1 ))
+         u=${BASE_USER_NAME}${n}
+         if [[ ${1} = create ]]
+         then
+          
+          if [ $aggr_type = Non-LFS ]
+          then
+	    cd ${i}
+	    mkdir ${u}
+	    
+          else
+            print "fts create -ftname ${u}.fs -server ${agger_server} -aggregate ${agger_name}"
+	    fts create -ftname ${u}.fs -server ${agger_server} -aggregate ${agger_name}
+	    check_RC "$?" "fts create"
+	    print "fts crmount -dir ${i}/${u} -fileset ${u}.fs"
+	    fts crmount -dir ${i}/${u} -fileset ${u}.fs
+	    check_RC "$?" "fts crmount"
+	    print "fts setquota -fileset ${u}.fs -size ${fs_quota}"
+	    fts setquota -fileset ${u}.fs -size ${fs_quota}
+	    check_RC "$?" "fts setquota"
+            print " "
+	  fi
+          elif [[ ${1} = delete ]]
+          then
+            
+            if [ $aggr_type = Non-LFS ]
+            then
+	     cd ${i}
+	     rm -R ${u}
+	    else
+             print "fts delmount -dir ${i}/${u}"
+             fts delmount -dir ${i}/${u}
+	     check_RC "$?" "fts delmount"
+             print "fts delete -fileset ${u}.fs -server ${agger_server} -aggregate ${agger_name}"
+             fts delete -fileset ${u}.fs -server ${agger_server} -aggregate ${agger_name}
+	     check_RC "$?" "fts delete"
+	    fi
+	  else
+		:
+	  fi
+      done
+      aggrs=`print ${aggrs} | sed 's/^[^ ]* *//'`
+      aservers=`print ${aservers} | sed 's/^[^ ]* *//'`
+      aggr_filesets=`print ${aggr_filesets} | sed 's/^[^ ]* *//'`
+      fs_quota=`print ${fs_quota} | sed 's/^[^ ]* *//'`
+    done
+
+   print "... Exiting $0"
+
+}
+
+#==================================================================================
+# 
+# Function: do_cm_check
+# Purpose:  This function executes the "cm check" command on every machine the
+#	    test will be running. This will assure the availability of the
+#	    filesets by the time the script starts exercising operations on them.
+#	    Note that the RSH is done with a -l <1st test user>. This is so that
+#	    only the ~testuser/.rhosts file needs to be altered for this test
+#	    and not the /.rhosts.
+#
+#==================================================================================
+do_cm_check()
+{
+   for rhost in $MACHINES
+   do
+     if [[ $HOSTNAME = $rhost ]]
+     then
+        cm check
+     else
+        ${RSH} $rhost -n -l ${BASE_USER_NAME}1 cm check
+     fi
+   done
+   print "... Exiting $0"
+}
+
+#==================================================================================
+# Function: cell_registration
+# Purpose:  This function updates the cell's registry databases. 
+#	    For each user, it adds/deletes an entry in the registry. 
+#	    A group is created/deleted in the registry.
+#	    There is only one group used for the purpose of this test.
+#
+#=================================================================================
+
+cell_registration() 
+{
+
+  print "Entering $0 ..."
+
+  base_uid=${BASE_UID}
+  base_gid=${GROUP_ID}
+  print ${base_uid} ${base_gid}
+
+  process_rgy_group_list ${1}
+  process_rgy_user_list ${1}
+
+   print "... Exiting $0"
+}
+
+#====================================================================================
+# Function: users_homefs_setup 
+# Purpose: This function sets ownership, acls and
+#	   modes on users' home filesets.
+#=====================================================================================
+
+users_homefs_setup()
+{
+
+   print "Entering $0 ..."
+
+   # The files USER_PROFILE and TODO_SCRIPT are expected to be in the path
+   # set in the datafile. 
+   if (( $POPULATE_USER_ENV ))
+   then
+     n=1
+     for i in ${home_filesets}
+     do 
+        print "${COPY} ${TROOT}/${USER_PROFILE} ${i}/.${USER_PROFILE}"
+        ${COPY} ${TROOT}/${USER_PROFILE} ${i}/.${USER_PROFILE}
+        print "${COPY} ${TROOT}/${TODO_SCRIPT} ${i}/${TODO_SCRIPT}"
+        ${COPY} ${TROOT}/${TODO_SCRIPT} ${i}/${TODO_SCRIPT}
+        print "${CHOWN} -R ${BASE_USER_NAME}${n} ${i}"
+        ${CHOWN} -R ${BASE_USER_NAME}${n} ${i}
+        print "${CHMOD} -R 755 ${i}"
+        ${CHMOD} -R 755 ${i}
+        print "${CHGRP} -R ${GROUP_NAME} ${i}"
+        ${CHGRP} -R ${GROUP_NAME} ${i}
+        (( n = n + 1 ))
+     done
+   fi
+   print "... Exiting $0"
+}
+
+#==========================================================================
+# Function: dcelogin_users_to_readnwrite
+# Purpose: This function logs in a user per machine, and have each user execute
+#	   the TODO script.
+#=========================================================================
+
+dcelogin_users_to_readnwrite()
+{
+
+   print "Entering $0 ..."
+   n=1
+   homes=${home_filesets}
+
+   if [[ -f ${COMMON_LOG_FILE} ]]
+   then
+      ${RM} -f ${COMMON_LOG_FILE}
+   fi
+   ${TOUCH} ${COMMON_LOG_FILE}
+   ${CHMOD} 777 ${COMMON_LOG_FILE}
+
+   while (( ${n} <= ${NUMBER_OF_USERS} ))
+   do
+      for m in ${MACHINES}
+      do
+         user_home=`print ${homes} | sed 's/ .*$//'`
+	 print "user_home = ${user_home}"
+         u=${BASE_USER_NAME}${n}
+	 print "Ready to dce_login user - ${u} on machine - ${m}"
+         # if this rsh fails, check the .rhosts and hosts.equiv files in the host and remote
+	 # machines
+	 ${RSH} ${m} -n -l ${u} ${DCE_LOGIN} ${u} ${DFS_USER_PWD} -exec ${user_home}/${TODO_SCRIPT} ${COMMON_LOG_FILE} ${u} ${TIME_TO_RUN} > ${LOCAL_LOG_DIR}/${m}.${u}.log 2>&1 &
+	 PIDS="${PIDS}$! "
+	 print "PIDS => $PIDS"
+         if (( ${n} >= ${NUMBER_OF_USERS} ))
+	 then
+	     break 2 
+	 else
+	     (( n = n + 1 ))
+	 fi
+	 homes=`print ${homes} | sed 's/^[^ ]* *//'`
+      done
+   done
+   print "... Exiting $0"
+}
+
+#====================================================================================
+# Function: list_home_filesets
+#====================================================================================
+get_home_filesets()
+{
+   integer agger_size=0
+   integer fts_per_aggr=0
+   n=1 
+   home_filesets=""
+ 
+   aggr_filesets="${FILESETS_PER_AGGR}"
+
+   for i in ${BASE_MOUNT_POINTS}
+   do
+     fts_per_aggr=`print ${aggr_filesets} | sed 's/ .*$//'` 
+     while (( n <= ${NUMBER_OF_USERS} && fts_per_aggr >= 1 )) 
+     do
+	home_filesets="${home_filesets}$i/${BASE_USER_NAME}${n} "	
+	(( fts_per_aggr = fts_per_aggr - 1 ))
+	(( n = n + 1 ))
+     done
+     aggr_filesets=`print ${aggr_filesets} | sed 's/^[^ ]* *//'`
+   done 	   
+   print "Home filesets are = ${home_filesets}"
+}
+
+#====================================================================================
+# Function: process_rgy_group_list
+#====================================================================================
+process_rgy_group_list()
+{
+
+# There is only one group for now, so it is just adding or deleting the group
+
+   members=""
+   if [[ ${1} = enter ]]
+   then
+        add_rgy_group ${GROUP_NAME} ${base_gid}
+   else
+        remove_rgy_entry group ${GROUP_NAME}
+   fi
+}
+
+#====================================================================================
+# Function: process_rgy_user_list
+#====================================================================================
+process_rgy_user_list ()
+{
+
+   integer i=1
+   principal_name=""
+   homes=${home_filesets}
+
+   principal_uid=${base_uid}
+   principal_gid=${base_gid}
+
+   # Add all users to the registry
+
+   while (( i <= ${NUMBER_OF_USERS} )) 
+   do
+	principal_name=${BASE_USER_NAME}${i}
+	user_home=`print ${homes} | sed 's/ .*$//'`
+	homes=`print ${homes} | sed 's/^[^ ]* *//'`
+print "prin name = ${principal_name}, user_home = ${user_home} "
+	if [[ $1 = enter ]]
+	then
+	   add_rgy_user ${principal_name} ${principal_uid} ${GROUP_NAME} ${user_home}
+	else
+	   remove_rgy_entry principal ${principal_name}
+	fi
+	(( i = i + 1 ))
+	(( principal_uid = principal_uid + 1 ))
+   done
+}
+
+#====================================================================================
+# Function: add_rgy_user
+# ${1} : principal name
+# ${2} : principal uid
+# ${3} : group name
+# ${4} : home directory
+#====================================================================================
+add_rgy_user ()
+{
+
+utmp=${1}
+
+# First find out if the user is already in the registry database.
+cat << EOF > /tmp/$0.$$
+domain principal
+view ${1}
+quit
+EOF
+
+${RGY_EDIT} -update < /tmp/$0.$$ > /tmp/$0-${utmp}.$$
+n=`cat /tmp/$0-$1.$$ | awk 'BEGIN { FS = " "}  $1 ~ /'"$utmp"'/ {print $1}'`
+
+print ${n} 
+${RM} -f /tmp/$0.$$ /tmp/$0-${utmp}.$$
+if [[ $n = ${1} ]]
+then 
+   print "User ${1} with ID ${2} is already in the registry."
+else
+# If the user was not found in the registry then add it.
+   ${RGY_EDIT} -update << ==END==
+domain principal
+add ${1} ${2}
+domain account 
+add ${1} -g ${3} -o none -pw ${DFS_USER_PWD} -mp -dce- -h ${4} -mcl 96 -mcr 168
+quit
+==END==
+fi
+}
+
+#====================================================================================
+# Function: add_rgy_group
+# ${1}: group name
+# ${2}: group id
+#====================================================================================
+add_rgy_group()
+{
+
+  ${RGY_EDIT} -update -g << ==END==
+add $1 $2
+quit
+==END==
+}
+
+#====================================================================================
+# Function: remove_rgy_entry
+# ${1}:  [principal | group ]
+# ${2}:   name
+#====================================================================================
+remove_rgy_entry()
+{
+
+  rgy_flag=" -p "
+  if [[ $1 = group ]]
+  then 
+    rgy_flag=" -g "
+  fi 
+  ${RGY_EDIT} -update ${rgy_flag} << ==END==
+delete $2
+quit
+==END==
+ 
+}
+
+#====================================================================================
+# Function: get_user_names
+#====================================================================================
+get_user_names()
+{
+
+   integer i=1
+   list_user_names=""
+   principal_name=""
+ 
+   while (( i <= ${NUMBER_OF_USERS} )) 
+   do
+	principal_name=${BASE_USER_NAME}${i}
+	list_user_names="${list_user_names}${principal_name} "
+        (( i = i + 1 ))
+   done
+   print "list of users - $list_user_names."
+}
+
+#====================================================================================
+# Function: validate_input
+# This function verifies that the arguments are valid
+# before the test proceeds.
+#====================================================================================
+validate_input()
+{
+
+   if [[ ! -f ${DATA_FILE} ]]
+   then
+      print "${PROGNAME}: ${DATA_FILE} not found or is not a file."
+      print $USAGE
+      print "$PROGNAME exiting."
+      exit 1
+   fi
+
+}
+
+#====================================================================================
+# Function: check_aggr_data
+# Check that the aggregate data is correct.
+# That is: the aggregate is on the server, it's an LFS aggregate
+# AND there's at least AGGR_SIZE free space available.
+#====================================================================================
+check_aggr_data()
+{
+   print "Entering $0 ..."
+
+   names="${AGGR_NAMES}"
+   sizes="${AGGR_SIZES}"
+
+   for rhost in ${AGGR_SERVERS}
+   do
+      aggr_name=`print ${names} | sed 's/ .*$//'`
+      aggr_size=`print ${sizes} | sed 's/ .*$//'`
+
+      aggr_info=`fts aggrinfo -server $rhost -aggr $aggr_name`
+      if [ $? -ne 0 ]
+      then
+        print "FAILED - Error executing command 'fts aggrinfo -server $rhost -aggr $aggr_n
+ame'"
+        print "$PROGNAME exiting."
+        exit 1
+      fi
+
+      aggr_type=`print $aggr_info | awk '{print $1}'`
+
+      if [[ $aggr_type = LFS ]]
+      then
+        aggr_free=`print $aggr_info | awk '{print $5}'`
+        if (( aggr_size > aggr_free ))
+        then
+           print "FAILED - Info on $rhost aggregate $aggr_name incorrect."
+           print "Only $aggr_free K free, not $aggr_size."
+           print "$PROGNAME exiting."
+           exit 1
+        fi
+      fi
+      names=`print ${names} | sed 's/^[^ ]* *//'`
+      sizes=`print ${sizes} | sed 's/^[^ ]* *//'`
+   done
+
+   print "... Exiting $0"
+}
+
+#====================================================================================
+# Function: check_uids
+# Check that the uids in the registry
+# match those on each machine.
+#====================================================================================
+check_uids()
+{
+   print "Entering $0 ..."
+
+   ${RGY_EDIT} -p -v > /tmp/$0-users.$$
+
+   for rhost in $MACHINES
+   do
+      for user in $list_user_names
+      do
+        rgy_uid=`cat /tmp/$0-users.$$ | grep $user | awk '{print $2}'`
+        ruid_rgids=`${RSH} $rhost -n -l $user id`
+        ruid=`print $ruid_rgids | awk -F= '{print $2}' | awk -F\( '{print $1}'`
+        if [[ $rgy_uid != $ruid ]]
+        then
+            print "FAILED - user id mismatch on $rhost!"
+            print "Expected $user to be $rgy_uid"
+            print "Found $user to be $ruid"
+            print "$PROGNAME exiting."
+	    exit 1
+        fi
+      done
+   done
+   rm -rf /tmp/$0-users.$$
+
+   print "... Exiting $0"
+}
+
+#====================================================================================
+# Function: check_dirs
+# Check that the directories exist.
+# If necessary, create the directories.
+# ${1}: string of directories
+# ${2}: permission bit mask
+#====================================================================================
+check_dirs()
+{
+   print "Entering $0 ..."
+
+   for dir in ${1}
+   do
+     # check that exists
+     if [[ ! -d $dir ]]
+     then
+       mkdir -p $dir
+       if [[ $? != 0 ]]
+       then
+         print "FAILED - Error creating directory $dir"
+         print "$PROGNAME exiting."
+         exit 1
+       fi
+     fi
+
+     # enforce permissions
+     chmod ${2} $dir
+     if [[ $? != 0 ]]
+     then
+       print "FAILED - Error chmoding directory $dir"
+       print "$PROGNAME exiting."
+       exit 1
+     fi
+   done
+
+   print "... Exiting $0"
+}
+
+#====================================================================================
+# Function: wait_and_see
+# Wait for users and check the common log file for FAILED messages
+#====================================================================================
+
+wait_and_see()
+{
+PASS=0
+FAIL=1
+PASS_FAIL=$FAIL
+
+   print "Entering $0 ..."
+   for pid in $PIDS
+   do
+     wait $pid
+   done
+
+   fgrep "FAIL" ${COMMON_LOG_FILE} > /dev/null
+   if (( $? == 0 ))
+   then
+      print "FAILURE detected - setting PASS_FAIL to $FAIL"
+      PASS_FAIL=$FAIL
+   else
+      npass=`fgrep "PASS" ${COMMON_LOG_FILE} | wc -l`
+      if (( $npass == $NUMBER_OF_USERS ))
+      then
+	print "All users PASSED - setting PASS_FAIL to $PASS"
+	PASS_FAIL=$PASS
+      else
+	print "FAILURE suspected - setting PASS_FAIL to $FAIL"
+	PASS_FAIL=$FAIL
+      fi
+   fi
+
+   print "... Exiting $0"
+}
+
+#======================================================
+#
+# Main process
+#
+#======================================================
+
+# I. SCRIPT SET UP
+#set -x 
+
+print "Entering $0 at `date`"
+PROGNAME=`basename $0`
+NUMBER_OF_ARGS=$#
+COMMAND_LINE_PARAMETERS="$@"
+
+# Initialize global variables
+initialize 
+
+# Read arguments from the command line and validate their values
+read_arguments
+
+# Set up the trap handler
+setup_trap
+
+# Reads data file and exports all variables
+read_datafile_export_variables
+
+# Load check_RC function
+. ${TROOT}/check_RC.ksh
+
+# II. Check datafile contents
+# Make sure that our hosts are alive.
+ping_machines
+
+# Calculate if AGGR_SIZES of disk space specified will suffice to create 
+# the filesets for the number of test users (set in the datafile).
+check_disk_space_alloted
+
+# Build user list and fileset list from BASE_USER_NAME and NUMBER_OF_USERS
+setup_user_data
+
+# Check that the directories exist with given permissions
+check_dirs "${BASE_MOUNT_POINTS}" "755"
+check_dirs "${LOCAL_LOG_DIR}" "777"
+check_dirs "${COMMON_LOG_DIR}" "777"
+
+# III. CELL REGISTRATION OF USERS
+# Sets up each user in the cell registry database.
+if (( $SETUP_RGY_ACCOUNTS ))
+then
+   cell_registration enter
+fi
+
+# Check that the test uids for the cell registry
+# match the local test uids on each machine.
+check_uids
+
+# IV. SET UP OF USERS' HOME FILESETS ON DFS AGGREGATES
+# Check that AGGR_SIZES of disk space is actually available.
+# Create filesets for users. 
+if (( $CREATE_FILESETS ))
+then
+   check_aggr_data
+   users_filesets create
+   do_cm_check
+   users_homefs_setup 
+fi
+
+# V. USERS EXERCISE OF DFS PERFORMING READS AND WRITES 
+dcelogin_users_to_readnwrite
+
+# VI. WAIT FOR USERS TO COMPLETE, SET PASS/FAIL RETURN
+wait_and_see
+
+# VII. CLEANUP 
+if (( $DELETE_FILESETS ))
+then 
+   users_filesets delete
+fi
+
+if (( $DELETE_RGY_ACCOUNTS ))
+then
+    cell_registration delete
+fi
+
+if (( $DELETE_COMMON_LOG_FILE ))
+then
+   rm ${COMMON_LOG_FILE}
+fi
+
+if (( $DELETE_LOCAL_LOGS ))
+then
+   rm -rf ${LOCAL_LOG_DIR}
+fi
+
+# VIII. EXIT
+if (( $PASS_FAIL ))
+then
+   print "$PROGNAME FAILED"
+else
+   print "$PROGNAME PASSED"
+fi
+print "Exiting $0 with $PASS_FAIL - program terminated at `date`"
+exit $PASS_FAIL
+
+
+
+
+
+
+
+
+

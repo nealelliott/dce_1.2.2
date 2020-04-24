@@ -1,0 +1,141 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ * 
+ */
+/*
+ * HISTORY
+ * $Log: sample_db.idl,v $
+ * Revision 1.1.7.3  1996/03/09  23:15:27  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:32:41  marty]
+ *
+ * Revision 1.1.7.2  1995/12/08  20:54:43  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  20:49:53  root]
+ * 
+ * Revision 1.1.2.2  1994/10/27  20:06:54  rrizzo
+ * 	expand copyright
+ * 	[1994/10/27  19:39:11  rrizzo]
+ * 
+ * Revision 1.1.2.1  1994/10/21  19:13:28  weir
+ * 	Submit sample program sources (CR 12635)
+ * 	[1994/10/21  19:12:42  weir]
+ * 
+ * $EndLog$
+ */
+/****************************************************************************/
+/* [27.VI.94]                                                               */
+/*                                                                          */
+/* sample_db.idl -- Here we declare a "serialization" function for the      */
+/*                  sample object                                           */
+/*                                                                          */
+/*                                                                          */
+/*  This file contains the declarations for the data type that will contain */
+/*   the data that we will be storing "in" our sample objects.              */
+/*                                                                          */
+/*  The declarations are done in an IDL file because the data is sent       */
+/*   across the wire by the ACL and Backing Store routines.                 */
+/*                                                                          */
+/*                                                                          */
+/*                                                                          */
+/*                                                                          */
+/*  The instructions for how to set up the IDL and ACF files to generate    */
+/*   serialization procedures for backing store data types can be found in  */
+/*   the dce_db_open.3dce manpage. This file and its accompanying .acf file */
+/*   are written in conformance with the examples there.                    */
+/*                                                                          */
+/*                                                                          */
+/*                            -77 cols-                                     */
+/****************************************************************************/
+
+
+
+[ uuid(00312933-403d-1d3d-a469-0000c0d4de56),
+version(1.0) ]
+
+interface sampledb
+{
+	import "dce/database.idl";
+	import "sample.idl";
+
+
+/*** FROM dce/database.idl: *************************************************/
+	/* This is the standard header for each "object" in the database.   */
+	/* IMPORTANT:
+	/*	The header struct cannot have any variable-length data      */
+	/*      (e.g., char *). This is because when fetching (and un-      */
+	/*	marshalling) just the header, the variable part is at the   */
+	/*	end of the application's entire data object, not at the end */
+	/*	of the header.                                              */
+/*
+        THE FOLLOWING IS FILLED IN BY A CALL TO dce_db_std_header_init().
+	For an example of how these fields are accessed, see the routine
+	sample_resolve_by_name() in sample_server.c. Note that the fields
+	are automatically filled in by the ACL library; we only have to
+	read them.
+
+	typedef struct dce_db_dataheader_s_t {
+	    uuid_t		uuid;              [...Object UUID.]
+	    uuid_t		owner_id;
+	    uuid_t		group_id;
+	    uuid_t		acl_uuid;
+	    uuid_t		def_object_acl;
+	    uuid_t		def_container_acl;
+	    unsigned32		ref_count;
+	    THE FOLLOWING FIELDS ARE PRIVATE TO THE LIBRARY:
+	    utc_t		created;
+	    utc_t		modified;
+	    unsigned32		modified_count;
+	} dce_db_dataheader_t;
+
+	typedef enum {
+	    dce_db_header_std,
+	    dce_db_header_acl_uuid,
+	    dce_db_header_none
+	} dce_db_header_type_t;
+
+
+	WHICH ONE OF THE FOLLOWING YOU GET DEPENDS ON A FLAG PASSED TO
+	THE dce_db_open() ROUTINE...
+	typedef union switch (dce_db_header_type_t type) tagged_union {
+	    case dce_db_header_none:		NONE ;
+	    case dce_db_header_std:		dce_db_dataheader_t h;
+	    case dce_db_header_acl_uuid:	uuid_t	acl_uuid;
+	} dce_db_header_t;
+
+*/
+/*** ...END OF FROM dce/database.idl ****************************************/
+
+	/* Currently there is no actual object data in this structure.      */
+	/*  We just use it to hold the object piece of the                  */
+	/*  name->object->acl mapping...      [OLD NOTE]                    */
+
+	typedef struct sample_record_s_t {
+		[string]   char message[TEXT_SIZE];
+	} sample_record_t;
+
+	typedef struct sample_data_s_t {
+		dce_db_header_t s_hdr;
+		sample_record_t s_data;
+	} sample_data_t;
+
+
+	void sample_data_convert(
+		[in]		handle_t	h,
+		[in,out]	sample_data_t	*data,
+		[in,out]	error_status_t	*st
+	);
+
+
+	void uu_convert(
+		[in]		handle_t	h,
+		[in,out]	uuid_t		*u,
+		[in,out]	error_status_t	*st
+	);
+
+}
+

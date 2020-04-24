@@ -1,0 +1,133 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ * 
+ */
+/*
+ * HISTORY
+ * $Log: rrpc.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:07:02  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:25:48  marty]
+ *
+ * Revision 1.1.4.1  1995/12/08  21:27:36  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  17:59:43  root]
+ * 
+ * Revision 1.1.2.3  1994/07/15  17:22:19  rsalz
+ * 	Created from rpc/sys_idl/rrpc.idl
+ * 	Update LLB support; remove sources from src/rpc (OT CR 7435).
+ * 	[1994/07/15  17:20:16  rsalz]
+ * 
+ * Revision 1.1.2.2  1994/06/09  16:03:03  devsrc
+ * 	cr10892 - fix copyright
+ * 	[1994/06/09  15:48:40  devsrc]
+ * 
+ * Revision 1.1.2.1  1994/05/06  20:00:05  rsalz
+ * 	Add files for NCS1.5 mgmt interface support.
+ * 	[1994/05/06  19:59:52  rsalz]
+ * 
+ * $EndLog$
+ */
+
+/*
+**  Copyright (c) 1989 by
+**	Hewlett-Packard Company, Palo Alto, Ca. and
+**	Digital Equipment Corporation, Maynard, Mass.
+*/
+
+/*
+**  This interface defines procedures exported by all NCS1.5.1 servers.  The
+**  implementation of this interface is in the server's runtime support
+**  (i.e. not part of the application server proper).  This is an internal
+**  interface for the DCE 1.1 endpoint mapper (dced) so that it can serve
+**  as an LLB; it is not intended for public use.
+*/
+[
+    uuid(36CE399D-4000-0000-0D00-00C366000000), version(0)
+]
+interface rrpc
+{
+
+    const long	rrpc_cant_get_stats		= 0x1C040002;
+    const long	rrpc_cant_get_ifs		= 0x1C040003;
+    const long	rrpc_op_not_allowed		= 0x1C040004;
+
+    /*
+    ** A vector of integer statistics returned by "rrpc_inq_stats".  The
+    ** constants defined below define the meaning of the various elements
+    ** of the vector.
+    */
+    const long	rrpc_sv_calls_in		= 0;	/* calls processed */
+    const long	rrpc_sv_rcvd			= 1;	/* pkts rcvd */
+    const long	rrpc_sv_sent			= 2;	/* pkts sent */
+    const long	rrpc_sv_calls_out		= 3;	/* calls made */
+    const long	rrpc_sv_frag_resends		= 4;	/* frag sent that were dups of previous send */
+    const long	rrpc_sv_dup_frags_rcvd		= 5;	/* dup frags rcvd */
+
+    typedef [v1_struct] struct {
+		unsigned32		vers;
+		unsigned16		port[32];
+		unsigned16		opcnt;
+		uuid_old_t		id;
+    } rrpc_if_spec_t;
+
+    typedef [v1_array] rrpc_if_spec_t	rrpc_interface_vec_t[];
+
+    typedef [v1_array] signed32		rrpc_stat_vec_t[];
+
+
+    /*
+    ** A trivial procedure to check to see if a server is answering requests.
+    */
+    [idempotent]
+    void
+    rrpc_are_you_there (
+	[in]	handle_t		h,
+	[out]	error_status_t		*status
+    );
+
+
+    /*
+    **  Return some interesting statistics.
+    */
+    [idempotent]
+    void
+    rrpc_inq_stats(
+	[in]	handle_t		h,
+	[in]	unsigned32		max_stats,
+	[out, max_is(max_stats), last_is(*l_stat)]
+		rrpc_stat_vec_t		stats,
+	[out]	signed32		*l_stat,
+	[out]	error_status_t		*status
+    );
+
+
+    /*
+    **  Return a list of interfaces the server currently exports.
+    */
+    [idempotent]
+    void
+    rrpc_inq_interfaces(
+	[in]	handle_t		h,
+	[in]	unsigned32		max_ifs,
+	[out, max_is(max_ifs), last_is(*l_if)]
+		rrpc_interface_vec_t	ifs,
+	[out]	signed32		*l_if,
+	[out]	error_status_t		*status
+    );
+
+
+    /*
+    **  Shutdown server.  Some servers may choose to not be shut-downable
+    **  using this call.
+    */
+    void
+    rrpc_shutdown(
+	[in]	handle_t		h,
+	[out]	error_status_t		*status
+    );
+}

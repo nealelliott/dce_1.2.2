@@ -1,0 +1,129 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: run.i18n,v $
+# Revision 1.1.4.2  1996/03/11  02:36:33  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:04:30  marty]
+#
+# Revision 1.1.4.1  1995/12/11  21:52:53  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:54:18  root]
+# 
+# Revision 1.1.2.2  1994/10/06  20:38:12  agd
+# 	expand copyright
+# 	[1994/10/06  14:30:39  agd]
+# 
+# Revision 1.1.2.1  1994/09/08  20:36:57  dassarma
+# 	Run script for i18n systests
+# 	[1994/09/08  20:36:15  dassarma]
+# 
+# $EndLog$
+#!/bin/ksh
+#
+# Driver to run the I18N system tests.
+# 
+LOOPS_TO_EXECUTE=""
+HOURS_TO_EXECUTE=""
+export internal_loop_hours=""
+KEEP_ALL_JOURNALS=""
+callwas="$*"
+if [[ -z $TET_ROOT ]]
+then
+        echo TET_ROOT not defined.
+        exit 1
+fi
+
+test_name="all"			# Default to run all tests in tet_scen file.
+				# This is also used to name the results directory.
+				
+
+myname=${0##*/}
+
+Usage() {
+    cat <<BeQuiteNow
+
+Usage: $myname {-l loops | -t hours} [other opts] test_name
+Options:
+  -l <number>	Number of loops or passes to run.
+  -t <hours>	Time in hours.  Accepts decimal point, eg -t .5 = 30 minutes.
+  -c		Keep the journal files from all successful iterations.
+  -e <number>	Max errors-in-a-row allowed before punting test (default=50).
+  -E <number>	Max total errors allowed before punting test (default=500).
+  -h		List test-specific options.
+
+Args:
+  Test name: I8NSAN001|I8NSAN002|all
+  -l and -t are mutually exclusive, and one or the other is required.
+  Quotes around a string arg may be omitted when arg contains no whitespace.
+
+BeQuiteNow
+	exit 2
+}
+
+
+havmopt=0
+while getopts :l:t:e:E:c: arguments
+do
+	case $arguments in
+
+		l)      LOOPS_TO_EXECUTE=$OPTARG;;
+
+		t)      HOURS_TO_EXECUTE=$OPTARG;;
+
+		e)	MaxErrsInARow=$OPTARG;;
+
+		E)	MaxErrors=$OPTARG;;
+
+		h)	cat <<SayNoMore
+
+TEST: I8NSAN001
+  -l <number>	Number of loops to execute.  Default is 1.
+  -t <hours>	Hours to run internal loop per principal.  Accepts decimal
+		point, eg -T .5 = 30 minutes.  -L & -T are mutually exclusive.
+
+TEST: I8NSAN002
+  -l <number>   Number of loops to execute.  Default is 1.
+  -t <hours>    Hours to run internal loop per principal.  Accepts decimal
+                point, eg -T .5 = 30 minutes.  -L & -T are mutually exclusive.
+TEST: all
+  Run all of the above.
+
+SayNoMore
+			exit 1;;
+
+		:)	echo "	-$OPTARG requires an argument"
+			Usage
+			exit 1;;
+
+		\?)	echo "	-$OPTARG is not a valid switch"			
+			Usage
+			exit 1;;
+
+         esac
+done
+shift OPTIND-1
+
+
+if [ -n "$1" ]
+then
+	test_name=$1	# Assign test name if there is one on command line.
+fi
+
+if [[	$test_name = "all" || $test_name = "I8NSAN001" || $test_name = "I8NSAN002" ]]
+then
+	echo "Test suite \"$test_name\" will be run."
+else
+	echo "Test suite \"$test_name\" is unknown."
+	exit 1
+fi
+
+#
+# Now run the main loops.
+#
+. $TET_ROOT/system/tools/run_loops.ksh I18N "run.i18n $callwas"

@@ -1,0 +1,202 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: dcetmchg,v $
+# Revision 1.1.7.2  1996/03/11  02:49:12  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:09:52  marty]
+#
+# 	Initial King Kong branch
+# 	[1993/07/09  15:28:47  root]
+#
+# Revision 1.1.7.1  1995/12/13  21:56:18  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/13  21:45:38  root]
+# 
+# 	Modifications to work in new systest environment.  DON'T use
+# 	this test yet, however.  The test works, and does what we want
+# 	it to (change epoch, change time one hour ahead, change epoch back),
+# 	but the cell gets hosed a few minutes after the test finishes.
+# 	[1993/04/06  14:30:25  truitt]
+# 
+# 	Change from /bin/sh to /bin/ksh.
+# 	[1993/03/30  19:43:07  truitt]
+# 
+# 	Ported to TET.  Improved error messages and error handling.
+# 	[1993/03/29  17:41:05  truitt]
+# 
+# 	Merge Hp_dce1_0_1 with DCE1_0_2
+# 	[1993/03/17  19:39:25  truitt]
+# 
+# 	Embedded copyright notice
+# 	[1993/02/05  14:48:38  cjd]
+# 
+# Revision 1.1.1.7  1993/03/11  22:15:28  osfrcs
+# 	    Loading drop DCE1_0_2B18
+# 
+# Revision 1.1.3.2  1992/06/11  20:05:00  mcfarland
+# 	changed files from test_latest
+# 	[1992/06/09  13:11:27  mcfarland]
+# 
+# Revision 1.1.3.2  1993/02/05  13:15:46  cjd
+# 	Embedded copyright notice
+# 
+# Revision 1.1.2.3  1992/07/17  20:23:35  pellis
+# 	Many changes to make test run correctly.
+# 	[1992/07/17  19:57:35  pellis]
+# 
+# Revision 1.1.2.2  1992/05/08  15:20:48  bmw
+# 	new systest changes
+# 	[1992/05/08  15:17:13  bmw]
+# 
+# Revision 1.1.1.2  1992/05/28  15:18:15  root
+# 	    Loading drop Dce1_0_1b15
+# 
+# $EndLog$
+#
+#   TEST_NAME: dcetmchg
+#
+#   COMPONENT_NAME: dce.systest
+#
+#   FUNCTIONS: setup_dcetmchg
+#	       change_time
+#	       verify_time
+#	       cleanup_dcetmchg
+#	       check_RC
+#
+#   ORIGINS: 27
+#
+#
+#   (C) COPYRIGHT International Business Machines Corp. 1991
+#   All Rights Reserved
+#
+#
+#   FILES: dcetmchg (this file)
+#
+#   REQUIREMENTS:
+#	This testcase must be run on a machine running DTS and
+#	configured as a server.
+#
+#	Note: It is highly recommended that this test be started
+#	from its test driver (see $TET_ROOT/time/bin/run.time).
+#
+#   RESTRICTIONS:
+#	Running this testcase will cause the time to abruptly
+#	change.  This may have adverse effects on any activity
+#	running on this machine which relies on time services.
+#
+#   USAGE: dcetmchg
+#      
+#   TESTCASE OVERVIEW
+#	The purpose of this testcase is to test Dce dts' ability to
+#	correctly update the time and the epoch number using the
+#	"dtscp  change" command.
+#	
+#	Design:  The test should be run on both a local and a global
+#	server.  The state of DTS must not be off in order to run the test.
+#	The epoch number of the server is saved	and changed to be an epoch
+#	number unused by any other servers on the local network.
+#	This is verified.  The current time is saved and then
+#	increased by one hour.  This is verified.  Then the time and
+#	epoch are restored to their original value using the change
+#	command and these values are verified.  This test relies on the 
+#	correct operation of the time service to update the time on 
+#	the machine after this test has been run.  Running the test will
+#	cause the machine's time to be slightly behind.
+#
+#
+#  CHANGE HISTORY
+#  11/5/90	Clissold/Flake 	Initial design.  
+#  11/30/90	Leslie Flake	Design of testcase DCETMCHG complete
+#  12/7/90	Leslie Flake	Initial code
+#  07/18/91	John Currey	Config Changes
+#  03/12/92			Update dtscp command to current interface
+#				Add dce_login_noexec for the operations
+#			        on remote machine
+
+#dcetmchg : test case for time
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="dcetmchg"
+
+# preparation of DCE time suite
+startup() {
+
+	print "START DCE time systest: dcetmchg; DATE: `date`"
+	tet_infoline "START DCE time systest: ${TET_PNAME}; DATE: `date`"
+
+	#------------------------------------------------------------------------------
+	# WPHI:		combination/substitution - $WS.$PID.$HOST.$ITERATION
+	# WSTMPDIR:	the workstation temporary directory
+	# WSLOGDIR:	directory where our JOURNALs are kept during the run
+	# JOURNAL:	file containing output from the standard library commands
+	# CMDFILE:	file containing all output from workstation commands
+	# STATUSFILE:	file containing other log information from the workstation
+	# SPOOLFILE:	file containing all information written to stdout
+	#------------------------------------------------------------------------------
+	WSTMPDIR=/tmp
+	export WSTMPDIR
+	return
+}
+
+dcetmchg() {
+#set -x
+
+	sleep 5
+	setup_dcetmchg
+	if (( $? == 0 )); then
+		change_time
+	else
+		tet_result FAIL
+		print "ERROR: dcetmchg failed in function setup_dcetmchg"
+		tet_infoline "ERROR: dcetmchg failed in function setup_dcetmchg"
+		return
+	fi
+
+	if (( $? == 0 )); then
+		verify_time
+	else
+		tet_result FAIL
+		print "ERROR: dcetmchg failed in function change_time"
+		tet_infoline "ERROR: dcetmchg failed in function change_time"
+		return
+	fi
+
+	if (( $? == 0 )); then
+		cleanup_dcetmchg
+	else
+		tet_result FAIL
+		print "ERROR: dcetmchg failed in function verify_time"
+		tet_infoline "ERROR: dcetmchg failed in function verify_time"
+		return
+	fi
+
+	if (( $? == 0 )); then
+		tet_result PASS
+		print "PASS: dcetmchg passed"
+		tet_infoline "PASS: dcetmchg passed"
+	else
+		tet_result FAIL
+		print "ERROR: dcetmchg failed in function cleanup_dcetmchg"
+		tet_infoline "ERROR: dcetmchg failed in function cleanup_dcetmchg"
+	fi
+}
+
+# cleanup of DCE time test
+cleanup() {
+
+	print "END DCE time systest: dcetmchg; DATE: `date`"
+	tet_infoline "END DCE time systest: ${TET_PNAME}; DATE: `date`"
+}
+
+# source tcm
+. ${TET_ROOT}/profile.dcest
+. ${TET_ROOT}/time/ts/dcetm.ksh
+. ${TCM}

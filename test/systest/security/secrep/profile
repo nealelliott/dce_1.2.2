@@ -1,0 +1,372 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: profile,v $
+# Revision 1.1.2.2  1996/03/09  20:51:59  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:39  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:12  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  18:53 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  19:52 UTC  bissen
+# 	 merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:53 UTC  gordon_l
+# 	Fixed for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  17:51 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 	[1995/12/11  22:22:23  root]
+# 
+# Revision 1.1.2.3  1993/08/11  13:24:26  sekhar
+# 	Removed incorrect break out of case
+# 	[1993/08/11  13:12:58  sekhar]
+# 
+# Revision 1.1.2.2  1993/08/02  17:40:07  sekhar
+# 	Replication system test. Initial version
+# 	[1993/08/02  17:29:21  sekhar]
+# 
+# $EndLog$
+#
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#    This files defines constants,variables, aliases etc and is
+#    sourced and used by all the security replication objects and tests.
+#
+#    Some of the variables are machine or OS dependent and thus
+#    need to be tailored to the machine.
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#   The following definitons are machine and/or OS dependent
+#   and so must be tailored.
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+#   RSH - This depends on the system where the script
+#   which sources this file is running.
+#
+#D# This is now picked up from the $TET_ROOT/profile.dcest
+#D# so that the platform differences are automatically picked 
+#D# up. 
+#D# RSH=remsh
+
+OSNM=`uname`
+HOSTNM=`uname -n`
+
+#   PSARGS - arguments passed to ps. This is used
+#   to extract information about secd (pid value, whether 
+#   secd is running or not). 
+
+case $OSNM in
+   
+    HP-UX) PSARGS="-ef"
+	   ;;
+        *) ;;
+esac 
+
+#   
+#   LOOP CONSTANTS :
+#      
+#   Some of the operations in the replication system test
+#   have to be repeated several times in a loop with 
+#   a delay between each iteration of the loop. Both
+#   the delay and the number of times a loop is executed
+#   can be controlled by the loop constants defined here.
+#
+#   Assosciated with each type of loop are two constants.
+#   The constant ending with _CNT indicates the number of
+#   times a loop executed. 
+#   The constant ending with _INT indicates the time 
+#   interval in seconds between each iteration.
+#
+#   The values of *_CNT and *_INT are dependent on 
+#   the machine speed and/or the type of testing (WAN
+#   or LAN) and/or the type of operation being done.
+#
+
+#--------------------------------------------------------------
+
+#   These are used to determine if all the updates have
+#   propagated to all the slaves. The value here is 
+#   influenced by many factors:
+#  
+#   a.  If the update test is being run with a large number
+#       of principals then count and interval should be
+#       higher.
+#
+#   b.  If WAN testing is being done i.e. one of the slaves
+#       is on a WAN, then the count and interval should be
+#       higher. (A better solution would be to decrease
+#       the number of principals being added - see UPDATE_NPRINC).
+
+SA_PROP_LOOP_INT=10
+SA_PROP_LOOP_CNT=180    # i.e. Max wait time = 30 mins
+
+SA_MRKINIT_LOOP_INT=5
+SA_MRKINIT_LOOP_CNT=48  # i.e. Max wait time = 4 mins
+
+#--------------------------------------------------------------
+
+#   A slave configuration takes some time to complete. These are
+#   used to wait until the slave configuration is complete.
+
+SLV_CONFIG_LOOP_INT=10
+SLV_CONFIG_LOOP_CNT=90 # i.e. max wait time = 15 mins
+
+#--------------------------------------------------------------
+
+#   A slave which has been deleted remains as "marked for deletion"
+#   on the replica list of the master. These are used to wait
+#   until the deleted replica is removed from the replica list
+#   of the master.
+
+
+REPLIST_SLVDEL_LOOP_INT=10
+REPLIST_SLVDEL_LOOP_CNT=60
+
+REPLIST_SLV_MRKDEL_LOOP_INT=5
+REPLIST_SLV_MRKDEL_LOOP_CNT=60
+
+#--------------------------------------------------------------
+
+#   Whenever a slave or master is restarted, sec_admin cannot
+#   bind to the slave or master immediately. Hence these are used to 
+#   wait until the sec_admin can successfully bind to slave or master.
+
+SA_BIND_LOOP_CNT=48
+SA_BIND_LOOP_INT=5
+
+#--------------------------------------------------------------
+ 
+#   These are used during secd startup / termination to determine
+#   if secd is really stopped /started on the host .
+
+SECD_LOOP_INT=5
+SECD_LOOP_CNT=48
+
+#   This is used by the function secd_wait_bindexport in file secd.
+#   The purpose of this constant is to prevent a race conditon which
+#   can cause the slave to abort. 
+#
+#   The sequence of events which causes the slave to die is the
+#   is as follows: 
+#         
+#       1. master and slaves are stopped ( e.g. to compare registries )
+#       2. slaves are restarted
+#       3. master is restarted  
+#       4. master is shutdown   
+#
+#   where master shutdown (step 4) happens immediately after 
+#   master restart (step 2). If this shutdown happens before
+#   the slave had a chance to call rs_login_setup_host_identity()
+#   call then the slave would abort (and coredump).
+# 
+#   This can be avoided by calling secd_wait_bindexport after master 
+#   has been restarted. secd_wait_bindexport introduces a sleep 
+#   thus guranteeing the slaves enough time to come up.
+#
+#   The amount of time secd_wait_bindexport sleeps is determined by
+#   SECD_STARTUP_INT 
+#   
+
+SECD_STARTUP_INT=180
+
+#   NET -  mount point through which all hosts are reachable
+#   as $NET/<machine_name> i.e. Host a should be reachable 
+#   from host b via the path $NET/a .
+
+#   NET=/net
+NET=/net
+#    The following MUST be uncommented and set prior 
+#    to running the script.
+#
+#    LOGS_DIR - A logs directory where all the logs are 
+#               written. This MUST be specified using a 
+#               pathname which must be accessible from all hosts. 
+#
+#               If the LOGS_DIR does not exist then one 
+#               is created . If the LOGS_DIR already exists 
+#               then it is deleted.
+#
+#  LOGS_DIR=$NET/large/tet/security/logs
+#D# no longer set here - in tc_common_init
+
+#   The following must be SET and are not OPTIONAL :
+#
+#   CONFIG_HOSTS - List of hosts which are going to run security replicas.
+#                  This should include the host running the master as well.
+#                  The hosts on which the slaves are running are assumed to
+#                  already configured as client only machines.
+#               
+#   e.g. CONFIG_HOSTS="x y z"
+#   CONFIG_HOSTS="large color newhp21"
+#
+#   CONFIG_NAMES - List of replica names (without subsys/dce/sec )
+#                  to be used during the slave configuration.
+#                  The first name on the list is the name used for the
+#                  first host on the CONFIG_HOSTS list and so on.
+#
+#   e.g. CONFIG_NAMES="armpit"
+#   CONFIG_NAMES="large color newhp21"
+#
+#   SECD_OPTIONS  Sets any options which need to be specified
+#                 whenever secd is restarted. The options will
+#                 apply to both the master as well as all the slaves.
+#
+#                 N.B. -d won't work (because it will try to run
+#                      the replica in the foreground.
+#                      But other options should work.
+#
+
+PHOME=$TET_ROOT/security/ts/secrep.new
+
+#   NUM_SLAVES  Sets the number of slave replica machines to configure
+#               and test.  tc_common_init sets the $NUM_SLAVES number
+#               of SLV_NAMES and SLV_HOSTS.  Note:  the number of slaves
+#               will actually be less if there are not machines on the
+#               cell available to equal $NUM_SLAVES
+
+typeset -i NUM_SLAVES
+NUM_SLAVES=2
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#   The following are used to control the replication system
+#   test 
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+#
+#   This determines how many principals are created by 
+#   the security functional test. The higher this number, the 
+#   longer the time for the updates to propagate to all slaves.
+#   Hence this and the loop constants SLV_PROP_LOOP_{CNT,INT}
+#   are interdependent. If this number is very high, then
+#   SLV_PROP_LOOP_{CNT and/or INT} must be increased as well.
+#
+#   If one of the slaves is on a WAN, then it is highly desirable
+#   to set the UPDATE_NPRINC to a very small number so that
+#   updates won't take an inordinately long time to propagate.
+
+UPDATE_NPRINC=10
+
+#  
+#   RGYLOGIN_NPRINC is used by the rgylogin functional test.
+#   This number should really be small. This is because it
+#   it is used to test if a principal can log in when the
+#   the master is down. And since logging in each principal can
+#   take a very long time , setting this to a very high number
+#   would increase the testing time.
+
+RGYLOGIN_NPRINC=5 
+
+#   TC_UPDATE_DELAY is the amount of time to wait after starting
+#   the update security functional test . This is currently only 
+#   used by the TC_CHM_Q_UPDATE test. This is required because of
+#   the following reason. 
+#
+#   The update test calls sec_rgy_site_open_update() to bind to 
+#   the update site. TC_CHM_Q_UPDATE starts the update test (in the 
+#   background) and then does a change master . Note that the
+#   intent of the test is verify that change master works while 
+#   updates are in progress . Also, the update test should fail
+#   as soon as the master is changed. 
+#
+#   However, there is a race condition here. And that is the 
+#   change master may succeed *before* the update test calls
+#   sec_rgy_site_open_update(). In this case the update test 
+#   may actually bind to the new master not the old one and so the
+#   update test would succeed rather than failing.
+#
+#   This race condition is avoided by sleeping TC_UPDATE_DELAY
+#   after starting the update test (this allows the update test
+#   to bind to the current master before the change master is done).
+#
+
+TC_UPDATE_DELAY=10
+
+CM_UPD_NPRINC=100
+CM_RGYLOGIN_NPRINC=25
+
+CELLADMIN=cell_admin     #  Name of the cell_admin
+CELLPW=-dce-             #  cell_admin's password
+DCELOCAL=/opt/dcelocal   #  Location of DCE binaries
+DCE_CONFIG=$DCELOCAL/etc/dce_config  
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#   Machine and OS independent definitions which need not
+#   be tailored and which are used by the replication
+#   objects.
+#
+
+#   The log messages are indented according to the indentation
+#   level in effect at the time the message is logged. The 
+#   alias inc_il increases and dec_il decreases the indentation
+#   level. 
+
+# alias inc_il="let IL=IL+1"
+# alias dec_il="let IL=IL-1"
+
+#
+#   Symbolic constants 
+#
+
+DELREP_FORCE=-force   #  Used to specify forcible deletion of a replica
+
+SECD_EXISTS=0         #  Secd is running on a host
+SECD_NOTEXIST=1       #  Secd is stopped on a host
+RGY_EXISTS=0          #  Registry exists on a host
+RGY_NOTEXIST=1        #  Registry does not exist on a host
+REP_EXISTS=0          #  Registry exists and secd is running on a host
+REP_NOTEXIST=1        #  Registry does not exist and secd is stopped on a host
+SFT_UPDATE_ADD="-a"   #  Used to indicate that update security 
+                      #  functional test is run with the -a option
+SFT_UPDATE_DEL="-r"   #  Used to indicate that update security
+                      #  functional test is run with the -r option
+
+ST_SECD_RUNNING=0     #  Secd is running on a host
+ST_SECD_STOPPED=1     #  Secd is stopped on a host
+ST_RGY_EXISTS=0       #  Registry exists on a host
+ST_RGY_NOTEXIST=1     #  Registry does not exist on a host
+ST_MBR_ALL_REPLISTS=0 #  Replica is on all replica lists
+ST_MBR_NO_REPLIST=1   #  Replica is not on any replica list
+
+STR_RL_MRKDEL="(marked for deletion)"
+GREP_STR_RL_MRKDEL="\(marked for deletion\)"
+
+STR_RL_MRKINIT="marked for initialization"
+RL_REPLIST_IGNORE_MRKDEL=1     #  Used to ignore replicas marked for deletion.
+
+#  NULL_MASTER_NAME should be set to some non-null string value
+#  to prevent any inadvertant binding to master .
+
+NULL_MASTER_HOST="no_master_security_server_in_cell"
+NULL_MASTER_NAME="no_master_security_server_in_cell"
+
+#   SA_OUTF is the file which always contains the output of the 
+#   last sec_admin command executed. The output needs to be 
+#   passed between objects and hence is defined here.
+
+SA_OUTF=/tmp/sa_outf_`uname -n`
+
+SUBSYSDIR=subsys/dce 
+SECURITYDIR=sec
+
+# fi

@@ -1,0 +1,397 @@
+
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* Check basic race conditions for new entries.  Have both test and
+* stress processes referencing new name, then issue mkdir call.  Ensure
+* name present in cache and dir listing.
+*
+* Same as above, only with test and stress processes changing the dir,
+* *creating and deleting* other names in the same directory.
+*
+* Check dir name race conditions for entry removal: test process
+* busily referencing name when rmdir issued.  Test for name gone when
+* done.
+*
+* Check dir name race condition also by having test and stress
+* processes changing the dir, playing with names other than the one
+* being removed from the directory.
+*
+* Check "wdir" semantics for rmdir'd directory: "." and ".." entries
+* should be gone.  Do rmdir in separate process (with a different wdir,
+* since you can't rmdir current working directory), and then ensure that
+* readdir reports no entries at all in the directory ("." and ".."
+* should be gone).
+*
+* Also check that rmdir via from a stress process does proper '.' and
+* '..' removal as seen from a test process on another client.
+*
+
+*
+* Note: Try this test on both single machin cell and multi-machine cell.
+*       Try this from both DFS and local path so that it will also test 
+*       xvnode layer. This test realy needs to be run from the combination
+*       of DFS and local path (rmdir via CM or rmdir form local path).
+*
+
+* 
+* USAGE: ./file_test -l {HUBNAME} -I {this_script} ; For HUB
+*        ./file_test -c {HUBNAME} : For other spokes
+*
+
+* Include config file.
+include config
+umask 0
+
+set loopTimes 10
+set dirName1 tempDir1
+set dirName2 tempDir2
+set dirName3 tempDir3
+set dirName4 tempDir4
+
+
+*
+* This procedure tests rmdir call.
+*
+set test1_Proc proc END_PROC
+  echo
+  echo remove and mkdir call test1.
+
+  umask 0
+  getwd workDir
+  chdir $testDir
+
+  sync_join "concurrent_mkdir" $timeout
+  verifyStatus false
+  mkdir $dirName1 0777
+  if ( @ITL_Status != 0 ) {
+    if ( @ITL_Status != @EEXIST ) {
+      echo FAILED: Make dir failed in test 1.
+    }
+  }
+  verifyStatus true
+
+  sync_join "concurrent_mkdir_done" $timeout
+  stat $dirName1 var
+
+  sync_join "refer_and_mkdir" $timeout
+  mkdir $dirName3 0777
+
+  sync_join "mkdir_again" $timeout
+  verifyStatus false
+  mkdir $dirName4 0777
+  if ( @ITL_Status != 0 ) {
+    if ( @ITL_Status != @EEXIST ) {
+      echo FAILED: Make dir failed in test 1.
+    }
+  }
+  verifyStatus true
+  
+  sync_join "rmdir" $timeout
+  verifyStatus false
+
+  rmdir $dirName2
+  if ( @ITL_Status != @ENOENT ) {
+    echo FAILED: errno = @ITL_Status: rmdir a non-existent dir in test 1.
+  }
+  verifyStatus true
+
+  stat $dirName3 var
+
+  sync_join "rmdir_tempdir" $timeout
+  verifyStatus false
+  rmdir $dirName3
+  if ( @ITL_Status != 0 ) {
+    if ( @ITL_Status != @ENOENT ) {
+      echo FAILED errno = @ITL_Status : remove dir failed in test 1.
+    }
+  }
+  verifyStatus true
+
+  sync_join "rmdir_tempdir_done" $timeout
+
+  mkdir $dirName2 0777
+
+* This guy works on the dirName1
+  chdir $dirName1
+  opendir . dirPtr
+  readdir @dirPtr dirInfo
+  closedir @dirPtr
+
+  sync_join "rmdir_test" $timeout
+
+  sync_join "rmdir_check" $timeout
+
+  verifyStatus false
+  stat . var
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: This dir . should be removed.
+  }
+  stat .. var
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: This dir .. should be gone.
+  }
+  verifyStatus true
+
+  sync_join "finish_sync" $timeout
+  
+  chdir @workDir
+
+  echo remove and mkdir call test1 done.
+  echo 
+END_PROC
+
+
+*
+* This procedure makes, refer and remove dirs.
+* create adn delete the test file.
+*
+
+set test2_Proc proc END_PROC
+
+  echo
+  echo remove and mkdir call test2.
+  umask 0
+
+  getwd workDir
+  chdir $testDir
+
+  sync_join "concurrent_mkdir" $timeout
+  verifyStatus false
+  mkdir $dirName1 0777
+  if ( @ITL_Status != 0 ) {
+    if ( @ITL_Status != @EEXIST ) {
+      echo FAILED errno = @ITL_Status : Make dir failed in test 2.
+    }
+  }
+  verifyStatus true
+
+  sync_join "concurrent_mkdir_done" $timeout
+  stat $dirName1 var
+
+  sync_join "refer_and_mkdir" $timeout
+  verifyStatus false
+  stat $dirName3 var
+  verifyStatus true
+
+  sync_join "mkdir_again" $timeout
+  verifyStatus false
+  mkdir $dirName4 0777
+  if ( @ITL_Status != 0 ) {
+    if ( @ITL_Status != @EEXIST ) {
+      echo FAILED: Make dir failed in test 2.
+    }
+  }
+  verifyStatus true
+
+  sync_join "rmdir" $timeout
+  verifyStatus false
+  rmdir $dirName2
+  if ( @ITL_Status != @ENOENT ) {
+    echo FAILED: @ITL_Status test2 , rmdir a non-existent dir.
+  }
+  verifyStatus true
+
+  sync_join "rmdir_tempdir" $timeout
+  verifyStatus false
+  rmdir $dirName3
+  if ( @ITL_Status != 0 ) {
+    if ( @ITL_Status != @ENOENT ) {
+      echo FAILED errno = @ITL_Status : remove dir failed in test 2.
+    }
+  }
+  verifyStatus true
+
+  sync_join "rmdir_tempdir_done" $timeout
+  verifyStatus false
+  stat $dirName3 var
+  if ( @ITL_Status == 0 ) {
+     echo FAILED: remove dir failed test2.
+  }
+  verifyStatus true
+
+  sync_join "rmdir_test" $timeout
+
+* This guy try to remove the working dir of the othre's.
+  chdir $dirName2
+  set myBrother ("../" + $dirName1 )
+  stat @myBrother var
+  rmdir @myBrother 
+
+  verifyStatus false
+  stat @myBrother var
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: Failed to remove someone's working dir in test 2.
+  }
+  verifyStatus true
+  
+  sync_join "rmdir_check" $timeout
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo remove and mkdir call test2 done.
+  echo
+END_PROC
+
+set test3_Proc proc END_PROC
+
+  echo
+  echo remove and mkdir call test3.
+  umask 0
+
+  getwd workDir
+  chdir $testDir
+
+  sync_join "concurrent_mkdir" $timeout
+  verifyStatus false
+  mkdir $dirName1 0777
+  if ( @ITL_Status != 0 ) {
+    if ( @ITL_Status != @EEXIST ) {
+      echo FAILED: Make dir failed in test 3.
+    }
+  }
+  verifyStatus true
+
+  sync_join "concurrent_mkdir_done" $timeout
+
+  sync_join "refer_and_mkdir" $timeout
+  verifyStatus false
+  stat $dirName3 var
+  verifyStatus true
+
+  sync_join "mkdir_again" $timeout
+  loop x 1 1 $loopTimes
+    set newName ( $testDir + @x )
+    mkdir @newName 0777
+  endloop
+
+  sync_join "rmdir" $timeout
+  loop x 1 1 $loopTimes
+    set newName ( $testDir + @x )
+    rmdir @newName
+  endloop
+
+  sync_join "rmdir_tempdir" $timeout
+* This process busily references the dir to be removed.
+  verifyStatus false
+  loop x 1 1 $loopTimes 
+    stat $dirName1 var
+  endloop
+  verifyStatus true
+
+  sync_join "rmdir_tempdir_done" $timeout
+
+  verifyStatus false
+  stat $dirName3 var
+  if ( @ITL_Status == 0 ) {
+     echo FAILED: remove dir failed. There is such dir (test3).
+  }
+  verifyStatus true
+  
+
+  sync_join "rmdir_test" $timeout
+
+  sync_join "rmdir_check" $timeout
+* Try to see the dir removed from this process
+  verifyStatus false
+  stat $dirName1 var
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: I see the dir still there.
+  }
+  verifyStatus true
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo remove and mkdir call test3 done.
+  echo
+
+END_PROC
+
+
+
+****************************************************************************
+* Check spokes.
+if ( $ITL_nspokes != 3 ) {
+  echo FAILED: You need at exact 3 spokes to run the test.
+  quit
+}
+
+loop loopVar 1 1 $loopTimes
+
+* Need to pass a parameter to each procedure to have a good prog struct.
+!* Dispath remote procedures
+rexec_async $ITL_spoke[0] test1_Proc result[0] asyncVar[0]
+rexec_async $ITL_spoke[1] test2_Proc result[1] asyncVar[1]
+rexec_async $ITL_spoke[2] test3_Proc result[2] asyncVar[2]
+
+sync_create "concurrent_mkdir" $ITL_nspokes $timeout
+sync_release "concurrent_mkdir"
+
+sync_create "concurrent_mkdir_done" $ITL_nspokes $timeout
+sync_release "concurrent_mkdir_done"
+
+sync_create "refer_and_mkdir" $ITL_nspokes $timeout
+sync_release "refer_and_mkdir"
+
+sync_create "mkdir_again" $ITL_nspokes $timeout
+sync_release "mkdir_again"
+
+sync_create "rmdir" $ITL_nspokes $timeout
+sync_release "rmdir"
+
+sync_create "rmdir_tempdir" $ITL_nspokes $timeout
+sync_release "rmdir_tempdir"
+
+sync_create "rmdir_tempdir_done" $ITL_nspokes $timeout
+sync_release "rmdir_tempdir_done"
+
+sync_create "rmdir_test" $ITL_nspokes $timeout
+sync_release "rmdir_test"
+
+sync_create "rmdir_check" $ITL_nspokes $timeout
+sync_release "rmdir_check"
+
+sync_create "finish_sync" $ITL_nspokes $timeout
+sync_release "finish_sync"
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+
+chdir $currentDir
+chdir $testDir
+exec clearDir_Proc $dirName2
+exec clearDir_Proc $dirName4
+
+endloop
+
+
+quit
+

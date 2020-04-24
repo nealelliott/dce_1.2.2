@@ -1,0 +1,219 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: roverride.idl,v $
+ * Revision 1.1.8.2  1996/03/09  23:28:15  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:43  marty]
+ *
+ * Revision 1.1.8.1  1995/12/08  17:33:10  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:55:16  root]
+ * 
+ * Revision 1.1.6.1  1994/05/05  20:44:41  hasbrouc
+ * 	add group override support (RFC 55)
+ * 	[1994/05/05  20:12:29  hasbrouc]
+ * 
+ * Revision 1.1.4.2  1992/12/29  13:30:32  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:48:37  zeliff]
+ * 
+ * Revision 1.1.2.2  1992/05/14  18:59:42  burati
+ * 	Add is_passwd_overridden
+ * 	[1992/05/14  01:53:25  burati]
+ * 
+ * Revision 1.1  1992/01/19  14:55:17  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+
+/*  roverride.idl V=2 09/30/91 //littl/prgy/src/idl
+**
+** Copyright (c) Hewlett-Packard Company 1991
+** Unpublished work. All Rights Reserved.
+**
+*/
+/*
+**  roverride.idl - Remote Override interface.
+*/
+
+[
+    uuid(5d978990-4851-11ca-9937-08001e039448),
+    version(1)
+]
+
+interface roverride {
+
+    import "dce/rgynbase.idl";
+    import "dce/oride_base.idl";
+
+    /*
+     * roverride_get_login_info
+     *      Lookup the account in the passwd_override file, by a combination
+     *      of name, uid, gid, and if found, return any overridden information.
+     * Errors:
+     *      COMMUNICATIONS ERROR
+     *      sec_login_s_no_override_info
+     *      sec_login_s_override_failure
+     *      sec_login_s_ovrd_ent_not_found
+     */
+    void roverride_get_login_info (
+        [in]        handle_t                    h,
+        [in,string] char                        *pw_name,
+        [in,out]    signed32                    *pw_uid,
+        [in,out]    signed32                    *pw_gid,
+        [out]       sec_rgy_unix_passwd_buf_t   pw_salt,
+        [out]       sec_rgy_name_t              pw_gecos,
+        [out]       sec_rgy_name_t              pw_dir,
+        [out]       sec_rgy_name_t              pw_shell,
+        [out]       sec_override_fields_t       *overridden,
+        [out]       error_status_t              *status
+    );
+
+
+    /*
+     * roverride_check_passwd
+     *      Check the specified password against the overridden password
+     *      for the specified account name.
+     * Errors:
+     *      COMMUNICATIONS ERROR
+     *      sec_login_s_no_override_info
+     *      sec_login_s_override_failure
+     *      sec_login_s_ovrd_ent_not_found
+     */
+    boolean32 roverride_check_passwd (
+        [in]        handle_t                    h,
+        [in,string] char                        *pw_name,
+        [in]        signed32                    *pw_uid,
+        [in]        signed32                    *pw_gid,
+        [in]        sec_rgy_unix_passwd_buf_t   pw_passwd,
+        [out]       error_status_t              *status
+    );
+
+
+    /*
+     * roverride_is_passwd_overridden
+     *      Lookup the account in the passwd_override file, by account name
+     *      only, because the uid and gid are unknown at this point.  Return
+     *      True if passwd has been overridden.
+     *
+     *      Obtains a string binding handle (w/port) from a configuration file
+     *      and makes the remote call with that handle.
+     *
+     * Errors:
+     *      COMMUNICATIONS ERROR
+     *      sec_login_s_no_override_info
+     *      sec_login_s_override_failure
+     *      sec_login_s_ovrd_ent_not_found
+     */
+    boolean32 roverride_is_passwd_overridden (
+        [in]        handle_t                    h,
+        [in,string] char                        *pw_name,
+        [out]       signed32                    *pw_uid,
+        [out]       signed32                    *pw_gid,
+        [out]       sec_rgy_unix_passwd_buf_t   pw_salt,
+        [out]       error_status_t              *status
+    );
+
+   /*
+    *	roverride_get_by_unix_num
+    *		For a given domain type in name_domain, search the domain for the supplied num.
+    *		For the domain sec_rgy_domain_person, look up the account name corresponding to
+    *		the supplied UID in the override_buffer.  Return account name if found.
+    *		For the sec_rgy_domain_group domain, look up the group name corresponding 
+    *		to the supplied GID in the override_group_buffer.  Return group name. 
+    *		Return false if nothing found, or if the sec_rgy_domain_org domain is searched.
+    *	
+    * Errors:
+    *      COMMUNICATIONS ERROR
+    *      sec_login_s_no_override_info
+    *      sec_login_s_override_failure
+    *      sec_login_s_ovrd_ent_not_found
+    *	
+    */
+
+   boolean32 roverride_get_by_unix_num (
+        [in]		handle_t			h,
+        [in]		sec_rgy_domain_t		name_domain,
+        [in]		signed32			unix_id,
+        [out]		sec_rgy_name_t			name,
+        [out]		error_status_t			*status
+    );
+
+    /*
+     * roverride_get_group_info
+     *      Lookup the group in the group_override file, by a combination
+     *      of name, gid, and if found, return any overridden information.
+     * Errors:
+     *      COMMUNICATIONS ERROR
+     *      sec_login_s_no_override_info
+     *      sec_login_s_override_failure
+     *      sec_login_s_ovrd_ent_not_found
+     */
+    void roverride_get_group_info (
+        [in]		handle_t			h,
+        [in,string]	char				*gr_name,
+        [in]		signed32			max_members,
+        [in,out]	signed32			*gr_gid,
+        [in,out]	sec_rgy_cursor_t		*member_cursor,
+        [out]		sec_rgy_unix_passwd_buf_t	gr_passwd,
+        [out, length_is(*number_supplied),size_is(max_members)]
+        		sec_rgy_member_t		member_list[],
+        [out]		signed32			*number_supplied,
+        [out]		signed32			*number_members,
+        [out]		sec_group_override_fields_t	*overridden,
+        [out]		error_status_t			*status
+    );
+
+   /* 
+    *	roverride_check_group_passwd
+    *		Check the specified passwd against the overriden passwd
+    *		in the override_group_buffer.
+    *	
+    * Errors:
+    *      COMMUNICATIONS ERROR
+    *      sec_login_s_no_override_info
+    *      sec_login_s_override_failure
+    *      sec_login_s_ovrd_ent_not_found
+    *	
+    */
+
+    boolean32 roverride_check_group_passwd (
+        [in]		handle_t			h,
+        [in,string]	char				*gr_name,
+        [in]		signed32			*gr_gid,
+        [in]		sec_rgy_unix_passwd_buf_t	gr_passwd,
+        [out]		error_status_t			*status
+    );
+
+   /* 
+    *	roverride_is_grp_pwd_overridden
+    *		Lookup the group name in the group_override file.
+    *		Return true of passwd overridden.
+    *	
+    * Errors:
+    *      COMMUNICATIONS ERROR
+    *      sec_login_s_no_override_info
+    *      sec_login_s_override_failure
+    *      sec_login_s_ovrd_ent_not_found
+    *	
+    */
+
+    boolean32 roverride_is_grp_pwd_overridden (
+        [in]		handle_t			h,
+        [in,string]	char				*gr_name,
+        [out]		signed32			*gr_gid,
+        [out]		sec_rgy_unix_passwd_buf_t	gr_salt,
+        [out]		error_status_t			*status
+    );
+
+}
+
+

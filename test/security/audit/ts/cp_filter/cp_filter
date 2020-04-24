@@ -1,0 +1,1242 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# (c) Copyright International Business Machines Corp. 1994, 1996
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+#  02/14/94	Weisz 	Initial design.  
+
+#cp_filter: test case for audit
+
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1 ic2 ic3 ic4 ic5 ic6 ic7 ic8"
+ic1="cp_filter01"
+ic2="cp_filter02"
+ic3="cp_filter03"
+ic4="cp_filter04"
+ic5="cp_filter05"
+ic6="cp_filter06"
+ic7="cp_filter07"
+ic8="cp_filter08"
+
+cellpw=-dce-
+local_cell_name=$(getcellname)
+
+startup() {
+
+#set -x
+	print "\nSTART DCE audit functional: cp_filter; DATE: `date`"
+	tet_infoline "START DCE audit functional: ${TET_PNAME}; DATE: `date`"
+
+        if [ "`uname`" = "OSF1" ]
+        then
+                PS_FLAGS="-e -o ucomm"
+        else
+                PS_FLAGS="-e"
+        fi
+
+#in order to run rgy_edit, there is need to dce_login as cell_admin 
+# use -up for rgy_edit to ensure master is updated.
+
+  dce_login cell_admin $cellpw -e rgy_edit -up <<EOF
+domain principal
+add aud_test_princ1
+add aud_test_princ2
+domain group
+add aud_test_group1
+add aud_test_group2
+domain account
+add aud_test_princ1 -g aud_test_group1 -o none -pw princ1 -mp $cellpw
+add aud_test_princ2 -g aud_test_group2 -o none -pw princ2 -mp $cellpw
+quit
+EOF
+
+# unsetenv KRB5CCNAME
+  export DCEAUDITFILTERON=1
+
+# auditd must be running for handling of filters
+  auditd
+  sleep 5
+}
+
+#========================================================================
+
+cp_filter01() {
+#set -x
+
+ print "\nSTART: cp_filter01 started"
+ tet_infoline "START: cp_filter01 started"
+ if [[ ! -d /opt/dcelocal/etc/audit/ec ]]
+ then
+   print "\nERROR: precondition not met - event class directory not defined"
+   tet_infoline "ERROR: precondition not met - event class directory not defined"
+   return 1
+ fi 
+
+if (( $AUDITCP ))
+then
+  auditcp audevents catalog
+else
+  dcecp -c audevents catalog
+  if (( $? == 0 ))
+  then
+    dcecp <<EOF 
+audevents show {dce_audit_filter_query dce_audit_filter_modify}
+EOF
+  fi
+fi
+
+ (( return_value = $? ))
+ print "\naudit control program return value = $return_value"
+ tet_infoline "audit control program return value = $return_value"
+ if (( $return_value == 0 ))
+ then
+   tet_result PASS
+   print "\nPASS: cp_filter01 passed"
+   tet_infoline "PASS: cp_filter01 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: cp_filter01 failed"
+   tet_infoline "ERROR: cp_filter01 failed"
+ fi
+}
+
+#========================================================================
+
+cp_filter02() {
+#set -x
+
+ print "\nSTART: cp_filter02 started"
+ tet_infoline "START: cp_filter02 started"
+
+if (( $AUDITCP ))
+then
+ auditcp audfilter add <<EOF
+0
+aud_test_princ1
+denial
+
+log
+
+dce_audit_filter_modify
+EOF
+
+ auditcp audfilter add <<EOF
+0
+aud_test_princ2
+denial
+
+log
+
+dce_audit_filter_modify
+EOF
+
+else
+  dcecp << EOF
+audfilter create {{principal aud_test_princ1} {principal aud_test_princ2}} -attribute {dce_audit_filter_modify denial log}
+EOF
+fi
+
+ if (( $? == 0 ))
+ then
+   print "\nOK: filter for aud_test_princ1 and aud_test_princ2 added successfuly"
+   tet_infoline "OK: filter for aud_test_princ1 and aud_test_princ2 added successfuly"
+   FAIL=N
+ else
+   FAIL=Y
+ fi
+
+
+ if [[ $FAIL = N ]]
+ then
+
+   if (( $AUDITCP ))
+   then
+      auditcp audfilter show <<EOF > /tmp/auditcp.out
+0
+aud_test_princ1
+EOF
+
+   else
+     dcecp << EOF > /tmp/auditcp.out
+audfilter show {principal aud_test_princ1}
+EOF
+   fi
+
+   if (( $? == 0 ))
+   then
+     (( return_value = $(grep -c 'o filter' /tmp/auditcp.out) ))
+
+     if (( $return_value == 1 ))
+     then
+       FAIL=Y
+       print "\nERROR: filter for aud_test_princ1 not found"
+       tet_infoline "ERROR: filter for aud_test_princ1 not found"
+     else
+       FAIL=N
+       print "\nOK: filter for aud_test_princ1 read successfuly"
+       tet_infoline "OK: filter for aud_test_princ1 read successfuly"
+     fi
+   else
+     FAIL=Y
+   fi
+ fi
+
+if (( $AUDITCP ))
+then
+  auditcp audfilter add <<EOF
+2
+aud_test_group1
+all
+
+log
+
+dce_audit_filter_query
+EOF
+
+else
+  dcecp << EOF
+audfilter create {group aud_test_group1} -attribute {dce_audit_filter_query all log}
+EOF
+fi
+
+ if (( $? == 0 ))
+ then
+   print "\nOK: filter for aud_test_group1 added successfuly"
+   tet_infoline "OK: filter for aud_test_group1 added successfuly"
+   FAIL=N
+ else
+   FAIL=Y
+ fi
+
+
+ if [[ $FAIL = N ]]
+ then
+   if (( $AUDITCP ))
+   then
+     auditcp audfilter show <<EOF > /tmp/auditcp.out
+2
+aud_test_group1
+EOF
+
+   else
+     dcecp << EOF > /tmp/auditcp.out
+audfilter show {group aud_test_group1}
+EOF
+   fi
+
+   if (( $? == 0 ))
+   then
+     (( return_value = $(grep -c 'o filter' /tmp/auditcp.out) ))
+
+     if (( $return_value == 1 ))
+     then
+       FAIL=Y
+       print "\nERROR: filter for aud_test_group1 not found"
+       tet_infoline "ERROR: filter for aud_test_group1 not found"
+     else
+       FAIL=N
+       print "\nOK: filter for aud_test_group1 read successfuly"
+       tet_infoline "OK: filter for aud_test_group1 read successfuly"
+     fi
+   else
+     FAIL=Y
+   fi
+ fi
+
+print "local cell name is: $local_cell_name\n"
+
+if (( $AUDITCP ))
+then
+  auditcp audfilter add <<EOF
+4
+$local_cell_name
+success
+
+log
+
+dce_audit_filter_query
+EOF
+
+else
+  dcecp << EOF
+audfilter create {cell $local_cell_name} -attribute {dce_audit_filter_query success log}
+EOF
+fi
+
+ if (( $? == 0 ))
+ then
+   print "\nOK: filter for local cell added successfuly"
+   tet_infoline "OK: filter for local cell added successfuly"
+   FAIL=N
+ else
+   FAIL=Y
+ fi
+
+
+ if [[ $FAIL = N ]]
+ then
+   if (( $AUDITCP ))
+   then
+
+     auditcp audfilter show <<EOF > /tmp/auditcp.out
+4
+$local_cell_name
+EOF
+
+   else
+     dcecp << EOF > /tmp/auditcp.out
+audfilter show {cell $local_cell_name}
+EOF
+   fi
+
+   if (( $? == 0 ))
+   then
+     (( return_value = $(grep -c 'o filter' /tmp/auditcp.out) ))
+
+     if (( $return_value == 1 ))
+     then
+       FAIL=Y
+       print "\nERROR: filter for local cell not found"
+       tet_infoline "ERROR: filter for local cell not found"
+     else                                                                 
+       FAIL=N
+       print "\nOK: filter for local cell read successfuly"
+       tet_infoline "OK: filter for local cell read successfuly"
+     fi
+   else
+     FAIL=Y
+   fi
+ fi
+
+
+  if (( $AUDITCP ))
+  then
+    auditcp audfilter add <<EOF
+6
+success
+
+log
+
+dce_audit_filter_query
+EOF
+
+  else
+    dcecp << EOF
+audfilter create world -attribute {dce_audit_filter_query success log}
+EOF
+  fi
+
+ if (( $? == 0 ))
+ then
+   print "\nOK: world filter added successfuly"
+   tet_infoline "OK: world filter added successfuly"
+   FAIL=N
+ else
+   FAIL=Y
+ fi
+
+
+ if [[ $FAIL = N ]]
+ then
+   if (( $AUDITCP ))
+   then
+     auditcp audfilter show <<EOF > /tmp/auditcp.out
+6
+EOF
+
+   else
+     dcecp << EOF > /tmp/auditcp.out
+audfilter show world
+EOF
+   fi
+
+   if (( $? == 0 ))
+   then
+     (( return_value = $(grep -c 'o filter' /tmp/auditcp.out) ))
+
+     if (( $return_value == 1 ))
+     then
+       FAIL=Y
+       print "\nERROR: world filter not found"
+       tet_infoline "ERROR: world filter not found"
+     else                                                                 
+       FAIL=N
+       print "\nOK: world filter read successfuly"
+       tet_infoline "OK: world filter read successfuly"
+     fi
+   else
+     FAIL=Y
+   fi
+ fi
+
+
+ if [[ $FAIL = N ]]
+ then
+   tet_result PASS
+   print "\nPASS: cp_filter02 passed"
+   tet_infoline "PASS: cp_filter02 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: cp_filter02 failed"
+   tet_infoline "ERROR: cp_filter02 failed"
+ fi
+}
+
+#========================================================================
+
+cp_filter03() {
+#set -x
+
+ print "\nSTART: cp_filter03 started"
+ tet_infoline "START: cp_filter03 started"
+ if (( $AUDITCP ))
+ then
+   auditcp audfilter catalog
+ else
+   dcecp -c audfilter catalog
+ fi
+ if (( $? == 0 ))
+ then
+   print "\nOK: audfilter catalog - successful"
+   tet_infoline "OK: audfilter catalog - successful"
+   FAIL=N
+ else
+   FAIL=Y
+ fi
+
+ if [[ $FAIL = N ]] 
+ then  
+   tet_result PASS
+   print "\nPASS: cp_filter03 passed"
+   tet_infoline "PASS: cp_filter03 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: cp_filter03 failed"
+   tet_infoline "ERROR: cp_filter03 failed"
+ fi
+}
+
+#========================================================================
+
+cp_filter04() {
+#set -x
+
+ print "\nSTART: cp_filter04 started"
+ tet_infoline "START: cp_filter04 started"
+ if (( $AUDITCP ))
+ then
+   auditcp audfilter remove <<EOF
+0
+aud_test_princ2
+denial
+
+log
+
+dce_audit_filter_modify
+EOF
+
+  else
+  dcecp << EOF
+audfilter create {principal aud_test_princ2} -attribute {dce_audit_filter_modify success log}
+EOF
+  dcecp << EOF
+audfilter create {principal aud_test_princ2} -attribute {dce_audit_filter_modify failure alarm}
+EOF
+  dcecp << EOF
+audfilter create {principal aud_test_princ2} -attribute {dce_audit_filter_query success log}
+EOF
+  dcecp << EOF
+audfilter create {principal aud_test_princ2} -attribute {dce_audit_filter_query all log}
+EOF
+    dcecp << EOF
+audfilter modify {principal aud_test_princ2} -remove {dce_audit_filter_modify denial log}
+EOF
+    dcecp << EOF
+audfilter modify {principal aud_test_princ2} -remove {dce_audit_filter_modify success log}
+EOF
+    dcecp << EOF
+audfilter modify {principal aud_test_princ2} -remove {dce_audit_filter_modify failure alarm}
+EOF
+    dcecp << EOF
+audfilter modify {principal aud_test_princ2} -remove {dce_audit_filter_query success log}
+EOF
+    dcecp << EOF
+audfilter modify {principal aud_test_princ2} -remove {dce_audit_filter_query denial log}
+EOF
+    dcecp << EOF
+audfilter modify {principal aud_test_princ2} -remove {dce_audit_filter_query failure log}
+EOF
+    dcecp << EOF
+audfilter modify {principal aud_test_princ2} -remove {dce_audit_filter_query pending log}
+EOF
+  fi
+
+ if (( $? == 0 ))
+ then
+   print "\nOK: audfilter remove - successful"
+   tet_infoline "OK: audfilter remove - successful"
+   FAIL=N
+ else
+   FAIL=Y
+ fi                                
+
+ if (( $AUDITCP ))
+ then
+   auditcp audfilter catalog
+ else
+   dcecp -c audfilter catalog
+ fi
+
+ if (( $? == 0 ))
+ then
+   print "\nOK: audfilter catalog - successful"
+   tet_infoline "OK: audfilter catalog - successful"
+   FAIL=N
+ else
+   FAIL=Y
+ fi
+
+ if (( $AUDITCP ))
+ then
+ auditcp audfilter show <<EOF > /tmp/auditcp.out
+0
+aud_test_princ2
+EOF
+
+ else
+   dcecp << EOF 2> /tmp/auditcp.out
+audfilter show {principal aud_test_princ2}
+EOF
+ fi
+
+ if (( $? == 0 ))
+ then
+    (( return_value = $(grep -c 'o filter' /tmp/auditcp.out) ))
+
+    if (( $return_value == 0 ))
+    then
+       FAIL=Y
+       print "\nERROR: filter for principal aud_test_princ2 found (should have been removed)"
+       tet_infoline "ERROR: filter for principal aud_test_princ2 found (should have been removed)"
+    else                                                                 
+       FAIL=N
+       print "\nOK: filter for principal aud_test_princ2 removed successfully"
+       tet_infoline "OK: filter for principal aud_test_princ2 removed successfully"
+    fi
+ else                                                                 
+    print "\nreturn from audfilter show for aud_test_princ2 = $?"
+    FAIL=N
+    print "\nOK: filter for principal aud_test_princ2 removed successfully"
+    tet_infoline "OK: filter for principal aud_test_princ2 removed successfully"
+ fi
+
+ if [[ $FAIL = N ]] 
+ then  
+   tet_result PASS
+   print "\nPASS: cp_filter04 passed"
+   tet_infoline "PASS: cp_filter04 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: cp_filter04 failed"
+   tet_infoline "ERROR: cp_filter04 failed"
+ fi
+}
+
+
+#========================================================================
+
+cp_filter05() {
+#set -x
+
+ print "\nSTART: cp_filter05 started"
+ tet_infoline "START: cp_filter05 started"
+
+ if (( $AUDITCP ))
+ then
+   auditcp audfilter add <<EOF
+0
+aud_test_princ1
+denial
+
+alarm
+
+dce_audit_filter_query
+EOF
+
+ else
+   dcecp << EOF
+audfilter create {principal aud_test_princ1} -attribute {dce_audit_filter_query denial alarm}
+EOF
+ fi
+
+ if (( $? == 0 ))
+ then
+   if (( $AUDITCP ))
+   then
+     auditcp audfilter add <<EOF
+0
+aud_test_princ2
+denial
+
+log
+
+dce_audit_filter_modify
+EOF
+
+   else
+     dcecp << EOF
+audfilter create {principal aud_test_princ2} -attribute {dce_audit_filter_modify denial log}
+EOF
+   fi
+
+   if (( $? == 0 ))
+     then
+       print "\nOK: filters 1 and 2 added successfuly"
+       tet_infoline "OK: filters 1 and 2 added successfuly"
+       FAIL=N
+     else
+       print "\nERROR: could not add filter 2"
+       tet_infoline "ERROR: could not add filter 2"
+       FAIL=Y
+     fi
+ else
+   FAIL=Y
+       print "\nERROR: could not add filter 1"
+       tet_infoline "ERROR: could not add filter 1"
+ fi
+
+ if [[ $FAIL = N ]] 
+ then  
+   if (( $AUDITCP ))
+   then
+     auditcp audfilter delete <<EOF
+0
+aud_test_princ1
+EOF
+   else
+     dcecp << EOF
+audfilter delete {principal aud_test_princ1}
+EOF
+   fi
+
+   if (( $? == 0 ))
+   then
+     print "\nOK: audfilter delete - successful"
+     tet_infoline "OK: audfilter delete - successful"
+     FAIL=N
+   else
+     print "\nERROR: could not delete filter 1"
+     tet_infoline "ERROR: could not delete filter 1"
+     FAIL=Y
+   fi                                
+ fi
+
+ if [[ $FAIL = N ]] 
+ then  
+   if (( $AUDITCP ))
+   then
+     auditcp audfilter catalog
+   else
+     dcecp -c audfilter catalog
+   fi
+
+   if (( $? == 0 ))
+   then
+     print "\nOK: audfilter catalog - successful"
+     tet_infoline "OK: audfilter catalog - successful"
+     FAIL=N
+   else
+     FAIL=Y           
+   fi
+ fi
+
+ if (( $AUDITCP ))
+ then
+   auditcp audfilter show <<EOF
+0
+aud_test_princ2
+EOF
+ else 
+   dcecp << EOF
+audfilter show {principal aud_test_princ2}
+EOF
+ fi
+
+ print "\nreturn from audfilter show for aud_test_princ2 = $?"
+ if [[ $FAIL = N ]] 
+ then  
+   tet_result PASS
+   print "\nPASS: cp_filter05 passed"
+   tet_infoline "PASS: cp_filter05 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: cp_filter05 failed"
+   tet_infoline "ERROR: cp_filter05 failed"
+ fi
+}
+
+
+#========================================================================
+
+cp_filter06() {
+#set -x
+
+ print "\nSTART: cp_filter06 started"
+ tet_infoline "START: cp_filter06 started"
+
+  dcecp -c aud stop
+
+  FAIL=Y
+  time_elapsed=0
+
+  while (( time_elapsed < 120 ))
+  do
+     sleep 5
+     (( time_elapsed = time_elapsed + 5 ))
+
+     nr_of_auditds=$( ps $PS_FLAGS | grep -c auditd )
+     if (( $nr_of_auditds == 0 ))
+     then
+        FAIL=N
+        break
+     fi
+  done
+
+  print "\n time elapsed till auditd stopped = $time_elapsed"
+
+if [[ $FAIL = N ]]
+then
+  auditd -D&
+  sleep 30
+
+  dcecp << EOF
+for {set i 0} {\$i < 20} {incr i} {
+audfilter create {{principal aud_test_princ1} {principal aud_test_princ2}} -attribute {dce_audit_filter_modify failure log}}
+EOF
+
+# negative test, with unknown principal 
+  if (( $? == 0 ))
+  then
+     dcecp << EOF
+audfilter create {principal xyz} -attribute {dce_audit_filter_modify failure log}
+EOF
+     (( rc = $? ))
+  else
+     print "\nERROR: create principals filter failed"
+     FAIL=Y
+  fi
+
+
+  if [[ $FAIL = N ]]
+  then
+     if (( $rc != 0 ))
+     then
+        dcecp << EOF
+for {set i 0} {\$i < 20} {incr i} {
+audfilter create {{group aud_test_group1} {group aud_test_group2}} -attribute {dce_audit_filter_modify failure log}}
+EOF
+     (( rc = $? ))
+     else
+        print "\nERROR: create filter for unknown principal succeeded"
+        FAIL=Y
+     fi
+  fi
+
+# negative test, with unknown group 
+  if [[ $FAIL = N ]]
+  then
+     if (( $rc == 0 ))
+     then
+        dcecp << EOF
+audfilter create {group xyz} -attribute {dce_audit_filter_modify failure log}
+EOF
+     (( rc = $? ))
+     else
+        print "\nERROR: create filter for groups failed"
+        FAIL=Y
+     fi
+  fi
+
+  if [[ $FAIL = N ]]
+  then
+     if (( $rc != 0 ))
+     then
+        dcecp << EOF
+for {set i 0} {\$i < 40} {incr i} {
+audfilter create {cell $local_cell_name} -attribute {dce_audit_filter_query failure log}}
+EOF
+     (( rc = $? ))
+     else
+        print "\nERROR: create filter for unknown group succeeded"
+        FAIL=Y
+     fi
+  fi
+
+# negative test, with unknown cell 
+  if [[ $FAIL = N ]]
+  then
+     if (( $rc == 0 ))
+     then
+        dcecp << EOF
+audfilter create {cell xyz} -attribute {dce_audit_filter_query failure log}
+EOF
+     (( rc = $? ))
+     else
+        print "\nERROR: create filter for cell failed"
+        FAIL=Y
+     fi
+  fi
+
+  if [[ $FAIL = N ]]
+  then
+     if (( $rc != 0 ))
+     then
+     dcecp << EOF
+for {set i 0} {\$i < 40} {incr i} {
+audfilter create {cell_overridable $local_cell_name} -attribute {dce_audit_filter_query success log}}
+EOF
+     (( rc = $? ))
+     else
+        print "\nERROR: create filter for unknown cell succeeded"
+        FAIL=Y
+     fi
+  fi
+
+  if [[ $FAIL = N ]]
+  then
+     if (( $rc == 0 ))
+     then
+        dcecp << EOF
+for {set i 0} {\$i < 40} {incr i} {
+audfilter create world -attribute {dce_audit_filter_query failure log}}
+EOF
+     (( rc = $? ))
+     else
+        print "\nERROR: create filter for cell_overridable failed"
+        FAIL=Y
+     fi
+  fi
+
+  if [[ $FAIL = N ]]
+  then
+     if (( $rc == 0 ))
+     then
+         dcecp << EOF
+for {set i 0} {\$i < 40} {incr i} {
+audfilter create world_overridable -attribute {dce_audit_filter_query success log}}
+EOF
+     (( rc = $? ))
+     else
+        print "\nERROR: create filter for world failed"
+        FAIL=Y
+     fi
+  fi
+
+  if [[ $FAIL = N ]]
+  then
+     if (( $rc == 0 ))
+     then
+        dcecp << EOF
+for {set i 0} {\$i < 40} {incr i} {
+audfilter create {{foreign_principal aud_test_princ1} {foreign_principal aud_test_princ2}} -attribute {dce_audit_filter_query denial log}}
+EOF
+     (( rc = $? ))
+     else
+        print "\nERROR: create filter for world_overridable failed"
+        FAIL=Y
+     fi
+  fi
+
+# negative test, with unknown foreign_principal 
+  if [[ $FAIL = N ]]
+  then
+     if (( $rc == 0 ))
+     then
+        dcecp << EOF
+audfilter create {foreign_principal xyz} -attribute {dce_audit_filter_query denial log}
+EOF
+     (( rc = $? ))
+     else
+        print "\nERROR: create filter for foreign_principal failed"
+        FAIL=Y
+     fi
+  fi
+
+  if [[ $FAIL = N ]]
+  then
+     if (( $rc != 0 ))
+     then
+        dcecp << EOF
+for {set i 0} {\$i < 40} {incr i} {
+audfilter create {{foreign_group aud_test_group1} {foreign_group aud_test_group2}} -attribute {dce_audit_filter_query failure log}}
+EOF
+     (( rc = $? ))
+     else
+        print "\nERROR: create filter for unknown foreign_principal succeeded"
+        FAIL=Y
+     fi
+  fi
+
+# negative test, with unknown foreign_group 
+  if [[ $FAIL = N ]]
+  then
+     if (( $rc == 0 ))
+     then
+        dcecp << EOF
+audfilter create {foreign_group xyz} -attribute {dce_audit_filter_query denial log}
+EOF
+     (( rc = $? ))
+     else
+        print "\nERROR: create filter for foreign_group failed"
+        FAIL=Y
+     fi
+  fi
+
+  if [[ $FAIL = N ]]
+  then
+     if (( $rc == 0 ))
+     then
+        print "\nERROR: create filter for unknown foreign_group succeeded"
+        FAIL=Y
+     fi
+  fi
+
+
+  if [[ $FAIL = N ]]
+  then
+     tet_result PASS
+     print "\nPASS: cp_filter06 passed"
+     tet_infoline "PASS: cp_filter06 passed"
+  else
+     tet_result FAIL
+     print "\nERROR: cp_filter06 failed"
+     tet_infoline "ERROR: cp_filter06 failed"
+  fi
+
+else
+   tet_result FAIL
+   print "\nERROR: could not stop auditd"
+   print "\nERROR: cp_filter06 failed"
+   tet_infoline "ERROR: cp_filter06 failed"
+fi
+
+
+}
+
+
+#========================================================================
+
+cp_filter07() {
+#set -x
+
+ print "\nSTART: cp_filter07 started"
+ tet_infoline "START: cp_filter07 started"
+
+#===  test previous operations when auditd is in selfaudit mode
+
+  dcecp -c aud stop
+
+  FAIL=Y
+  time_elapsed=0
+ 
+  while (( time_elapsed < 120 ))
+  do
+     sleep 5
+     (( time_elapsed = time_elapsed + 5 ))
+
+     nr_of_auditds=$( ps $PS_FLAGS | grep -c auditd )
+     if (( $nr_of_auditds == 0 ))
+     then
+        FAIL=N
+        break
+     fi
+  done
+
+  print "\n time elapsed till auditd stopped = $time_elapsed"
+
+if [[ $FAIL = N ]]
+then
+
+  auditd -a   
+  sleep 20
+
+
+ if (( $? == 0 ))
+ then
+    dcecp << EOF
+audfilter modify {foreign_principal aud_test_princ1} -remove {dce_audit_filter_query denial log}
+EOF
+ fi
+
+ if (( $? == 0 ))
+ then
+    dcecp << EOF
+audfilter modify {foreign_group aud_test_group1} -remove {dce_audit_filter_query denial log}
+EOF
+ fi
+
+ if (( $? == 0 ))
+ then
+    dcecp << EOF
+audfilter delete {foreign_principal aud_test_princ2}
+EOF
+ fi
+
+ if (( $? == 0 ))
+ then
+    dcecp << EOF
+audfilter delete {foreign_group aud_test_group2}
+EOF
+ fi
+
+
+ if (( $? == 0 ))
+ then
+       dcecp << EOF
+for {set i 0} {\$i < 11} {incr i} {
+audfilter create {{principal aud_test_princ1} {principal aud_test_princ2}} -attribute {dce_audit_filter_modify failure log}}
+EOF
+ fi
+
+ if (( $? == 0 ))
+ then
+  dcecp << EOF
+audfilter create world -attribute {dce_audit_filter_modify failure log}
+EOF
+ fi
+
+ if (( $? == 0 ))
+ then
+  dcecp << EOF
+audfilter create world_overridable -attribute {dce_audit_filter_modify failure log}
+EOF
+ fi
+
+
+ if (( $? == 0 ))
+ then
+    dcecp << EOF
+audfilter show {principal aud_test_princ1}
+EOF
+ fi
+
+ if (( $? == 0 ))
+ then
+    dcecp << EOF
+audfilter show world
+EOF
+ fi
+
+ if (( $? == 0 ))
+ then
+    dcecp << EOF
+audfilter show world_overridable
+EOF
+ fi
+
+ if (( $? == 0 ))
+ then
+    dcecp << EOF
+audfilter modify {principal aud_test_princ1} -remove {dce_audit_filter_modify failure log}
+EOF
+ fi
+
+ if (( $? == 0 ))
+ then
+    dcecp << EOF
+audfilter modify world -remove {dce_audit_filter_modify failure log}
+EOF
+ fi
+
+ if (( $? == 0 ))
+ then
+    dcecp << EOF
+audfilter modify world_overridable -remove {dce_audit_filter_modify failure log}
+EOF
+ fi
+
+ if (( $? == 0 ))
+ then
+  dcecp << EOF
+audfilter create world -attribute {dce_audit_filter_modify failure log}
+EOF
+ fi
+
+ if (( $? == 0 ))
+ then
+  dcecp << EOF
+audfilter create world_overridable -attribute {dce_audit_filter_modify failure log}
+EOF
+ fi
+
+ if (( $? == 0 ))
+ then
+  dcecp << EOF
+audfilter delete world
+EOF
+ fi
+
+ if (( $? == 0 ))
+ then
+  dcecp << EOF
+audfilter delete world_overridable
+EOF
+ fi
+
+
+ if (( $? == 0 ))
+ then
+    dcecp << EOF
+audfilter delete {principal aud_test_princ2}
+EOF
+ fi
+
+ if (( $? == 0 ))
+ then
+    dcecp -c audfilter catalog
+ fi
+
+
+ if (( $? == 0 ))
+ then
+   tet_result PASS
+   print "\nPASS: cp_filter07 passed"
+   tet_infoline "PASS: cp_filter07 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: cp_filter07 failed"
+   tet_infoline "ERROR: cp_filter07 failed"
+ fi
+
+else
+   tet_result FAIL
+   print "\nERROR: could not stop auditd"
+   print "\nERROR: cp_filter07 failed"
+   tet_infoline "ERROR: cp_filter07 failed"
+fi
+}
+#========================================================================
+
+cp_filter08() {
+#set -x
+# all modify operations are not allowed, since aud_test_princ1 is 
+# authorized only for querying
+
+ print "\nSTART: cp_filter08 started"
+ tet_infoline "START: cp_filter08 started"
+
+ FAIL=N
+
+ dce_login aud_test_princ1 princ1 -e  dcecp<<EOF 
+audfilter create world -attribute {dce_audit_filter_modify failure log}
+EOF
+
+ if (( $? != 0 ))
+ then
+    dcecp << EOF
+audfilter create world -attribute {dce_audit_filter_modify failure log}
+EOF
+
+    if (( $? == 0 ))
+    then
+       dce_login aud_test_princ1 princ1 -e  dcecp<<EOF 
+audfilter show world
+EOF
+
+       if (( $? == 0 ))
+       then
+          dce_login aud_test_princ1 princ1 -e  dcecp -c audfilter catalog
+
+          if (( $? == 0 ))
+          then
+             dce_login aud_test_princ1 princ1 -e  dcecp << EOF
+audfilter modify world -remove {dce_audit_filter_modify failure log}
+EOF
+
+             if (( $? != 0 ))
+             then
+                dce_login aud_test_princ1 princ1 -e  dcecp << EOF
+audfilter delete world
+EOF
+                if (( $? == 0 ))
+                then
+                   print "\nERROR: delete world filter succeeded, despite not authorized"
+                   FAIL=Y
+                fi
+             else
+                print "\nERROR: remove world filter succeeded, despite not authorized"
+                FAIL=Y
+             fi
+
+          else
+             print "\nERROR: audfilter catalog failed"
+             FAIL=Y
+          fi
+
+       else
+          print "\nERROR: audfilter show failed"
+          FAIL=Y
+       fi
+
+    else
+       print "\nERROR: audfilter create failed"
+       FAIL=Y
+    fi
+
+ else
+   print "\nERROR: audfilter create succeeded, despite not being authorized"
+   FAIL=Y
+ fi
+
+if [[ $FAIL = N ]]
+ then
+   tet_result PASS
+   print "\nPASS: cp_filter08 passed"
+   tet_infoline "PASS: cp_filter08 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: cp_filter08 failed"
+   tet_infoline "ERROR: cp_filter08 failed"
+ fi
+
+}
+
+#========================================================================
+
+cleanup() {
+
+#in order to run rgy_edit, there is need to dce_login as cell_admin 
+# use -up for rgy_edit to ensure master is updated.
+
+  dce_login cell_admin $cellpw -e rgy_edit -up <<EOF
+domain group
+del aud_test_group1
+del aud_test_group2
+domain principal
+del aud_test_princ1
+del aud_test_princ2
+quit
+EOF
+
+#     unsetenv KRB5CCNAME
+
+     rm /tmp/auditcp.out
+     rm /opt/dcelocal/var/audit/esl-*
+     rm /opt/dcelocal/var/audit/adm/central_trail*
+     if (( $AUDITCP ))
+     then
+       auditcp aud stop  # stop auditd daemon  
+     else
+       dcecp -c aud stop
+     fi
+	print "\nEND DCE audit functional: cp_filter; DATE: `date`"
+	tet_infoline "END DCE audit functional: ${TET_PNAME}; DATE: `date`"
+}
+
+#source tcm
+. $TET_ROOT/lib/ksh/tcm.ksh

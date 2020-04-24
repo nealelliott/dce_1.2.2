@@ -1,0 +1,598 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+#    Copyright (C) 1996, 1991 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This test switches back and forth between release and scheduled replication.
+
+###############################################################################
+
+# Usage:                rtest2
+
+# Typically run via:    rtest2 >& rtest2.out
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode. DFS server $SERVER_1
+# must export Episode aggregate $EPI_AGGRNAME_1, and $SERVER_2 must export
+# $EPI_AGGRNAME_2. $SERVER_1 and $SERVER_2 can be the same machine.
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1 and $SERVER_2, in
+# order to run the fts commands contained in this script. You must also be
+# able to create mount points in $test_root.
+
+# Highest error number is: 46.
+
+###############################################################################
+
+d=`pwd`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=rep
+
+# Load the test context.
+. $dn/statusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+ft_1=Stevens.$$
+
+dir_1=$test_root/Kevin.$$
+
+###############################################################################
+
+echo ""
+echo "$ty/$p starting as PID $$ at `date` on $hn"
+echo "   in cell $CELL_NAME."
+echo "Using aggregates $EPI_AGGRNAME_1 on $SERVER_1 and $EPI_AGGRNAME_2 on $SERVER_2."
+
+if test "$CELL_NAME" = ""
+   then echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting."
+        exit 2
+   fi
+
+###############################################################################
+
+sync; sync; sleep 2
+echo ""; date; echo "Part 1: release replication"
+
+########################################
+
+echo ""; echo "Creating fileset $ft_1..."
+fts create $ft_1 $SERVER_1 $EPI_AGGRNAME_1 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts create failed (errno $rf); $p ABORTING ($p: E1)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+ftid_1=`fts lsfldb $ft_1 $cav_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+echo "Fileset $ft_1 ID is $ftid_1."
+if test "$ftid_1" -le 0
+   then echo "- fileset ID is unreasonable ($ftid_1); $p ABORTING ($p: E2)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+echo ""; echo "Creating mount point at $dir_1 for $ft_1..."
+fts crmount $dir_1 $ft_1 $CELL_ARG; rf=$?
+if test $rf -ne 0
+   then echo "- fts crmount failed (errno $rf); $p ABORTING ($p: E3)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+setFsetRootProt $dir_1 $testuid "E3.1"
+if test $rf -ne 0
+   then 
+        echo "BAILING OUT of this part"; continue
+   fi
+
+########################################
+
+echo ""; echo "Putting stuff in $dir_1 (M0)..."
+cd /tmp; cd $dir_1; rf=$?
+if test `pwd` != $dir_1 -o $rf -ne 0
+   then echo "- cd $dir_1 failed (errno $rf, wd `pwd`); $p ABORTING ($p: E4)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+cat > f0 << ==END==
+
+   We hold these truths to be self-evident, that all men are created equal,
+   that they are endowed by their creator with certain unalienable rights,
+   that among these are life, liberty, and the pursuit of happiness. That
+   to secure these rights, governments are instituted among men, deriving
+   their just powers from the consent of the goverened.
+
+   That whenever any form of government becomes destructive of these ends,
+   it is the right of the people to alter or abolish it, and to institute
+   new government, laying its foundations on such principles and organizing
+   its powers in such form, as to them shall seem most likely to effect
+   their safety and happiness.
+
+==END==
+echo "Elvis has just left the building" > f1
+echo "She wants to sell my monkey" > f2
+echo "Buy Sam a drink and get his dog one too" > f3
+echo "This is $dir_1/file_1." > file_1
+cat file_1 file_1 file_1 file_1 | sed 's/file_1/file_4/' > file_4
+cat file_4 file_4 file_4 file_4 | sed 's/file_4/file_16/' > file_16
+cat f0 f0 f0 f0 > f_big0
+cat f_big0 f_big0 f_big0 f_big0 > f_big1
+mkdir d1 d2 d3
+cp f* d1
+cp file_4 d2
+cp file_16 d3
+
+########################################
+
+echo ""; echo "Here's what we have to work with:"
+
+echo ""
+ls -lAR $dir_1
+
+echo ""
+fts lsmount $dir_1; rf=$?
+if test $rf -ne 0
+   then echo "- fts lsmount failed (errno $rf); ($p: E5)"; rc=`expr $rc + 1`
+   fi
+
+echo ""
+cm whereis $dir_1; rf=$?
+if test $rf -ne 0
+   then echo "- cm whereis failed (errno $rf); ($p: E6)"; rc=`expr $rc + 1`
+   fi
+
+echo ""
+fts lsft -fileset $ftid_1 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts lsft failed (errno $rf); ($p: E7)"; rc=`expr $rc + 1`
+   fi
+
+########################################
+
+echo ""; echo "Setting up release replication..."
+fts setrepinfo $ft_1 -release -maxage 4:00 -failage 5:00 -reclaimwait 2:00:00 -defaultsiteage 1:00; rf=$?
+if test $rf -ne 0
+   then echo "- fts setrepinfo failed (errno $rf); $p ABORTING ($p: E8)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+fts addsite $ft_1 $SERVER_1 $EPI_AGGRNAME_1 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts addsite failed (errno $rf); $p ABORTING ($p: E9)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+########################################
+
+echo ""; echo "Release the fileset..."
+fts release $ft_1 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts release failed (errno $rf); $p ABORTING ($p: E12)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+if test $SERVER_1 != $SERVER_2
+   then
+   fts addsite $ftid_1 $SERVER_2 $EPI_AGGRNAME_2 $cav_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- fts addsite failed (errno $rf) ($p: E10)"; rc=`expr $rc + 1`
+      fi
+   fi
+
+fts crmount $dir_1.ro $ft_1.readonly $CELL_ARG; rf=$?
+if test $rf -ne 0
+   then echo "- fts crmount failed (errno $rf); $p ABORTING ($p: E11)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+if test $SERVER_1 != $SERVER_2
+    then
+    echo ""; echo "Waiting for the readonly to propagate initially..."
+    date
+    for tries in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30
+    do
+	sleep 30
+	xxx=`fts lsheader $SERVER_2 $EPI_AGGRNAME_2 | grep $ft_1.readonly | grep On-line`
+	if test "$xxx" != ""
+	    then break
+	fi
+	echo "...still sleeping at `date` for $ft_1.readonly on $SERVER_2"
+    done
+    date
+fi
+
+diff -r $dir_1 $dir_1.ro
+if test $? -ne 0
+   then echo "- diff says the RW and RO differ ($p: E13)"; rc=`expr $rc + 1`
+   fi
+
+cm whereis $dir_1 $dir_1.ro
+
+echo ""; echo "Modify the read/write fileset (M1)..."
+cp f1 f5
+rm f3
+echo "This is the new $dir_1/file_1" > file_1
+echo "You'd have to be here to believe it" > f4
+rm -r d3
+mkdir d4
+cp f? d4
+mkdir d5
+
+diff -r $dir_1 $dir_1.ro
+if test $? -ne 1
+   then echo "- diff says the RW and RO match ($p: E14)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Release the fileset again..."
+fts release $ft_1 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts release failed (errno $rf) ($p: E15)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Sleeping long enough for the CM to notice the new readonly (300 secs)..."
+date; sleep 300; date
+
+diff -r $dir_1 $dir_1.ro
+if test $? -ne 0
+   then echo "- diff says the RW and RO differ ($p: E16)"; rc=`expr $rc + 1`
+   fi
+
+fts lsreplicas $ft_1 -all $cav_arg
+fts lsft -fileset $ft_1.readonly -server $SERVER_1 $cav_arg
+
+########################################
+
+echo ""; echo "Done with part 1."
+
+###############################################################################
+
+sync; sync; sleep 2
+echo ""; date; echo "Part 2: scheduled replication"
+
+########################################
+
+if test $SERVER_1 != $SERVER_2
+   then
+   fts rmsite $ftid_1 $SERVER_2 $EPI_AGGRNAME_2 $cav_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- fts rmsite failed (errno $rf) ($p: E19)"; rc=`expr $rc + 1`
+      fi
+   fi
+
+fts rmsite $ftid_1 $SERVER_1 $EPI_AGGRNAME_1 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts rmsite failed (errno $rf) ($p: E18)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Switching to scheduled replication..."
+fts setrepinfo $ft_1 -scheduled -change -minrepdelay 0:10; rf=$?
+if test $rf -ne 0
+   then echo "- fts setrepinfo failed (errno $rf); $p ABORTING ($p: E17)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+fts lsfldb $ft_1
+
+echo ""; echo "Modify the read/write fileset (M2)..."
+cat >> f0 << ==END==
+
+   Prudence, indeed, will dictate that governments long established should
+   not be changed for light and transient causes, and accordingly all
+   experience hath shown that mankind are more disposed to suffer, while
+   evils are sufferable, than to right themselves by abolishing the forms
+   to which they are long accustomed.
+
+   But when a long train of abuses and usurpations, pursuing inevitably
+   the same object, evinces a desire to reduce them under absolute
+   despotism, it is their right, it is their duty, to throw off such
+   government, and to provide new guards for their future security.
+
+==END==
+mv f2 f6
+rm f5
+echo "This is the newest $dir_1/file_1" > file_1
+echo "You'd have to be here to believe it" > f4
+mv d2 d6
+cp f4 d6
+rm -rf d5
+
+fts addsite $ft_1 $SERVER_2 $EPI_AGGRNAME_2 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts addsite failed (errno $rf); $p ABORTING ($p: E20)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+if test $SERVER_1 != $SERVER_2
+   then
+   fts addsite $ftid_1 $SERVER_1 $EPI_AGGRNAME_1 $cav_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- fts addsite failed (errno $rf) ($p: E21)"; rc=`expr $rc + 1`
+      fi
+   fi
+
+########################################
+
+echo ""; echo "Update the fileset..."
+fts update $ft_1 -all $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts update failed (errno $rf) ($p: E23)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Waiting for the readonly to be built initially..."
+date
+for tries in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30
+do
+	sleep 30
+	xxx=`fts lsheader $SERVER_2 $EPI_AGGRNAME_2 | grep $ft_1.readonly | grep On-line`
+	if test "$xxx" != ""
+	    then break
+	fi
+	echo "...still sleeping at `date` waiting for $ft_1.readonly on $SERVER_2"
+done
+if test $SERVER_1 != $SERVER_2
+    then
+    for tries in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30
+    do
+	sleep 30
+	xxx=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 | grep $ft_1.readonly | grep On-line`
+	if test "$xxx" != ""
+	    then break
+	fi
+	echo "...still sleeping at `date` waiting for $ft_1.readonly on $SERVER_1"
+    done
+fi
+date
+
+# Must inform the CM that the R/O exists in case it checked while there wasn't one.
+cm checkfilesets; rf=$?
+if test $rf -ne 0
+   then echo "- cm checkfilesets failed (errno $rf) ($p: E46)"; rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+diff -r $dir_1 $dir_1.ro
+if test $? -ne 0
+   then echo "- diff says the RW and RO differ ($p: E24)"; rc=`expr $rc + 1`
+   fi
+
+########################################
+
+echo ""; echo "Changing replication parameters..."
+
+fts rmsite $ftid_1 $SERVER_2 $EPI_AGGRNAME_2 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts rmsite failed (errno $rf) ($p: E39)"; rc=`expr $rc + 1`
+   fi
+
+if test $SERVER_1 != $SERVER_2
+   then
+   fts rmsite $ft_1 $SERVER_1 $EPI_AGGRNAME_1 $cav_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- fts rmsite failed (errno $rf) ($p: E40)"; rc=`expr $rc + 1`
+      fi
+   fi
+
+fts setrepinfo $ftid_1 -clear -maxage 3m -failage 5m -reclaimwait 1h30m -minrepdelay 1m -defaultsiteage 2m $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts setrepinfo failed (errno $rf) ($p: E25)"; rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+# Must inform the CM of the new maxage/failage parameters.
+cm checkfilesets; rf=$?
+if test $rf -ne 0
+   then echo "- cm checkfilesets failed (errno $rf) ($p: E44)"; rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+echo ""; echo "Waiting for the readonlys to be destroyed..."
+date
+for tries in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30
+do
+	sleep 30
+	xxx=`fts lsheader $SERVER_2 $EPI_AGGRNAME_2 | grep $ft_1.readonly | grep On-line`
+	if test "$xxx" = ""
+	    then break
+	fi
+	echo "...still sleeping at `date` waiting for $ft_1.readonly to leave $SERVER_2"
+done
+if test $SERVER_1 != $SERVER_2
+    then
+    for tries in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30
+    do
+	sleep 30
+	xxx=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 | grep $ft_1.readonly | grep On-line`
+	if test "$xxx" = ""
+	    then break
+	fi
+	echo "...still sleeping at `date` waiting for $ft_1.readonly to leave $SERVER_1"
+    done
+fi
+date
+
+fts addsite $ftid_1 $SERVER_1 $EPI_AGGRNAME_1 -maxsiteage 2m $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts addsite failed (errno $rf) ($p: E41)"; rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+if test $SERVER_1 != $SERVER_2
+   then
+   fts addsite $ftid_1 $SERVER_2 $EPI_AGGRNAME_2 -maxsiteage 2m $cav_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- fts addsite failed (errno $rf) ($p: E42)"; rc=`expr $rc + 1`
+           echo "BAILING OUT of this part"; continue
+      fi
+   fi
+
+echo ""; echo "Waiting for the readonlys to be rebuilt..."
+date
+for tries in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30
+do
+	sleep 30
+	xxx=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 | grep $ft_1.readonly | grep On-line`
+	if test "$xxx" != ""
+	    then break
+	fi
+	echo "...still sleeping at `date` waiting for $ft_1.readonly on $SERVER_1"
+done
+if test $SERVER_1 != $SERVER_2
+    then
+    for tries in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30
+    do
+	sleep 30
+	xxx=`fts lsheader $SERVER_2 $EPI_AGGRNAME_2 | grep $ft_1.readonly | grep On-line`
+	if test "$xxx" != ""
+	    then break
+	fi
+	echo "...still sleeping at `date` waiting for $ft_1.readonly on $SERVER_2"
+    done
+fi
+date
+
+########################################
+
+diff -r $dir_1 $dir_1.ro
+if test $? -ne 0
+   then echo "- diff says the RW and RO differ ($p: E45)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Modify the read/write fileset (M3)..."
+echo "Michael Michael motorcycle" > f3
+rm f6
+echo "This is *really* the newest $dir_1/file_1" > file_1
+echo "Look out Loretta!" > f4
+mkdir d3
+cp f? d3
+rm -r d6
+
+diff -r $dir_1 $dir_1.ro
+if test $? -ne 1
+   then echo "- diff says the RW and RO match ($p: E26)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Sleeping long enough for the readonly to be updated (300 secs)..."
+date; sleep 300; date
+
+diff -r $dir_1 $dir_1.ro
+if test $? -ne 0
+   then echo "- diff says the RW and RO differ ($p: E27)"; rc=`expr $rc + 1`
+   fi
+
+fts lsreplicas $ft_1 -all $cav_arg
+
+########################################
+
+echo ""; echo "Done with part 2."
+
+###############################################################################
+
+sync; sync; sleep 2
+echo ""; date; echo "Part 3: release replication again"
+
+########################################
+
+echo ""; echo "Switching back to release replication..."
+fts setrepinfo $ft_1 -release -change; rf=$?
+if test $rf -ne 0
+   then echo "- fts setrepinfo failed (errno $rf); $p ABORTING ($p: E28)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+echo ""; echo "Modify the read/write fileset (M4)..."
+cp f3 f2
+rm f4
+echo "This is the absolute newest $dir_1/file_1" > file_1
+echo "Call Arnold Slick from Turtle Crick" > f4
+cp -r d3 d2
+
+if test $SERVER_1 != $SERVER_2
+    then
+    diff -r $dir_1 $dir_1.ro
+    if test $? -ne 1
+       then echo "- diff says the RW and RO match ($p: E43)"; rc=`expr $rc + 1`
+       fi
+fi
+
+########################################
+
+echo ""; echo "Release the fileset again..."
+fts release $ftid_1 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts release failed (errno $rf) ($p: E32)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Sleeping long enough for the CM to notice the new readonly (300 secs)..."
+date; sleep 300; date
+
+diff -r $dir_1 $dir_1.ro
+if test $? -ne 0
+   then echo "- diff says the RW and RO differ ($p: E33)"; rc=`expr $rc + 1`
+   fi
+
+fts lsreplicas $ft_1 -all $cav_arg
+
+########################################
+
+echo ""; echo "Clean up..."
+
+cd /tmp
+
+fts delmount $dir_1; rf=$?
+if test $rf -ne 0
+   then echo "- fts delmount failed (errno $rf) ($p: E34)"; rc=`expr $rc + 1`
+   fi
+
+fts delmount $dir_1.ro; rf=$?
+if test $rf -ne 0
+   then echo "- fts delmount failed (errno $rf) ($p: E35)"; rc=`expr $rc + 1`
+   fi
+
+# clean up the non-distinguished replica first.
+
+if test $SERVER_1 != $SERVER_2
+   then
+   fts rmsite $ftid_1 $SERVER_2 $EPI_AGGRNAME_2 $cav_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- fts rmsite failed (errno $rf) ($p: E37)"; rc=`expr $rc + 1`
+      fi
+   fi
+
+fts rmsite $ftid_1 $SERVER_1 $EPI_AGGRNAME_1 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts rmsite failed (errno $rf) ($p: E36)"; rc=`expr $rc + 1`
+   fi
+
+fts delete $ft_1 $SERVER_1 $EPI_AGGRNAME_1 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts delete failed (errno $rf) ($p: E38)"; rc=`expr $rc + 1`
+   fi
+
+########################################
+
+echo ""; echo "Done with part 3."
+
+###############################################################################
+
+sync; sync; sleep 2
+
+echo ""; echo "All done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################

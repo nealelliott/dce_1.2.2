@@ -1,0 +1,834 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#  
+
+###############################################################################
+# Copyright (C) 1995, 1992 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS exporting Episode (not exported UFS, and
+# not local Episode). 
+
+# This is a advanced test of the fts move command
+
+###############################################################################
+
+# Usage:                test21
+
+# Typically run via:    test21 >& test21.out or via runtests
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS exported UFS or LFS. SERVER_1 should
+# export EPI_AGGRNAME_1 in case of LFS, and two UFS partitions (/tmp and one
+# other) in case of UFS. In case of UFS, the /tmp partition would be dumped
+# to a file in the other partition. Ensure that there is adequate space for 
+# the dump file. This would be about 5Mb. In case of LFS two filesets would be
+# created, and the contents of one would be dumped to a file in the other. In
+# case of UFS, the fileset tmp.ufs should be defined in the FLDB prior to
+# running this test.
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1 and $SERVER_2, in
+# order to run the fts commands contained in this script. You must also be
+# able to create mount points in $export_root.
+
+# Highest error number is: 33.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+dn=`dirname $0`
+fillerFile=/tmp/$hn.filler.$$
+fillerTmp=/tmp/$hn.tmp.$$
+rc=0
+errCount=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${EPI_AGGRNAME_1=epi1}
+: ${EPI_AGGRNAME_2=epi2}
+: ${SERVER_1=$hn}
+: ${SERVER_2=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name="/.../$CELL_NAME"}
+: ${dns_server_prefix="/.:/hosts/"}
+: ${export_root=/.../$CELL_NAME/fs}
+: ${mount_prefix=$export_root/test}
+
+cav_arg="$CELL_ARG $AUTH_ARG $VERB_ARG"
+
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+if [ "$dfs_FileSysType" = "$DFS_WORKS_ON_LFS" ]
+ then
+   do_case1=TRUE
+   do_case2=TRUE
+   do_case3=TRUE
+ else 
+   do_case1=FALSE
+   do_case2=FALSE
+   do_case3=FALSE
+ fi
+
+#
+# Create a file name $fillerFile with the given the size 
+#
+createFile()
+{
+size=$1
+if [ -f $fillerTmp ]
+then
+     /bin/rm -rf $fillerTmp
+fi
+
+data="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789."
+echo $data >  $fillerTmp
+current=1;
+goal=`expr $size / 64`
+cat $fillerTmp > $fillerFile; rf=$?
+
+if [ $rf -eq 0 ]
+  then
+    while [ $current -lt $goal ]
+    do
+	cat $fillerTmp >> $fillerFile; rf=$?
+	if [ $rf -ne 0 ]
+	  then
+	    break
+	  fi
+        current=`expr $current + 1`
+    done
+  fi
+if [ $rf -ne 0 ]
+  then
+    echo "Failed to create filler file"
+    errCount = `expr $errCount + 1`
+    /bin/rm -f $fillerFile
+  fi
+/bin/rm -f $fillerTmp
+}
+
+fillUpFileset()
+{
+#
+# Fill the aggregate and delete the copy so that there will be a 
+# little room (> 512K) for cloning.
+#
+i=0
+while [ 1 -eq 1 ]
+  do
+    cp $fillerFile x1.$i; rf=$?
+    if [ $rf -ne 0 ]
+      then 
+        break
+      fi
+    old=x1.$i
+    i=`expr $i + 1`
+  done
+rm -f $old
+}
+
+# Cleanup resources and quit
+cleanup()
+{
+echo ""; echo "Cleaning up..."
+if [ "$dfs_FileSysType" = "$DFS_WORKS_ON_LFS" ]
+then
+  $bin_dir/fts delmount $mp $mp1 $mp2
+  $bin_dir/fts delete $ft $server1 $aggr1 $cav_arg
+  $bin_dir/fts delete $ft1 $server1 $aggr1 $cav_arg
+  $bin_dir/fts delete $ft2 $server2 $aggr2 $cav_arg
+  cm checkfilesets
+fi
+
+echo ""; echo "All done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+}
+
+allocateResources()
+{
+ft=fs.move.$$; ft1=fs.move.$$.1; ft2=fs.move.$$.2; 
+echo "Creating $ft on $server1 $aggr1..."
+$bin_dir/fts create $ft $server1 $aggr1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+    echo "fts create exit status was $rf"
+    echo "- command FAILED; ($p: E1)"
+    rc=`expr $rc + 1`
+  fi
+mp=$export_root/test/dir.test21.$$
+mp1=$export_root/test/dir.test21.$$.1
+mp2=$export_root/test/dir.test21.$$.2
+$bin_dir/fts crmount $mp $ft; rf=$?
+if [ $rf -ne 0 ]
+  then
+    echo "fts crmount exit status was $rf"
+    echo "- command FAILED; ($p: E2)"
+    rc=`expr $rc + 1`
+  fi
+setFsetRootProt $mp $testuid "E2.1"
+cm checkfilesets
+}
+
+###############################################################################
+
+if test "$CELL_NAME" = ""
+   then echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting."
+        exit 2
+   fi
+
+echo ""
+echo "$ty/$p starting as PID $$ at `date` on $hn"
+echo "   in cell $CELL_NAME."
+
+
+###############################################################################
+
+echo "Checking for aggregates..."
+cd /; cm checkfilesets
+
+# We have a simple error case to test in the case of UFS. This is, try moving
+# a UFS fileset.
+
+if [ "$dfs_FileSysType" = "$DFS_WORKS_ON_UFS" ]
+then
+# In the case of UFS, this aggr and fileset should exist
+   $bin_dir/fts aggrinfo $dns_server_prefix$SERVER_1 $UFS_ROOT_2; rf=$?
+   if [ $rf -ne 0 ]
+    then
+       echo "$UFS_ROOT_2 not exported by $SERVER_1, cannot continue"
+       echo "- terminating $p"
+       cleanup
+    else
+       aggr1=$UFS_ROOT_2; ft=$UFS_FSNAME_2; server1=$dns_server_prefix$SERVER_1
+    fi
+   $bin_dir/fts lsfldb $UFS_FSNAME_2; rf=$?
+   if [ $rf -ne 0 ]
+    then
+       echo "$UFS_FSNAME_2 not present in FLDB, cannot continue"
+       echo "- terminating $p"
+       cleanup
+    fi
+   echo "Attempting a move with UFS aggregates -- this should fail"
+   $bin_dir/fts move $ft $server1 $UFS_ROOT_2 $server1 $UFS_ROOT_1 $cav_arg; rf=$?
+   if [ $rf -eq 0 ]
+     then
+       echo "fts move exit status was $rf"
+       echo "- command succeeded; ($p: E3)"
+       rc=`expr $rc + 1`
+     fi
+else
+
+# The LFS case is the rest of this file
+# We hope to find two aggregates on different servers;
+# failing that, we'll take two aggregates on the same server.
+# Failing both of the above cases, cleanup and exit.
+
+$bin_dir/fts aggrinfo $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1; aggr_1_ok=$?
+$bin_dir/fts aggrinfo $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_3; aggr_3_ok=$?
+
+if [ $aggr_1_ok -eq 0 -a $aggr_3_ok -eq 0 ]
+ then
+   echo "Found two aggregates on different servers."
+   aggr1=$EPI_AGGRNAME_1; server1=$dns_server_prefix$SERVER_1
+   aggr2=$EPI_AGGRNAME_3; server2=$dns_server_prefix$SERVER_2
+ else
+   if [ $aggr_1_ok -eq 0 -o $aggr_3_ok -eq 0 ]
+    then
+      echo "Did not find two aggrs on $SERVER_1 and $SERVER_2, will look on $SERVER_2..."
+      $bin_dir/fts aggrinfo $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_2; aggr_2_ok=$?
+      if [ $aggr_2_ok -eq 0 ]
+       then
+         echo "Using two aggregates on the same server."
+         aggr1=$EPI_AGGRNAME_2; server1=$dns_server_prefix$SERVER_2
+         if [ $aggr_1_ok -eq 0 ]
+          then
+            aggr2=$EPI_AGGRNAME_1; server2=$dns_server_prefix$SERVER_1
+          else
+            aggr2=$EPI_AGGRNAME_3; server2=$dns_server_prefix$SERVER_2
+          fi
+       else
+         echo "Cannot run the move tests without two aggregates!"
+         echo "- terminating $p"
+         rc=`expr $rc + 1`
+         cleanup
+       fi
+    else
+      echo "Cannot run the move tests without two aggregates!"
+      echo "- terminating $p"
+      rc=`expr $rc + 1`
+      cleanup
+    fi
+ fi
+
+ echo "Proceeding with tests."; echo ""
+ allocateResources
+fi
+
+# Case 1: move a fileset within the same aggregate and then check the fldb and
+# the aggregate for the fileset status
+if [ $do_case1 = TRUE ]
+then
+echo ""; echo "*** Case 1"
+$bin_dir/fts move $ft $server1 $aggr1 $server1 $aggr1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+    echo "fts move exit status was $rf"
+    echo "- command failed; ($p: E4)"
+    rc=`expr $rc + 1`
+    errCount=`expr $errCount + 1`
+  fi
+
+serv=`$bin_dir/fts lsfldb $ft $cav_arg|tail -1|awk '{print $1}'|cut -d. -f1`
+aggr=`$bin_dir/fts lsfldb $ft $cav_arg|tail -1|awk '{print $3}'`
+if [ "$dns_server_prefix$serv" != "$server1" -o "$aggr" != "$aggr1" ]
+  then
+    echo "Found $ft on $dns_server_prefix$serv $aggr (was expecting $server1 $aggr1)"
+    echo "fldb entry for fileset $ft not correct"
+    echo "- command failed; ($p: E5)"
+    rc=`expr $rc + 1`
+    errCount=`expr $errCount + 1`
+  fi
+if [ $errCount -eq 0 ]
+ then
+    echo "Case 1 completed successfully."
+ else
+    echo "Case 1 has $errCount failures. This outcome may affect subsequent tests."
+    echo "Please use results of subsequent tests with caution"
+ fi
+fi # do_case1
+
+# Case 2: move a fileset to a different aggregate within the same server,
+# and then check the fldb and the aggregate for the fileset status
+if [ $do_case2 = TRUE ]
+then
+errCount=0
+echo ""; echo "*** Case 2"
+$bin_dir/fts move $ft $server1 $aggr1 $server2 $aggr2 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+    echo "fts move exit status was $rf"
+    echo "- command failed; ($p: E6)"
+    rc=`expr $rc + 1`
+    errCount=`expr $errCount + 1`
+    echo "move unexpectedly failed, cannot continue Case 2, proceeding"
+  fi
+if [ $errCount -eq 0 ]
+then
+serv=`$bin_dir/fts lsfldb $ft $cav_arg|tail -1|awk '{print $1}'|cut -d. -f1`
+aggr=`$bin_dir/fts lsfldb $ft $cav_arg|tail -1|awk '{print $3}'`
+if [ "$dns_server_prefix$serv" != "$server2" -o "$aggr" != "$aggr2" ]
+  then
+    echo "Found $ft on $dns_server_prefix$serv $aggr (was expecting $server2 $aggr2)"
+    echo "fldb entry for fileset $ft not correct"
+    echo "- command failed; ($p: E7)"
+    rc=`expr $rc + 1`
+    errCount=`expr $errCount + 1`
+    echo "lsfldb unexpectedly failed, cannot continue Case 2, proceeding"
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts move $ft $server2 $aggr2 $server1 $aggr1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+    echo "fts move exit status was $rf"
+    echo "- command failed; ($p: E8)"
+    rc=`expr $rc + 1`
+    errCount=`expr $errCount + 1`
+    echo "move unexpectedly failed, cannot continue Case 2, proceeding"
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+serv=`$bin_dir/fts lsfldb $ft $cav_arg|tail -1|awk '{print $1}'|cut -d. -f1`
+aggr=`$bin_dir/fts lsfldb $ft $cav_arg|tail -1|awk '{print $3}'`
+if [ "$dns_server_prefix$serv" != "$server1" -o "$aggr" != "$aggr1" ]
+  then
+    echo "Found $ft on $dns_server_prefix$serv $aggr (was expecting $server1 $aggr1)"
+    echo "fldb entry for fileset $ft not correct"
+    echo "- command failed; ($p: E9)"
+    rc=`expr $rc + 1`
+    errCount=`expr $errCount + 1`
+    echo "lsfldb unexpectedly failed, cannot continue Case 2, proceeding"
+  fi
+fi
+if [ $errCount -eq 0 ]
+ then
+    echo "Case 2 completed successfully."
+ else
+    echo "Case 2 has $errCount failures. This outcome may affect subsequent tests."
+    echo "Please use results of subsequent tests with caution"
+ fi
+fi # do_case2
+
+# Case 3: Create a large fileset, almost as large as the aggregate itself,
+# move this fileset to the other aggregate on the same server. Setup the 
+# target aggregate so that there is insufficient space for this fileset.
+# Test the consistency of the source fileset upon a move failure, the validity
+# of the entry in the FLDB, and the space accounting in the aggregates.
+
+echo ""; echo "*** Case 3"
+if [ $do_case3 = TRUE ]
+then
+# We don't need ft anymore, just to clear up space in aggr1
+$bin_dir/fts delete $ft $server1 $aggr1 $cav_arg
+cm checkfilesets
+
+# First, prepare the two aggregates and filesets
+ ag1space=`fts aggrinfo $server1 $aggr1 $cav_arg|tail -1|awk '{ print $5 }'`
+ if [ $? -ne 0 ]
+  then
+   echo "aggrinfo unexpectedly failed"
+   echo "- command failed; ($p: E10)"
+   rc=`expr $rc + 1`
+   errCount=`expr $errCount + 1`
+  fi
+ ag2space=`fts aggrinfo $server2 $aggr2 $cav_arg|tail -1|awk '{ print $5 }'`
+ if [ $? -ne 0 ]
+  then
+   echo "aggrinfo unexpectedly failed"
+   echo "- command failed; ($p: E11)"
+   rc=`expr $rc + 1`
+   errCount=`expr $errCount + 1`
+  fi
+ echo "Creating $ft1 on $server1 $aggr1..."
+ $bin_dir/fts create $ft1 $server1 $aggr1 $cav_arg; rf=$?
+ if [ $? -ne 0 ]
+  then
+   echo "create unexpectedly failed"
+   echo "- command failed; ($p: E12)"
+   rc=`expr $rc + 1`
+   errCount=`expr $errCount + 1`
+  fi
+ echo "Creating $ft2 on $server2 $aggr2..."
+ $bin_dir/fts create $ft2 $server2 $aggr2 $cav_arg; rf=$?
+ if [ $? -ne 0 ]
+  then
+   echo "create unexpectedly failed"
+   echo "- command failed; ($p: E13)"
+   rc=`expr $rc + 1`
+   errCount=`expr $errCount + 1`
+  fi
+ ft1quota=`fts lsquota -file $ft1|tail -1|awk '{print $2}'`
+ $bin_dir/fts setquota -file $ft1 -size `expr $ft1quota + $ag1space - 100` $cav_arg; rf=$?
+ if [ $? -ne 0 ]
+  then
+   echo "setquota unexpectedly failed"
+   echo "- command failed; ($p: E14)"
+   rc=`expr $rc + 1`
+   errCount=`expr $errCount + 1`
+  fi
+ ft2quota=`fts lsquota -file $ft2|tail -1|awk '{print $2}'`
+ $bin_dir/fts setquota -file $ft2 -size `expr $ft2quota + $ag2space - 100` $cav_arg; rf=$?
+ if [ $? -ne 0 ]
+  then
+   echo "setquota unexpectedly failed"
+   echo "- command failed; ($p: E15)"
+   rc=`expr $rc + 1`
+   errCount=`expr $errCount + 1`
+  fi
+ $bin_dir/fts crmount $mp1 $ft1; rf=$?
+ if [ $? -ne 0 ]
+  then
+   echo "crmount unexpectedly failed"
+   echo "- command failed; ($p: E16)"
+   rc=`expr $rc + 1`
+   errCount=`expr $errCount + 1`
+  fi
+
+ setFsetRootProt $mp1 $testuid "E16.1"
+
+ $bin_dir/fts crmount $mp2 $ft2; rf=$?
+ if [ $? -ne 0 ]
+  then
+   echo "crmount unexpectedly failed"
+   echo "- command failed; ($p: E17)"
+   rc=`expr $rc + 1`
+   errCount=`expr $errCount + 1`
+  fi
+ setFsetRootProt $mp2 $testuid "E17.1"
+
+ cm checkfilesets
+#
+# Create a  Mbyte file to fill the aggregates.
+#
+ createFile `expr 1024 \* 1024`
+#
+# Quit now if we haven't even gotten this far OK
+#
+ if [ $errCount -ne 0 ]
+  then
+   echo "Case 3 has $errCount errors already, cannot continue"
+   cleanup
+  fi
+#
+# Fill the aggregates
+#
+ echo "Filling up fileset $ft1 (mount point $mp1)..."
+ cd $mp1; fillUpFileset; cd /
+ echo "Filling up fileset $ft2 (mount point $mp2)..."
+ cd $mp2; fillUpFileset; cd /
+ /bin/rm -f $fillerFile
+
+# check if aggregate really full
+ft1usage=`$bin_dir/fts lsquota -file $ft1 $cav_arg|tail -1|awk '{ print $3 }'`
+ft2usage=`$bin_dir/fts lsquota -file $ft2 $cav_arg|tail -1|awk '{ print $3 }'`
+ag1rsp=`fts aggrinfo $server1 $aggr1 $cav_arg|tail -1|awk '{ print $5 }'`
+ag2rsp=`fts aggrinfo $server2 $aggr2 $cav_arg|tail -1|awk '{ print $5 }'`
+echo "Check this manually, because the quota difference may be substantial"
+echo "because of large file copy failure"
+echo "Remaining space for $aggr1 is $ag1rsp"
+echo "Usage for $ft1 is $ft1usage"
+echo "There shouldn't be adequate space in $aggr1 to hold $ft1 along with $ft2"
+echo "Remaining space for $aggr2 is $ag2rsp"
+echo "Usage for $ft2 is $ft2usage"
+echo "There shouldn't be adequate space in $aggr2 to hold $ft1 along with $ft2"
+echo "If the above are not true, this test should be regarded as a failure"
+echo "...but there has to be room to hold a clone of both filesets.  A clone but not a copy."
+moveErrCount=0
+
+# Get DFS status, just to see if everything is normal.
+echo "Get DFS status, just to see if everything is normal..."
+$bin_dir/fts lsfldb -verbose $cav_arg
+$bin_dir/fts lsheader $server1 -verbose $cav_arg
+$bin_dir/fts lsheader $server2 -verbose $cav_arg
+$bin_dir/fts lsq -file $ft1 -verbose $cav_arg
+$bin_dir/fts lsq -file $ft2 -verbose $cav_arg
+$bin_dir/fts aggrinfo $server1 -verbose $cav_arg
+$bin_dir/fts aggrinfo $server2 -verbose $cav_arg
+$bin_dir/fts lsft -file $ft1 -verbose $cav_ar
+$bin_dir/fts lsft -file $ft2 -verbose $cav_arg
+$bin_dir/fts statftserver $server1 -verbose $cav_arg
+$bin_dir/fts statftserver $server2 -verbose $cav_arg
+
+# Now, do the move, and it should fail because of lack of space
+ $bin_dir/fts move $ft1 $server1 $aggr1 $server2 $aggr2 $cav_arg; rf=$?
+ if [ $rf -eq 0 ]
+  then
+   echo "There should be a lack of space to move $ft1, but"
+   echo "move unexpectedly succeeded"
+   echo "- command succeeded; ($p: E18)"
+   rc=`expr $rc + 1`
+   errCount=`expr $errCount + 1`
+   moveErrCount=`expr $moveErrCount + 1`
+  fi
+#check the status of the LFS aggregates after the huge move
+echo "check the status of the LFS aggregates after the huge move..."
+$bin_dir/fts lsfldb -verbose $cav_arg
+$bin_dir/fts lsheader $server1 -verbose $cav_arg
+$bin_dir/fts lsheader $server2 -verbose $cav_arg
+$bin_dir/fts lsq -file $ft1 -verbose $cav_arg
+$bin_dir/fts lsq -file $ft2 -verbose $cav_arg
+$bin_dir/fts aggrinfo $server1 -verbose $cav_arg
+$bin_dir/fts aggrinfo $server2 -verbose $cav_arg
+$bin_dir/fts lsft -file $ft1 -verbose $cav_ar
+$bin_dir/fts lsft -file $ft2 -verbose $cav_arg
+
+ft1host=`$bin_dir/fts lsfldb $ft1 | tail -1 | awk '{ print $1 }'|cut -d. -f1`
+ft1aggr=`$bin_dir/fts lsfldb $ft1 | tail -1 | awk '{ print $3 }'`
+echo "Found $ft1 on $dns_server_prefix$ft1host $ft1aggr"
+if [ "$dns_server_prefix$ft1host" = "$server2" -a "$ft1aggr" = "$aggr2" ]
+  then
+    if [ $moveErrCount -eq 0 ]
+     then
+      echo "$ft1 is present in host $ft1host in aggregate $ft1aggr"
+      echo "Even though the move failed, the location seems to have"
+      echo "been updated in the FLDB. This is incorrect"
+      echo "- command failed; ($p: E19)"
+      rc=`expr $rc + 1`
+      errCount=`expr $errCount + 1`
+     fi
+  elif [ "$dns_server_prefix$ft1host" = "$server1" -a "$ft1aggr" = "$aggr1" ]
+    then
+     if [ $moveErrCount -ne 0 ]
+      then
+        echo "$ft1 is present in host $ft1host in aggregate $ft1aggr"
+        echo "Even though the move succeeded, the location seems to have"
+        echo "not been updated in the FLDB. This is incorrect"
+        echo "- command failed; ($p: E20)"
+        rc=`expr $rc + 1`
+        errCount=`expr $errCount + 1`
+      fi
+  fi  
+
+# After the bad move, clear all remnants that fts failed to cleanup
+echo "After the bad move, clear all remnants that fts failed to cleanup..."
+cloneId=`fts lsheader $server1 $aggr1 $cav_arg|grep $ft1.move-temp|awk '{ print $2 }'`
+if [ "$cloneId" != "" ]
+ then
+   echo "Zapping $cloneId from $server1 $aggr1..."
+   $bin_dir/fts zap $cloneId $server1 $aggr1 $cav_arg
+ fi
+moveId=`fts lsheader $server2 $aggr2 $cav_arg|grep $ft1|awk '{ print $2 }'`
+if [ "$moveId" != "" ]
+ then
+   echo "Zapping $moveId from $server2 $aggr2..."
+   $bin_dir/fts zap $moveId $server2 $aggr2 $cav_arg
+ fi
+
+moveErrCount=0
+# Try moving the other fileset
+ $bin_dir/fts move $ft2 $server2 $aggr2 $server1 $aggr1 $cav_arg; rf=$?
+ if [ $rf -eq 0 ]
+  then
+   echo "there should be a lack of space to move $ft2, but"
+   echo "move unexpectedly succeeded"
+   echo "- command succeeded; ($p: E21)"
+   rc=`expr $rc + 1`
+   errCount=`expr $errCount + 1`
+   moveErrCount=`expr $moveErrCount + 1`
+  fi
+#check the status of the LFS aggregates after the huge move
+$bin_dir/fts lsfldb -verbose $cav_arg
+$bin_dir/fts lsheader $server1 -verbose $cav_arg
+$bin_dir/fts lsheader $server2 -verbose $cav_arg
+$bin_dir/fts lsq -file $ft1 -verbose $cav_arg
+$bin_dir/fts lsq -file $ft2 -verbose $cav_arg
+$bin_dir/fts aggrinfo $server1 -verbose $cav_arg
+$bin_dir/fts aggrinfo $server2 -verbose $cav_arg
+$bin_dir/fts lsft -file $ft1 -verbose $cav_ar
+$bin_dir/fts lsft -file $ft2 -verbose $cav_arg
+
+ft2host=`$bin_dir/fts lsfldb $ft2 | tail -1 | awk '{ print $1 }'|cut -d. -f1`
+ft2aggr=`$bin_dir/fts lsfldb $ft2 | tail -1 | awk '{ print $3 }'`
+echo "Found $ft2 on $dns_server_prefix$ft2host $ft2aggr"
+if [ "$dns_server_prefix$ft2host" = "$server1" -a "$ft2aggr" = "$aggr1" ]
+  then
+    if [ $moveErrCount -eq 0 ]
+     then
+      echo "$ft2 is present in host $ft2host in aggregate $ft2aggr"
+      echo "Even though the move failed, the location seems to have"
+      echo "been updated in the FLDB. This is incorrect"
+      echo "- command failed; ($p: E22)"
+      rc=`expr $rc + 1`
+      errCount=`expr $errCount + 1`
+     fi
+  elif [ "$dns_server_prefix$ft2host" = "$server2" -a "$ft2aggr" = "$aggr2" ]
+   then
+    if [ $moveErrCount -ne 0 ]
+     then
+      echo "$ft2 is present in host $ft2host in aggregate $ft2aggr"
+      echo "Even though the move succeeded, the location seems to have"
+      echo "not been updated in the FLDB. This is incorrect"
+      echo "- command failed; ($p: E23)"
+      rc=`expr $rc + 1`
+      errCount=`expr $errCount + 1`
+     fi
+  fi  
+
+# After the bad move, clear all remnants that fts failed to cleanup
+echo "After the bad move, clear all remnants that fts failed to cleanup..."
+cloneId=`fts lsheader $server2 $aggr2 $cav_arg|grep $ft2.move-temp|awk '{ print $2 }'`
+if [ "$cloneId" != "" ]
+ then
+   echo "Zapping $cloneId from $server2 $aggr2..."
+   $bin_dir/fts zap $cloneId $server2 $aggr2 $cav_arg
+ fi
+moveId=`fts lsheader $server1 $aggr1 $cav_arg|grep $ft2|awk '{ print $2 }'`
+if [ "$moveId" != "" ]
+ then
+   echo "Zapping $moveId from $server1 $aggr1..."
+   $bin_dir/fts zap $moveId $server1 $aggr1 $cav_arg
+ fi
+
+moveErrCount=0
+
+# After the aborted move, check to see if the fileset is accessible
+(
+cd /
+cm checkfilesets
+errCount=0
+cd $mp1; i=0
+while [ $i -le 10 ]
+ do
+  date
+  ls -l > /dev/null
+  if [ $? -ne 0 ]
+   then
+     errCount=`expr $errCount + 1`
+   fi
+  touch x
+  if [ $? -ne 0 ]
+   then
+     errCount=`expr $errCount + 1`
+   fi
+  i=`expr $i + 1`
+ done
+rm -f x
+cd /; cm checkfilesets
+exit $errCount
+)&
+pid1=$!
+(
+cd /
+cm checkfilesets
+errCount=0
+cd $mp2; i=0
+while [ $i -le 10 ]
+ do
+  date
+  ls -l > /dev/null
+  if [ $? -ne 0 ]
+   then
+     errCount=`expr $errCount + 1`
+   fi
+  touch x
+  if [ $? -ne 0 ]
+   then
+     errCount=`expr $errCount + 1`
+   fi
+ i=`expr $i + 1`
+ done
+rm -f x
+cd /; cm checkfilesets
+)&
+pid2=$!
+$bin_dir/fts lsft -file $ft1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+ then
+  echo "lsft on $ft1 failed"
+  echo "- command failed; ($p: E24)"
+  errCount=`expr $errCount + 1`
+  rc=`expr $rc + 1`
+ fi
+$bin_dir/fts lsft -file $ft2 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+ then
+  echo "lsft on $ft2 failed"
+  echo "- command failed; ($p: E25)"
+  errCount=`expr $errCount + 1`
+  rc=`expr $rc + 1`
+ fi
+# Perhaps dumping a fileset will take it off-line just as effectively as
+#   will cloning it.
+echo "Attempting to clone $ft1..."
+$bin_dir/fts clone $ft1 -verbose $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+ then
+  echo "Fileset could not be cloned"
+  echo "- command failed; ($p: E26)"
+  errCount=`expr $errCount + 1`
+  rc=`expr $rc + 1`
+ fi
+echo "Attempting to clone $ft2..."
+$bin_dir/fts clone $ft2 -verbose $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+ then
+  echo "Fileset could not be cloned"
+  echo "- command failed; ($p: E27)"
+  errCount=`expr $errCount + 1`
+  rc=`expr $rc + 1`
+ fi
+wait $pid1; rf=$?
+if [ $rf -ne 0 ]
+ then
+  echo "Accessing and creating files in $ft1 failed; fileset inconsistent"
+  echo "- command failed; ($p: E28)"
+  errCount=`expr $errCount + 1`
+  rc=`expr $rc + 1`
+ fi
+wait $pid2; rf=$?
+if [ $rf -ne 0 ]
+ then
+  echo "Accessing and creating files in $ft2 failed; fileset inconsistent"
+  echo "- command failed; ($p: E29)"
+  errCount=`expr $errCount + 1`
+  rc=`expr $rc + 1`
+ fi
+
+# Bring the filesets back to the original aggregates
+# Try moving the other fileset
+$bin_dir/fts move $ft2 $server1 $aggr1 $server2 $aggr2 $cav_arg; rf=$?
+$bin_dir/fts move $ft1 $server2 $aggr2 $server1 $aggr1 $cav_arg; rf=$?
+
+if [ $ag1space -ge $ag2space ]
+ then
+   $bin_dir/fts delete $ft1 $server1 $aggr1 $cav_arg; rf=$?
+   cm checkfilesets
+   $bin_dir/fts move $ft2 $server2 $aggr2 $server1 $aggr1 $cav_arg; rf=$?
+   if [ $rf -ne 0 ]
+    then
+      echo "move should have succeeded because there should have been enough"
+      echo "space in $aggr1 for $ft2. Maybe you have other filesets in the"
+      echo "aggregate. Repeat this test after removing all filesets in the"
+      echo "two aggregates..."
+      echo "...or else there is no room to hold a clone..."
+      echo "move unexpectedly FAILED"
+      echo "but we are not counting this as an error..."
+    else
+     $bin_dir/fts move $ft2 $server1 $aggr1 $server2 $aggr2 $cav_arg; rf=$?
+     if [ $rf -ne 0 ]
+      then
+        echo "move should have succeeded because there should have been enough"
+        echo "space in $aggr2 for $ft2. Maybe you have other filesets in the"
+        echo "aggregate. Repeat this test after removing all filesets in the"
+        echo "two aggregates..."
+        echo "...or else there is no room to hold a clone..."
+        echo "move unexpectedly FAILED"
+      echo "but we are not counting this as an error..."
+      fi
+    fi
+ else
+   $bin_dir/fts delete $ft2 $server2 $aggr2 $cav_arg; rf=$?
+   cm checkfilesets
+   $bin_dir/fts move $ft1 $server1 $aggr1 $server2 $aggr2 $cav_arg; rf=$?
+   if [ $rf -ne 0 ]
+    then
+      echo "move should have succeeded because there should have been enough"
+      echo "space in $aggr2 for $ft1. Maybe you have other filesets in the"
+      echo "aggregate. Repeat this test after removing all filesets in the"
+      echo "two aggregates..."
+      echo "...or else there is no room to hold a clone..."
+      echo "move unexpectedly FAILED,"
+      echo "but we are not counting this as an error..."
+    else
+     $bin_dir/fts move $ft1 $server2 $aggr2 $server1 $aggr1 $cav_arg; rf=$?
+     if [ $rf -ne 0 ]
+      then
+        echo "move should have succeeded because there should have been enough"
+        echo "space in $aggr1 for $ft1. Maybe you have other filesets in the"
+        echo "aggregate. Repeat this test after removing all filesets in the"
+        echo "two aggregates..."
+        echo "...or else there is no room to hold a clone..."
+        echo "move unexpectedly FAILED"
+        echo "but we are not counting this as an error..."
+      fi
+    fi
+ fi
+
+#check the status of the LFS aggregates after the huge move
+$bin_dir/fts lsfldb -verbose $cav_arg
+$bin_dir/fts lsheader $server1 -verbose $cav_arg
+$bin_dir/fts lsheader $server2 -verbose $cav_arg
+if [ $errCount -eq 0 ]
+ then
+    echo "Case 3 completed successfully."
+ else
+    echo "Case 3 has $errCount failures. This outcome may affect subsequent tests."
+    echo "Please use results of subsequent tests with caution"
+ fi
+fi # do_case3
+
+cleanup

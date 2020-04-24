@@ -1,0 +1,275 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: tc_cm_restart,v $
+# Revision 1.1.2.2  1996/03/09  20:52:19  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:54  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:46  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  22:22:37  root]
+# 
+# $EndLog$
+#!/bin/ksh
+
+if [ -z "${TC_CM_RESTART_DEFINED}" ] ; then
+
+TC_CM_RESTART_DEFINED=1
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  DESCRIPTION:
+#      This test case is part of the security replication system test.
+#      This tests that secd can be stopped and restarted after a 
+#      change_master.
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+tet_startup="tc_cm_restart_init"
+tet_cleanup="tc_cm_restart_cleanup"
+tet_testlist="tc_cm_restart"
+
+iclist="ic1 ic2 ic3"
+ic1="tc_cm_restart_1"
+ic2="tc_cm_restart_2"
+ic3="tc_cm_restart_3"
+
+tc_cm_restart_init()
+{
+    typeset st
+
+    tc_common_init ; st=$?
+    if [ $st -ne 0 ] ; then
+        tet_delete $ic1 "tc_cm_restart_init(): Initialization failed"
+        tet_delete $ic2 "tc_cm_restart_init(): Initialization failed"
+        tet_delete $ic3 "tc_cm_restart_init(): Initialization failed"
+        return 
+    fi
+    if [ $SLV_CNT -lt 2 ] ; then
+        tet_delete $ic2 "tc_cm_restart_init(): Test requires at least 2 slaves"
+        tet_delete $ic3 "tc_cm_restart_init(): Test requires at least 2 slaves"
+        return
+    fi    
+    if [ $SLV_CNT -lt 1 ] ; then
+        tet_delete $ic1 "tc_cm_restart_init(): Test requires at least 1 slave"
+        return 
+    fi
+}
+
+tc_cm_restart_cleanup()
+{
+    tc_common_cleanup
+}
+
+tc__cm_restart()
+{
+    typeset st
+
+    set -A slvnm $1 ; set -A slvhost $2 ;
+
+    sa_change_master $slvnm ; st=$?   # Change master
+    if [ $st -ne 0 ] ; then
+        return $st
+    fi
+
+    secd_stop $slvhost $slvnm ; st=$?
+    if [ $st -ne 0 ] ; then
+        return $st
+    fi
+
+    secd_start $slvhost $slvnm ; st=$?
+    return $st
+}
+
+tc_cm_restart_1()
+{
+    typeset st
+
+    testdesc="Secd restart after change_master - Basic "
+    replog_testhdr "$testdesc"
+ 
+    slvhost_1=${SLV_HOSTNAMES[0]} ; slvnm_1=${SLV_NAMES[0]}
+
+    tc__cm_restart $slvnm_1 $slvhost_1 ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #   Wait until the "Number of outstanding updates" is 0 for all
+    #   slaves.
+
+    sa_wait_prop_complete "${SLV_NAMES[*]}" ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #    Verify that $slvnm_1 is the only master on all replica lists.
+
+    replist_verify_master "${REP_NAMES[*]}" $slvnm_1 ; st=$?
+    replog_testresult "$testdesc" $st
+}
+
+tc_cm_restart_2()
+{
+    typeset st
+
+    testdesc="Secd restart after change_master - with initrep pending"
+    replog_testhdr "$testdesc"
+
+    slvhost_1=${SLV_HOSTNAMES[0]} ; slvnm_1=${SLV_NAMES[0]}
+    slvhost_2=${SLV_HOSTNAMES[1]} ; slvnm_2=${SLV_NAMES[1]}
+
+    sa_change_master $slvnm_1 ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #   Wait for the change_master to propagate to all slaves.
+    sa_wait_prop_complete "${SLV_NAMES[*]}" ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #    Queue an initrep on the master's prop queue. 
+
+    tc_common_q_initrep $slvhost_2 $slvnm_2 ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #  Stop and restart the master.
+
+    secd_stop $MASTER_HOSTNAME $MASTER_NAME ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    secd_start $MASTER_HOSTNAME $MASTER_NAME ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #   Restart $slvnm_2 ( this will be reinitialized because
+    #   of the initrep queued in the master ).
+
+    secd_start $slvhost_2 $slvnm_2 ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #   Wait until the "Number of outstanding updates" is 0 for all
+    #   slaves.
+
+    sa_wait_prop_complete "${SLV_NAMES[*]}" ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #    Verify that $MASTER_NAME is the only master on all replica lists.
+
+    replist_verify_master "${REP_NAMES[*]}" $MASTER_NAME ; st=$?
+    replog_testresult "$testdesc" $st
+    return
+}
+
+#   Master restart with delrep pending
+
+tc_cm_restart_3()
+{
+    typeset st
+
+    testdesc="Master restart after change_master - with delrep pending"
+    replog_testhdr "$testdesc"
+
+    slvhost_1=${SLV_HOSTNAMES[0]} ; slvnm_1=${SLV_NAMES[0]}
+    slvhost_2=${SLV_HOSTNAMES[1]} ; slvnm_2=${SLV_NAMES[1]}
+    
+    #    This is like tc_cm_restart_1 except that it makes sure
+    #    that delrep is queued in the propagation queue before master
+    #    is restarted.
+
+    sa_change_master $slvnm_1 ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #   Wait for the change_master to propagate to all slaves.
+    sa_wait_prop_complete "${SLV_NAMES[*]}" ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #    Queue a delrep on the master's prop queue. 
+
+    tc_common_q_delrep $slvhost_2 $slvnm_2 ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_error "$slvnm_2 should be marked for deletion but is not"
+        replog_testresult "$testdesc" $st
+    fi
+
+    #  Stop and restart the master.
+
+    secd_stop $MASTER_HOSTNAME $MASTER_NAME ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    secd_start $MASTER_HOSTNAME $MASTER_NAME ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #   Restart $slvnm_2 ( this will be deleted because of the delrep
+    #   queued in the master ).
+    #
+    #   Use secd_start_nobind() not secd_start to start the secd. 
+    #   (See comments in secd_start_nobind() to see why )
+
+    secd_start_nobind $slvhost_2 $slvnm_2 
+
+    #   Verify slave is deleted 
+    slv_v_del $slvhost_2 $slvnm_2 ; st=$?
+
+    if [ $st -ne 0 ] ; then
+         replog_testresult "$testdesc" $st
+         return $st
+    fi
+
+    replist_verify_master "${REP_NAMES[*]}" $MASTER_NAME ; st=$?
+    replog_testresult "$testdesc" $st
+  
+    #  Cleanup - reconfigure $slvhost_2 as a replica
+    slv_config $slvhost_2 $slvhost_2
+    repdb_config_print
+}
+
+. $TET_ROOT/profile.dcest
+. ./profile
+. $PHOME/replog
+. $PHOME/tc_common
+. $PHOME/secd
+. $PHOME/slv
+. $TCM
+#. $TET_ROOT/lib/xpg3sh/tcm.sh
+
+fi

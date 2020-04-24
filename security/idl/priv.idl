@@ -1,0 +1,158 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: priv.idl,v $
+ * Revision 1.1.6.2  1996/03/09  23:28:05  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:33  marty]
+ *
+ * Revision 1.1.6.1  1995/12/08  17:32:21  root
+ * 	Submit OSF/DCE 1.2.1
+ * 
+ * 	HP revision /main/HPDCE02/1  1995/04/03  22:06 UTC  mullan_s
+ * 	Binary Compatibility Merge
+ * 
+ * 	HP revision /main/mullan_mothra_bin_compat2/1  1995/03/20  14:53 UTC  mullan_s
+ * 	Add pac argument to APIs.
+ * 	[1995/12/08  16:55:07  root]
+ * 
+ * Revision 1.1.4.2  1994/06/10  15:07:17  greg
+ * 	intercell fixes for DCE1.1 beta
+ * 	[1994/06/03  20:49:08  greg]
+ * 
+ * Revision 1.1.4.1  1994/06/02  21:28:25  mdf
+ * 	hp_sec_to_osf_3 drop, merge up with latest.
+ * 	[1994/05/24  15:15:59  mdf]
+ * 
+ * 	hp_sec_to_osf_3 drop
+ * 
+ * Revision 1.1.2.2  1992/12/29  13:30:04  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:17:06  zeliff]
+ * 
+ * Revision 1.1  1992/01/19  14:54:49  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+
+/*  priv.idl V=5 06/26/91 //littl/prgy/src/idl
+**
+** Copyright (c) Hewlett-Packard Company 1991
+** Unpublished work. All Rights Reserved.
+**
+*/
+/* Privilege Server Client Agent Interface
+ * 
+ *
+ *  The basic privilege server interface simply allows the acquisition of 
+ *  privilege ticket granting tickets (PTGTs).  These tickets allow Kerberos
+ *  version 5 tickets to be transformed into privilege attribute certificates
+ *  (PACs)  The privilege server will seal the principal's privileges into the
+ *  PAC which will allow the authorization system to make access decisions
+ *  based on inbformation other than just the principal's identifier.
+ *
+ * This is *NOT* an architectural interface.
+ */
+
+[ local ]
+interface sec_priv {
+
+    import "dce/prvnbase.idl";
+    import "dce/sec_login.idl";
+
+
+
+    /* S E C _ P R I V _ G E T _ E P T G T  
+     *
+     */
+    void sec_priv_get_eptgt (
+        [in] sec_login_handle_t               login_context,
+        [in] char                             *target_cell,
+        [in] unsigned32                       authn_svc,
+        [in] unsigned32                       authz_svc,
+ 	[out] sec_bytes_t                     *granted_privs,
+        [out, ref] error_status_t             *status
+    );
+
+    /* S E C _ P R I V _ B E C O M E _ D E L E G A T E
+     *
+     */
+    void sec_priv_become_delegate (
+    	[in] sec_login_handle_t          login_context,
+        [in] unsigned_char_p_t           target_cell,
+        [in] unsigned32                  authn_svc,
+        [in] unsigned32                  authz_svc,
+        [in] sec_id_delegation_type_t    dlg_type,
+        [in] sec_id_restriction_set_t    *dlg_rstrs,
+        [in] sec_id_restriction_set_t    *tgt_rstrs,
+        [in] sec_id_opt_req_t            *opt_rstrs,
+        [in] sec_id_opt_req_t            *req_rstrs,
+        [in] sec_id_compatibility_mode_t compat_mode,
+        [in] sec_bytes_t                 *dlg_chain,
+        [in] sec_bytes_t                 *delegate,
+        [in] sec_dlg_token_set_t         *dlg_token_set,
+        [out] sec_bytes_t                *privs,
+        [out] error_status_t             *stp
+    );
+
+
+    /* S E C _ P R I V _ B E C O M E _ I M P E R S O N A T O R
+     *
+     */
+    void sec_priv_become_impersonator (
+    	[in] sec_login_handle_t          login_context,
+        [in] unsigned_char_p_t           target_cell,
+        [in] unsigned32                  authn_svc,
+        [in] unsigned32                  authz_svc,
+        [in] sec_id_delegation_type_t    dlg_type,
+        [in] sec_id_restriction_set_t    *dlg_rstrs,
+        [in] sec_id_restriction_set_t    *tgt_rstrs,
+        [in] sec_id_opt_req_t            *opt_rstrs,
+        [in] sec_id_opt_req_t            *req_rstrs,
+        [in] sec_bytes_t                 *dlg_chain,
+        [in] sec_bytes_t                 *impersonator,
+        [in] sec_dlg_token_set_t         *dlg_token_set,
+	[out] sec_bytes_t		 *privs,
+        [out] error_status_t             *stp
+    );
+
+     
+    /* S E C _ P R I V _ G E T _ P T G T        (Secure)
+     *
+     * Get a privilege ticket granting ticket (PTGT) for the cell specified
+     * in the "target_cell" parameter so that privilege tickets  can be 
+     * synthesized by the KDC for that cell. This call will acquire whatever
+     * inter-cell tickets are needed to authenticate to the target cell's
+     * priv server. 
+     *
+     * The privileges to be sealed in the PTGT are obtained from the login
+     * context supplied by the caller. 
+     *
+     * It's up to the caller to extract the acquired PTGT from the
+     * the login handle in the appropriate fashion.
+     *
+     *  ERRORS:
+     *     sec_priv_s_not_member_any_groups  - principal is not a member of any
+     *                                         of the requested groups.
+     *     sec_priv_s_authn_svc_not_supported
+     *     sec_priv_s_authz_svc_not_supported
+     *     sec_rgy_server_unavailable
+     *
+     */
+    void sec_priv_get_ptgt (
+        [in]        sec_login_handle_t    login_context,
+        [in]        char                  *target_cell,
+        [in]        unsigned32            authn_svc,
+        [in]        unsigned32            authz_svc,
+        [out, ref]  error_status_t        *status
+    );
+}

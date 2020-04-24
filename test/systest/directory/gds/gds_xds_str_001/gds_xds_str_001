@@ -1,0 +1,2085 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: gds_xds_str_001,v $
+# Revision 1.1.7.2  1996/03/11  02:42:43  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:06:51  marty]
+#
+# Revision 1.1.7.1  1995/12/11  21:58:30  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/DCE1_1I/HPDCE02/1  1994/06/29  19:51 UTC  bissen
+# 	Merge hpdce02 (DCE 1.1 beta) and HPDCE01 into HPDCE02
+# 
+# 	HP revision /main/HPDCE01/1  1994/04/12  14:51 UTC  truitt
+# 
+# 	HP revision /main/truitt_junk/1  1994/04/12  14:33 UTC  truitt
+# 	clean up references to profile.dcest and STROOT
+# 	[1995/12/11  20:58:06  root]
+# 
+# Revision 1.1.5.1  1993/11/18  20:15:31  mhickey
+# 	Fixes for all the problems mentioned in defect 9474.
+# 	[1993/11/18  20:13:24  mhickey]
+# 
+# Revision 1.1.2.8  1993/11/08  21:37:02  mhickey
+# 	Fixes to put tree create and delete clients in
+# 	the background, support setting the number of
+# 	GDS client procs in gdsSetup.
+# 
+# 	Defects: 9397, 9399
+# 	[1993/11/08  21:28:45  mhickey]
+# 
+# Revision 1.1.2.7  1993/11/04  21:49:05  mhickey
+# 	Some changes to help debugging:
+# 
+# 	   if the gds_xds_str_001_cl link is used, then
+# 	    gds_xds_str_001_cl -f <datafile> -G -p 0
+# 	   will do GDS configuration only.
+# 
+# 	   When clients are printed, the PID is printed as well.
+# 
+# 	defect 9209
+# 	[1993/11/04  21:48:50  mhickey]
+# 
+# Revision 1.1.2.6  1993/11/03  20:17:39  mhickey
+# 	A few more minor changes
+# 	 - route error messages from grep to /dev/null
+# 	 - print pass/fail stats on receipt of Cntl-C
+# 	 - report proper status if startup fails
+# 	 - warning only if tree setup fails, so that
+# 	   the delete from some subsequent iteration can
+# 	   fix things up.
+# 
+# 	defect 9209
+# 	[1993/11/03  20:17:13  mhickey]
+# 
+# Revision 1.1.2.5  1993/11/02  22:22:36  mhickey
+# 	Merged with changes from 1.1.2.4
+# 	[1993/11/02  22:22:30  mhickey]
+# 
+# 	Minor fixes (logs not removed,etc.)
+# 
+# 	defect 9209
+# 	[1993/11/02  21:50:12  mhickey]
+# 
+# Revision 1.1.2.2  1993/10/30  18:51:59  mhickey
+# 	Submit of improved gds_xds_str_001. Various fixes
+# 	for problems from initial runs.
+# 
+# 	Defect 9209.
+# 	[1993/10/30  18:51:06  mhickey]
+# 
+# Revision 1.1.2.4  1993/11/02  21:51:50  mhickey
+# 	Minor fixes (logs not removed,etc.)
+# 
+# 	defect 9209
+# 	[1993/11/02  21:50:12  mhickey]
+# 
+# Revision 1.1.2.2  1993/10/30  18:51:59  mhickey
+# 	Submit of improved gds_xds_str_001. Various fixes
+# 	for problems from initial runs.
+# 
+# 	Defect 9209.
+# 	[1993/10/30  18:51:06  mhickey]
+# 
+# Revision 1.1.2.3  1993/11/02  21:46:43  mhickey
+# 	Minor fixes (logs not removed,etc.)
+# 
+# 	defect 9209.
+# 	[1993/11/02  21:44:41  mhickey]
+# 
+# Revision 1.1.2.2  1993/10/30  18:51:59  mhickey
+# 	Submit of improved gds_xds_str_001. Various fixes
+# 	for problems from initial runs.
+# 
+# 	Defect 9209.
+# 	[1993/10/30  18:51:06  mhickey]
+# 
+# $EndLog$
+############################################################################
+# TITLE: gds_xds_str_001
+#
+# ASSOCIATION:
+#
+# OBJECTIVE:
+#
+# LOGIC FLOW: 
+#
+# CALLED FROM:
+#       shell, test harness
+#
+# CALLS INTO:
+#
+# SYNTAX:
+#
+############################################################################
+
+#############################################################################
+# init_vars() - give variables some inital values to ensure tests in other  #
+#               shell functions succeed.                                    #
+#############################################################################
+init_vars()
+{
+   #
+   # Cleanup flag  - default is no cleanup of log files
+   #
+   CLEANUP=0
+
+   #
+   # Client debugging - default is no extra client debug prints.
+   #
+   XT_TEST_DEBUG=""
+
+   #
+   # Value for a sleep after setting up the test tree (for debugging)
+   #
+   DEBUG_SLEEP=0
+
+   #
+   # total clients 
+   #
+   cli_to_start=0
+
+   #
+   # clients per machine
+   # 
+   cli_p_mach=0
+
+   #
+   # client machine list
+   #
+   cli_mach=""
+
+   #
+   # Number of threads per xt_test iteration
+   #
+   nthreads=0
+
+   #
+   # extra clients
+   # 
+   cli_fudge=0
+ 
+   #
+   # name of local host
+   #
+   localhost=`hostname`
+
+   #
+   # Number fo passes to run - default is "none" since default is to run for
+   # a duration, not a number of passes.  The default, and tests to determine
+   # if we are running by passes, are non-numeric to distiguish from the 
+   # case where the user specifies "passes = 0" to get GDS setup only.
+   #
+   PASSES=none
+
+   #
+   # Hours to run from command line
+   #
+   CHOURS=0
+   HOURS=0
+
+   #
+   # Minutes to run
+   #
+   MINS=0
+
+   ITERATION=0
+
+   #
+   # local log dir - log for run stored here and pass, fail, etc directories
+   #                 created below this
+   #
+   local_log_dir=""
+
+   #
+   # remote xt_test log dir - log from xt_test operations goes here
+   #
+   xt_test_logdir=""
+
+   #
+   # D2_LOGDIR - the remote directory to which D2_LOG ging output is 
+   #             directed.
+   #
+   rem_D2_LOGDIR=""   
+
+   #
+   # temp directory
+   #
+   tmp_dir=""
+
+   #
+   # stress level
+   #
+   stress_level=""
+
+   #
+   # log name
+   #
+   log_name=""
+
+   #
+   # Indicator of whether or not to config GDS
+   #
+   config_gds=0
+
+   #
+   # gds config file name
+   #
+   gds_conf_fn=""
+
+   #
+   # wait periods for each stage of the test iteration; ie: the maximum number
+   # of minutes to wait for all the clients to complete a stage
+   # 
+   READY_WAIT=0
+   EXIT_WAIT=0
+
+   #
+   # iteration delay - how long to wait in between each iteration.  This can
+   # be used to cause test iterations to use existing DSA processes on the
+   # DSA host, or to make the DSA host start new DSA processes for each 
+   # iteration.
+   #
+   inter_iteration_delay=0
+
+   #
+   # note the time
+   #
+   START_DATE=`date`
+   #
+   # this is a macro for converting the date to a number of seconds via 
+   # a call to eval.
+   #
+   TIMER='eval echo `awk "BEGIN { printf \"%8d\", \`date +"%j"\`*86400 + \`date +"%H"\`*3600 + \`date +"%M"\`*60 + \`date +"%S"\`; exit}"`'
+   #
+   # the starting time in seconds for use in calculating whether test run is
+   # complete.
+   #
+   START_TIME=`$TIMER`
+
+   # use the proper shell commands modulo system type
+   if [ `uname 2>/dev/null` = "HP-UX" ]; then
+	REMSH=remsh
+   else
+	REMSH=rsh
+   fi
+   #
+   # user name of tester
+   #
+   tester=`id | tr '()' '  ' | awk '{print $2}'`
+}
+
+
+############################################################################
+# setup_trap() - Sets up a trap handler for SIGHUP, SIGINTR, etc.          #
+#                Action is to exit on receipt of signal                    #
+############################################################################
+setup_trap() {
+trap	'rs_echo ""
+	 rs_echo "   ========================================"
+	 rs_echo "          Trap signal received..."
+	 rs_echo "   ========================================"
+	 rs_echo ""
+         kill_jobs
+         [ $ITERATION -eq 0 -o "$ITERATION_STAT"="" ] && ITERATION_STAT=killed
+	 cleanup $ITERATION $create_cli; cleanup final
+	 END_DATE=`date`
+	 rs_echo "      Start time was $START_DATE"
+	 rs_echo "      End time is $END_DATE"
+	 rs_echo "      COMPLETED $ITERATION ITERATIONS!"
+         rs_echo "      PASSED: $ITERATIONS_PASSED   FAILED: $ITERATIONS_FAILED  ERROR: $ITERATIONS_ERROR"
+	 exit 1' 1 2 3 1
+}
+
+#######################################
+# runecho - echo to the run log       #
+#######################################
+runecho() 
+{
+  echo "$1" >> $runlog
+}
+
+########################################
+# passecho - echo to the run log       #
+########################################
+passecho() 
+{
+  echo "$1" >> $passlog
+}
+
+################################################
+# rp_echo - echo to both the run and pass logs #
+################################################
+rp_echo() 
+{
+  echo "$1" >> $passlog
+  echo "$1" >> $runlog
+}
+
+#################################################
+# rs_echo - echo to both the run log and stdout #
+#################################################
+rs_echo() 
+{
+  echo "$1"
+  echo "$1" >> $runlog
+}
+
+print_usage()
+{
+ if [ "$SCRIPT" = "gds_xds_str_001_cl" ]
+ then 
+   echo ""
+   echo "usage: gds_xds_str_001_cl [-B <path>][-C <nclients>] [-d] [-f <path>][-h] [-H <hours>]  [-L <path>] [-m <minutes>][-P <passes>][-R] [-I seconds][-T <path>]"
+   echo "Where:"
+   echo "       -B path      specifies the path on each client machine where"
+   echo "                    the xt_test binary is stored."
+   echo "       -C <num>     specifies the number of clients to run."
+   echo "       -d           specifies that client debug info is to be printed"
+   echo "       -f <config>  specifies the path to the configuration file"
+   echo "       -H <hours>   specifies hours to run"
+   echo "       -h           prints this help message"
+   echo "       -L <path>    specifies the path to the log directory"
+   echo "       -m <mins>    specifies minutes to run"
+   echo "       -P <passes>  specifies passes to run"
+   echo "                    Note: -p cannot be specified if -h or -m is"
+   echo "                          specified and vice-versa"
+   echo "       -R           specifies that log files are to be removed after"
+   echo "                    the test run is complete."
+   echo "       -I <seconds> specifies the number of seconds the driver is"
+   echo "                    to sleep between iterations."
+   echo "       -T <path>    specifies the path to the directory to use when"
+   echo "                    creating temporary files."
+   echo ""
+ else
+   echo "usage: gds_xds_str_001 [-f <path_to_config_file>] [-h] [-G]"
+   echo "Where:"
+   echo "       -f <config>  specifies the path to the configuration file"
+   echo "       -h           prints this help message"
+   echo "       -G           causes GDS to be configged on all machines."
+ fi
+}
+
+print_hi()
+{
+   rs_echo ""
+   rs_echo "Beginning Threadsafe XDS Stress System Test Execution at `date`"
+   rs_echo "-------------------------------------------------------------------"
+   rs_echo "   Test invocation information:"
+   rs_echo "   ------------------------------"
+   rs_echo "   - Tester is $tester"
+   rs_echo "   - Test driver is being run on $localhost (logs are here)"
+   rs_echo "   - Command line is $COMM_LINE."
+   rs_echo ""
+   rs_echo "   Test execution parameters are:"
+   rs_echo "   ------------------------------"
+   rs_echo "   - Running $cli_to_start clients on: $cli_mach"
+   if [ "$cli_mach" != "$localhost" ]
+   then
+      rs_echo "     ($cli_p_mach clients per machine, $cli_fudge machines"
+      rs_echo "      will run one extra client)"
+   fi
+   rs_echo    "   - Test Stress Level is set to $STRESS_LEVEL."
+   rs_echo    "   - Each client will start $nthreads threads."
+   rs_echo    "   - Testcase(s) is/are $TESTCASES."
+   [ $config_gds -ne 0 ] && rs_echo "   - GDS will be configged ($ngds_clients Client processes)." || \
+                             rs_echo "   - GDS will NOT be configged."
+   if [ "$PASSES" = "none" ]
+   then
+      rs_echo "   - Running for $HOURS hrs, $MINS mins."
+   else
+      rs_echo "   - Running for $PASSES passes."
+   fi
+   rs_echo "   - Waiting maximum of $GDSSETUP_WAIT minutes for GDS to setup."
+   rs_echo "   - Waiting maximum of $READY_WAIT minutes for clients to print READY message."
+   rs_echo "   - Waiting maximum of $EXIT_WAIT minutes for clients to print EXIT message."
+   rs_echo "   - Waiting $ITERATION_SLEEP seconds between iterations."
+   rs_echo "   - Using configuration file $CONFIG"
+   [ "$XT_TEST_DEBUG" != "" ] && rs_echo "   - Clients are printing debug information"
+   [ $DEBUG_SLEEP -ne 0 ] && rs_echo "   - Sleeping for $DEBUG_SLEEP seconds afterbuilding the test tree."
+   rs_echo ""
+   rs_echo "   Executables:" 
+   rs_echo "   ------------"
+   rs_echo "   - Expect xt_test executable to be in directory $exe_path."
+   rs_echo "   - Expect GDS setup scripts to be in directory $STTOOLS_DIR"
+   rs_echo "   - Expect gds_xds_str_001 testcase files to be in $TESTCASEDIR."
+   rs_echo ""
+   rs_echo "   Log Files:"
+   rs_echo "   ----------"
+   rs_echo "   - The log of the entire run is in $LOG_DIR/runlog.$$.MM-DD-YY"
+   rs_echo "   - If not cleaned up (if CLEANUP = 0 or iteration failed), then"
+   rs_echo "     - Client D2_LOG output is in "
+   rs_echo "          $LOG_BASE/<pass|fail>/<iteration>/<host>.<iteration>.<client_num>.$$.<os>.d2log"
+   rs_echo "     - Output from the xt_test clients is in "
+   rs_echo "          $LOG_BASE/<pass|fail>/<iteration>/<host>.<iteration>.<client_num>.$$.<os>.xtlog"
+   rs_echo "     - The log for the iteration is in"
+   rs_echo "          $LOG_BASE/<pass|fail>/<iteration>/$$.<iteration>.passlog"
+   [ $CLEANUP -eq 0 ] && \
+		       rs_echo "   - Log files will be saved after test is run" ||\
+		       rs_echo "   - Log files will be removed after test run"
+   rs_echo ""
+   rs_echo "   Temporary files:"
+   rs_echo "   ----------------"
+   rs_echo "   - Temporary files will be created in $tmp_dir"
+   rs_echo "   --------------------------------------------------"
+   rs_echo ""
+   rs_echo ""
+
+}
+
+#############################################################################
+# wait_for_clients(mess, dir , max_loop, err_file) - wait for message in    #
+#          client logs.                                                     #
+#          Loops, sleeping for 1 minute, then checking for a specified      #
+#          string in the log files for the clients from the specified case  #
+#          for the current iteration.  The max_loop parameter specifies a   #
+#          maximum number of times (minutes) to loop before declaring the   #
+#          client(s) hung.  This is a fail-safe to prevent the entire test  #
+#          run from becoming hung because of a hung client.  The err_file   #
+#          parameter tells wait_for_clients where to put the output         #
+#          indicating whcich clients did not print the specified message to #
+#          their logs for processing by the caller.                         #
+#############################################################################
+wait_for_clients()
+{
+   #
+   # get our params
+   #
+   # the message we are looking for
+   #
+   wfc_mess="$1"
+   #
+   # the thing to search
+   #
+   wfc_spec=$2
+   #
+   # the maximum number of checks
+   #
+   wfc_max_loop=$3
+   #
+   # the error output file
+   # 
+   wfc_errout=$4
+
+   #
+   # parse file names - assumes we are looking in the logs, which have
+   #                    names like host.pass.cli_num.$$.type
+   wfc_parsenames=$5
+
+   #
+   #
+   # initialize the loopcount
+   #
+   wfc_lcount=1
+
+   # 
+   # print a message
+   # 
+   passecho "      Looking for $wfc_mess in the logs for iteration $ITERATION"
+   passecho "      Starting at `date` (maximum of $wfc_max_loop loops)."
+
+   #
+   # and do the loop
+   #
+   wfc_doloop=1
+   while ( [ $wfc_doloop -eq 1 ] )
+   do
+      #
+      # grep for lines containing the message from the client logs for the 
+      # specified case, and convert them into the form 
+      #    "cli_numb host os" 
+      # for the comparison to the client info file
+      #
+      if [ "$wfc_parsenames" != "parse" ]
+      then
+         gotit=`grep "$wfc_mess" $wfc_spec`
+         if [ "$gotit" != "" ]
+         then
+            wfc_stat="all_got_mess"
+            wfc_doloop=0
+         fi
+      else 
+         grep "$wfc_mess" $wfc_spec 2>/dev/null | awk -F '/' '{print $NF}' | awk -F '.' '{print $3, $1,$5}' | sort > $tmp_dir/$$.wfc_mess_lines
+   
+         #
+         # Now diff the files. If they match, then all is well.  If not, then
+         # keep looping
+         #
+         diff $cliinfo $tmp_dir/$$.wfc_mess_lines > $wfc_errout 2>&1
+  
+         # 
+         # check to see if we should exit. We should exit if all the client 
+         # logs contained the specified message, or if the loop_max is
+         #  reached
+         if [ $? -eq 0 ]
+         then
+            wfc_stat="all_got_mess"
+            wfc_doloop=0
+         fi
+      fi ## if [ "$wfc_parsnames" != "parse" ]
+      #
+      # check to see if we have hit the specified maximum number
+      # of loops.
+      #
+      if [ $wfc_lcount -eq $wfc_max_loop ]
+      then
+         wfc_stat="max_loop"
+         wfc_doloop=0
+      else
+         #
+         # increment the loop count
+         #
+         wfc_lcount=`expr $wfc_lcount + 1`
+         #
+         # sleep a minute to give the clients a chance to catch up
+         # 
+         sleep 60
+      fi
+   done
+
+   #
+   # print a status message
+   # 
+   [ "$wfc_stat" = "all_got_mess" ] && stat_mess="All clients got message" || \
+                                       stat_mess="After $wfc_lcount loops some clients still missing message."
+   passecho "      Done looking for $wfc_mess in the logs for iteration $ITERATION."
+   passecho "      Finished at `date` (after $wfc_lcount loops)..."
+   passecho "      $stat_mess"
+   if [ "$wfc_stat" != "all_got_mess" -a "$wfc_parsenames" = "parse" ]
+   then
+      passecho "      The following clients did not print the message:"
+      passecho "`awk '{ if ( NF > 1 ) printf(\"           %s %s %s\n\", $2, $3, $4); }' $wfc_errout`"
+   fi
+
+   #
+   # cleanup
+   #
+   passecho "      Cleaning up temporary files..."
+   rm -f $tmp_dir/$$.wfc*
+}
+
+
+
+############################################################################
+# cleanup(pass) - cleanup for a pass or for the entire run                 #
+#                                                                          #
+#      if CLEANUP is non-zero, cleanup the logs from specified pass or the #
+#      entire run.                                                         #
+############################################################################
+cleanup()
+{
+   #
+   # first arg is the context from which we were called
+   #
+   cu_case=$1
+   cu_stat=okay
+   
+   [ "$cu_case" != "final" ] &&  cu_mess="pass $cu_case" || \
+                                cu_mess="$cu_case"
+   if [ "$cu_case" != "final" -a $ITERATION -gt 0 ]
+   then
+      cu_treekiller=$2
+   fi
+
+   #
+   # print a message
+   #
+   passecho ""
+   passecho "   Starting $cu_mess cleanup at `date`"
+   passecho "   -----------------------------------------------------------------"
+
+   #
+   # if context was "final" then remove the client info file and all the 
+   # logs if CLEANUP is true.
+   #
+   if [ "$cu_case" = "final" ]
+   then
+      rm -f $cliinfo
+
+      for mach in $cli_mach
+      do
+         rs_echo "      Removing this run's files from $mach"
+         [ "$mach" = "$localhost" ] && { RSH=; str="*.$$"; } || \
+                                   { RSH="${REMSH} $mach -n"; str='*'.$$; }
+         ${RSH} rm -f $TESTCASEDIR/$str
+         ${RSH} ls -f $TESTCASEDIR/$str > /tmp/cu_fin.$$
+         if [ -s /tmp/cu_fin.$$ ]
+         then
+            rs_echo "      Couldn't remove all of this run's files from $mach!"
+            rs_echo "      Following files are left on $mach:"
+            awk '{printf("         %s\n",$0); }' /tmp/cu_fin.$$
+            rm -f /tmp/cu_fin.$$
+         else
+            rs_echo "      All files removed from $mach"
+            rm -f /tmp/cu_fin.$$
+         fi
+      done
+   #
+   # else the arg is the pass number, so cleanup the logs, etc. if
+   # CLEANUP is non-zero.
+   #
+   else
+      if [ $ITERATION -gt 0 ]
+      then
+         #
+         # get the info on the system we will use to delete the test tree
+         #
+         set `grep "^$cu_treekiller "  $cliinfo` 
+         tk_seq=$1
+         tk_host=$2
+         tk_os=$3
+         if [ $DEBUG_SLEEP -ne 0 ]
+         then
+            echo "      SLEEPING FOR DEBUGGING ($DEBUG_SLEEP seconds)..."
+            rp_echo "      SLEEPING FOR DEBUGGING ($DEBUG_SLEEP seconds)..."
+            sleep $DEBUG_SLEEP
+         fi
+         [ $TREE_SETUP -eq 1 ] && pmess="" || pmess="(May Fail)"
+         passecho "      Starting tree delete on $tk_host ($tk_os) at `date` $pmess"
+         if [ "$tm_host" != "$localhost" ]
+         then
+            mess="Remote"
+            $REMSH $tk_host -n "ksh -c 'export D2_LOG_DIR=$rem_D2_LOGDIR ; . ${TET_ROOT}/profile.dcest ; cd $TESTCASEDIR; $cli_path $XT_TEST_DEBUG -i $CLEANUP_TESTCASE -o $tk_host.$ITERATION.$tk_seq.$$.$tk_os.cud2_log'" > ${LOG_DIR}/$tk_host.$ITERATION.$tk_seq.$$.$tk_os.cuxtlog 2>&1
+         else
+            mess="Local"
+            $cli_path $XT_TEST_DEBUG -i $CLEANUP_TESTCASE -o $tk_host $ITERATION.$tk_seq.$$.$tk_os.cud2_log > ${LOG_DIR}/$tk_host.$ITERATION.$tk_seq.$$.$tk_os.cuxtlog 2>&1
+         fi ## if [ tm_host = localhost ]
+         if [ $? -ne 0 ]
+         then
+            passecho "     $mess command to delete test tree returned non-zero!"
+            cu_stat=error
+         else
+            # 
+            # look for the "Testcase XX passed" lines that tell us the 
+            # cleanup is done
+            #   
+            wait_for_clients "Testcase $CLEANUP_TESTCASE passed" "$LOG_DIR/$tk_host.$ITERATION.$tk_seq.$$.$tk_os.cuxtlog" $READY_WAIT $tmp_dir/$$.cu_chk_rdy_err noparse
+            # 
+            # check for failures in the xt test log
+            anyerror=`grep FAILED ${LOG_DIR}/$tk_host.$ITERATION.$tk_seq.$$.$tk_os.cuxtlog`
+            #
+            # Report the results
+            #
+            # Did the client print the finished message? 
+            # Were any errors reported?
+            #
+            if [ "$wfc_stat" != "all_got_mess" -o "$anyerror" != "" ]
+            then
+               passecho "      WARNING - Tree deletion failed (see $todir for details)"
+            else
+               passecho "      Tree deletion complete at `date`."
+            fi
+         fi ## if delete tree command returns non-zero
+     fi ## Iteration -gt 0 ]
+     if [ $CLEANUP -eq 0 -o "$ITERATION_STAT" != "passed" -o "$cu_stat" != "okay" ]
+     then
+        todir=$LOG_BASE/$ITERATION_STAT/$cu_case
+        passecho "      Creating $todir for the logs..."
+        mkdir -p $todir
+        passecho "      Copying logs to $todir..."
+        passecho "        Pass log ($passlog)..."
+        plog=`basename $passlog`
+        mv $passlog $todir
+        passlog=$todir/$plog
+        passecho "        D2 and xt logs..."
+        mv $LOG_DIR/*.$cu_case.*.$$.*.*log $todir
+     else
+        passecho "      Removing local logs..."
+        rm -f $LOG_DIR/*.*log $passlog 
+        passlog=/dev/null
+     fi
+     for i in $cli_mach
+     do
+        if [ $CLEANUP -eq 0 -o "$ITERATION_STAT" != "passed" ]
+        then
+           passecho "      Copying logs from $i to $todir..."
+           rcp $i:$rem_D2_LOGDIR/$i.$cu_case.'*'.$$.'*' $todir 2>/dev/null
+        fi
+        passecho "     Removing the logs from $i..."
+        ${REMSH} $i -n rm -f $rem_D2_LOGDIR/$i.$cu_case.'*'.$$.'*'
+     done
+   fi
+   #
+   # print a message
+   #
+   passecho "   ------------------------------------------------------------------"
+   passecho "   Finished $cu_mess cleanup at `date`"
+   passecho ""
+}
+
+############################################################################
+# start_clients() - start the client jobs                                  #
+############################################################################
+start_clients()
+{
+
+sc_stat="okay"
+sctc=$1
+sctcf=$2
+sc_treemaker=$3
+
+passecho "   Beginning client startup for process $$ Iteration $ITERATION at `date`"
+passecho "   --------------------------------------------------------------------------"
+passecho ""
+passecho "      Testcase is $sctc"
+passecho "      Testcase file is $sctcf"
+
+#
+# get the info on the system we will use to create the test tree
+#
+set `grep "^$sc_treemaker "  $cliinfo`
+tm_seq=$1
+tm_host=$2
+tm_os=$3
+passecho "      Running on system $tm_host to create the test tree."
+passecho ""
+passecho "      Starting tree create on $tm_host ($tm_os) at `date`"
+if [ "$tm_host" != "$localhost" ]
+then
+   mess="Remote"
+   $REMSH $tm_host -n "ksh -c 'export D2_LOG_DIR=$rem_D2_LOGDIR ; . ${TET_ROOT}/profile.dcest ; cd $TESTCASEDIR; $cli_path $XT_TEST_DEBUG -i $SETUP_TESTCASE -o $tm_host.$ITERATION.$tm_seq.$$.$tm_os.sud2_log'" > ${LOG_DIR}/$tm_host.$ITERATION.$tm_seq.$$.$tm_os.suxtlog 2>&1 &
+else
+   mess="Local"
+   $cli_path $XT_TEST_DEBUG -i $SETUP_TESTCASE -o $tm_host.$ITERATION.$tm_seq.$$.$tm_os.sud2_log > ${LOG_DIR}/$tm_host.$ITERATION.$tm_seq.$$.$tm_os.suxtlog 2>&1 &
+fi
+if [ $? -ne 0 ]
+then
+   passecho "      $mess command to create test tree returned non-zero!"
+   sc_stat="got an error"
+else
+   # 
+   # look for the "Testcase XX passed" lines that tell us the setup is done
+   # 
+   wait_for_clients "Testcase $SETUP_TESTCASE passed" "$LOG_DIR/$tm_host.$ITERATION.$tm_seq.$$.$tm_os.suxtlog" $READY_WAIT $tmp_dir/$$.rc_chk_rdy_err noparse
+   #
+   # check for failures in the xt test log
+   anyerror=`grep FAILED ${LOG_DIR}/$tm_host.$ITERATION.$tm_seq.$$.$tm_os.suxtlog`
+   #
+   # Report the results
+   #
+   # Did all of the clients print the startup message? 
+   # Were any errors reported?
+   #
+   if [ "$wfc_stat" != "all_got_mess" -o "$anyerror" != "" ]
+   then
+      passecho "      WARNING - Tree creation failed (see $LOG_BASE/error/$ITERATION for details"
+      passecho "      WARNING - Client runs may fail as well!"
+   else
+      passecho "      Tree creation completed at `date`"
+      TREE_SETUP=1
+   fi
+   if [ $DEBUG_SLEEP -ne 0 ]
+   then
+      rp_echo "      SLEEPING FOR DEBUGGING ($DEBUG_SLEEP seconds)..."
+      echo "      SLEEPING FOR DEBUGGING ($DEBUG_SLEEP seconds)..."
+      sleep $DEBUG_SLEEP
+   fi
+   for nextrec in $cli_infos
+   do
+      #
+      # break up the client info record
+      #
+      set `echo $nextrec | tr ':' ' '`
+      seq=$1
+      host=$2
+      ostype=$3
+      
+      #
+      # report on the particulars of the client we are starting
+      #
+      passecho "      STARTing xt_test client $seq (testcase $sctc) on $host ($ostype) at `date`"
+  
+      #
+      # Locked and Loaded...FIRE! Err...I mean, start the next client. 
+      #
+      if [ "$host" != "$localhost" ]
+      then
+         $REMSH $host -n "ksh -c 'export D2_LOG_DIR=$rem_D2_LOGDIR ; . ${TET_ROOT}/profile.dcest ; cd $TESTCASEDIR; $cli_path $XT_TEST_DEBUG -t $sctcf -o $host.$ITERATION.$seq.$$.$ostype.d2log'" > ${LOG_DIR}/$host.$ITERATION.$seq.$$.$ostype.xtlog 2>&1 &
+         if [ $? -ne 0 ]
+         then
+            sc_stat="got an error"
+            passecho "      ${REMSH} command to startup client $seq returned non-zero!"
+         else
+            passecho "      STARTed xt_test client $seq (testcase $sctc) - local PID is $!"
+         fi
+      else
+         $cli_path $XT_TEST_DEBUG -t $sctcf > ${LOG_DIR}/$host.$ITERATION.$seq.$$.$ostype.xtlog 2>&1 &
+         if [ $? -ne 0 ]
+         then
+            sc_stat="got an error"
+            passecho "      Local command to startup client $seq returned non-zero!"
+         else
+            passecho "      STARTed xt_test client $seq (testcase $sctc) - local PID is $!"
+         fi
+      fi
+   done
+fi
+passecho "   ------------------------------------------------------------------------"
+passecho "   Finished client startup for process $$ at `date`"
+passecho ""
+
+}
+ 
+##############################################################################
+# ready_check - Checks client logs to see if all clients are READY           #
+#                                                                            #
+#              Convert the client info file and client log READY lines into  #
+#              wbat should be equivelant forms, then diff them.  If they     #
+#              don't match, we have a problem.                               #
+##############################################################################
+ready_check()
+{
+   rc_stat="okay"
+   rtc=$1
+   #
+   # Print message
+   #
+   passecho ""
+   passecho "   Check startup for iteration $ITERATION ($rtc) at `date`"
+   passecho "   ------------------------------------------------------------------"
+
+   # 
+   # look for the "(startup) passed" lines that tell us all of the clients 
+   # are started.
+   # 
+   wait_for_clients "(startup) passed" "$LOG_DIR/*.$ITERATION.*.$$.*.xtlog" $READY_WAIT $tmp_dir/$$.rc_chk_rdy_err parse
+   #
+   # Report the results
+   #
+   # Did all of the clients print the startup message?
+   if [ "$wfc_stat" != "all_got_mess" ]
+   then
+      rc_stat="got an error"
+      passecho "      ERROR: CLIENT STARTUP FAILED!!"
+      passecho "         The following clients did not report READY:"
+      passecho "`awk '{ if ( NF > 1 ) printf(\"           %s %s %s\n\", $2, $3, $4 ); }' $tmp_dir/$$.rc_chk_rdy_err`"
+   else
+      #
+      # did they all start successfully?
+      #
+      grep -i "failed" $LOG_DIR/*.$ITERATION.*.$$.*.xtlog | awk -F '/' '{print $NF}' | awk -F '.' '{print $3, $1,$5}' | sort -u > $tmp_dir/$$.rc_anyerr
+      if [ -s $tmp_dir/$$.rc_anyerr ]
+      then
+         rc_stat="got an error"
+         passecho "      ERROR: CLIENT STARTUP FAILED!!"
+         passecho "         The following clients reported errors during startup:"
+         passecho "`awk '{printf(\"           %s %s %s\n\", $1, $2, $3 ); }' $tmp_dir/$$.rc_anyerr`"
+      else
+         passecho "      Verified client startup...All clients report READY"
+      fi
+   fi
+   
+   #
+   # cleanup
+   #
+   passecho "      Removing temporary files..."
+   rm -f $tmp_dir/$$.rc*
+
+   passecho "   ------------------------------------------------------------------"
+   passecho "   Startup check for iteration $ITERATION ($rtc) done at `date`"
+   passecho ""
+
+}
+
+  
+##############################################################################
+# check_run_status - check to see if the test passed                         #
+#         Checks the status from the client logs to see if the test ran as   #
+#         expected.                                                          #
+##############################################################################
+check_run_stat()
+{
+   crs_stat="okay"
+   ctc=$1
+   #
+   # print a message
+   #
+   passecho ""
+   passecho "   Checking exit status for iteration $ITERATION ($ctc) at `date`"
+   passecho "   ------------------------------------------------------------------------"
+
+   # 
+   # look for the "(shutdown) passed" lines that tell us all of the clients are done
+   # 
+   wait_for_clients "(shutdown) passed" "$LOG_DIR/*.$ITERATION.*.$$.*" $EXIT_WAIT $tmp_dir/$$.crs_prob_cli parse
+   #
+   # Report the results
+   #
+   if [ "$wfc_stat" != "all_got_mess" ]
+   then
+      passecho "      ERRORS IN CLIENT EXIT!!"
+      passecho "         The following clients do not appear to have exitted??:"
+      passecho "`awk '{ if ( NF > 1 ) printf(\"           %s %s %s\n\",$2, $3, $4); }' $tmp_dir/$$.crs_prob_cli`"
+      crs_stat="got an error"
+   else
+      passecho "      Verified client exits..."
+   fi   
+
+   #
+   # check the status of the clients that DID exit
+   #
+   passecho "      Checking client exit statuses..."
+   #
+   # get the "(shutdown) passed" lines for future comparisons
+   #
+   grep "(shutdown) passed" $LOG_DIR/*.$ITERATION.*.$$.*.xtlog | cut -f 1 -d ':'| sort > $tmp_dir/$$.crs_comp_lines
+
+   #
+   # Now see who passed and failed
+   #
+   grep -i "failed" `cat $tmp_dir/$$.crs_comp_lines` | awk -F '/' '{print $NF}' | awk -F '.' '{print $3,$1,$5}' | sort -u  > $tmp_dir/$$.crs_cli_failed
+   if [ -s $tmp_dir/$$.crs_cli_failed ]
+   then
+      #
+      # Some failed, set return value
+      #
+      crs_stat=failed
+      #
+      # make a list of who passed
+      #
+      diff $tmp_dir/$$.crs_cli_failed $cliinfo | grep '>' | sed -e 's/^> //' > $tmp_dir/$$.crs_cli_passed 
+   else
+      crs_stat=passed
+      cp $cliinfo  $tmp_dir/$$.crs_cli_passed
+   fi 
+   if [ "crs_stat" != "passed" ]
+   then
+      passecho "      The following clients FAILED:"
+      passecho "`awk  '{ printf(\"           %s %s %s\n\",$1, $2, $3); }' $tmp_dir/$$.crs_cli_failed`"
+      passecho "      The following clients PASSED:"
+      passecho "`awk  '{ printf(\"           %s %s %s\n\",$1, $2, $3); }' $tmp_dir/$$.crs_cli_passed`"
+   else
+      passecho "      Verified client exit statuses..."
+   fi
+   passecho "      Iteration $ITERATION (testcase $testcase) $crs_stat" 
+   #
+   # cleanup
+   #             
+   passecho "      Removing temporary files..."
+   rm -f $tmp_dir/$$.crs*
+
+   passecho "   ----------------------------------------------------------------------"
+   passecho "   Exit status check for iteration $ITERATION ($ctc) done at `date`"
+   passecho ""
+
+} 
+##############################################################################
+# kill_jobs() - kills all jobs indicated by the client logs for this process #
+#         greps the system names and pids of the clients from the logs and   #
+#         rsh's to the host (if necessary) and kills the job.                #
+##############################################################################
+kill_jobs()
+{
+   kj_case=$1
+   [ "$kj_case" = "final" ]  &&  kj_case='*'
+   #
+   # print a message
+   #
+   rp_echo "   Starting to kill jobs for process $$ , iteration $ITERATION at `date`"
+   rp_echo "   ---------------------------------------------------------------------"
+
+   #
+   # generate a list of pids for each host
+   #
+   for mach in $cli_mach
+   do
+      ostype=`grep $mach $cliinfo | awk '{print $3}'`
+      [ "$ostype" = "OSF1" -o "$ostype" = "AIX" ] && ps_opts="wax" || \
+                                                     ps_opts="-e"
+      
+      [ "$mach" = "$localhost" ] && RSH= || RSH="$REMSH $mach -n"
+      
+      pids=`$RSH ps $ps_opts | grep xt_test | awk '{print $1}'`
+      if [ "$pids" != "" ]
+      then
+         rp_echo "      process ids for $mach are $pids"
+         rp_echo "      attempting to kill $pids on $mach at `date`..."
+         $RSH kill -9 $pids
+         jobsleft=`$RSH ps $ps_opts | grep xt_test | awk '{print $1}'`
+         if [ "$jobsleft" = "" ]
+         then 
+            rp_echo "      All jobs on $mach killed"
+         else
+            pidsleft=`echo $jobsleft | awk '{print $1}'`
+            rp_echo "      Could not kill $pidsleft on $mach"
+         fi
+      else
+         rp_echo "      No jobs running on $mach..."
+      fi
+   done
+
+   rp_echo "   ---------------------------------------------------------------------"
+   rp_echo "   Finished killing jobs for process $$ at `date`"
+}
+
+#############################################################################
+# pop_list(list)                                                            #
+#     Return pl_item, pl_nitems, and pl_items_left containing the first     #
+#     element of the list, the number of items left in the list, and the    #
+#     list sans the first item.                                             #
+#############################################################################
+pop_list()
+{
+   pl_res=
+   pl_item=
+   pl_nitems=
+   pl_items_left=
+
+   set `echo $1 | awk '{ if (NF > 1) \
+                         {
+                             pos = index($0,$2); \
+                             x = substr($0,pos,(length($0) - pos) +1); \
+                          } \
+                          else \
+                             x = ""; \
+                          print $1, NF-1, x; }'`
+   pl_item=$1; shift
+   pl_nitems=$1; shift
+   pl_items_left="$*"
+}
+
+###########################################################################
+# setup_testcase(testcase, nthreads)                                      #
+#     If it doesn't already exist, create a testcase file for the         #
+#     specified testcase that will make xt_test spawn the desired number  #
+#     threads.                                                            ############################################################################
+setup_testcase() 
+{
+
+   #
+   # store the args 
+   #
+   st_stat=okay
+   tc=$1
+   thds=$2
+
+   runecho "   Beginning testcase setup for process $$ at `date`"
+   runecho "   ---------------------------------------------------------------------"
+
+   #
+   # some useful local variables
+   # 
+   # testcase files
+   tc_files=`eval "echo \\$${tc}_files"`
+   # testcase type
+   tc_type=`eval "echo \\$${tc}_type"`
+   # testcase start routine
+   tc_start=T${tc_type}.start
+   # testcase shutdown
+   tc_shutdn=T${tc_type}.shutdn
+   # testcase input file for xt_test
+   tc_input=$TESTCASEDIR/T${thds}${tc}X.$$
+ 
+   #
+   # Check to see if the file is already created (shouldn't be)
+   #
+   if [ ! -f $tc_input ]
+   then
+      runecho "      Creating testcase file for testcase $tc with $thds threads"
+      runecho "      Path to xt_test intput file is $tc_input"
+      runecho "      Testcase files are $tc_files"
+      tc_files_left=$tc_files
+      #
+      # put the startup stuff in the xt_test input file
+      # 
+      cp $tc_start $tc_input
+      thd_cnt=0
+      #
+      # now loop through the testcase files until $thds lines have been 
+      # written to the xt_test input file.
+      #
+      while ( [ $thd_cnt -le $thds ] )
+      do
+         #
+         # pull the first testcase file off of the list, get the number
+         # in the list, and return the new list.
+         #
+         pop_list "$tc_files_left"
+
+         #
+         # the next testcase file
+         #
+         tcf=$pl_item
+         #
+         # add it to the xt_test input file
+         # 
+         echo $tcf >> $tc_input 
+         # 
+         # if the new number of files is 0, then reset the list of files
+         # else, set it to the remaining list of files.
+         [ $pl_nitems -eq 0 ] && tc_files_left=$tc_files || \
+                                 tc_files_left=$pl_items_left
+         #
+         # bump the thread count
+         #
+         thd_cnt=`expr $thd_cnt + 1`
+      done
+      #
+      # add the shutdown stuff to the xt_test input file.
+      #
+      sed -e /--/d $tc_shutdn >> $tc_input
+      runecho "      Finished creating testcase file for testcase $tc."
+      
+      #
+      # now copy the file to all the machines involved.
+      #
+      for mach in $cli_mach
+      do
+         if [ "$mach" != "$localhost" ]
+         then
+            runecho "      Copying $tc_input to $mach..."
+            rcp $tc_input $mach:$tc_input
+            madeit=`${REMSH} $mach -n ls $tc_input`
+            if [ "$madeit" != "$tc_input" ]
+            then
+               rp_echo "      Couldn't copy $tc_input to $mach!!"
+               st_stat=failed
+               break
+            else
+               runecho "      Verified copy of $tc_input to $mach."
+            fi
+         fi
+      done
+   else
+      runecho "      Odd...$tc_input already exists."
+   fi
+   runecho "   -----------------------------------------------------------------------"
+   runecho "   Finished testcase setup (testcase $tc) for process $$ at `date`"
+
+} ## setup_testcase
+         
+#############################################################
+# setup_GDS() - create the input file for gdsSetup and use  # 
+#               it to set up the GDS config                 #
+#############################################################
+setup_GDS()
+{
+   runecho "   Beginning GDS setup for process $$ at `date`"
+   runecho "   -----------------------------------------------------------------"
+   sg_stat=okay
+   mach_1=${mach_1:-""}
+   mach_2=${mach_2:-""}
+   #
+   # first put the constant stuff in the config file
+   #
+   runecho "      Creating the gdsSetup input file..."
+   cat > $gds_conf_fn << EOF
+#
+# Script generated gdsSetup input file. Generated on `date`.
+# Generator: gds_xds_str_001   Pid: $$  Tester: $tester
+#
+# number of client "slots" to allocate on GDS setups
+#
+GDS_NCLIENTS=$ngds_clients
+
+EOF
+   grep "GDS_" $CONFIG  | grep -v VARLIST >> $gds_conf_fn
+   #
+   # set mach_1 and mach_2 out of the cli_mach list if not already
+   # set.
+   #
+   [ "$mach_1" = "" ] && mach_1=`echo $cli_mach | awk '{print $1}'`
+   [ "$mach_2" = "" ] && mach_2=`echo $cli_mach | awk '{print $2}'`
+   runecho "      mach_1 (initial DSA) is $mach_1, $mach_2 is $mach_2"
+   #
+   # now pull mach_1 and mach_2 out of the machines list
+   #
+   mach_left=`echo $cli_mach | sed -e s/$mach_1// -e s/$mach_2//`
+   #
+   # write the mach_x = lines and the beginning of the ALL_MACH lists
+   # 
+   runecho "      Adding lines for mach_1 and mach_2 to $gds_conf_fn"
+   echo "mach_1=$mach_1" >> $gds_conf_fn
+   echo "mach_2=$mach_2" >> $gds_conf_fn
+   echo "ALL_MACH=\"mach_1 mach_2\"" >> $gds_conf_fn
+   #
+   # create a mach_x= line, an entry in the ALL_MACH list and a config line
+   # for all of the other machines
+   #
+   runecho "      Adding lines for $mach_left to $gds_conf_fn"
+   echo $mach_left | awk '{ for (i=3; i < NF+3; i++) \
+                            { \
+                              printf("mach_%d=%s\n", i, $(i-2)); \
+                              printf("ALL_MACH=\"$ALL_MACH mach_%d\"\n",i); \
+                              printf("GDS_HOSTCONFIG=\"$GDS_HOSTCONFIG mach_%d:name=same:dir=1,Cli-Srv,mach_1:dir=2,Cli,mach_2\"\n",i); \
+                            } }' >> $gds_conf_fn
+   runecho "      Finished creating the gdsSetup input file."
+   runecho "      Distributing the gdsSetup file."
+   #
+   # copy the file to all the machines involved.
+   #
+   for mach in $cli_mach
+   do
+      if [ "$mach" != "$localhost" ]
+      then
+         runecho "      Copying $gds_conf_fn to $mach..."
+         rcp $gds_conf_fn $mach:$gds_conf_fn
+         madeit=`${REMSH} $mach -n ls $gds_conf_fn`
+         if [ "$madeit" != "$gds_conf_fn" ]
+         then
+            runecho "      Couldn't copy $gds_conf_fn to $mach!!"
+            sg_stat=failed
+            break
+         else
+            runecho "      Verified copy of $gds_conf_fn to $mach."
+         fi
+      fi
+   done
+   runecho "      Finished distributing the gdsSetup file."
+   #
+   # Set them up.
+   #
+   # move any existing worldSetup.gds log first so that we don't read the
+   # success message before the config is actually done.
+   #
+   [ -f ${LOG_ROOT}/worldSetup.gds/working/worldSetup.gds.$localhost ] && \
+     mv ${LOG_ROOT}/worldSetup.gds/working/worldSetup.gds.$localhost ${LOG_ROOT}/worldSetup.gds/working/worldSetup.gds.$localhost.sav
+   runecho "      Starting the worldSetup script at `date`"
+   $STTOOLS_DIR/worldSetup.gds $gds_conf_fn > ${LOG_ROOT}/worldSetup.gds/working/worldSetup.log.$$ &
+   #
+   # wait a minute to let the log get something in it.  This prevents an
+   # annoying message from wait_for_clients()
+   #
+   sleep 60
+   #
+   # wait for worldSetup to report everything is okay or till our time
+   # for gdsSetup is up
+   #
+   wait_for_clients "GDSSETUP IS OKAY"  "${LOG_ROOT}/worldSetup.gds/working/worldSetup.gds.$localhost" $GDSSETUP_WAIT $tmp_dir/$$.gdssetup_probs noparse
+   runecho "      wait_for_clients returned at `date`"
+   #
+   # Report the results
+   #
+   if [ "$wfc_stat" != "all_got_mess" ]
+   then
+      runecho "      Couldn't config GDS!!"
+      runecho "      Logs are in ${LOG_DIR}/gdsSetup.<machine_name>"
+      sg_stat=failed
+   fi
+   runecho "   -----------------------------------------------------------------"
+   runecho "     Completed GDS setup for process $$ at `date`"
+} ## setup_gds()
+
+   
+
+#############################################################################
+# checkvars(varlist)                                                        #
+#    Check that each variable in the list has a value                       #
+#############################################################################
+checkvars()
+{
+   cv_stat=okay
+   vlist=$1
+
+   runecho "   Beginning variable list check for process $$ at `date`"
+   runecho "   ---------------------------------------------------------------"
+   for i in $vlist
+   do
+      res=`eval "echo \\$$i"`
+      if [ "$res" = "" ]
+      then
+         rs_echo "      no value for $i!"
+         cv_stat=failed
+      else
+         runecho "      $i = $res"
+      fi
+   done
+   runecho "   ---------------------------------------------------------------"
+   runecho "   Finished variable list check for process $$ at `date`"
+
+}
+
+#############################################################################
+# Main processing                                                           #
+#############################################################################
+myargv=$*
+myargc=$#
+#set -x
+SCRIPT=`basename $0`
+PGM=$SCRIPT
+COMM_LINE="$0 $*"
+
+#
+# Iteration 0 means we didn't start the test loop yet
+#
+ITERATION=0
+#
+# temporary runlog until we get the LOGDIR value
+#
+runlog=/tmp/runlog.$$.`date +%m-%d-%y`
+
+#
+# temporary passlog until we get the LOGDIR value
+#
+passlog=/tmp/passlog.$$.`date +%m-%d-%y`
+
+#
+# initialize some variables
+#
+init_vars
+
+#
+# Parse the command line - only if we are invoked as gds_xds_str_001_cl
+#
+if [ "$SCRIPT" = "gds_xds_str_001_cl" ]
+then
+   VAL_NEEDED="NONE"
+   for i in $myargv
+   do
+      case $i in 
+
+       -*)
+   	   if [ "$VAL_NEEDED" != "NONE" ]
+  	   then
+	      echo "Missing value for $VAL_NEEDED"
+              print_usage
+	      exit 1
+           fi
+	   case $i in 
+ 	      -B) # the path to the binaries on the clients
+	          # we accept this at face value since we have no
+	          # quick way to check
+	          VAL_NEEDED=BINDIR
+		  ;;
+	      -C) # number of clients to run
+	          VAL_NEEDED=NCLI
+		  ;;
+	      -c) # another client machine
+	          VAL_NEEDED=CLI_MACH
+		  ;;
+	      -d) # debug the clients
+	          XT_TEST_DEBUG=-v
+		  ;;
+	      -f) # config file path
+	          VAL_NEEDED=CONFIG_FN
+		  ;;
+              -G) # 
+                  # config GDS
+                  #
+                  config_gds=1
+                  ;;
+	      -H) # Hours to run
+	          if [ "$PASSES" != "none" ]
+	          then
+		     echo "Can't specify -p with -h or -m"
+		     print_usage
+		     exit 1
+	          fi
+	          VAL_NEEDED=HOURS
+		  ;;
+	      -h) # want print_usage
+	          print_usage
+	          exit 0
+		  ;;
+	      -L) # the directory in which to store logs. 
+	          VAL_NEEDED=LOGDIR
+		  ;;
+	      -m) # Minutes to run 
+	          if [ "$passes" != "none" ]
+	          then
+		     echo "Can't specify -p with -h or -m"
+		     print_usage
+		     exit 1
+	          fi
+	          VAL_NEEDED=MINS
+		  ;;
+	      -n) # number of write operations
+	          VAL_NEEDED=NUMWRITES
+		  ;;
+	      -p) # passes
+	          if [ $HOURS -ne 0 -o $MINS -ne 0 ]
+	          then
+		     echo "Can't specify -p with -h or -m"
+		     print_usage
+		     exit 1
+	          fi
+	          VAL_NEEDED=PASSES
+		  ;;
+	      -R) # Remove logs at end of test run
+	          CLEANUP=1
+		  ;;
+	      -*) # Huh?
+	          echo "Bad flag $i"
+	          print_usage
+	          exit 1
+		  ;;
+	   esac 
+	   ;;
+         *) case $VAL_NEEDED in
+	     NCLI) cli_to_start=$i
+		   VAL_NEEDED="NONE"
+		     ;;
+	   BINDIR) # we accept this at face value
+		   exe_path=$i
+		   VAL_NEEDED="NONE"
+		     ;;
+	 CLI_MACH) cli_mach="$cli_mach $i"
+		   VAL_NEEDED="NONE"
+		     ;;
+	CONFIG_FN) if [ ! -f $i ]
+		   then
+		      echo "Configuration file $i does not exist"
+		      print_usage
+		      exit 1
+		   fi
+		   CONFIG=$i
+		   VAL_NEEDED="NONE"
+		     ;;
+      HOURS|MINS) [ "$VAL_NEEDED" = "HOURS" ] && CHOURS=$i || MINS=$i
+		   VAL_NEEDED="NONE"
+		     ;;
+	   LOGDIR) LOG_DIR=$i
+		   VAL_NEEDED="NONE"
+		     ;;
+	   PASSES) PASSES=$i
+		   VAL_NEEDED="NONE"
+		     ;;
+		*) # Huh
+		   echo "Bad arguement $i"
+		   print_usage
+		   exit 1
+		   ;;
+	     esac
+
+	     ;;
+      esac
+   done
+   if [ "$VAL_NEEDED" != "NONE" ]
+   then
+      echo "missing arguement for $VAL_NEEDED option"
+      print_usage
+      exit 2
+   fi
+else
+   #
+   # only -f <config_file>, -G or -H options allowed 
+   #
+   if [ $myargc -gt 3 ]
+   then
+      rs_echo "$0: bad arg count ($myargc)."
+      print_usage
+      exit 1
+   fi
+   for arg in $myargv
+   do 
+      case $arg in
+         -h) #
+             # use default config file
+             #
+             print_usage
+             exit 0;
+             ;;
+
+          -G) # 
+              # config GDS
+              #
+              config_gds=1
+              ;;
+     
+          -f) #
+              # better be the -f config file option
+              #
+              VAL_NEEDED=CONFIG_FILE
+              ;;
+
+           *) case $VAL_NEEDED in
+                 CONFIG_FILE) 
+                   if [ ! -f $arg ]
+                   then
+                     echo "$SCRIPT: config file missing does not exist ($arg)."
+                     print_usage
+                     exit 1
+                   else
+                     CONFIG=$arg
+                   fi
+                   VAL_NEEDED=NONE
+                   ;;
+                 *)
+                    # 
+                    # error
+                    # 
+                    echo "   $SCRIPT: bad arg ($arg)."
+                    print_usage
+                    exit 1
+                    ;;
+               esac
+        esac
+   done
+   if [ "$VAL_NEEDED" != "NONE" ]
+   then
+      echo "missing arguement for $VAL_NEEDED option"
+      print_usage
+      exit 2
+   fi
+fi
+
+if [ "$CONFIG" = "" ]
+then 
+   rs_echo "   No Config file specified!"
+   print_usage
+   exit 1
+fi
+
+#
+# reset the SCRIPT variable to get the LOG_DIR set correctly even if
+# we are using the command line switches.
+#
+SCRIPT=`basename $SCRIPT '_cl'`
+
+#
+# get the default values from the configuration file
+#
+rs_echo "   Reading config file $CONFIG"
+. $CONFIG
+
+#
+# check that all of the required variables are set.
+#
+rs_echo "   Looking for variable list"
+if [ "$VARLIST" = "" ]
+then
+   rs_echo "   No variable list in config file $CONFIG!"
+   rs_echo "   $CONFIG must contain a list of the variables it defines."
+   exit 1
+else
+   rs_echo "   Checking for variable assignments"
+   checkvars "$VARLIST"
+   if [ "$cv_stat" != "okay" ]
+   then
+      rs_echo "   All required variables not defined in config file $CONFIG!"
+      exit 1
+   else
+      rs_echo "   All variables defined"     
+   fi
+fi
+
+#
+# now set the parameters for the test.  A value supplied on the command line 
+# overrides a value from the configuration file.
+#
+#
+# list of client machines
+#
+[ -n "$cli_mach" ] || cli_mach=$CLI_MACHINES
+
+#
+# Number of clients to run
+#
+[ $cli_to_start -ne 0 ] || cli_to_start=`eval "echo \\$${STRESS_LEVEL}_CLIENTS"`
+
+#
+# Number of threads per client
+#
+nthreads=`eval "echo \\$${STRESS_LEVEL}_THREADS"`
+
+#
+# Number of GDS client processes
+#
+ngds_clients=`eval "echo \\$${STRESS_LEVEL}_GDS_NCLIENTS"`
+
+#
+# gds configuration switch
+#
+[ -n "$config_gds" ] || config_gds=$CONFIG_GDS
+
+#
+# gds config file
+#
+gds_conf_fn=$TESTCASEDIR/gds_config.$$
+
+#
+# D2_LOGDIR
+#
+rem_D2_LOGDIR=$D2_LOGDIR
+D2_LOG_DIR=$D2_LOG_DIR
+export D2_LOG_DIR
+
+#
+# path to binaries
+#
+[ -n "$exe_path" ] || exe_path=$BINDIR
+
+#
+# client executable
+#
+cli_path=$exe_path/xt_test
+
+#
+# duration of run
+#
+[ $CHOURS -ne 0 ] && HOURS=$CHOURS
+
+
+#
+# Temp directory
+#
+[ -n "$tmp_dir" ] || tmp_dir=$TMP_DIR
+
+#
+# client info file (for checking results)
+#
+cliinfo=$tmp_dir/gds_xds_str_001_cliinfo$$
+
+#
+# make sure that the log, and tmp directories exist
+#
+#
+# source the file of tools that will create the path to the log dir.
+# STTOOLS_DIR should be set in the environment to point to the directory 
+# containing the systest tools.
+# 
+. $STTOOLS_DIR/conf_util.sh
+for currdir in log+$LOG_DIR tmp+$tmp_dir
+do
+   #
+   # get the type and the path
+   # 
+   type_and_path=`echo $currdir | tr '+' ' '`
+   set $type_and_path
+   dtype=$1
+   dpath=$2
+
+   #
+   # if the directory does not exist
+   #
+   if [ ! -d $dpath ]
+   then
+      #
+      # try to create it
+      #
+      rs_echo "   Trying to create $dtype dir ($dpath)..."
+      conf_makepath $dpath
+      if [ "$conf_mp_out" = "error" ]
+      then
+	 rs_echo "   Couldn't create $dtype dir."
+	 print_usage
+	 exit 1
+      else
+	 rs_echo "   Created $dtype dir ($dpath)..."
+      fi
+   fi
+done
+
+rs_echo "   Moving the run log from $runlog to $LOG_DIR/runlog.$$.`date +%m-%d-%y`"
+mv $runlog $LOG_DIR
+runlog=$LOG_DIR/runlog.$$.`date +%m-%d-%y`
+
+#
+# calculate the number of clients per machine, and the "fudge".  The fudge is
+# the remainder of the division of total clients into machines.  An additional
+# client is started on each machine until the fudge is gone.
+#
+if [ "$cli_mach" != "$localhost" ]
+then
+  #
+  # Running on more than one system. Do the calculation.
+  #
+  # get number of machines 
+  #
+  nmach=`echo $cli_mach | awk '{print NF}'`
+  #
+  # handle the case where there are more machines than clients to be run.
+  # We loop through the client machines until we have the same number of
+  # machines as clients to run
+  #
+  if [ $nmach -gt $cli_to_start ]
+  then
+     cli_mach=`echo $cli_mach | cut -f1-$nmach -d' '`
+  fi            
+
+  #
+  # get base number of clients per machine
+  #
+  cli_p_mach=`echo "$cli_to_start/$nmach;quit" | bc`
+
+  #
+  # get the fudge
+  #
+  cli_fudge=`echo "$cli_to_start%$nmach;quit" | bc`
+else
+  #
+  # for the local machine case, we just prime the pertinent variables
+  #
+  cli_p_mach=$cli_to_start
+  cli_fudge=0
+fi
+
+#
+# Say hi
+#
+print_hi
+
+
+if [ "$PASSES" = "none" ]
+then
+  SECONDS_TO_EXECUTE=`awk "BEGIN { print (3600 * $HOURS)+(60 * $MINS); exit; }"`
+fi
+
+#
+# setup trap handler
+#
+rs_echo "   Setting up trap handler"
+setup_trap
+
+#
+# build the client info file
+#
+# loop through the list of machines, starting clients on each as 
+# dictated by the number of clients per machine and the fudge
+#
+rs_echo ""
+rs_echo "   Beginning to set up client run information at `date`"
+rs_echo "   ----------------------------------------------------------------------------"
+
+#
+# initialize the list of client info records
+#
+cli_infos=""
+#
+# initialize the client sequence number - start at 1
+#
+cli_seq=1
+
+for i in $cli_mach
+do
+  #
+  # set base value for clients for this machine
+  #
+  cli_this_mach=$cli_p_mach
+
+  #
+  # set the RSH variable
+  # 
+  #   If we are starting remote clients and the current machine is not the
+  #   local host, then RSH is set to be the preamble for a remote client 
+  #   startup, else it is null.
+  #
+  #
+  runecho "   Checking access to $i"
+  if [ "$i" != "$localhost" ]
+  then
+     RSH="$REMSH $i -n"
+     #
+     # test rsh access
+     #
+     good_acc=`$RSH echo true`
+     if [ "$good_acc" != "true" ]
+     then 
+        rs_echo "   ACCESS for machine $i DENIED"
+        exit 1
+     fi
+  else
+     RSH=
+  fi
+
+  #
+  # get the O/S type
+  #
+  os=`$RSH uname`
+
+  #
+  # Check to see if we can find/execute the remote programs
+  #
+  runecho "   Checking for $cli_path on $i"
+  for cliprog in $cli_path
+  do
+     cando=`$RSH $cliprog -v 2>&1 | grep -i "usage"`
+     if [ "$cando" = "" ]
+     then
+        #
+        # report and quit
+        #
+        rs_echo "   Can't run client executable $cliprog on $i..."
+        print_usage
+        ITERATION_STAT=exe_error
+        cleanup $ITERATION none; cleanup final
+        exit 1
+     fi
+  done
+
+  #
+  # if we have fudge left, take one
+  #
+  if [ $cli_fudge -gt 0 ]
+  then
+     cli_this_mach=`expr $cli_this_mach + 1`
+     cli_fudge=`expr $cli_fudge - 1`
+  fi
+  
+  #
+  # initialize the per-machine client counter and seqence counter
+  #
+  cli_on_mach=0
+  preloop_seq=$cli_seq
+
+  #
+  # now loop until we have the right number of clients started on this
+  # machine.
+  #
+  runecho "   Allocating clients to $i"
+  while( [ $cli_on_mach -lt $cli_this_mach ] )
+  do
+    #
+    # save the info on the client
+    #
+    echo "$cli_seq $i $os" >> $cliinfo
+    cli_infos="$cli_infos $cli_seq:$i:$os"
+
+    cli_on_mach=`expr $cli_on_mach + 1`
+    cli_numbs="$cli_numbs $cli_seq"
+    cli_seq=`expr $cli_seq + 1`
+ done
+done  
+
+rs_echo "   ----------------------------------------------------------------------------"
+rs_echo "   Finished setting up client run information at `date`"
+rs_echo ""
+
+#
+# if we are told to, setup gds.
+#
+if [ $config_gds -eq 1 ]
+then
+   rs_echo "   Configuring GDS"
+   setup_GDS
+   if [ "$sg_stat" != "okay" ]
+   then
+      rs_echo "   Couldn't configure GDS!"
+      rs_echo "   See $LOG_ROOT/worldSetup.gds/working for log files"
+      ITERATION_STAT=gds_setup_failed
+      cleanup $ITERATION none; cleanup final
+      exit 1
+   else
+      rs_echo "   GDS configured"
+   fi
+fi
+
+#
+# Setup the testcases
+#
+rs_echo "   Setting up testcases"
+if [ "$TESTCASES" != "variant" ]
+then
+   testcase_list=$TESTCASES
+else
+   testcase_list=$TESTCASE_LIST
+fi
+
+runecho "   Testcases are $testcase_list"
+for i in $testcase_list
+do
+   runecho "Setting up testcase $i"
+   setup_testcase $i $nthreads
+   if [ "$st_stat" != "okay" ]
+   then
+      rs_echo "   Couldn't setup testcase $i!"
+      rs_echo "   See $runlog for details."
+      ITERATION_STAT=error
+      cleanup $ITERATION none; cleanup final
+      exit 1
+   else
+      runecho "   Testcase $i is set up."
+   fi
+done
+rs_echo "   All testcases set up."
+   
+
+############################################################
+# LOOP 
+###########################################################
+DONE="FALSE"
+
+ITERATIONS_PASSED=0
+ITERATIONS_FAILED=0
+ITERATIONS_ERROR=0
+
+rs_echo ""
+rs_echo "   Starting test loop at `date`"
+rs_echo ""
+
+#
+# initialize the list of testcases throught which we will cycle
+#
+testcases_left=$testcase_list
+#
+# initialize the list of numbers from which to select the tree creator
+# winner.
+#
+avail_clients=$cli_numbs
+#
+# we put a check on the number of iterations here to see if the user is 
+# just getting GDS configged.  This is possible by using the gds_xds_str_001_cl
+# link and running the test as gds_xds_str_001_cl -f <datafile> -G -p 0
+# This is useful in cases where it is desireable to run the test with 
+# tracing enabled on the test systems, since the directory system needs to be
+# configured before tracing can be turned on.
+#
+if [ "$PASSES" != "none" ]
+then
+   if [ $ITERATION -eq $PASSES ]
+   then
+      rs_echo "   $PASSES specified (GDS config only), cleaning up"
+      ITERATION_STAT=config_only
+      cleanup $ITERATION none; cleanup final
+      exit 0
+   fi
+fi
+
+#
+# Set the ITERATION counter to 1.  This tells the cleanup routine that 
+# there are per-pass files on the local and remote machines to be cleaned up
+#
+ITERATION=1
+while ( [ "$DONE" = "FALSE" ] )
+do
+   TREE_SETUP=0
+   #
+   # Logic here is:
+   #
+   #
+   # figure out the testcase we are running
+   #
+   pop_list "$testcases_left"
+   curr_tc=$pl_item
+   [ $pl_nitems -eq 0 ] && testcases_left=$testcase_list || \
+                           testcases_left=$pl_items_left
+
+   #
+   # figure out the system from which we will create the test tree
+   #
+   pop_list "$avail_clients"
+   create_cli=$pl_item
+   [ $pl_nitems -eq 0 ] && avail_clients=$cli_numbs || \
+                           avail_clients=$pl_items_left
+   #
+   # set the passlog
+   # 
+   [ -f $passlog ] && mv $passlog $LOG_DIR/$$.$ITERATION.passlog
+   passlog=$LOG_DIR/$$.$ITERATION.passlog
+
+   #   
+   # Print message
+   #
+   rp_echo ""
+   rp_echo "   BEGINNING gds_xds_str_001 ITERATION $ITERATION ($curr_tc) AT `date`"
+   rp_echo "   -----------------------------------------------------------------------"
+   rp_echo ""
+
+   #
+   # now start the clients for the current case
+   #
+   start_clients $curr_tc T${nthreads}${curr_tc}X.$$ $create_cli
+   if [ "$sc_stat" != "okay" ]
+   then
+      passecho "      ERROR starting $curr_tc clients for iteration $ITERATION"
+      CASE_STAT=`echo $sc_stat | tr 'a-z' 'A-Z'`
+      ITERATION_STAT=error 
+      kill_jobs $ITERATION
+   else
+      #
+      # Make sure everyone is ready
+      #
+      ready_check "$curr_tc"
+      if [ "$rc_stat" != "okay" ]
+      then
+         passecho "      ERROR in $curr_tc client startup for iteration $ITERATION"
+         CASE_STAT=`echo $rc_stat | tr 'a-z' 'A-Z'`
+         ITERATION_STAT=error
+         kill_jobs $ITERATION
+      else
+         #
+         # see if the iteration passed or failed 
+         #
+         check_run_stat $curr_tc
+         CASE_STAT=`echo $crs_stat | tr 'a-z' 'A-Z'`
+         [ "$crs_stat" != "got an error" ] && ITERATION_STAT=$crs_stat || ITERATION_STAT=error
+         if [ "$crs_stat" != "passed" ]
+         then
+            kill_jobs $ITERATION
+         fi
+      fi # ready check status
+   fi
+   #
+   # cleanup after the case.  If the case failed, the cleanup routine saves
+   # the log files for post-mortem examination.
+   #
+   cleanup "$ITERATION" $create_cli
+   if [ "$cu_stat" != "okay" ]
+   then
+      passecho "      Cleanup failed"
+      rp_echo "      Cleanup for iteration $ITERATION AN ERROR!!"
+      rp_echo "      This may cause errors in the next iteration!!"
+      CASE_STAT="GOT AN ERROR"
+   fi
+      
+   if [ "$CASE_STAT" = "FAILED" ] 
+   then
+      ITERATIONS_FAILED=`expr $ITERATIONS_FAILED + 1`
+   elif [ "$CASE_STAT" = "GOT AN ERROR" ]
+   then
+      ITERATIONS_ERROR=`expr $ITERATIONS_ERROR + 1`
+   else
+      ITERATIONS_PASSED=`expr $ITERATIONS_PASSED + 1`
+   fi
+
+   #
+   # Print the status for the iteration
+   #
+   rp_echo ""
+   rp_echo "      $SCRIPT: ITERATION $ITERATION - testcase ($curr_tc) $CASE_STAT."
+   rp_echo ""
+
+   # 
+   # Print some stats, increment counters, check for exit condition, etc
+   #
+   CURRENT_TIME=`$TIMER`
+   SECONDS_EXECUTED=`expr $CURRENT_TIME - $START_TIME`
+   passecho ""
+   passecho "   --------------------------------------------------------------------"
+   passecho "   COMPLETED gds_xds_str_001 ITERATION $ITERATION AT `date`"
+   passecho ""
+   if [ "$PASSES" != "none" ]
+   then
+      if [ $ITERATION -eq $PASSES ]
+      then
+         DONE="TRUE"
+      fi
+   else
+      if [ "$SECONDS_EXECUTED" -gt "$SECONDS_TO_EXECUTE" ]
+      then
+	 DONE="TRUE"
+      fi
+   fi
+   passlog=none
+   ITERATION=`expr $ITERATION + 1`
+   sleep $ITERATION_SLEEP
+done  # for the ITERATION
+
+cleanup "final"
+#
+# Print final stats
+#
+ITERATION=`expr $ITERATION - 1`
+rs_echo "COMPLETED $ITERATION ITERATIONS!"
+rs_echo "  PASSED: $ITERATIONS_PASSED   FAILED: $ITERATIONS_FAILED  ERROR: $ITERATIONS_ERROR"
+rs_echo "START DATE AND TIME WERE $START_DATE"
+END_DATE=`date`
+rs_echo "END DATE AND TIME IS $END_DATE"
+runhours=`echo "$SECONDS_EXECUTED/3600; quit" | bc`
+runmins=`echo "($SECONDS_EXECUTED%3600)/60; quit" | bc`
+rs_echo "DURATION OF TEST RUN: $runhours HOURS, $runmins MINUTES"
+
+
+rs_echo ""
+rs_echo ""
+rs_echo "---------------------------------------------------------------------"
+rs_echo "Completed Threadsafe XDS Stress System Test Execution at `date`"
+rs_echo ""

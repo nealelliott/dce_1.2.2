@@ -1,0 +1,773 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: zlctest,v $
+# Revision 1.1.425.1  1996/10/17  18:38:01  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:58:32  damon]
+#
+# Revision 1.1.420.1  1994/02/04  20:48:10  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:25:56  devsrc]
+# 
+# Revision 1.1.418.1  1993/12/07  17:47:04  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  19:45:42  jaffe]
+# 
+# Revision 1.1.2.3  1993/01/11  18:38:29  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:24:30  htf]
+# 
+# Revision 1.1.2.2  1992/11/19  13:37:58  jaffe
+# 	Transarc delta: comer-ot5597-add-zlc-tests 1.5
+# 	  Selected comments:
+# 	    Add a suite of tests for zero linkcount files.
+# 	    The test program proper.
+# 	    Modified tests to check whether or not the blocks used by
+# 	    a file are returned on removal.
+# 	    Modified the tests to check number of used blocks.
+# 	    Cleaned up the code that keeps the file open.  Now just uses the
+# 	    shell file descriptor mechanism (exec 3< testfile) rather than
+# 	    using a sleeping process (duh!).
+# 	    Changed the mechanism to keep the test file open.
+# 	    Misc cleanup.
+# 	    Replaced findremote with findlfsremote.  Also replaced check for
+# 	    returning disk space on delete after remote move with and optional
+# 	    test that waits 10.5 minutes before checking.  The wait is to allow
+# 	    the remote to determine that TSR for the move has completed.
+# 	    Clean-up TET usage.
+# 	    See above.
+# 	[1992/11/18  17:14:07  jaffe]
+# 
+# $EndLog$
+#
+
+###############################################################################
+#    Copyright (C) 1991, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# List invocable component list
+iclist="ic1 ic2 ic3 ic4 ic5 ic6"
+
+# Map test purposes into invocable components
+ic1=localdelete			# delete an LFS file
+ic2=dfsdelete			# delete a DFS file
+ic3=loccrdfsopen		# local create, open dfs, delete local, read dfs
+ic4=dfscrlocopen		# dfs create, local open, dfs delete, local read
+ic5=movefileset			# read of zlc across local fileset move
+ic6=remotemovefileset		# read of zlc across remote fileset move
+
+# To make things run correctly on a RIOS
+LIBPATH=/usr/lib:/lib export LIBPATH
+
+# source in util functions
+if [ ! -r ${TESTTOP:-.}/utils ]
+  then
+	echo "Cannot find ${TESTTOP:-.}/utils.  Perhaps TESTTOP is not set properly" >&2
+fi
+. ${TESTTOP:-.}/utils
+
+# Set up parameters for this test
+Setup() {
+	hostname=`uname -n`
+	SERVER=`hostprincipal $hostname`
+	FILESET=zlcmove.$$
+	MOUNTPOINT=/.:/fs/zlc.$$
+	LOCALPATH=/testmnt.$$
+	AGGRLIST=`findaggrs`
+	getaggr() {
+		_aggrno=$1
+		set -- $AGGRLIST
+		eval echo \$$_aggrno
+	}
+	FROMAGGR=`getaggr 1`
+	if [ ! "$FROMAGGR" ]
+	  then
+		ErrorLog "Primary Episode aggregate not found"
+		result UNRESOLVED
+		CaptureOff
+		echo "Setup Failed"
+		exit 1
+	fi
+	FROMDEV=`finddev $FROMAGGR`
+	if [ ! "$FROMDEV" ]
+	  then
+		ErrorLog "Cannot find device for primary Episode aggregate not found"
+		result UNRESOLVED	
+		CaptureOff
+		echo "Setup Failed"
+		exit 1
+	fi
+	
+	TOAGGR=`getaggr 2`
+	if [ ! "$TOAGGR" ]
+	  then
+		ErrorLog "Primary Episode aggregate not found"
+		result UNRESOLVED
+		CaptureOff
+		echo "Setup Failed"
+		exit 1
+	fi
+	TODEV=`finddev $TOAGGR`
+	if [ ! "$TODEV" ]
+	  then
+		ErrorLog "Cannot find device for primary Episode aggregate not found"
+		result UNRESOLVED
+		CaptureOff
+		echo "Setup Failed"
+		exit 1
+	fi
+
+	if checkpath epimount epiunmount
+	  then 
+		:
+	  else
+		ErrorLog "One or both of epimount and epiunmount is not present in PATH"
+		result UNRESOLVED
+		CaptureOff
+		echo "Setup Failed"
+		exit 1
+	fi
+
+	# create a local mount point on LOCALPATH, if necessary
+	if [ ! -d $LOCALPATH ]
+	  then
+		mkdir $LOCALPATH
+	fi
+
+	# create the fileset we're going to use
+	deletefileset $FILESET $MOUNTPOINT
+	if [ $? -ne 0 ]
+	  then
+		ErrorLog "Error deleting old fileset"
+		result UNRESOLVED
+		CaptureOff
+		echo "Setup Failed"
+		exit 1
+	fi
+
+	createfileset $FILESET $SERVER $FROMAGGR $MOUNTPOINT VOLID
+	if [ $? -ne 0 ]
+	  then
+		ErrorLog "Error creating fileset $FILESET on $MOUNTPOINT"
+		result UNRESOLVED
+		CaptureOff
+		echo "Setup Failed"
+		exit 1
+	fi
+
+	return
+}
+
+
+Cleanup()
+{
+	Log "Cleanup called"
+	epiunmount $LOCALPATH 2> /dev/null
+	rmdir $LOCALPATH
+	deletefileset $FILESET $MOUNTPOINT
+}
+
+PASS=0
+FAIL=0
+DUNNO=0
+result() {
+	_result=$1
+	case $_result in 
+		PASS)	PASS=`expr $PASS + 1`;;
+		FAIL)	FAIL=`expr $FAIL + 1`;;
+		UNRESOLVED)	DUNNO=`expr $DUNNO + 1`;;
+	esac
+
+	Log "invocable component returned $_result status"
+}
+
+######################################################################
+# Begin Test Purposes #
+#######################
+# test delete on local (glue) path  -- IC 1
+localdelete()
+{
+	Log "Regression test: Test basic ability to delete a file in glue path."
+	Log ""
+
+	_TESTFILE=$LOCALPATH/testfile.$$
+	_error=0
+
+	# mount Episode
+	if epimount $FILESET $LOCALPATH > /dev/null 2>&1
+	  then :
+	  else
+		ErrorLog "Error in 'epimount $FILESET $LOCALPATH'"
+		result UNRESOLVED
+		return
+	fi
+
+	# Find out how much space we have in the fileset
+	_bytesused=`getbytesused $FILESET`
+
+	# Create file and give it the proper permissions
+	Log "creating $_TESTFILE"
+	makepow2 $_TESTFILE 10
+	chmod 666 $_TESTFILE
+
+	# Did we use any blocks?
+	_newbytesused=`getbytesused $FILESET`
+	if [ "$_bytesused" -eq "$_newbytesused" ]
+	  then
+		ErrorLog "No blocks used in writing file"
+		result UNRESOLVED
+		_error=1
+	  else
+		# Delete test file
+		Log "deleting $_TESTFILE"
+		if rm $_TESTFILE >/dev/null 2>&1
+		  then
+			# Did we return the blocks?
+			_newbytesused=`getbytesused $FILESET`
+			if [ "$_bytesused" -ne "$_newbytesused" ]
+			  then
+				ErrorLog "Didn't return all the disk blocks on delete"
+				result FAIL
+				_error=1
+			fi
+		  else
+			ErrorLog "Error in deleting $_TESTFILE"
+			result FAIL
+			_error=1
+		fi
+	fi
+	
+	if epiunmount $LOCALPATH > /dev/null 2>&1
+	  then :
+	  else
+		ErrorLog "Error in 'epiunmount $LOCALPATH'"
+		if [ $_error -eq 0 ]
+		  then
+			result UNRESOLVED
+			_error=1
+		fi
+	fi
+
+	if [ $_error -eq 0 ]
+	  then
+		result PASS
+	fi
+}
+
+# test to delete a DFS file -- IC 2
+dfsdelete()
+{
+	Log "Regression test: Test basic ability to delete a file in DFS."
+	Log ""
+
+	_TESTFILE=$MOUNTPOINT/testfile.$$
+	_error=0
+
+	# Find out how much space we have in the fileset
+	_bytesused=`getbytesused $FILESET`
+
+	# Create file and give it the proper permissions
+	Log "creating $_TESTFILE"
+	makepow2 $_TESTFILE 10
+	chmod 666 $_TESTFILE
+
+	# Did we use any blocks?
+	_newbytesused=`getbytesused $FILESET`
+	if [ "$_bytesused" -eq "$_newbytesused" ]
+	  then
+		ErrorLog "No blocks used in writing file"
+		result UNRESOLVED
+		_error=1
+	  else
+		# Delete test file
+		Log "deleting $_TESTFILE"
+		if rm $_TESTFILE >/dev/null 2>&1
+		  then 
+			# Did we return the blocks?
+			_newbytesused=`getbytesused $FILESET`
+			if [ "$_bytesused" -ne "$_newbytesused" ]
+			  then
+				ErrorLog "Didn't return all the disk blocks on delete"
+				result FAIL
+				_error=1
+			fi
+		  else
+			ErrorLog "Error in deleting $_TESTFILE"
+			result FAIL
+			_error=1
+		fi
+	fi
+
+	if [ $_error -eq 0 ]
+	  then
+		result PASS
+	fi
+}
+
+# test ability to create a file locally, open it through DFS, remove file
+# locally, then read file through DFS -- IC 3
+loccrdfsopen()
+{
+	Log "Create a file locally, open it through DFS, remove file"
+	Log "locally, then read file through DFS.  This basically tests the"
+	Log "ability to keep around a file after its linkcount has gone to 0."
+	Log "It is a regression test."
+	Log ""
+
+	# local and remote names for the same file
+	LTESTFILE=$LOCALPATH/testfile.$$
+	MTESTFILE=$MOUNTPOINT/testfile.$$
+	_error=0
+
+	# mount Episode
+	if epimount $FILESET $LOCALPATH > /dev/null 2>&1
+	  then :
+	  else
+		ErrorLog "Error in 'epimount $FILESET $LOCALPATH'"
+		result UNRESOLVED
+		return
+	fi
+
+	# Find out how much space we have in the fileset
+	_bytesused=`getbytesused $FILESET`
+
+	# create file in episode
+	Log "creating $LTESTFILE"
+	makepow2 $LTESTFILE 10 "Testfile"
+	chmod 666 $LTESTFILE
+
+	# check existence in DFS
+	if [ ! -f $MTESTFILE ]
+	  then
+		ErrorLog "Cannot access file $MTESTFILE"
+		result UNRESOLVED
+		_error=1
+	  else
+		# open a file for later reading
+		Log "opening $MTESTFILE through DFS"
+		exec 3< $MTESTFILE
+
+		Log "deleting $LTESTFILE"
+		if rm $LTESTFILE >/dev/null 2>&1
+		  then
+			# check file for eyecatcher
+			if grep Testfile <&3 > /dev/null 2>&1
+			  then
+				# close the file
+				exec 3<&-
+
+				# Did we return the blocks?
+				_newbytesused=`getbytesused $FILESET`
+				if [ "$_bytesused" -ne "$_newbytesused" ]
+				  then
+					ErrorLog "Didn't return all the disk blocks on delete"
+					result FAIL
+					_error=1
+				fi
+			  else
+				# close the file
+				exec 3<&-
+
+				ErrorLog "Could not read after delete"
+				result FAIL
+				_error=1
+			fi
+		  else
+			# close the file
+			exec 3<&-
+
+			ErrorLog "Error in deleting $LTESTFILE"
+			result FAIL
+			_error=1
+		fi
+	fi
+
+	if epiunmount $LOCALPATH > /dev/null 2>&1
+	  then :
+	  else
+		ErrorLog "Error in 'epiunmount $LOCALPATH'"
+		result UNRESOLVED
+		_error=1
+	fi
+
+	if [ $_error -eq 0 ]
+	  then
+		result PASS
+	fi
+}
+	
+# test ability to create a file through DFS, open it locally, remove file
+# through DFS, then read file locally	-- IC 4
+dfscrlocopen()
+{
+	Log "Create a file through DFS, open it locally, remove file through "
+	Log "DFS, then read file locally.  This basically tests the ability"
+	Log "to keep around a file after its linkcount has gone to 0.  It is"
+	Log "a regression test."
+	Log ""
+
+	# local and remote names for the same file
+	LTESTFILE=$LOCALPATH/testfile.$$
+	MTESTFILE=$MOUNTPOINT/testfile.$$
+	_error=0
+
+	# mount Episode
+	if epimount $FILESET $LOCALPATH > /dev/null 2>&1
+	  then :
+	  else
+		ErrorLog "Error in 'epimount $FILESET $LOCALPATH'"
+		result UNRESOLVED
+		return
+	fi
+
+	# Find out how much space we have in the fileset
+	_bytesused=`getbytesused $FILESET`
+
+	# create file in DFS
+	Log "creating $MTESTFILE"
+	makepow2 $MTESTFILE 10 "Testfile"
+	chmod 666 $MTESTFILE
+
+	# check existence in DFS
+	if [ ! -f $LTESTFILE ]
+	  then
+		ErrorLog "Cannot access file $LTESTFILE"
+		result UNRESOLVED
+		_error=1
+	  else
+		# open a file for later reading
+		Log "opening $LTESTFILE through local path"
+		exec 3< $LTESTFILE
+
+		Log "deleting $MTESTFILE"
+		if rm $MTESTFILE >/dev/null 2>&1
+		  then
+			# wait for delayed read to complete
+			if grep Testfile <&3 > /dev/null 2>&1
+			  then 
+				# close the file
+				exec 3<&-
+
+				# Did we return the blocks?
+				_newbytesused=`getbytesused $FILESET`
+				if [ "$_bytesused" -ne "$_newbytesused" ]
+				  then
+					ErrorLog "Didn't return all the disk blocks on delete"
+					result FAIL
+					_error=1
+				fi
+			  else
+				# close the file
+				exec 3<&-
+
+				ErrorLog "Could not read after delete"
+				result FAIL
+				_error=1
+			fi
+		  else
+			# close the file
+			exec 3<&-
+
+			ErrorLog "Error in deleting $MTESTFILE"
+			result FAIL
+			_error=1
+		fi
+	fi
+
+	if epiunmount $LOCALPATH > /dev/null 2>&1
+	  then :
+	  else
+		ErrorLog "Error in 'epiunmount $LOCALPATH'"
+		result UNRESOLVED
+		_error=1
+	fi
+
+	if [ $_error -eq 0 ]
+	  then
+		result PASS
+	fi
+}
+
+# test ability to open a file, move the fileset, then read the file -- IC 5
+movefileset()
+{
+	MTESTFILE=$MOUNTPOINT/testfile.$$
+	LTESTFILE=$LOCALPATH/testfile.$$
+	_error=0
+
+	Log "The idea behind this test is to open a file, delete the file, "
+	Log "move the fileset, then try to read the contents of the file.  "
+	Log "This is testing whether the zlc code is properly handling moved "
+	Log "fileset containing zero linkcount files.  To make sure the CM is "
+	Log "not just reading a copy of the file from its cache, the file is "
+	Log "actually created through the glue path."
+	Log ""
+
+	# mount Episode
+	if epimount $FILESET $LOCALPATH > /dev/null 2>&1
+	  then :
+	  else
+		ErrorLog "Error in 'epimount $FILESET $LOCALPATH'"
+		result UNRESOLVED
+		return
+	fi
+
+	# Find out how much space we have in the fileset
+	_bytesused=`getbytesused $FILESET`
+
+	# create file in episode
+	Log "creating $LTESTFILE"
+	makepow2 $LTESTFILE 10 "Testfile"
+	chmod 666 $LTESTFILE
+
+	# try to read through DFS
+	if [ ! -f $MTESTFILE ]
+	  then
+		ErrorLog "Cannot read file $MTESTFILE"
+		_error=1
+	fi
+
+	# unmount fileset
+	if epiunmount $LOCALPATH > /dev/null 2>&1
+	  then :
+	  else
+		ErrorLog "Error in 'epiunmount $LOCALPATH'"
+		_error=1
+	fi
+
+	if [ $_error -ne 0 ]
+	  then
+		result UNRESOLVED
+		return
+	fi
+
+	# file is now created
+	Log "opening $MTESTFILE for later read"
+	exec 3< $MTESTFILE
+
+	Log "deleting $MTESTFILE"
+	if rm $MTESTFILE >/dev/null 2>&1
+	  then :
+	  else
+		ErrorLog "Error in deleting $MTESTFILE"
+		result FAIL
+		exec 3<&-
+		return
+	fi
+
+	# attempt to move fileset
+	Log "moving fileset $FILESET"
+	if fts move $FILESET -fromserver $SERVER -fromaggregate $FROMAGGR \
+			     -toserver $SERVER -toaggregate $TOAGGR -localauth
+	  then :
+	  else
+		ErrorLog "fts move failed"
+		result UNRESOLVED
+		exec 3<&-
+		return
+	fi
+	Log "fileset $FILESET moved"
+
+	# wait for delayed read to complete
+	if grep Testfile <&3 > /dev/null 2>&1
+	  then
+		# close the file
+		exec 3<&-
+
+		# Did we return the blocks?
+		_newbytesused=`getbytesused $FILESET`
+		if [ "$_bytesused" -ne "$_newbytesused" ]
+		  then
+			ErrorLog "Didn't return all the disk blocks on delete"
+			ErrorLog "    before: $_bytesused  after: $_newbytesused"
+			result FAIL
+		  else
+			result PASS
+		fi
+	  else
+		# close the file
+		exec 3<&-
+
+		ErrorLog "Could not read after delete"
+		result FAIL
+		exec 3<&-
+	fi
+
+	if fts move $FILESET -fromserver $SERVER -fromaggregate $TOAGGR \
+			     -toserver $SERVER -toaggregate $FROMAGGR -localauth
+	  then :
+	  else
+		ErrorLog "Could not move fileset back from $TOAGGR to $FROMAGGR"
+	fi
+}
+
+# same as the previous test except that the fileset is moved to a different machine -- IC 6
+remotemovefileset()
+{
+	MTESTFILE=$MOUNTPOINT/testfile.$$
+	LTESTFILE=$LOCALPATH/testfile.$$
+	_error=0
+
+	Log "The idea behind this test is to open a file, delete the file, "
+	Log "move the fileset, then try to read the contents of the file.  "
+	Log "This is testing whether the zlc code is properly handling moved "
+	Log "fileset containing zero linkcount files.  To make sure the CM is "
+	Log "not just reading a copy of the file from its cache, the file is "
+	Log "actually created through the glue path.  This test differs from "
+	Log "the previous one in that the move is across machines."
+	Log ""
+
+	# try to find a remote machine and an LFS aggregate
+	findlfsremote $SERVER REMOTE REMAGGR
+	if [ $? -ne 0 ]
+	  then
+		ErrorLog "No remote machine with LFS aggregate available in cell"
+		result UNRESOLVED
+		return
+	fi
+
+	# mount Episode
+	if epimount $FILESET $LOCALPATH > /dev/null 2>&1
+	  then :
+	  else
+		ErrorLog "Error in 'epimount $FILESET $LOCALPATH'"
+		result UNRESOLVED
+		return
+	fi
+
+	# Find out how much space we have in the fileset
+	_bytesused=`getbytesused $FILESET`
+
+	# create file in episode
+	Log "creating $LTESTFILE"
+	makepow2 $LTESTFILE 10 "Testfile"
+	chmod 666 $LTESTFILE
+
+	# try to read through DFS
+	if [ ! -f $MTESTFILE ]
+	  then
+		ErrorLog "Cannot read file $MTESTFILE"
+		_error=1
+	fi
+
+	# unmount fileset
+	if epiunmount $LOCALPATH > /dev/null 2>&1
+	  then :
+	  else
+		ErrorLog "Error in 'epiunmount $LOCALPATH'"
+		_error=1
+	fi
+
+	if [ $_error -ne 0 ]
+	  then
+		result UNRESOLVED
+		return 
+	fi
+
+	# file is now created
+	Log "opening $MTESTFILE for later read"
+	exec 3< $MTESTFILE
+
+	Log "deleting $MTESTFILE"
+	if rm $MTESTFILE >/dev/null 2>&1
+	  then :
+	  else
+		ErrorLog "Error in deleting $MTESTFILE"
+		result FAIL
+		exec 3<&-
+		return
+	fi
+
+	# attempt to move fileset
+	Log "moving fileset $FILESET"
+	if fts move $FILESET -fromserver $SERVER -fromaggregate $FROMAGGR \
+			     -toserver $REMOTE -toaggregate $REMAGGR -localauth
+	  then :
+	  else
+		ErrorLog "fts move failed"
+		result UNRESOLVED
+		exec 3<&-
+		return
+	fi
+	Log "fileset $FILESET moved"
+
+	# wait for delayed read to complete
+	if grep Testfile <&3 > /dev/null 2>&1
+	  then
+		# close the file
+		exec 3<&-
+
+		# optionally check for returned blocks
+		if [ "$REMOTECHECK" ]
+		  then
+			# The ZLC manager on the remote tried to get the
+			# OFD token during TSR, so it will have to wait for
+			# the TSR Target timeout (8-10 minutes) before it
+			# will try again to get the token.  If we want to
+			# see if the storage is returned on close, we have
+			# to wait.
+
+			sleep 630	# sleep 10.5 minutes
+
+			# Did we return the blocks?
+			_newbytesused=`getbytesused $FILESET`
+			if [ "$_bytesused" -ne "$_newbytesused" ]
+			  then
+				ErrorLog "Didn't return all the disk blocks on delete"
+				result FAIL
+				exec 3<&-
+				return
+			fi
+		fi
+	  else
+		# close the file
+		exec 3<&-
+
+		ErrorLog "Could not read after delete"
+		result FAIL
+		exec 3<&-
+		return
+	fi
+
+	result PASS
+}
+
+Openlog zlctest.`date +%m%d%y`
+Log "Running ZLC tests on `date`"
+Log "Initializing..."
+CaptureOn
+Setup
+CaptureOff
+
+Log "Running test cases..."
+for ic in $iclist
+  do
+	func=`eval echo \\$$ic` export func
+	Log "------------------------------------------"
+	Log "Running invocable component: $func"
+	CaptureOn
+	eval $func
+	CaptureOff
+done
+
+Log "------------------------------------------"
+Log "Shutting down..."
+CaptureOn
+Cleanup
+CaptureOff
+
+if [ $FAIL -eq 0 -a $DUNNO -eq 0 ]
+  then
+	echo "all tests PASSED"
+	exit 0
+  else
+	echo "Pass: $PASS  Fail: $FAIL  Unresolved: $DUNNO"
+	exit 1
+fi

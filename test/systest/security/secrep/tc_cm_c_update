@@ -1,0 +1,166 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: tc_cm_c_update,v $
+# Revision 1.1.2.2  1996/03/09  20:52:16  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:51  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:41  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:17 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  20:12 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/03  14:43 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/03  14:32 UTC  gordon_l
+# 	Fixes for change_master/b
+# 	ecome_master
+# 	[1995/12/11  22:22:35  root]
+# 
+# $EndLog$
+
+
+if [ -z "${TC_CM_C_UPDATE_DEFINED}" ] ; then
+
+TC_CM_C_UPDATE_DEFINED=1
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  DESCRIPTION:
+#      This test case is part of the security replication system test.
+#      The purpose of this test is to ensure that a change master can be
+#      done while updates are in progress. As soon as the master is changed
+#      the updates should start failing.
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+tet_startup="tc_cm_c_update_init"
+tet_cleanup="tc_cm_c_update_cleanup"
+tet_testlist="tc_cm_c_update"
+
+iclist="ic1"
+ic1="tc_cm_c_update"
+
+tc_cm_c_update_init()
+{
+    typeset st
+
+    tc_common_init ; st=$?
+    if [ $st -ne 0 ] ; then
+        tet_delete $ic1 "tc_chm_upd_init(): Initialization failed"
+        return 
+    fi
+    if [ $SLV_CNT -lt 1 ] ; then
+        tet_delete $ic2 "tc_chm_upd_init(): Test requires at least 1 slave"
+        return 
+    fi
+
+    if [ $SLV_CNT -lt 2 ] ; then
+        replog_msg "Preferrably 2 slaves are required for this test"
+    fi
+}
+
+tc_cm_c_update_cleanup()
+{
+    tc_common_cleanup
+}
+
+tc_cm_c_update()
+{
+    typeset st old_master_name old_master_host  slvnm_1 slvhost_1 
+
+    testdesc="Change master - while updates are in progress"
+    replog_testhdr "$testdesc"
+
+    old_master_name=$MASTER_NAME  ; old_master_host=$MASTER_HOSTNAME
+    slvhost_1=${SLV_HOSTNAMES[0]} ; slvnm_1=${SLV_NAMES[0]}
+
+    #   Run the update test. The number of principals should really be 
+    #   large enough so that the update test will start failing with 
+    #   "Replica not master" or "bad state" message as soon as the 
+    #   change master is done.
+
+    replog_msg "Running update test to add rgy items required by this test"
+    sft_x_update_hosts $MASTER_HOSTNAME $CM_UPD_NPRINC $SFT_UPDATE_ADD
+
+    #   While the updates are in progress, change the master. 
+
+    replog_msg "Sleeping $TC_UPDATE_DELAY seconds to allow update test to bind to the"
+    replog_msg "update site before attempting change_master"
+    replog_blank
+    sleep $TC_UPDATE_DELAY
+
+    sa_change_master $slvnm_1 ; st=$?   # Change master
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #   Wait for the update test to complete and verify that the test
+    #   failed since the master was changed.
+
+    tc_wait_bgjobs "update test"
+
+    sft_v_update_hosts  $old_master_host $SFT_UPDATE_ADD ; st=$?
+
+    if [ $st -ne 0 ] ; then
+        replog_msg "Successfully verified that the update test failed"
+    else
+        replog_error "update test passed. It should have failed"
+        replog_testresult "$testdesc" 1
+        return
+    fi
+
+    #   Wait until the "Number of outstanding updates" is 0 for all
+    #   slaves. This gurantees that all the updates from the update 
+    #   test have propagated to all the slaves. It also gurantees that the
+    #   change_master has propagated to all slaves (until this is propagated
+    #   the new master will not be listed as the master on the replica list
+    #   of the slave which has yet to receive the change master update - causing
+    #   replist_verify_master to fail ). 
+
+    sa_wait_prop_complete "${SLV_NAMES[*]}" ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #    Verify that $slvnm_1 is the only master on all replica lists.
+
+    replist_verify_master "${REP_NAMES[*]}" $slvnm_1 ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+    
+    replog_testresult "$testdesc" $st
+    # Cleanup
+    sft_cleanup
+    replog_msg "The update test run as part of the cleanup will usually fail."
+    replog_msg "This error is expected and should be ignored."
+}
+
+. $TET_ROOT/profile.dcest
+. ./profile
+. $PHOME/replog
+. $PHOME/tc_common
+. $PHOME/secd
+. $PHOME/slv
+. $TCM
+#. $TET_ROOT/lib/xpg3sh/tcm.sh
+
+fi

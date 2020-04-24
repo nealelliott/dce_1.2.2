@@ -1,0 +1,121 @@
+RPC runtime I18N extension functional tests  (Version 0.1)
+						6/8/94
+
+Purpose:
+
+	This test suite is developed to test APIs for I18N extensions to 
+	RPC runtime in OSF DCE release 1.1.
+
+	List of APIs:	NSI management
+				rpc_ns_mgmt_set_attribute
+				rpc_ns_mgmt_remove_attribute
+				rpc_ns_mgmt_read_codesets
+				rpc_ns_mgmt_free_codesets
+
+			Codeset Registry
+				dce_cs_loc_to_rgy
+				dce_cs_rgy_to_loc
+				rpc_rgy_get_max_bytes
+				rpc_rgy_get_codesets
+
+			Evaluation
+				rpc_ns_import_ctx_add_eval
+				rpc_cs_eval_without_universal
+				rpc_cs_get_tags (default eval logic)
+				rpc_ns_binding_lookup_next
+				rpc_ns_binding_lookup_done
+				rpc_cs_binding_set_tags
+				rpc_cs_char_set_compat_check
+				custom evaluations (CMIR/SMIR)
+
+			Stub Support
+				rpc_cs_get_tags
+				cs_byte_net_size
+				wchar_t_net_size
+				cs_byte_to_netcs
+				wchar_t_to_netcs
+				cs_byte_local_size
+				wchar_t_local_size
+				cs_byte_from_netcs
+				wchar_t_from_netcs
+				
+Required Environments:
+
+	General:  OSF character and code set registry needs to be installed
+		  as "/usr/lib/nls/csr/code_set_registry.db".  This is a binary
+		  file, which is produced by 'csrc' (code set registry 
+		  compiler).   The input file to csrc is platform dependent, 
+		  and will be found in the following directory:
+
+		  src/test/functional/rpc/runtime/i18n_api/ts/cs_rgy/<platform>
+
+		  (Note:  These csrc input files are not the OSF official
+			  version.  At this point, the official version of
+			  OSF character and code sets registry input file is
+			  not ready.  These input files are provided, so
+			  the I18N API functional tests can be run.  When
+			  the official version of OSF character and code sets
+			  registry input file is ready, it will replace these
+			  temporary files.)
+
+		  Japanese EUC and SJIS locales are required.  This is because
+		  input data are Japanese.  However, if the contents of
+		  'i18n_input_data' are changed to other data, for example,
+		  French, the other locale (French locale) will be required.
+
+	HP:	HP-UX version 10 is required, since nl_langinfo() is broken
+		with HP-UX version 9.
+
+
+How to run the test:
+
+	1) Compile code set registry
+		At /usr/lib/nls/csr directory:
+
+	% csrc -i <csr_directory>/code_set_registry.txt -o code_set_registry.db
+
+	  <csr_directory> is one of
+
+	   src/test/functional/rpc/runtime/i18n_api/ts/cs_rgy/AT386
+	   src/test/functional/rpc/runtime/i18n_api/ts/cs_rgy/HP800
+	   src/test/functional/rpc/runtime/i18n_api/ts/cs_rgy/RIOS
+
+	  Copy "code_set_registry.db" into "/usr/lib/nls/csr" directory.
+		
+	2) Login as cell_admin
+	3) Go to the directory 'obj'/<platform>/test/functional/rpc/runtime
+	4) Execute the following shell command (csh)
+
+		setenv I18N_SERVER_ENTRY "/.:/i18n_test"
+		setenv TET_ROOT "`pwd`/i18n_api"
+		setenv TET_EXECUTE "`pwd`/i18n_api"
+		mkdir i18n_api/all
+
+	5) Add TET path to your current path
+
+		e.g.  setenv PATH /usr/dcetest/test/tet/bin:$PATH
+
+	6) Set the appropriate locale names (locale names are system dependent)
+
+		e.g.  setenv I18N_SERVER_LOCALE "japanese.euc"	(HP)
+		      setenv I18N_CLIENT_LOCALE "japanese"	(HP)
+
+		      setenv I18N_SERVER_LOCALE "/usr/lib/nls/loc/ja_JP.AJEC"
+		      setenv I18N_CLIENT_LOCALE "/usr/lib/nls/loc/ja_JP.SJIS"
+								(OSF/1)
+
+	7) Run the following command
+
+	   % tcc -e -s i18n_api/tet_scen -x i18n_api/tetexec.cfg -j journal all
+
+	   This will execute all of the available test cases
+
+	8) To verify the test results, check the journal output.  Also
+	   for evaluation/stub support test cases, go to
+
+	 obj/<platform>/test/functional/rpc/runtime/i18n_api/ts/cs_eval/cs_byte
+		and
+	 obj/<platform>/test/functional/rpc/runtime/i18n_api/ts/cs_eval/wchar
+
+	   directory, and run "result_check.sh" script.  This script verifies
+	   that the generated output is the same as the expected output.

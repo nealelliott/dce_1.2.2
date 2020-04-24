@@ -1,0 +1,375 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# @HP_COPYRIGHT@
+#
+# HISTORY
+# $Log: dce.unconfig,v $
+# Revision 1.1.12.1  1996/07/08  18:21:16  arvind
+# 	DCE 1.2.2 work
+# 	[1996/06/14  20:41 UTC  mullan_s  /main/mullan_dce122_bugs_1/1]
+#
+# 	Merge from mullan_dce_krb5_der_work branch.
+# 	[1996/06/06  23:07 UTC  mullan_s  /main/mullan_dce_krb5_der_work/1]
+#
+# 	Remove krb5 host principal.
+# 	[1996/03/09  23:09:38  marty  1.1.10.3]
+#
+# Revision 1.1.10.3  1996/03/09  23:09:38  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:27:42  marty]
+# 
+# Revision 1.1.10.2  1996/02/07  17:47:31  parul
+# 	DCE 1.2.1 final drop from HP
+# 	[1996/02/07  16:13:12  parul]
+# 
+# 	DCE 1.2.1 final drop from HP
+# 
+# Revision 1.1.8.3  1994/09/15  20:20:54  tom
+# 	Bug 11479, 10949 - Delete gda and cds-server pricipals if they exist.
+# 	Remove any registry that might exist on the node.
+# 	While we are here, let dcecp do all the work.
+# 	[1994/09/15  20:19:32  tom]
+# 
+# Revision 1.1.8.2  1994/08/25  21:21:09  tom
+# 	Remove deletion of cds-server and gda principles for clients. (OT 11854)
+# 	Add deletion of hosts/<host>/config (dced entry).
+# 	[1994/08/25  19:51:21  tom]
+# 
+# Revision 1.1.8.1  1994/06/09  16:05:23  devsrc
+# 	cr10892 - fix copyright
+# 	[1994/06/09  15:50:07  devsrc]
+# 
+# Revision 1.1.6.5  1993/08/02  15:46:07  rsarbo
+# 	relocate invocation of dfs.unconfig to beginning of script.
+# 	result is CDS entries get cleaned up properly on unconfig
+# 	even if DFS server was configured.
+# 	[1993/08/02  15:35:35  rsarbo]
+# 
+# Revision 1.1.6.4  1993/07/28  21:40:58  tom
+# 	Bug 8382 - more problems with arguments, save the hostname early.
+# 	[1993/07/28  21:32:52  tom]
+# 
+# Revision 1.1.6.3  1993/07/20  22:46:00  tom
+# 	Fix usage error.
+# 	[1993/07/20  22:31:17  tom]
+# 
+# Revision 1.1.6.2  1993/07/19  19:25:47  zeliff
+# 	HP port of DFS
+# 	[1993/07/19  18:19:43  zeliff]
+# 
+# Revision 1.1.4.5  1993/07/16  22:37:21  kissel
+# 	Additional cleanup
+# 	[1993/07/15  21:13:02  jake]
+# 
+# 	Reference Port Madness
+# 	[1993/07/09  19:57:28  jake]
+# 
+# 	removed "sh " in call
+# 	[1993/04/27  20:36:31  jake]
+# 
+# 	Creating GAMERA branch with Rick's latest Hp_dce1_0_1 code
+# 	[1993/04/01  18:53:00  jake]
+# 
+# Revision 1.1.2.3  1993/06/16  20:56:19  jake
+# 	HP Reference Port dce.unconfig first offering
+# 	[1993/06/16  20:55:42  jake]
+# 
+# Revision 1.1.2.2  1993/06/04  01:07:48  kissel
+# 	Initial HPUX RP version.
+# 	[1993/06/03  21:24:33  kissel]
+# 
+# Revision 1.1.2.12  1993/03/29  19:11:03  kissel
+# 	Call dfs.unconfig with the hostname.
+# 	[1993/03/29  18:18:15  kissel]
+# 
+# Revision 1.1.2.11  1992/12/18  21:27:02  aha
+# 	CHFts06426: Do error checking of rgy_edit and cdscp commands using the
+# 	common functions "chk_rgy_edit" and "chk_cdscp" (most commands were
+# 	not being checked, or gave little information in their error
+# 	messages).
+# 	[1992/12/18  21:17:43  aha]
+# 
+# Revision 1.1.2.10  1992/12/18  15:08:21  aha
+# 	CHFts06426: replace temporary code checking output from rgy_edit
+# 	and cdscp calls with calls to common check routines chk_rgy_edit
+# 	and chk_cdscp.
+# 	[1992/12/18  14:32:38  aha]
+# 
+# Revision 1.1.2.9  1992/12/18  13:11:19  aha
+# 	Various changes related to integrating SAM samlog with dce_config:
+# 	1. Changed log_msg "type" parameter to match SAM options.
+# 	2. Changed type of some log_msg messages for consistency.
+# 	3. Merged "cat" to logfile into log_msg.
+# 	4. Changed wording of some messages for consistency
+# 	[1992/12/14  20:58:06  aha]
+# 
+# Revision 1.1.2.8  1992/12/07  21:56:36  aha
+# 	CHFts06340: Allow parameter (node to be unconfigured) to be a
+# 	fully-qualified hostname.  Also, correctly reference $err_found in
+# 	checking for errors at the end.
+# 	[1992/12/07  21:47:42  aha]
+# 
+# Revision 1.1.2.7  1992/12/02  15:11:17  aha
+# 	1. Remove extraneous #!/bin/sh after $EndLog$
+# 	2. Reference dce_config_utils by absolute pathname.
+# 	[1992/12/01  22:11:47  aha]
+# 
+# Revision 1.1.2.6  1992/11/12  21:55:11  aha
+# 	1. Source common utilities from dce_config_utils.
+# 	2. Add a #!/bin/sh after $EndLog$ so it will survive stripping.
+# 	3. Change x_exit to err_exit calls.
+# 	4. Set err_found at site of error, since common functions don't do
+# 	   this.
+# 	5. Use log_afile instead of direct cat to logfile
+# 	[1992/11/12  21:36:51  aha]
+# 
+# Revision 1.1.2.5  1992/11/03  18:00:43  aha
+# 	If the log_msg environment variables are not set, initialize them to
+# 	default values so that this script can be run stand-alone.  If
+# 	$logfile does not exist, create it and initialize it with a header.
+# 	[1992/11/03  17:57:48  aha]
+# 
+# Revision 1.1.2.4  1992/10/26  20:07:51  aha
+# 	1) Added logging of all significant actions.  For now, log_msg
+# 	   function is a prototype included here.  This is to be replaced by
+# 	   an interface to the SAM logging function.
+# 	2) Added return value (0-OK, 1-error encountered).
+# 	3) Added error message and prompt for continuation on any error.
+# 	4) Added check for rgy_edit errors.
+# 	5) Added check for cdscp errors.
+# 	6) Removed previous "echo"'d status messages (replaced by logging)
+# 	[1992/10/23  18:52:13  aha]
+# 
+# Revision 1.1.2.3  1992/07/14  18:43:35  shu
+# 	Added function to allow unconfiguring different
+# 	host machine other than the one the script is
+# 	running on.
+# 	[1992/07/14  18:42:26  shu]
+# 
+# Revision 1.1.2.2  1992/07/08  22:04:52  shu
+# 	This script is an HP cpyright, not OSF copyright.
+# 	[1992/07/08  21:16:36  shu]
+# 
+# 	Created the first version of the script dce.unconfig .
+# 	This script removes the running machine from the cell
+# 	by deleting its associated objects and directories
+# 	from the registry database and the name space.
+# 	[1992/07/08  20:52:19  shu]
+# 
+# $EndLog$
+#
+# (C) COPYRIGHT Hewlett Packard Company 1992
+# All Rights Reserved
+#
+
+#------------------------------------------------------
+# Source the common utility functions
+#------------------------------------------------------
+
+ID=`id -u`
+if [ ${ID} -ne 0 ];then
+	echo "You must have root permission to run \"dce.unconfig\"."
+	exit 1
+fi
+
+: ${DCE_ETC:="/etc"}
+export DCE_ETC
+
+err_found=0
+
+args=$#
+host=$1
+
+if [ -z "$SOURCE_COM_UTILS" ]
+then
+	if [ -f ${DCE_ETC}/dce_com_utils ]
+	then
+		. ${DCE_ETC}/dce_com_utils
+	else
+		echo Cannot source "${DCE_ETC}/dce_com_utils"
+		exit 1
+	fi
+fi
+
+if [ "$args" != "1" ]
+then
+    echo "Usage Error:  dce.unconfig <hostname>"
+    exit 1
+fi
+
+UNCONFIG_NAME=$host
+# remove any internet domain suffix from hostname
+DOMAIN_NAME=`echo $UNCONFIG_NAME | cut -s -f2- -d. 2>/dev/null`
+UNCONFIG_NAME=`echo $UNCONFIG_NAME | cut -f1 -d. 2>/dev/null`
+
+# Assume local domain if fully qualified hostname was not specified
+if [ -z "$DOMAIN_NAME" ]
+then
+    if [ -f /etc/resolv.conf ]
+    then
+        domain=`grep "domain[ |	]" /etc/resolv.conf | awk '{print $2}'`
+        fully_qual_host=$UNCONFIG_NAME.$domain
+    else
+        log_msg ERROR "You must enter a fully qualified hostname to be unconfigured."
+        x_exit
+    fi
+else
+    fully_qual_host=$UNCONFIG_NAME.$DOMAIN_NAME
+fi
+
+if [ -x ${DCE_BIN}/dfs.unconfig ]; then
+	log_msg DEBUG "dce.unconfig: Executing: ${DCE_BIN}/dfs.unconfig $UNCONFIG_NAME"
+	${DCE_BIN}/dfs.unconfig $UNCONFIG_NAME
+	if [ $? != 0 ]; then
+		err_found=1
+	fi
+fi
+
+DCECP_SCRIPT=/tmp/dcecp_script$$
+
+# find the name (if any) of the security replica
+#
+log_msg SUMMARY "Checking for security replica running on $UNCONFIG_NAME"
+HOSTIP=`getip $UNCONFIG_NAME`
+cat > $DCECP_SCRIPT << EOF
+foreach s [registry cat] {
+  set l [registry show \$s -replica]
+  if {[string first $HOSTIP [attrlist getvalues \$l -type addresses]] != -1} {
+      puts [attrlist getvalues \$l -type name]
+  }
+}
+EOF
+SEC_REPLICA=`dcecp $DCECP_SCRIPT 2> /dev/null`
+if [ "${SEC_REPLICA}" ]; then
+	log_msg DEBUG "Security replica name: $SEC_REPLICA"
+fi
+
+# Don't allow them to unconfig the master security server
+#
+if [ "${SEC_REPLICA}" ]; then
+    cat > $DCECP_SCRIPT << EOF
+puts [attrlist getvalues [registry show $SEC_REPLICA -replica] -type type]
+EOF
+    TYPE_OF_SERVER=`dcecp $DCECP_SCRIPT 2> /dev/null`
+    if [ "$TYPE_OF_SERVER" = "master" ]; then
+	if [ "$do_checks" = "y" ]; then
+		log_msg ERROR "Cannot unconfigure the master security server."
+		x_exit
+	fi
+	exit 1
+    fi
+fi
+
+# Handle unconfig of CDS server
+#
+if [ "$UNCONFIG_NAME" = "$HOSTNAME" ]; then
+	ps ${PSARGS} | grep -q cdsd
+	if [ $? -eq 0 ]; then
+		log_msg SUMMARY "Looking up name of clearinghouse ..."
+		HOSTIP=`getip $UNCONFIG_NAME`
+		cat > /tmp/dcecp_script$$ <<EOF
+set l [directory show /.: ]
+foreach m [attrlist getvalues \$l -type CDS_Replicas] {
+    if {[string first "$HOSTIP" [attrlist getvalues \$m -type Tower]] != -1} {
+        puts [attrlist getvalues \$m -type CH_Name]
+        exit 0
+    }
+}
+exit 1
+EOF
+		CH_NAME=`dcecp /tmp/dcecp_script$$`
+		if [ $? -ne 0 ]; then
+			rm -f dcecp /tmp/dcecp_script$$
+			if [ "$do_checks" = "y" ]; then
+				log_msg ERROR "Unable to find the name of the clearinghouse on this host."
+				x_exit
+			fi
+			exit 1
+       		fi
+		rm -f dcecp /tmp/dcecp_script$$
+
+		log_msg WARNING "Going to remove the clearinghouse ($CH_NAME) on this host."
+		if [ "$do_checks" = "y" ]; then
+			x_exit
+		fi
+		log_msg DETAIL "Executing: dcecp -c clearinghouse delete $CH_NAME"
+		dcecp -c clearinghouse delete $CH_NAME
+		if [ $? -ne 0 ]; then
+			if [ "$do_checks" = "y" ]; then
+				log_msg ERROR "Unable to delete clearing house $CH_NAME."
+				x_exit
+			fi
+			exit 1
+		fi
+		log_msg DETAIL "Executing: cdscp disable server"
+		cdscp disable server
+	fi
+else
+	log_msg DETAIL "Executing: dcecp -c principal show hosts/$UNCONFIG_NAME/cds-server"
+	dcecp -c principal show hosts/$UNCONFIG_NAME/cds-server > /dev/null 2>&1
+	if [ $? -eq 0 ]; then
+                if [ "$do_checks" = "y" ]; then
+                        log_msg ERROR "You must remove the clearinghouse on $UNCONFIG_NAME manually before continuing."
+                        x_exit
+                fi
+                exit 1
+	fi
+fi
+
+log_msg SUMMARY "dce.unconfig: Deleting client registry and CDS entries."
+
+#
+# Create a dcecp script to do it all
+#
+cat > $DCECP_SCRIPT <<EOF
+if ![ catch { principal show hosts/$UNCONFIG_NAME/gda} ] {
+	puts "\tDeleting GDA principal ..."
+	principal delete hosts/$UNCONFIG_NAME/gda
+}
+if ![ catch {principal show hosts/$UNCONFIG_NAME/cds-server} ] {
+	puts "\tDeleting cds-server principal ..."
+	principal delete hosts/$UNCONFIG_NAME/cds-server
+}
+if { [ string length "$SEC_REPLICA" ] != 0 } {
+	puts "\tDeleting Security replica ..."
+	registry delete -force $SEC_REPLICA
+	object delete $SEC_REPLICA
+}
+
+puts "\tDeleting host principal ..."
+principal delete hosts/$UNCONFIG_NAME/self
+puts "\tDeleting CDS namespace tree: /.:/hosts/$UNCONFIG_NAME ..."
+directory delete -force -tree /.:/hosts/$UNCONFIG_NAME
+puts "\tSetting directory /.:/hosts to synchronize ..."
+directory synchronize /.:/hosts
+puts "\tDeleting krb5 host principal ..."
+principal delete host/$fully_qual_host
+EOF
+
+#
+# Leave stdout alone so user can get feedback
+#
+dcecp $DCECP_SCRIPT 2> /tmp/dcecp_out$$
+if [ $? -ne 0 ]; then
+	err_exit "while trying to unconfigure.
+Message from dcecp:
+  `cat /tmp/dcecp_out$$`"
+	err_found=1
+fi
+
+rm -f /tmp/dcecp_out$$
+rm -f $DCECP_SCRIPT
+
+if [ "$err_found" = 0 ]
+then
+	log_msg VERBOSE "dce.unconfig: Successfully unconfigured DCE client on $UNCONFIG_NAME."
+else
+	log_msg ERROR "dce.unconfig: Failed to unconfigure DCE client on $UNCONFIG_NAME."
+fi
+
+exit $err_found

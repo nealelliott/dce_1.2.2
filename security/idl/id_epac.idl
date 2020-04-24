@@ -1,0 +1,212 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: id_epac.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:27:55  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:23  marty]
+ *
+ * Revision 1.1.4.1  1995/12/08  17:31:32  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:54:57  root]
+ * 
+ * Revision 1.1.2.4  1994/08/04  16:12:55  mdf
+ * 	Hewlett Packard Security Code Drop
+ * 	[1994/07/26  19:09:45  mdf]
+ * 
+ * Revision 1.1.2.3  1994/06/17  18:42:19  devsrc
+ * 	cr10872 - fix copyright
+ * 	[1994/06/17  18:08:58  devsrc]
+ * 
+ * Revision 1.1.2.2  1994/05/11  19:10:42  ahop
+ * 	hp_sec_to_osf_2 drop
+ * 	[1994/04/29  21:05:08  ahop]
+ * 
+ * Revision 1.1.2.1  1994/01/28  23:10:47  burati
+ * 	Initial version (dlg_bl1)
+ * 	[1994/01/18  20:52:37  burati]
+ * 
+ * $EndLog$
+ */
+
+/*
+** Copyright (c) Hewlett-Packard Company 1993
+** Unpublished work. All Rights Reserved.
+**
+*/
+/*
+** Identity EPAC base type definitions 
+*/
+
+[
+    uuid(6a7409ee-d6c0-11cc-8fe9-0800093569b9)
+]
+
+interface sec_id_epac_base {
+
+    import "dce/sec_base.idl";
+    import "dce/id_base.idl";
+    import "dce/sec_attr_base.idl";
+
+    /* Optional/Required restrictions */
+    typedef struct {
+        unsigned16 restriction_len;
+        [size_is(restriction_len), ptr]
+            byte *restrictions;
+    } sec_id_opt_req_t;
+
+    typedef enum {
+        sec_rstr_e_type_user,                /* POSIX 1003.6 */
+            /* Entry contains a key identifying a user
+             */
+        sec_rstr_e_type_group,               /* POSIX 1003.6 */
+            /* Entry contains a key identifying a group
+             */
+        sec_rstr_e_type_foreign_user,
+            /* Entry contains a key identifying a user and the foreign realm
+             */
+        sec_rstr_e_type_foreign_group,
+            /* Entry contains a key identifying a group and the foreign realm
+             */
+        sec_rstr_e_type_foreign_other,
+            /* Entry contains a key identifying a foreign realm.  Any user
+             * that can authenticate to the foreign realm will be allowed access.
+             */
+        sec_rstr_e_type_any_other,
+            /* Any user that can authenticate to any foreign realm will be
+             * allowed access.
+             */
+        sec_rstr_e_type_no_other
+	    /* No other user is allowed to access.
+	     */
+    } sec_rstr_entry_type_t;
+
+    /* Delegation/Target restrictions */
+    typedef struct {
+        union sec_id_entry_u
+        switch (sec_rstr_entry_type_t entry_type) tagged_union {
+        case sec_rstr_e_type_any_other:
+        case sec_rstr_e_type_no_other:
+         /* Just the tag field */;
+        case sec_rstr_e_type_user:
+        case sec_rstr_e_type_group:
+        case sec_rstr_e_type_foreign_other:
+          sec_id_t id;
+        case sec_rstr_e_type_foreign_user:
+        case sec_rstr_e_type_foreign_group:
+          sec_id_foreign_t foreign_id;
+        } entry_info;
+    } sec_id_restriction_t;
+
+    /* Set of delegation or target restrictions */
+    typedef struct {
+        unsigned16 num_restrictions;
+        [ptr, size_is(num_restrictions)]
+            sec_id_restriction_t *restrictions;
+    } sec_id_restriction_set_t;
+
+
+    /* Delegation compatibility modes -
+     * determines which EPAC from the delegation chain, if any, to convert
+     * and insert into the V1.0 PAC portion of the Authorization Data field.
+     */
+    typedef unsigned16 sec_id_compatibility_mode_t;
+    const unsigned16 sec_id_compat_mode_none      = 0;
+    const unsigned16 sec_id_compat_mode_initiator = 1;
+    const unsigned16 sec_id_compat_mode_caller          = 2;
+
+    /* Supported delegation types */
+    typedef unsigned16 sec_id_delegation_type_t;
+    const unsigned16 sec_id_deleg_type_none          = 0;
+    const unsigned16 sec_id_deleg_type_traced        = 1;
+    const unsigned16 sec_id_deleg_type_impersonation = 2;
+
+    /* Supported seal type identifiers */
+    typedef unsigned16 sec_id_seal_type_t;
+    const unsigned16 sec_id_seal_type_none    = 0;
+    const unsigned16 sec_id_seal_type_md5_des = 1;
+    const unsigned16 sec_id_seal_type_md5     = 2;
+
+    /* Seal */
+    typedef struct {
+        sec_id_seal_type_t seal_type;
+        unsigned16 seal_len;
+        [size_is(seal_len),ptr]
+            byte *seal_data;
+    } sec_id_seal_t;
+
+    /* Privilege Attributes for inclusion in an Extended PAC */
+    typedef struct {
+        sec_id_t realm;
+        sec_id_t principal;
+        sec_id_t group;
+        unsigned16 num_groups;
+        [size_is(num_groups), ptr]
+            sec_id_t *groups;
+        unsigned16 num_foreign_groupsets;
+        [size_is(num_foreign_groupsets), ptr]
+            sec_id_foreign_groupset_t *foreign_groupsets;
+    } sec_id_pa_t; 
+
+
+    /* sec_cred_pa_handle_t
+     * A handle on opaque privilege attribute data
+     */
+    typedef void *sec_cred_pa_handle_t;
+
+    /* sec_cred_cursor_t
+     * an input/output cursor used to iterate through a set of delegates via
+     * the sec_cred_get_delegate() or sec_login_cred_get_delegate() calls.
+     * Initialized with a call to sec_cred_initialize_cursor() or
+     * sec_login_cred_initialize_cursor().
+     */
+    typedef void *sec_cred_cursor_t;
+
+    /* sec_cred_attr_cursor_t
+     * an input/output cursor used to iterate through a set of extended
+     * attributes using calls to sec_cred_get_extended_attributes().
+     * Initialized with a call to sec_cred_initialize_attr_cursor().
+     */
+    typedef void *sec_cred_attr_cursor_t;
+
+    /* Extended PAC Data*/
+    typedef struct {
+        sec_id_pa_t                 pa;
+        sec_id_compatibility_mode_t compat_mode;	
+        sec_id_delegation_type_t    deleg_type;
+        sec_id_opt_req_t            opt_restrictions;
+        sec_id_opt_req_t            req_restrictions;
+        unsigned32                  num_attrs;
+        [size_is(num_attrs), ptr]
+            sec_attr_t              *attrs;
+        sec_id_restriction_set_t    deleg_restrictions;
+        sec_id_restriction_set_t    target_restrictions;
+    } sec_id_epac_data_t;
+
+    /* List of seals */
+    typedef struct {
+        unsigned32               num_seals;
+        [size_is(num_seals), ptr]
+            sec_id_seal_t        *seals;
+    }  sec_id_seal_set_t;
+    typedef [ptr] sec_id_seal_set_t *sec_id_seal_set_p_t;
+
+    /* Extended PAC */
+    typedef struct {
+        sec_bytes_t 		pickled_epac_data;
+        [ptr] sec_id_seal_set_t	*seals;
+    } sec_id_epac_t;
+
+    /* Set of Extended PACs */
+    typedef struct {
+        unsigned32               num_epacs;
+        [size_is(num_epacs), ptr]
+            sec_id_epac_t        *epacs;
+    } sec_id_epac_set_t;
+}

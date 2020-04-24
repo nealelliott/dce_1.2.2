@@ -1,0 +1,284 @@
+*
+* @OSF_COPYRIGHT@
+* COPYRIGHT NOTICE
+* Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+* ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+* the full copyright text.
+*
+* HISTORY
+* $Log: clone_error.itl,v $
+* Revision 1.1.117.1  1996/10/17  18:21:00  damon
+* 	Submitting on behalf of Transarc
+* 	[1996/10/17  16:51:06  damon]
+*
+* Revision 1.1.112.1  1994/02/04  20:41:16  devsrc
+* 	Merged from 1.0.3a to 1.1
+* 	[1994/02/04  15:22:45  devsrc]
+* 
+* Revision 1.1.110.2  1994/01/20  18:43:44  annie
+* 	added copyright header
+* 	[1994/01/20  18:39:58  annie]
+* 
+* Revision 1.1.110.1  1993/12/07  17:42:17  jaffe
+* 	New File from Transarc 1.0.3a
+* 	[1993/12/02  21:59:09  jaffe]
+* 
+* $EndLog$
+*
+
+!**********************************************************
+!*** Simulate errors during a clone
+!**********************************************************
+
+include "defaults.itl"
+
+!*** Initialize variables
+
+set clone_func "ftu_FsetCloneWithKA"
+set destroy_func "DestroyFset"
+set error $ENOTTY
+set fset_id_high	$ITL_ProcessId
+set fset_id_low		1
+set fset_id string	("" + $fset_id_high + ",," + $fset_id_low)
+set fset_name ("fzappa." + $ITL_ProcessId)
+set kernel_clone_func "vol_efsClone"
+set kernel_cleanup_func "vol_efsDestroy"
+set mp ("/tmp/fset." + $ITL_ProcessId)
+set num_clone_bps 15
+set num_kernel_clone_bps 13
+set orig_fset_id $fset_id
+set orig_sum_file ("/tmp/fset_orig_sum." + $ITL_ProcessId)
+set sum_cmd ("find " + $mp + " -type f -print | xargs sum")
+set tmp_sum_file ("/tmp/fset_tmp_sum." + $ITL_ProcessId)
+
+set crank_fset_id proc END
+	set fset_id_low (@fset_id_low + 1)
+	set fset_id ("" + @fset_id_high + ",," + @fset_id_low)
+END
+
+*** Initialize the user-level clone bomb points, with one bomb point 
+*** description for each unique bomb point in the code
+loop i 1 1 $num_clone_bps
+	set clone_bp_desc[$i] ($clone_func + "." + $i + ":error=" + $error
+			       + ":count=1+1")
+endLoop
+
+*** Initialize the kernel-level clone bomb points, where each bomb point
+*** description has its 'count' value set to one greater than the previous
+*** description
+loop i 1 1 $num_kernel_clone_bps
+	set clone_bp_desc[$i + $num_clone_bps]
+		 ($kernel_clone_func + ".1:error=" + $error
+		  + ":count=" + $i + "+" + $i)
+endLoop
+
+set total_clone_bps ($num_clone_bps + $num_kernel_clone_bps)
+
+*** Initialize the cleanup bomb points.  These will allow us to test double
+*** failures where the clone fails and then the destroy fails to clean up.
+*** We pick these individually, because we can't hit all of the bomb points
+*** in the code.  The bogus 0th bomb point description allows us to test the
+*** case where the destroy doesn't fail without changing the generic loop
+*** below.
+set cleanup_bp_desc[0] "NONE:error=0:count=0+0"
+set cleanup_bp_desc[1] ($destroy_func + ".1:error=" + $error + ":count=1+0")
+set cleanup_bp_desc[2] ($destroy_func + ".2:error=" + $error + ":count=1+0")
+set cleanup_bp_desc[3] ($destroy_func + ".5:error=" + $error + ":count=1+0")
+set cleanup_bp_desc[4] ($destroy_func + ".6:error=" + $error + ":count=1+0")
+set cleanup_bp_desc[5] ($destroy_func + ".13:error=" + $error + ":count=1+0")
+set cleanup_bp_desc[6] ($destroy_func + ".14:error=" + $error + ":count=1+0")
+set cleanup_bp_desc[7] ($destroy_func + ".16:error=" + $error + ":count=1+0")
+set cleanup_bp_desc[8] ($destroy_func + ".17:error=" + $error + ":count=1+0")
+set cleanup_bp_desc[9] ($destroy_func + ".18:error=" + $error + ":count=1+0")
+set cleanup_bp_desc[10] ($destroy_func + ".19:error=" + $error + ":count=1+0")
+set cleanup_bp_desc[11] ($destroy_func + ".20:error=" + $error + ":count=1+0")
+set cleanup_bp_desc[12] ($destroy_func + ".21:error=" + $error + ":count=1+0")
+set cleanup_bp_desc[13] ($destroy_func + ".22:error=" + $error + ":count=1+0")
+
+set max_cleanup_bps 13
+
+*** Failures early in the clone processing, dont' go through DestroyFset();
+*** instead they call ftutil_VolDestroyAux().  These bomb point descriptions
+*** handle those cases.
+set early_cleanup_bp_desc[0] "NONE:error=0:count=0+0"
+set early_cleanup_bp_desc[1] ($clone_func + ".16:error=" + $error
+			      + ":count=1+0")
+set max_early_cleanup_bps 1
+
+!*** Verify and attach aggregate number $aggr_id ($device)
+verifyAggr $device
+attachAggr $device $aggr_type $aggr_name $aggr_id
+
+!*** Create and mount fileset $fset_name on $mp
+createFset $aggr_id $fset_id $fset_name
+mkdir $mp 0755
+mountFset $fset_name $mp
+
+!*** Create a temporary clone
+***  just to have an existing backing fileset.
+***  This allows us to hit all of the clone bomb points.
+exec crank_fset_id
+set tmp_clone_id $fset_id 
+set tmp_clone_name ($fset_name + ".tmp")
+cloneFset $aggr_id $orig_fset_id $tmp_clone_id $tmp_clone_name
+
+!*** Populate the fileset
+set create_file proc END
+	open ($mp + "/" + @file_name) ($O_CREAT|$O_RDWR) 0666 fd
+	write @fd @data
+	close @fd
+END
+
+set file_name "little"
+set data "Joe got a good job working at the Utility Muffin Research Kitchen, where he stands arrogantly twisting the sterile canvas snoot of a fully charged icing anointment utensil,"
+exec create_file
+
+set file_name "green"
+set data "and every time a nice little muffin comes by on the belt, he puts forth:"
+exec create_file
+
+set file_name "rosette"
+set data "a little green rosette!"
+exec create_file
+
+mkdir ($mp + "/junk") 0755
+set file_name "/junk/bag-o-bits"
+set data ("JDP" * ($block_size + 13))
+exec create_file
+
+*** Save and ID and name for the clone
+exec crank_fset_id
+set clone_id $fset_id
+set clone_name ($fset_name + ".clone")
+
+!*** Compute a checksum on the contents of $mp
+set orig_sum_cmd ($sum_cmd + " >" + $orig_sum_file)
+shellExec orig_sum_cmd
+
+*** This procedure will be used after each aborted operation to ensure that
+*** the checksum matches the one computed above.
+set tmp_sum_cmd ($sum_cmd + " >" + $tmp_sum_file)
+set cmp_sum_cmd ("cmp -s " + $orig_sum_file + " " + $tmp_sum_file)
+set cmp_sums proc END
+	!*** See if checksum of $mp matches the original
+	shellExec tmp_sum_cmd
+	shellExec cmp_sum_cmd
+END
+
+set do_clone proc END
+	!*** Execute the doomed clone operation
+	verifyStatus false
+	cloneFset $aggr_id @orig_fset_id @clone_id $clone_name
+	if (@ITL_Status != @expected_error) {
+		error Code (@ITL_Status) != expected error (@expected_error)
+	}
+	verifyStatus true
+END
+
+loop i 1 1 $total_clone_bps
+	!*** Set $clone_bp_desc[$i]
+	if ($i <= $num_clone_bps) {
+		setBomb $clone_bp_desc[$i]
+	} else {
+		setKernelBomb $clone_bp_desc[$i]
+	}
+
+	if ($i < 4 || ($i > 12 && $i < 16)) {
+		*** Clone bomb points less than 4 and those between 12 and 16
+		*** don't cause a destroy on the cleanup path, so we
+		*** handle these cases a little differently.
+		set expected_error $error
+		exec do_clone
+
+		if ($i > 2) {
+			*** The first two bomb points occur so early that a
+			*** clone fileset isn't even created yet, so we only
+			*** do the destroy on higher numbered bomb points.
+			destroyFset $aggr_id $clone_id
+		}
+
+		*** Make sure that the fileset contents are the same
+		exec cmp_sums
+	} else {
+		*** Cause compound failures of both clone and the subsequent
+		*** destroy.  Note that the destroy bomb point description at
+		*** offset 0 is bogus, so for each clone bomb point we're also
+		*** testing the case where the destroy doesn't fail.
+
+		if ($i < 7) {
+			*** If we're bombing-out early in the clone routine
+			*** (before the 7th bomb point) we need to use an
+			*** alternate set of cleanup bomb points.
+			set max_bps $max_early_cleanup_bps
+		} else {
+			set max_bps $max_cleanup_bps
+		}
+
+		loop j 0 1 $max_bps
+			if ($i < 7) {
+				set bp_desc $early_cleanup_bp_desc[$j]
+			} else {
+				set bp_desc $cleanup_bp_desc[$j]
+			}
+
+			!*** Set $bp_desc
+			setBomb $bp_desc
+
+			*** Attemp the clone
+			if ($i <= $num_clone_bps) {
+				set expected_error $error
+			} else {
+				set expected_error $EIO
+			}
+			exec do_clone
+
+			if ($j == 0 || $j > 12) {
+				*** The destroy should have succeeded, so we
+				*** insist that the clone fileset is gone.
+				verifyStatus false
+				getFsetSize $aggr_id $clone_id dummy
+				if ($ITL_Status != $FTU_E_NO_SUCH_FSET) {
+					error Code ($ITL_Status) != expected error ($FTU_E_NO_SUCH_FSET)
+				}
+				verifyStatus true
+			} else {
+				*** We caused the destroy to fail, so after
+				*** cleaning up by finishing the destroy, we
+				*** should put things back in good shape.
+				destroyFset $aggr_id $clone_id
+			}
+
+			*** Make sure that the fileset contents are the same
+			exec cmp_sums
+
+		endLoop
+	}
+
+	*** The clone bomb points have a repeat counts, so we have to unset
+	*** them.
+	if ($i <= $num_clone_bps) {
+		set clone_bp_name ($clone_func + "." + $i)
+		!*** Unset $clone_bp_name
+		unsetBomb $clone_bp_name
+	} else {
+		set kernel_bp_name ($kernel_clone_func + ".1")
+		!*** Unset $kernel_bp_name
+		unsetKernelBomb $kernel_bp_name
+	}
+endLoop
+
+!*** Remove the checksum files
+set rm_sum_cmd ("rm -f " + $orig_sum_file + " " + $tmp_sum_file)
+shellExec rm_sum_cmd
+
+!*** Unmount and destroy the filesets
+unmountFset $mp
+unlink $mp
+destroyFset $aggr_id $tmp_clone_id
+destroyFset $aggr_id $orig_fset_id
+
+!*** Detach and verify the aggregate
+detachAggr $aggr_id
+verifyAggr $device
+
+echo !!! The test passed !!!

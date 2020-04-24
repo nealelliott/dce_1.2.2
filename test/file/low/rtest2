@@ -1,0 +1,279 @@
+#!/bin/sh
+
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: rtest2,v $
+# Revision 1.1.10.1  1996/10/17  18:29:51  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:54:59  damon]
+#
+# Revision 1.1.4.4  1993/01/11  18:33:49  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:16:40  htf]
+# 
+# Revision 1.1.4.3  1992/10/28  18:14:29  jaffe
+# 	Transarc delta: jess-ot5320-fix-fs-low-testhome 1.1
+# 	  Selected comments:
+# 	    The fs and low test shell scripts have the following if statement
+# 	    if [ "$TESTTOP" = "`pwd`" ]
+# 	    then
+# 	    UTIL_DIR=../util
+# 	    testhome=$TESTTOP
+# 	    else
+# 	    UTIL_DIR=$TESTTOP/util
+# 	    testhome=$TESTTOP/$testSuiteType
+# 	    fi
+# 	    The problem is that variable testSuiteType is not defined at this time.
+# 	    See above.
+# 	[1992/10/28  14:43:52  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/28  18:16:31  jaffe
+# 	Transarc delta: rajesh-clean-low-tests 1.5
+# 	  Selected comments:
+# 	    To remove make and clean options from the low test suite. To change
+# 	    the scripts to use common shell functions. To create a file
+# 	    fs_functionsScript with the common shell functions in the util
+# 	    directory.
+# 	    To remove make and clean options. To change the scripts to use common
+# 	    shell functions from util/fs_functionsScript instead of inline code.
+# 	    Modify scripts to follow coding standards, simplify the code, increase
+# 	    readability etc.
+# 	    No changes yet
+# 	    More of above.
+# 	    Modify the tests to give them a simpler logical structure, modularity,
+# 	    readability ( one command per line) and to change then to use the
+# 	    common function created earlier.
+# 	    Modification of rtest1 and rtest2 to use the utility functions
+# 	    correctly.
+# 	    See above.
+# 	[1992/08/28  12:31:33  jaffe]
+# 
+# Revision 1.1.2.4  1992/06/19  17:19:20  jaffe
+# 	Transarc delta: rajesh-ot4304-low-rtest2 1.1
+# 	  Selected comments:
+# 	    low rprog2.c assumes that gid of files and dirs is the gid of the
+# 	    creating process. On OSF1 the group id of created files and dirs are
+# 	    that of the parent dir and not the process's group id. Fix the tests
+# 	    to operate correctly for OSF1 platforms.
+# 	    No change actually.
+# 	[1992/06/19  17:17:49  jaffe]
+# 
+# Revision 1.1.2.3  1992/05/29  22:59:51  mason
+# 	Transarc delta: fred-3754-change-script-name 1.1
+# 	  Selected comments:
+# 	    To clean up a number of defects with the tests.  In addition to defect
+# 	    3754, the changes also fix defects 3750 and 3748.
+# 	    Fixed setting of TESTTOP variable.
+# 	[1992/05/29  12:51:54  mason]
+# 
+# Revision 1.1.2.2  1992/05/21  12:47:28  jaffe
+# 	Transarc delta: fred-merge-tests 1.1
+# 	  Selected comments:
+# 	    Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	    the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	    should be looking at the same test code.
+# 	    Changes to facilitate merge of local DFS test code with the OSF's.
+# 	Transarc delta: fred-remove-sys 1.1
+# 	  Selected comments:
+# 	    To remove dependency on the AFS sys command in the test scripts.
+# 	    To remove dependency on AFS sys command.
+# 	Transarc delta: rajesh-low-rtest2-passuidgid 1.1
+# 	  Selected comments:
+# 	    To modify the rtest2 program so that rprog2.c does not need to be linked
+# 	    with the libdce.a so that the same cc command can be used both under DFS and
+# 	    AFS. Done by determining the uid and gid in the rtest2 shellscript and
+# 	    passing it to rprog2.c, instead of letting rprog2.c using DCE security API
+# 	    calls in DCE/DFS and system calls in AFS to do it.
+# 	    Modified to pass uid and gid to rprog2.c. For DCE/DFS it uses klist program.
+# 	Transarc delta: rajesh-low-tests-dfs-update 1.3
+# 	  Selected comments:
+# 	    To fix bugs and modify the low tests for DFS.
+# 	    To provide for corect compilation of rprog2.c for DFS.
+# 	    Change compile flag DFS to TR_DFS for rprog2.c
+# 	    DCE security API call fixes
+# 
+# 	$TALog: rtest2,v $
+# 	Revision 4.20  1994/11/01  22:32:09  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r4.19 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	[1992/05/20  20:44:56  jaffe]
+# 
+# $EndLog$
+#
+###############################################################################
+#    Copyright (C) 1990, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This script runs a C program which tests chown() and fchown().
+# This test will only succeed if run by root.
+
+# Usage: rtest2 
+
+# This script assumes the existence of rprog2.c in the current directory. If
+# the $testhome variable is set, then the make option will attempt to copy
+# it from there to the current directory. If $testhome and the current
+# directory are different and both contain this file, then the clean option
+# will remove it from the current directory.
+
+###############################################################################
+
+#
+# PrintUsage() -
+#   Prints the usage message for this script.
+
+PrintUsage()
+{
+	echo "$programName tests chown() functions."
+	echo "Usage: $programName "
+}
+
+#
+# Initialise some variables. UTIL_DIR is the directory containing 
+# the script fs_FunctionsScript with common functions.
+#
+
+TESTTOP=${TESTTOP:="`pwd`"}
+if [ "$TESTTOP" = "`pwd`" ]
+then
+	UTIL_DIR=../util
+	testhome=$TESTTOP
+else
+	UTIL_DIR=$TESTTOP/util
+	testhome=$TESTTOP/low
+fi
+
+#
+# Source script containing common functions
+#
+
+. $UTIL_DIR/fs_FunctionsScript
+
+trap '
+	cd $currentDir
+	rm -rf dir.* file.* $programName.out
+	echo "$programName killed; returning $scriptErrorExit" | tee -a $logFile
+	exit $scriptErrorExit
+	' 2 3 15
+
+#
+# Initialise more variables
+#
+
+fs_InitSetup low
+
+#
+# Parse the command line
+#
+
+while [ "$1" != "" ] 
+do
+	case $1 in
+		help|-help) 
+			PrintUsage
+			exit $successExit
+			;;
+
+		*)  echo "$programName: invalid argument \"$1\"" | tee -a $logFile
+			exit $scriptErrExit
+			;;
+	esac
+done
+
+###############################################################################
+
+fs_CheckBinaryExistence $cProgramName
+
+#
+# Start test
+#
+
+(
+	echo "$programName (chown) starting in $currentDir"
+	echo "Host `hostname` ($fs_sysName)"
+	date
+) | tee -a $logFile
+
+fs_DetermineFSType
+
+#
+# Determine uid and gid of the user
+#
+
+#This can be done inside the C program in which DCE security API
+#calls need to be  used in the program to determine the uid and gid
+#which means that the program has  to be compiled with libdce.a. This
+#would lead to different Makefiles for the tests  under DCE/DFS
+#compared AFS without time-costly fixes to the makefile. If at some
+#stage these tests are used for DFS only then c proghram can be
+#modified accordingly 
+
+echo "FS Type is $fsType"
+if [ $fsType -eq $DFS ] 
+then
+
+#
+# DFS file system. Need to get uid and gid as in security database.
+#
+	hexuid=`klist | grep Principal | grep -v Global | tr -d ' ' | tr '-' ':' | cut -f2 -d:`
+
+	hexgid=`klist | grep Group: | tr -d ' ' | tr '-' ':' | cut -f2 -d:`
+
+# The below hangs. So use echo instead of it
+##    uid=`bc` << ==UIDEND==
+#ibase=16
+#$hexuid
+#quit
+#==UIDEND==
+#
+#    gid=`bc` << ==GIDEND==
+#ibase=16
+#$hexgid
+#quit
+#==GIDEND==
+	uid=`echo "ibase=16\n$hexuid\nquit" | bc`
+	gid=`echo "ibase=16\n$hexgid\nquit" | bc`
+else
+
+#
+#other file system types. Use local uid and gid.
+#
+
+	touch /tmp/a
+	owner=`ls -lg /tmp/a | tr -s ' ' ' ' | cut -d ' ' -f3`
+	group=`ls -lg /tmp/a | tr -s ' ' ' ' | cut -d ' ' -f4`
+	uid=`grep $owner /etc/passwd | cut -d: -f3`
+	gid=`grep $group /etc/group | cut -d: -f3`
+	rm /tmp/a
+fi
+
+echo "Uid=$uid, Gid=$gid" | tee -a $logFile 
+./$cProgramName  $uid $gid > $programName.out
+errorCount=$?
+cat $programName.out | tee -a $logFile
+rm -f $programName.out
+
+###############################################################################
+
+#
+# Remove temporary file created by the test. (Previously done in -clean option)
+#
+
+(
+	echo ""
+	echo "$testSuiteType/$programName returning $errorCount in $currentDir"
+	date
+) | tee -a $logFile
+
+rm -rf $cProgramName dir.* file.* $programName.out
+
+exit $errorCount
+
+###############################################################################

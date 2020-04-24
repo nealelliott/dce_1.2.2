@@ -1,0 +1,367 @@
+
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* Check basic cache data consistency: update from stress process, and
+* ensure that test process sees the new information.
+
+* Also, make update (of, say, mode bits) via stress process, and then
+* make piles of *other* status (e.g. utimes) also via stress processes,
+* *while* the DFS client test process is stating the file, ensuring that
+* the first update is successful.  Since other updates are happening
+* concurrently, DFS client will encounter more race conditions, but it
+*  knows what it expects to see in the mode bits.
+
+* Check updates to all status info: utimes, chmod, chown, chgrp,
+* truncate (both growing and shrinking), where the update is made via
+* a stress process, and checked via the test processes.
+
+*
+
+* 
+* USAGE: ./file_test -l {HUBNAME} -I {this script}
+*
+
+* Include config file.
+include config
+
+set loopTimes 10
+* You can change the user id to anyone else.
+set userId root
+
+*
+* This procedure (test hosts) stats a file.
+*
+set stat_Proc proc END_PROC
+  echo
+  echo Stat test file from spoke.
+
+  getwd wd
+  chdir $testDir
+
+  sync_join "begin_sync" $timeout
+
+  set fileName $testFile 
+  open @fileName $O_RDONLY 0777 fileId
+  
+  stat @fileName statInfo1
+
+  sync_join "chmod" $timeout
+  
+  set syncName modbit
+  loop x 1 1 7
+    set modBit @x
+    set modBit (@modBit*64+@modBit*8+@modBit)
+    set syncVar (@syncName+@x)
+    sync_join @syncVar $timeout
+    set syncVarDone (@syncVar + "done")
+    sync_join @syncVarDone $timeout
+
+    stat @fileName statInfo
+    if ( @statInfo.st_mode & 0777 & ~(@modBit) ) {
+      echo FAILED: the file has different file's mode after chmod.
+    }
+  endloop
+  sync_join "chmod_done" $timeout
+
+  sync_join "chown" $timeout
+  sync_join "chown_done" $timeout
+  stat @fileName statInfo
+  if ( @statInfo.st_uid == @statInfo1.st_uid ) {
+    echo FAILED: the file's uid is wrong after chown.
+  }
+
+  set truncate[1] 0
+  set truncate[2] 10
+  set truncate[3] 656536
+  set truncate[4] (65536+10)
+  set truncate[5] (10*65536)
+  set truncate[6] (10*65536+100)
+  set truncate[7] (10*65536-100)
+  set truncate[8] (10*65536)
+  set truncate[9] (65536+10)
+  set truncate[10] 656536
+  set truncate[11] 10
+  
+  sync_join "truncate" $timeout
+  set syncName truncate
+  loop x 1 1 11
+    set syncVar (@syncName+@x)
+    sync_join @syncVar $timeout
+
+    set syncVarDone (@syncVar + "done")
+    sync_join @syncVarDone $timeout
+    stat @fileName statInfo
+    if ( @statInfo.st_size != @truncate[@x] ) {
+      echo FAILED: the file has different file's size after truncate.
+    }
+  endloop
+  sync_join "truncate_done" $timeout
+
+  sync_join "write" $timeout
+  sync_join "write_done" $timeout
+  lseek @fileId $SEEK_SET @truncate[11]
+  set junk string ""
+  read @fileId 18 junk
+  if ( @junk != "Add eighteen chars" ) {
+    echo FAILED: write after truncate.
+  }
+  stat @fileName statInfo
+  if ( @statInfo.st_size != @truncate[11] + 18 )  {
+    echo FAILED: the file has different file's size after write.
+  }
+  
+  sync_join "hardlink" $timeout
+  sync_join "hardlink_done" $timeout
+  stat @fileName statInfo
+  if ( @statInfo.st_nlink == @statInfo1.st_nlink ) {
+echo @statInfo.st_nlink @statInfo1.st_nlink
+    echo FAILED: the file's link count is wrong after hardlink.
+  }
+ 
+  sync_join "unlink" $timeout
+  sync_join "unlink_done" $timeout
+  stat @fileName statInfo
+  if ( @statInfo.st_nlink != @statInfo1.st_nlink ) {
+    echo FAILED: the file's link count is wrong after unlink.
+  }
+   
+  sync_join "remove" $timeout
+  sync_join "remove_done" $timeout
+
+  verifyStatus false
+  stat @fileName statInfo 
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: The file is there by stat.
+  }
+  verifyStatus true
+
+  sync_join "finish_sync" $timeout
+  
+  chdir @wd
+  echo Done.
+  echo 
+END_PROC
+
+*
+* This procedure (stress host) updates a test file.
+*
+set update_Proc proc END_PROC
+  echo
+  echo Update file from spoke
+
+  getwd wd
+  chdir $testDir
+   
+  sync_join "begin_sync" $timeout
+
+  set fileName $testFile 
+  open @fileName $O_RDWR 0777 fileId
+
+  sync_join "chmod" $timeout
+
+  if ( $ITL_SystemType == solaris ) {
+    utimes @fileName "" "" 0 "" "" 0 
+  }
+  else {
+    utimes @fileName "" "" -1 "" "" -1
+  }
+
+  chmod . 0777
+  set syncName modbit
+  loop x 1 1 7
+    set modBit @x
+    set modBit (@modBit*64+@modBit*8+@modBit)
+    set syncVar (@syncName+@x)
+    sync_join @syncVar $timeout
+    chmod @fileName @modBit
+    set syncVarDone (@syncVar + "done")
+    sync_join @syncVarDone $timeout
+  endloop
+  
+  sync_join "chmod_done" $timeout
+
+  sync_join "chown" $timeout
+  chowner @fileName $userId 
+  sync_join "chown_done" $timeout
+
+  set truncate[1] 0
+  set truncate[2] 10
+  set truncate[3] 656536
+  set truncate[4] (65536+10)
+  set truncate[5] (10*65536)
+  set truncate[6] (10*65536+100)
+  set truncate[7] (10*65536-100)
+  set truncate[8] (10*65536)
+  set truncate[9] (65536+10)
+  set truncate[10] 656536
+  set truncate[11] 10
+  
+  sync_join "truncate" $timeout
+  set syncName truncate
+  loop x 1 1 11
+    set syncVar (@syncName+@x)
+    sync_join @syncVar $timeout
+    truncate @fileName @truncate[@x]
+    set syncVarDone (@syncVar + "done")
+    sync_join @syncVarDone $timeout
+  endloop
+  sync_join "truncate_done" $timeout
+
+  sync_join "write" $timeout
+  lseek @fileId $SEEK_SET @truncate[11]
+  set junk string "Add eighteen chars"
+  write @fileId @junk
+  lseek @fileId $SEEK_SET @truncate[11]
+  sync_join "write_done" $timeout
+
+  sync_join "hardlink" $timeout
+  hardlink @fileName junk
+  sync_join "hardlink_done" $timeout
+ 
+  sync_join "unlink" $timeout
+  unlink junk
+  sync_join "unlink_done" $timeout
+
+  sync_join "remove" $timeout
+
+  close @fileId
+  remove @fileName
+
+  sync_join "remove_done" $timeout
+
+  sync_join "finish_sync" $timeout
+
+  chdir @wd
+  echo Done.
+  echo 
+END_PROC
+
+****************************************************************************
+* Check spokes.
+if ( $ITL_nspokes < 2 ) {
+  echo FAILED: You need at least 2 spokes to run the test.
+  quit
+}
+
+chdir $testDir
+
+loop loopVar 1 1 $loopTimes
+
+* Create a single file to be tested.
+set fileName $testFile 
+open $fileName ($O_CREAT|$O_RDWR) 0777 fileId
+write $fileId "This is a junk"
+close $fileId
+
+!* Update test file and check the cache consistency.
+rexec_async $ITL_spoke[0] update_Proc result[0] asyncVar[0]
+
+!* Stat a single file by N test hosts.
+loop x 1 1 ($ITL_nspokes-1)
+  rexec_async $ITL_spoke[$x] stat_Proc result[$x] asyncVar[$x]
+endLoop
+
+sync_create "begin_sync" $ITL_nspokes $timeout
+sync_release "begin_sync" 
+
+sync_create "chmod" $ITL_nspokes $timeout
+sync_release "chmod" 
+
+set syncName modbit
+loop x 1 1 7
+  set syncVar ($syncName+$x)
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar 
+  set syncVarDone ($syncVar + "done")
+  sync_create $syncVarDone $ITL_nspokes $timeout
+  sync_release $syncVarDone 
+endloop
+
+sync_create "chmod_done" $ITL_nspokes $timeout
+sync_release "chmod_done" 
+
+
+sync_create "chown" $ITL_nspokes $timeout
+sync_release "chown" 
+
+sync_create "chown_done" $ITL_nspokes $timeout
+sync_release "chown_done" 
+
+sync_create "truncate" $ITL_nspokes $timeout
+sync_release "truncate" 
+
+set syncName truncate
+loop x 1 1 11
+  set syncVar ($syncName+$x)
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar 
+  set syncVarDone ($syncVar + "done")
+  sync_create $syncVarDone $ITL_nspokes $timeout
+  sync_release $syncVarDone 
+endloop
+
+sync_create "truncate_done" $ITL_nspokes $timeout
+sync_release "truncate_done" 
+
+sync_create "write" $ITL_nspokes $timeout
+sync_release "write" 
+
+sync_create "write_done" $ITL_nspokes $timeout
+sync_release "write_done" 
+
+sync_create "hardlink" $ITL_nspokes $timeout
+sync_release "hardlink" 
+
+sync_create "hardlink_done" $ITL_nspokes $timeout
+sync_release "hardlink_done" 
+
+sync_create "unlink" $ITL_nspokes $timeout
+sync_release "unlink" 
+
+sync_create "unlink_done" $ITL_nspokes $timeout
+sync_release "unlink_done" 
+
+sync_create "remove" $ITL_nspokes $timeout
+sync_release "remove" 
+
+sync_create "remove_done" $ITL_nspokes $timeout
+sync_release "remove_done" 
+
+sync_create "finish_sync" $ITL_nspokes $timeout
+sync_release "finish_sync" 
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure in check name.
+  }
+endloop
+
+endloop
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+echo Done
+quit

@@ -1,0 +1,50 @@
+#!/bin/sh
+
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: sentry.clean,v $
+# Revision 1.1.8.1  1996/10/17  18:23:23  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:51:52  damon]
+#
+# Revision 1.1.2.3  1993/01/11  18:29:22  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:06:40  htf]
+# 
+# Revision 1.1.2.2  1992/10/28  17:38:37  jaffe
+# 	New File
+# 	[1992/10/27  19:55:07  jaffe]
+# 
+# $EndLog$
+# clean server entries in FLDB, depends on the output format of fts lsserver
+# and also on /etc/hosts being up to date. All we do is not blow away our own
+# server entry, but entries for other machines in the cell may not be retained.
+
+hname=`hostname`
+fullhname=`grep $hname /etc/hosts | cut -d"	" -f2`
+ipaddr=`grep $hname /etc/hosts | cut -d"	" -f1`
+
+fts lsserver -all | while read line
+do
+   if [ "$line" = "" ]
+   then
+	continue;
+   fi
+   host=`echo $line | cut -d" " -f1`
+   grep $host /etc/hosts; try1=$?
+   newHost=`echo $host | sed -n 's/^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*/&/p'`
+   echo  $newHost
+   if [ "$host" = "$fullhname" -o "$host" = "$hname" -o "$newHost" = "$ipaddr" ] 
+   then
+	:
+   elif [ $try1 -eq 0 -o "$newHost" != "" ]
+   then 
+	fts delserver -server $host
+   fi
+done
+exit 0

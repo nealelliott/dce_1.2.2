@@ -1,0 +1,532 @@
+
+Checklist for foreign ACL testing
+
+Jason Gait
+May 27, 1994
+
+Scenario:
+
+	storingRealm = owningRealm
+
+Design center:
+
+	most common Unix protection cases for files and directories
+
+A. Access to file
+
+	Principal in owningRealm (Fred) creates a file and sets ACL to
+
+		user_obj:rw-c--
+		group_obj:r-----
+		other_obj:r-----
+
+	Side effects:
+
+		mode = rw-r--r--
+
+1. verify that principal in requestingRealm (Joe) cannot read the file
+2. verify that Joe cannot write the file
+3. verify that Joe cannot change the ACL on the file
+
+	Fred changes ACL:
+
+		foreign_group:JoeGroup:rw-c--
+		foreign_user:Joe:r-----
+
+4. verify that Joe cannot write the file
+5. verify that Joe cannot change the ACL on the file
+
+	Fred changes ACL
+
+		foreign_user:Joe:---c--
+
+6. verify that Joe cannot read the file
+
+	Fred adds to ACL
+
+		foreign_user:Joe:r-----
+		foreign_group:JoeGroup:------
+
+7. verify that Joe can now read the file
+8. verify that other members of JoeGroup cannot read the file
+
+	Fred adds to ACL
+
+		any_other:r-----
+
+9. verify that other foreign principals can read the file
+
+	Fred changes ACL
+
+		delete: any_other
+
+		foreign_user:Joe:rw----
+		foreign_group:JoeGroup:r-----
+		foreign_other:JoeCell:------
+
+	Side effects:
+
+		mask_obj:rw----
+
+		mode = rw-rw-r--
+
+10. verify that Joe can now write file
+11. verify that members of JoeGroup can read the file
+12. verify that members of JoeGroup cannot write the file
+13. verify that principals not in JoeGroup cannot read the file
+
+	Fred changes ACL
+
+		foreign_user:Joe:rw-c--
+		foreign_group:JoeGroup:rw----
+		foreign_other:JoeCell:r-----
+
+14. verify that Joe can change ACL
+15. verify that members of JoeGroup can write the file
+16. Verify that other principals in JoeCell can now read the file
+
+	Fred changes ACL
+
+		foreign_group:JoeGroup:rw-c--
+		foreign_other:JoeCell:rw----
+
+17. verify that members of JoeGroup can change the ACL
+18. verify that other principals can write the file
+
+	Fred changes ACL
+
+		foreign_other:JoeCell:rw-c--
+
+19. verify that other principals can change the ACL
+
+        Fred changes ACL
+
+		delete foreign_other:JoeCell
+
+                foreign_user:Joe:rw-c--
+                foreign_group:JoeGroup:rw----
+                any_other:r-----
+
+20. verify that Joe can change ACL
+21. verify that members of JoeGroup can write the file
+22. Verify that other principals in JoeCell can now read the file
+
+        Fred changes ACL
+
+                foreign_group:JoeGroup:rw-c--
+                any_other:rw----
+
+23. verify that members of JoeGroup can change the ACL
+24. verify that other principals can write the file
+
+        Fred changes ACL
+
+                any_other:rw-c--
+
+25. verify that other principals can change the ACL
+
+	Fred creates directory with ACL:
+
+		user_obj:rwxcid
+		group_obj:r-x---
+		other_obj:rwxcid
+
+	Joe creates file in directory with ACL:
+
+		user_obj:rwxc--
+		group_obj:r-----
+		other_obj:r-----
+		any_other:rwxc--
+
+26. verify that Fred cannot change the c-bit in user_obj
+27. verify that cell_admin in FredCell cannot change the c-bit
+28. verify that DCE root in FredCell cannot change the c-bit
+
+
+B. Access to directory
+
+	Fred creates directory with ACL
+
+		user_obj:rwxcid
+		group_obj:r-x---
+		other_obj:r-x---
+
+	Side effects:
+
+		mode = drwxr-xr-x
+
+1. verify that directory appears when Joe does ls in parent
+2. verify that Joe cannot ls the directory
+
+	Fred changes ACL
+
+		foreign_user:Joe:r-x---
+
+	Side effects:
+
+		mask_obj:r-x---
+
+3. verify that Joe can now ls the directory
+
+	Fred changes ACL
+
+		foreign_group:JoeGroup:r-x---
+
+	Side effects:
+
+		mask_obj:rwx---
+
+4. verify that members of JoeGroup can ls the dir
+
+	Fred changes ACL
+
+		foreign_user:Joe:rwx-i-
+		foreign_other:JoeCell:r-x---
+
+	Side effects:
+
+		mask_obj:rwx-i-
+
+5. verify that Joe can now create file in directory
+6. verify that Fred can delete the file created by Joe
+7. verify that other principals in JoeCell can ls the dir
+
+	Fred changes ACL
+
+		foreign_user:Joe:rwx-id
+		foreign_group:JoeGroup:rwx-i-
+
+	Side effects:
+
+		mask_obj:rwx-id
+
+8. verify that Joe can delete file in directory
+9. verify that members of JoeGroup can create file in dir
+
+	Fred changes ACL
+
+		foreign_user:Joe:rwxcid
+		foreign_group:JoeGroup:rwx-id
+		foreign_other:JoeCell:rwx-i-
+
+	Side effects:
+
+		mask_obj:rwxcid
+
+10. verify that Joe can change ACL on dir
+11. verify that members of JoeGroup can delete files from dir
+12. verify that other principals can create file in dir
+
+	Fred changes ACL
+
+		foreign_group:JoeGroup:rwxcid
+		foreign_other:JoeCell:rwx-id
+
+13. verify that members of JoeGroup can change ACL on dir
+14. verify that other principals can delete files from dir
+
+	Fred changes ACL
+
+		foreign_other:JoeCell:rwxcid
+
+15. verify that other principals can change ACL on dir
+
+	Joe creates subdir with ACL
+
+                user_obj:rwxcid
+                group_obj:r-x---
+                other_obj:r-x---
+
+	Side effects:
+
+		Default cell = requestorRealm
+
+	Note: the tests implicitly verify change rights.
+
+16. verify that the storingRealm cell_admin can read files in the
+    subdir
+17. verify that the storingRealm DCE root can read files in the subdir
+18. verify that the storingRealm cell_admin can delete files in the
+    subdir
+19. verify that the storingRealm DCE root can delete files in the
+    subdir
+20. verify that Fred cannot cd into subdir
+21. verify that Fred cannot ls subdir
+22. verify that Fred cannot create a file in subdir
+23. verify that Fred cannot delete a file in subdir
+24. verify that Fred cannot change the c-bit in user_obj
+25. verify that cell_admin in FredCell cannot change the c-bit
+26. verify that DCE root in FredCell cannot change the c-bit
+
+	Joe changes ACL
+
+		foreign_user:Fred:r-x---
+
+27. verify that Fred can cd into subdir
+28. verify that Fred can now ls subdir
+
+	Joe changes ACL
+
+		foreign_user:Fred:--x---
+
+29. verify that Fred can cd to subdir
+
+	Joe changes ACL
+
+		foreign_group:FredGroup:r-x---
+
+30. verify that members of FredGroup can ls subdir
+
+	Joe changes ACL
+
+		foreign_user:Fred:rwxc--
+		foreign_other:FredCell:r-x---
+
+31. verify that Fred can change the ACL on subdir
+32. verify that other principals in FredCell can list subdir
+33. verify that Fred can not create a file in subdir
+34. verify that Fred can not delete a file in subdir
+
+	Joe changes ACL
+
+		foreign_user:Fred:rwxci-
+		foreign_group:FredGroup:rwxc--
+
+35. verify that Fred can create a file in subdir
+36. verify that members of FredGroup can change the ACL on subdir
+
+	Joe changes ACL
+
+		foreign_user:Fred:rwxcid
+		foreign_group:FredGroup:rwxci-
+		foreign_other:FredCell:rwxc--
+
+37. verify that Fred can delete a file in subdir
+38. verify that members of FredGroup can create files in subdir
+39. verify that members of FredGroup cannot delete files in subdir
+40. verify that other principals can change the ACL on subdir
+
+	Joe changes ACL
+
+		foreign_group:FredGroup:rwxcid
+		foreign_other:FredCell:rwxci-
+
+41. verify that members of FredGroup can delete files in subdir
+42. verify that other principals can create files in subdir
+
+	Joe changes ACL
+
+		foreign_other:FredCell:rwxcid
+
+43. verify that other principals can delete files in subdir
+
+
+C. Inheriting ACLs
+
+	Design center:
+
+		file system in storingRealm mounted in requestingRealm
+
+        Fred creates directory with ACL
+
+		default cell = Fred Cell
+
+                user_obj:rwxcid
+                group_obj:r-x---
+                other_obj:r-x---
+
+		initial object:
+
+                user_obj:rw-c--
+                group_obj:r-----
+                other_obj:r-----
+
+		initial container:
+
+                user_obj:rwxcid
+                group_obj:r-x---
+                other_obj:r-x---
+
+	Joe creates file in dir ("echo testing > file")
+
+1. verify that the file has the ACL
+
+		default cell = JoeCell
+
+		user_obj:rw-c--
+		group_obj:r-----
+		other_obj:r-----
+
+	Joe creates a subdir in dir ("mkdir subdir")
+
+2. verify that the subdir has the ACL
+
+		default cell = JoeCell
+
+		user_obj:rwxcid
+		group_obj:r-x---
+		other_obj:r-x---
+
+3. verify subdir has the io ACL
+
+		initial object
+
+		user_obj:rw-c--
+		group_obj:r-----
+		other_obj:r-----
+
+4. verify subdir has the ic ACL
+
+		initial container
+
+		user_obj:rwxcid
+		group_obj:r-x---
+		other_obj:r-x---
+
+        Fred adds to ACL
+
+		mask_obj:rwxcid
+		user:Bill:r-x---
+		foreign_user:Joe:rwxcid
+		foreign_group:JoeGroup:r-x---
+		foreign_other:JoeCell:r-x---
+		any_other:r-x---
+
+		initial object:
+
+		mask_obj:r-xc--
+		user:Bill:r-x---
+		foreign_user:Joe:r-----
+		foreign_group:JoeGroup:r-x---
+		foreign_other:JoeCell:r-----
+		any_other:r-x---
+
+		initial container:
+
+		mask_obj:rwxcid
+		user:Bill:r-----
+		foreign_user:Joe:rwxcid
+		foreign_group:JoeGroup:r-x---
+		foreign_other:JoeCell:r-x---
+		any_other:r-x---
+
+	Joe creates file in dir ("echo testing > file")
+
+5. verify that the file has the ACL
+
+		default cell = JoeCell
+
+		mask_obj:rw-c--
+		user_obj:rw-c--
+		group_obj:r-----
+		other_obj:r-----
+		user:Joe:r-----
+		foreign_user:Bill:r-x--- #effective r-----
+		foreign_user:Fred:rw-c--
+		foreign_other:FredCell:r-----
+		group:JoeGroup:r-x---   #effective:r-----
+		any_other:r-x---      #effective:r-----
+
+	Joe creates a subdir in dir ("mkdir subdir")
+
+6. verify that the subdir has the ACL
+
+		default cell = JoeCell
+
+		mask_obj:rwxcid
+		user_obj:rwxcid
+		group_obj:r-x---
+		other_obj:r-x---
+		user:Joe:rwxcid
+		foreign_user:Bill:r-----
+		foreign_user:Fred:rwxcid
+		foreign_other:JoeCell:r-x---
+		group:JoeGroup:r-x---
+		any_other:r-x---
+
+7. verify subdir has the io ACL
+
+		initial object
+
+		mask_obj:rwxc--
+		user_obj:rw-c--
+		group_obj:r-----
+		other_obj:r-----
+		user:Joe:r-----
+		foreign_user:Bill:r-x---
+		foreign_user:Fred:rw-c--
+		foreign_other:JoeCell:r-----
+		group:JoeGroup:r-x---
+		any_other:r-x---
+
+8. verify subdir has the ic ACL
+
+		initial container
+
+		mask_obj:rwxcid
+		user_obj:rwxcid
+		group_obj:r-x---
+		other_obj:r-x---
+		user:Joe:rwxcid
+		foreign_user:Bill:rwxcid
+		foreign_user:Fred:rwxcid
+		foreign_other:JoeCell:r-x---
+		group:JoeGroup:r-x---
+		any_other:r-x---
+
+	Fred creates FredFile in subdir
+
+9. verify that FredFile has the ACL
+
+		Default cell = FredCell
+
+		mask_obj:r-----
+		user_obj:rw-c--
+		user:Fred:r-----
+		foreign_user:Joe:r-----
+		group_obj:r-----
+		foreign_group:JoeGroup:r-x--- #effective:r-----
+		other_obj:r-----
+		foreign_other:JoeCell:r-----
+		any_other:r-x---        #effective:r-----
+
+	Fred creates FredDir in subdir
+
+10. verify that FredDir has the ACL
+
+		Default cell = FredCell
+
+		mask_obj:rwxcid
+		user_obj:rwxcid
+		user:Fred:rwxcid
+		foreign_user:Joe:rwxcid
+		group_obj:r-x---
+		foreign_group:JoeGroup:r-x---
+		other_obj:r-x---
+		foreign_other:JoeCell:r-x---
+		any_other:r-x---
+
+11. verify that FredDir has the io ACL
+
+		mask_obj:r-x---
+		user_obj:rw-c--
+		user:Fred:r-----
+		foreign_user:Joe:r-----
+		group_obj:r-----
+		foreign_group:JoeGroup:r-x---
+		other_obj:r-----
+		foreign_other:JoeCell:r-----
+		any_other:r-x---
+
+12. verify that FredDir has the ic ACL
+
+		mask_obj:rwxcid
+		user_obj:rwxcid
+		user:Fred:rwxcid
+		foreign_user:Joe:rwxcid
+		group_obj:r-x---
+		foreign_group:JoeGroup:r-x---
+		other_obj:r-x---
+		foreign_other:JoeCell:r-x---
+		any_other:r-x---
+

@@ -1,0 +1,176 @@
+#!/bin/ksh
+# 
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# @OSF_COPYRIGHT@
+# 
+# HISTORY
+# $Log: switch_DNS,v $
+# Revision 1.1.4.2  1996/03/11  01:47:59  marty
+# 	Update copyright years
+# 	[1996/03/10  19:47:40  marty]
+#
+# Revision 1.1.4.1  1995/12/11  17:16:55  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  17:01:17  root]
+# 
+# Revision 1.1.2.4  1994/08/17  11:51:44  marrek
+# 	Use uname -n .
+# 	[1994/08/17  07:37:15  marrek]
+# 
+# Revision 1.1.2.3  1994/08/01  12:27:23  marrek
+# 	Fixes for OT 10742, 11357, 11432.
+# 	[1994/08/01  12:26:13  marrek]
+# 
+# Revision 1.1.2.2  1994/07/22  11:41:06  marrek
+# 	Fix typo in version comment.
+# 	[1994/07/22  08:17:56  marrek]
+# 
+# Revision 1.1.2.1  1994/07/20  14:06:36  marrek
+# 	Add OSF copyright notice.
+# 	[1994/07/20  14:01:45  marrek]
+# 
+# 	Initial Version
+# 	[1994/07/20  13:53:07  marrek]
+# 
+# 	Script switch_DNS introduced for running typeless tests
+# 
+# $EndLog$
+#
+# $RCSfile: switch_DNS,v $ $Revision: 1.1.4.2 $ $Date: 1996/03/11 01:47:59 $
+#
+#
+#  (c) Copyright 1991,1992-1994 Siemens-Nixdorf Information Systems
+#  Munich, Germany
+#  All Rights Reserved
+#
+#
+# switch_DNS
+# NAME switch_DNS
+#
+# DESC
+# {
+# GDS XDS/Switch Tests (single threaded mode) using DNS Cellname=snidec.sni.com
+# Each invocable component runs the 'xt_test -i' executable using as standard
+# input the batch file specified in each strategy statement.
+# Also, the DIT must already contain at least the two following object:
+#  DSA1:        /C=de/O=dbp/OU=dap11/CN=dsa/CN=dsa-m1
+#  DSA2:        /C=de/O=dbp/OU=dap11/CN=dsa/CN=dsa-m2
+# }
+#
+TP_PATH="lib/"
+_HOST_NAME=`uname -n`
+
+tet_startup="Startup"			# startup function
+tet_cleanup="Cleanup"			# cleanup function
+
+iclist="ic1 ic2 ic3"
+
+ic1="tp1"				# functions for ic1
+ic2="tp2"				# functions for ic2
+ic3="tp1"				# functions for ic3
+
+tp1() {
+	tet_infoline "XDS/Switch - cleantree"
+	$API_SCRIPTS/cleantree "${TP_PATH}"
+}
+
+tp2() {
+        tet_infoline "XDS/Switch - typeless_valid Testcases"
+        $API_SCRIPTS/TEST "${TP_PATH}"typeless_valid > /tmp/test_trace 2>&1
+        check_ERROR_xds "${TP_PATH}typeless_valid.$_HOST_NAME.result" 0 1
+}
+
+
+Verify_CDS()
+{
+   cdscp show cell /.: > /tmp/cdstst
+   if test $? -ne 0
+   then
+      tet_infoline "Verify_CDS - Couldn't execute <cdscp> properly - STOP"
+      tet_infoline "UNINITIATED"
+#     tet_result=UNINITIATED
+      exit 1
+   else
+      if [ `grep -c 'snidec.sni.com' /tmp/cdstst` -gt 0 ]
+      then
+         cdscp show dir /.:/sales > /tmp/cdstst_sales
+         if test $? -ne 0
+         then
+            tet_infoline "Verify_CDS - gdscp show dir /.:/sales failed -> STOP"
+            tet_infoline "UNINITIATED"
+#           tet_result=UNINITIATED
+            exit 1
+         fi
+         cdscp show dir /.:/sales/admin > /tmp/cdstst_sales_admin
+         if test $? -ne 0
+         then
+            tet_infoline "Verify_CDS - gdscp show dir /.:/sales/admin failed ->
+ STOP"
+            tet_infoline "UNINITIATED"
+#           tet_result=UNINITIATED
+            exit 1
+         fi
+      else
+         tet_infoline "Verify_CDS - Invalid CDS cellname specified --> STOP"
+         tet_infoline "UNINITIATED"
+#        tet_result=UNINITIATED
+         exit 1
+      fi
+   fi
+}
+
+
+Cleanup() 
+{
+        rm -f /tmp/test_trace
+        if [[ -z "$KEEP_API_LOGS" ]]
+        then
+          find ${TET_EXECUTE}/switch/lib/typeless_valid -name *.log -exec rm -f {} \;
+        fi
+        rm -f ${TET_EXECUTE}/switch/save*
+	tet_infoline "TESTING (XDS/Switch) with XT_TEST FINISHED"
+}
+
+Startup() 
+{
+        rm -f ${TET_EXECUTE}/tet.log
+
+#        echo "\n\
+#        Aware that CDS is installed already - Enter 'n' if not: \n\
+#            : \c"
+#        read xyz
+#        if [ x$xyz = xn ]
+#        then
+#           exit
+#        fi
+
+        Verify_CDS
+
+        if [ $? -ne 0 ]
+        then
+           exit 
+#        else
+#           echo "\n\
+#           Aware you have executed <dce_login> - Enter 'n' if not: \n\
+#               : \c"
+#           read xyz
+#           if [ x$xyz = xn ]
+#           then
+#              exit
+#           fi
+        fi
+
+	export_paths
+
+	tet_infoline "TESTING (XDS/Switch) with XT_TEST STARTED"
+        . ${TET_EXECUTE}/config/two_dsas.sh
+}
+
+#source shell common functions
+. ${TET_EXECUTE}/lib/shfuncs
+
+#execute shell test case manager - must be last line
+. ${TET_ROOT}/lib/xpg3sh/tcm.sh

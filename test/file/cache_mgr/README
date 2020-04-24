@@ -1,0 +1,128 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: README,v $
+# Revision 1.1.8.1  1996/10/17  18:17:30  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:49:43  damon]
+#
+# Revision 1.1.2.5  1993/01/11  18:25:00  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  16:56:13  htf]
+# 
+# Revision 1.1.2.4  1992/11/18  21:16:04  jaffe
+# 	Transarc delta: fred-ot5906-add-more-info 1.1
+# 	  Selected comments:
+# 	    To close out defect 5906.
+# 	    Re-arranged Cautions section to be more readable, and better explain how
+# 	    to handle the sticky bit on directories.
+# 	[1992/11/18  14:27:03  jaffe]
+# 
+# Revision 1.1.2.3  1992/11/04  19:21:39  jaffe
+# 	Transarc delta: fred-cc-fix-socket-port 1.3
+# 	  Selected comments:
+# 	    Additional fixes were necessary.  A couple calls to htons were added and
+# 	    also normalized the optn() flags.  There values are different on AIX and
+# 	    OSF/1.
+# 	    Added text to clarify how to run tests and to warn about some potential
+# 	    setup problems.
+# 	    Forgot to include new .h file.
+# 	[1992/11/04  17:33:50  jaffe]
+# 
+# Revision 1.1.2.2  1992/10/28  16:00:59  jaffe
+# 	New file
+# 	[1992/10/27  16:57:50  jaffe]
+# 
+# $EndLog$
+
+			DFS Cache Consistency Tests
+
+
+This file contains some simple steps for running the DFS cache 
+consistency tests.  These instructions assume the cache consistency
+tests have been "installed" (via the ODE build program).
+
+Overview:
+
+  The cache consistency tests are model after a master/slave paradigm.  The
+  master program (hub) issues commands to the slave programs (spoke).  These
+  commands tell the spoke to execute some number of file system operations.
+  After all slaves have executed the tests, the master issues commands to
+  the slaves to verify results.
+
+  In addition, some tests will involve stress programs that will carry
+  out I/O operations while the remaining test programs carry through on
+  test cases.
+
+  The intention is to have a number of spoke progras running in various 
+  locations.  For example, in a two machine configuration exporting the
+  file system mounted at /usr as root.dfs (/:) on machine A, you might
+  start spoke programs in the following locations.
+
+    /:    - on machine A
+    /usr  - on machine A
+    /:    - on machine B
+
+  Then you could start a hub program in either /: or /usr on machine A.
+
+
+Cautions:
+
+  There are a number of things to be aware of when running the tests.  
+
+  - First you must be DCE logged in.  We run logged in as cell_admin.
+  - Be sure the directory you are in does not have the sticky bit set, i.e.
+    if you do an ls -ld on the directory the permissions do not include a
+    lower case 't'.  If it does you can remove it by issuing a 
+    'chmod 777 <dir_name>'.  It is suggested that you create a sub-directory in
+    which to run the tests.  Make sure the permissions on this directory
+    allow the appropriate access for the tests to create and remove files.
+  - Be sure you have the hub and spoke programs running in the correct
+    locations, i.e. the same "global" directories.
+
+
+Running the Tests:
+
+1)  Change to the appropriate install directory.  This will be,
+
+      <sandbox>/install/<machine>/test/file/cache_mgr
+
+    There should be two programs here called, hub and spoke.
+
+2)  For each client machine involved in the tests, change to an appropriate
+    directory (e.g. /.../mycell/fs/test) and start a spoke program
+    on that machine.  For example,
+
+      spoke &
+
+    NOTE: 
+	The cache consistency tests can be run on a single machine by
+ 	executing a spoke under DFS and another under the local path
+	that is exported by DFS.
+
+    Each spoke program will print the number of the socket it has obtained
+    for the hub to communicate with it.  The socket number 5555 is the
+    default.
+
+3)  On the server machine change directory to the same directory as the
+    spoke programs were started in and start the hub program with the 
+    following syntax.
+
+      hub <machine>[/<port>] <machine>[/<port>] ...
+
+    If the spoke program on the respective machine obtained the 5555 port,
+    then the port number is not required.  However, if the spoke program
+    acquired another port, you need to enter it. For example.
+
+      hub larry curly/6543 moe/3456
+
+    In this case the spoke program on larry is assumed to be communicating
+    on port number 5555.
+
+That's it.  If the program completes successfully it will print that
+it returned 0 values in all cases.  Otherwise it will report non-zero
+return values.

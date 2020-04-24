@@ -1,0 +1,203 @@
+#!/bin/sh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: test14,v $
+# Revision 1.1.10.1  1996/10/17  18:30:24  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:55:17  damon]
+#
+# Revision 1.1.4.5  1993/01/11  18:35:55  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:18:49  htf]
+# 
+# Revision 1.1.4.4  1992/10/28  18:14:55  jaffe
+# 	Transarc delta: fred-ot5472-use-testhome-variable 1.1
+# 	  Selected comments:
+# 	    Fixed the fs and low tests to correctly use TESTTOP.  We were setting a
+# 	    variable, testhome, as the location for the test scripts and executables,
+# 	    but we did not use it to execute C programs.
+# 	    (I checked out some scripts which did not need this change.)
+# 	    Use testhome when referencing C executables.
+# 	Transarc delta: jess-add-dumpkernel-in-low-tests 1.5
+# 	  Selected comments:
+# 	    Add function call (icl_DumpKernel) in the test suite. In case of running
+# 	    error of C programmes in the test suite the "icl_DumpKernel" function
+# 	    will be called in errex() to do the kernel trace. The dump file is located
+# 	    in "/tmp/prog#.kernel.dump.pid". You have to have the debug flag set to
+# 	    have the dump file.
+# 	    See above.
+# 	    Process another C file and add "low" as dump file header.
+# 	    Turn on the prog3 debug flags.
+# 	    It should not create the zero length dumpfile when there is nothing wrong.
+# 	Transarc delta: jess-ot5320-fix-fs-low-testhome 1.1
+# 	  Selected comments:
+# 	    The fs and low test shell scripts have the following if statement
+# 	    if [ "$TESTTOP" = "`pwd`" ]
+# 	    then
+# 	    UTIL_DIR=../util
+# 	    testhome=$TESTTOP
+# 	    else
+# 	    UTIL_DIR=$TESTTOP/util
+# 	    testhome=$TESTTOP/$testSuiteType
+# 	    fi
+# 	    The problem is that variable testSuiteType is not defined at this time.
+# 	    See above.
+# 	[1992/10/28  14:53:05  jaffe]
+# 
+# Revision 1.1.4.3  1992/09/25  17:31:22  jaffe
+# 	Transarc delta: jess-ot5196-low-test-err-redirection 1.1
+# 	  Selected comments:
+# 	    Redirect stderr to stdout from running programs of low/tests
+# 	[1992/09/24  12:50:54  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/28  18:17:32  jaffe
+# 	Transarc delta: rajesh-clean-low-tests 1.5
+# 	  Selected comments:
+# 	    To remove make and clean options from the low test suite. To change
+# 	    the scripts to use common shell functions. To create a file
+# 	    fs_functionsScript with the common shell functions in the util
+# 	    directory.
+# 	    To remove make and clean options. To change the scripts to use common
+# 	    shell functions from util/fs_functionsScript instead of inline code.
+# 	    Modify scripts to follow coding standards, simplify the code, increase
+# 	    readability etc.
+# 	    No changes yet
+# 	    More of above.
+# 	    Modify the tests to give them a simpler logical structure, modularity,
+# 	    readability ( one command per line) and to change then to use the
+# 	    common function created earlier.
+# 	    See above.
+# 	    Modification of rtest1 and rtest2 to use the utility functions
+# 	    correctly.
+# 	[1992/08/28  12:34:53  jaffe]
+# 
+# Revision 1.1.2.3  1992/05/29  23:00:21  mason
+# 	Transarc delta: fred-3754-change-script-name 1.1
+# 	  Selected comments:
+# 	    To clean up a number of defects with the tests.  In addition to defect
+# 	    3754, the changes also fix defects 3750 and 3748.
+# 	    Fixed setting of TESTTOP variable.
+# 	[1992/05/29  13:01:42  mason]
+# 
+# Revision 1.1.2.2  1992/05/21  12:50:24  jaffe
+# 	Transarc delta: fred-merge-tests 1.1
+# 	  Selected comments:
+# 	    Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	    the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	    should be looking at the same test code.
+# 	    Changes to facilitate merge of local DFS test code with the OSF's.
+# 	Transarc delta: fred-remove-sys 1.1
+# 	  Selected comments:
+# 	    To remove dependency on the AFS sys command in the test scripts.
+# 	    To remove dependency on AFS sys command.
+# 	[1992/05/20  20:55:58  jaffe]
+# 
+# $EndLog$
+###############################################################################
+#    Copyright (C) 1990, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This script tests holey files.
+
+# In case of error the C program will dump the kernel data into
+# a file "/tmp/prog#.kernel.dump.pid" if the debug flag is on.
+
+# Usage: test14 
+
+###############################################################################
+
+#
+# PrintUsage() -
+#   Prints the usage message for this script.
+
+PrintUsage()
+{
+    echo "$programName tests holey files"
+    echo "Usage: $programName "
+}
+
+#
+# Initialise some variables. UTIL_DIR is the directory containing 
+# the script fs_FunctionsScript with common functions.
+#
+
+TESTTOP=${TESTTOP:="`pwd`"}
+if [ "$TESTTOP" = "`pwd`" ]
+then
+    UTIL_DIR=../util
+    testhome=$TESTTOP
+else
+    UTIL_DIR=$TESTTOP/util
+    testhome=$TESTTOP/low
+fi
+
+. $UTIL_DIR/fs_FunctionsScript
+
+trap '
+    cd $currentDir; 
+    rm -f tfile.14 $programName.out
+    echo "$programName killed; returning $scriptErrorExit" | tee -a $logFile; 
+    exit $scriptErrorExit
+     ' 2 3 15
+
+fs_InitSetup low
+
+#
+# Parse the command line
+#
+
+while [ "$1" != "" ]
+do 
+    case $1 in 
+        help|-help) PrintUsage;
+                    exit $successExit;
+                    ;;
+
+        *)          echo "ERROR $testSuiteType/$programName: invalid argument \"$1\"" | tee -a $logFile; 
+                    exit $scriptErrExit
+                    ;;
+    esac
+done
+
+###############################################################################
+
+fs_CheckBinaryExistence $testhome/$cProgramName
+
+#
+# Start test
+#
+
+(
+    echo "$programName (holey) starting in $currentDir"; 
+    echo "Host `hostname` ($fs_sysName)"; 
+    date
+) | tee -a $logFile
+
+fs_DetermineFSType
+
+$testhome/$cProgramName > $programName.out; errorCount=$?; cat $programName.out | tee -a $logFile 2>&1
+
+#
+# Remove temporary file created by the test. (Previously done in -clean option)
+#
+
+(
+    echo "$programName cleaning up" ; 
+    date 
+) | tee -a $logFile
+
+rm -f  tfile.14 $programName.out
+
+(
+    echo "";
+    echo "$testSuiteType/$programName returning $errorCount in $currentDir"; 
+    date
+) | tee -a $logFile
+
+exit $errorCount
+

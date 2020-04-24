@@ -1,0 +1,518 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rgynbase.idl,v $
+ * Revision 1.1.12.1  1996/06/04  21:59:31  arvind
+ * 	merge u2u addition of sec_rgy_acct_auth_user_to_user from mb_u2u
+ * 	[1996/05/06  20:11 UTC  burati  /main/DCE_1.2/1]
+ *
+ * 	merge u2u work
+ * 	[1996/04/29  19:09 UTC  burati  /main/mb_u2u/1]
+ *
+ * 	,
+ * 	u2u work off Mothra, before 1.2 branch is available
+ * 	[1996/04/29  19:05 UTC  burati  /main/mb_mothra8/1]
+ *
+ * Revision 1.1.10.2  1996/03/09  23:28:14  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:42  marty]
+ * 
+ * Revision 1.1.10.1  1995/12/08  17:33:05  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:55:15  root]
+ * 
+ * Revision 1.1.7.2  1994/08/29  15:51:33  hondo
+ * 	OT 11919 --login activity idl change to support different address types
+ * 	[1994/08/28  21:48:57  hondo]
+ * 
+ * Revision 1.1.7.1  1994/07/15  15:00:08  mdf
+ * 	Hewlett Packard Security Code Drop
+ * 	[1994/07/14  17:17:26  mdf]
+ * 
+ * Revision 1.1.5.2  1992/12/29  13:30:27  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:48:33  zeliff]
+ * 
+ * Revision 1.1.3.2  1992/06/02  21:01:58  sekhar
+ * 	Drop the Unix interfaces changes made by frisco.
+ * 	[1992/06/01  20:15:34  sekhar]
+ * 
+ * Revision 1.1.1.2  1992/05/22  19:03:06  frisco
+ * 	Add Unix interface support
+ * 
+ * Revision 1.1  1992/01/19  14:54:58  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+
+/*  rgynbase.idl
+**
+** Copyright (c) Hewlett-Packard Company 1991, 1996
+** Unpublished work. All Rights Reserved.
+**
+*/
+/* 
+ * User Registry - Base network datatypes
+ */
+
+interface rgynbase
+
+{
+    import "dce/secsts.idl";
+    import "dce/passwd.idl";
+    import "dce/sec_base.idl";
+
+    /* Generic status ok */
+    const signed32      sec_rgy_status_ok = 0;
+
+    /*
+     * Types 
+     */
+
+    typedef unsigned32 bitset;
+
+    /*
+     * s e c _ t i m e v a l _ s e c _ t 
+     *
+     * The seconds portion of a unix timeval_t - to be used when expressing
+     * absolute dates. 
+     */
+    typedef signed32    sec_timeval_sec_t;
+
+    /*
+     * s e c _ t i m e v a l _  t 
+     * 
+     * A full unix timeval_t. 
+     */
+    typedef struct {
+        signed32            sec;
+        signed32            usec;
+    }               sec_timeval_t;
+
+    /*
+     * s e c _t i m e v a l _ p e r i o d _ t 
+     *
+     * A time period expressed in seconds relative to some other well known base
+     * time. 
+     */
+    typedef signed32    sec_timeval_period_t;
+
+
+   /*
+    * Account login name key abbreviation types 
+    */
+    typedef signed32    sec_rgy_acct_key_t;
+
+    /* Invalid key            */
+    const signed32      sec_rgy_acct_key_none = 0;
+
+    /* person is enough       */
+    const signed32      sec_rgy_acct_key_person = 1;
+
+    /* person and group       */
+    const signed32      sec_rgy_acct_key_group = 2;
+
+    /* person, group and org  */
+    const signed32      sec_rgy_acct_key_org = 3;
+
+    /* end of legitimate key values */
+    const signed32      sec_rgy_acct_key_last = 4;
+
+
+    /*
+     * Database cursor for iterative operations 
+     */
+    typedef struct {
+        uuid_t          source;
+        signed32        handle;
+        boolean32       valid;
+    }               sec_rgy_cursor_t;
+
+    /*
+     * Name types - the base name data types should be tied into the name
+     * system data types. 
+     */
+    const signed32        sec_rgy_pname_max_len = 256;
+    const signed32        sec_rgy_pname_t_size  = 257; /* Include final '\0' */
+    typedef [string] char sec_rgy_pname_t[sec_rgy_pname_t_size];
+
+    const signed32        sec_rgy_name_max_len = 1024;
+    const signed32        sec_rgy_name_t_size  = 1025;
+    typedef [string] char sec_rgy_name_t[sec_rgy_name_t_size];
+
+    typedef struct {
+        sec_rgy_name_t      pname;
+        sec_rgy_name_t      gname;
+        sec_rgy_name_t      oname;
+    }               sec_rgy_login_name_t;
+
+    typedef char sec_rgy_member_t[sec_rgy_name_t_size];
+
+ 
+    /* The sec_rgy_unix_passwd_t type is the registry's representation
+     * of an encrypted unix password like that returned by the unix "crypt"
+     * command.
+     */
+    const  unsigned32 sec_rgy_max_unix_passwd_len = 16;
+    typedef [string] char sec_rgy_unix_passwd_buf_t[sec_rgy_max_unix_passwd_len];
+                                        
+    /* UNIX id unassigned */
+    const unsigned32 sec_rgy_uxid_unknown = -1;   /* i.e undefined */
+
+
+    typedef struct sec_rgy_sid_t {
+        uuid_t          person;
+        uuid_t          group;
+        uuid_t          org;
+    }               sec_rgy_sid_t;
+
+    typedef struct {
+        signed32            person;
+        signed32            group;
+        signed32            org;
+    }               sec_rgy_unix_sid_t;
+
+    /*
+     * s e c_ r g y _ f o r e i g n _ i d _ t 
+     * 
+     */
+    typedef struct sec_rgy_foreign_id_t {
+        uuid_t      principal;
+        uuid_t      cell;
+    } sec_rgy_foreign_id_t;
+
+    /*
+     *PGO domains 
+     */
+    typedef signed32    sec_rgy_domain_t;
+
+    const signed32      sec_rgy_domain_person = 0;
+    const signed32      sec_rgy_domain_group = 1;
+    const signed32      sec_rgy_domain_org = 2;
+    const signed32      sec_rgy_domain_last = 3;
+
+    /*         
+     * s e c _ r g y _ p g o _ f l a g s _ t 
+     */
+    typedef bitset  sec_rgy_pgo_flags_t;
+
+        /* pgo item is an alias */
+        const unsigned32 sec_rgy_pgo_is_an_alias  = 0x1;
+
+        /* pgo item is required - cannot be deleted */
+        const unsigned32 sec_rgy_pgo_is_required  = 0x2;
+
+        /*
+         * projlist_ok: on person items indicates person can have a concurrent
+         * group set on group items indicates this group can appear on a
+         * concurrent group set.  On org items this flag is undefined. 
+         */
+        const unsigned32 sec_rgy_pgo_projlist_ok = 0x4;
+
+        /*
+         * bits 4-32 unused 
+         */
+        const unsigned32 sec_rgy_pgo_flags_none = 0;
+
+    /*
+     * s e c _ r g y _ p g o _ i t e m _ t 
+     */
+    typedef struct {
+        uuid_t              id;
+        signed32            unix_num;
+        signed32            quota;
+        sec_rgy_pgo_flags_t flags;
+        sec_rgy_pname_t     fullname;
+    }               sec_rgy_pgo_item_t;
+
+    const signed32      sec_rgy_quota_unlimited = -1;
+
+    /*
+     * s e c _ r g y _ a c c t _ a d m i n _ f l a g s _ t 
+     */
+    typedef bitset sec_rgy_acct_admin_flags_t;
+        /* account is valid for running login shell */
+        const unsigned32  sec_rgy_acct_admin_valid      = 0x1;
+
+        /* account access should be audited - NOT IMPLEMENTED */
+        const unsigned32 sec_rgy_acct_admin_audit       = 0x2;
+
+        /* Allow account to be a server principal.
+         * This account's name may be used as server name in TGT.
+         */
+        const unsigned32 sec_rgy_acct_admin_server      = 0x4; 
+
+        /* Allow account to be a client principal.
+         * This account's name may be used as client name in TGT.
+         */
+        const unsigned32 sec_rgy_acct_admin_client      = 0x8; 
+
+        /* NOTE: to prevent user from performing any authentication,
+         * turn off both sec_rgy_acct_admin_server and
+         * sec_rgy_acct_admin_client flags.
+         */
+
+        /*
+         * bits 2-32 unused 
+         */
+        const unsigned32  sec_rgy_acct_admin_flags_none = 0;
+
+    /*
+     * s e c _ r g y _ a c c t _ a u t h _ f l a g s _ t 
+     *
+     * account authorization flags implement per-principal authentication policy
+     * as defined by the Kerberos V5 protocol 
+     */
+    typedef  bitset  sec_rgy_acct_auth_flags_t;
+
+        /*
+         * allow issuance of post-dated certificates 
+         */
+        const unsigned32 sec_rgy_acct_auth_post_dated        = 0x1;
+
+        /*
+         * allow issuance of forwardable certificates 
+         */
+        const unsigned32 sec_rgy_acct_auth_forwardable      = 0x2;
+
+        /*
+         * allow issuance of certificates based on TGT authentication (not
+         *used by DECorum authorization services). 
+         */
+        const unsigned32 sec_rgy_acct_auth_tgt              = 0x4;
+
+        /*
+         * allow issuance of renewable certificates 
+         */
+        const unsigned32 sec_rgy_acct_auth_renewable        = 0x8;
+
+        /*
+         * allow issuance of proxiable certificates 
+         */
+        const unsigned32 sec_rgy_acct_auth_proxiable        = 0x10;
+
+        /*
+         * Allow issuance of KRB5 tickets to a server, based
+         * on the session key from that server's current TGT. 
+         */
+        const unsigned32 sec_rgy_acct_auth_dup_skey  = 0x20;
+
+        /*
+         * Allow and enforce DCE server authentication via the
+         * user to user protocol.  sec_rgy_acct_auth_dup_skey
+         * must also be set, for this flag to be useful.
+         */
+        const unsigned32 sec_rgy_acct_auth_user_to_user = 0x40;
+
+        /*
+         * bits 8-32 unused 
+         */
+        const unsigned32      sec_rgy_acct_auth_flags_none = 0;
+
+    /*
+     * s e c _ r g y _ a c c t _ a d m i n _ t 
+     *
+     * The portion of an account item that is only directly modifiable by an
+     * administrator. 
+     */
+    typedef struct {
+        /*
+         * creator, creation_date, last_changer and change_data are all fields
+         * that are set by the server. 
+         */
+        sec_rgy_foreign_id_t        creator;
+        sec_timeval_sec_t           creation_date;
+        sec_rgy_foreign_id_t        last_changer;
+        sec_timeval_sec_t           change_date;
+        sec_timeval_sec_t           expiration_date;
+        /*
+         * Kerberos V5+ TGT revocation.  TGTs issued before this date will not
+         * be honored. 
+         */
+        sec_timeval_sec_t           good_since_date;
+        sec_rgy_acct_admin_flags_t  flags;
+        sec_rgy_acct_auth_flags_t   authentication_flags;
+    }               sec_rgy_acct_admin_t;
+
+    /*
+     * s e c _ r g y _ a c c t _ u s e r _ f l a g s _ t 
+     *
+     */
+    typedef  bitset sec_rgy_acct_user_flags_t;
+        /*
+         * passwd_valid indicates this password is "good" - the absence of
+         * this bit forces the user to change their password. 
+         */
+        const unsigned32 sec_rgy_acct_user_passwd_valid  = 0x1;
+
+        /*
+         *bits 2-32 unused 
+         */
+        const unsigned32  sec_rgy_acct_user_flags_none = 0;
+
+
+
+    /*
+     * s e c _ r g y _ a c c t _ u s e r _ t 
+     *
+     */
+    typedef struct {
+        sec_rgy_pname_t           gecos;
+        sec_rgy_pname_t           homedir;
+        sec_rgy_pname_t           shell;
+        sec_passwd_version_t      passwd_version_number;  /* assigned by server */
+        sec_timeval_sec_t         passwd_dtm;
+        sec_rgy_acct_user_flags_t flags;
+        sec_rgy_unix_passwd_buf_t passwd;
+    }               sec_rgy_acct_user_t;
+
+    typedef  bitset  sec_rgy_plcy_pwd_flags_t;
+        const unsigned32  sec_rgy_plcy_pwd_no_spaces = 0x1;
+        const unsigned32  sec_rgy_plcy_pwd_non_alpha = 0x2;
+        /*
+         * bits 3-32 unused 
+         */
+        const unsigned32 sec_rgy_plcy_pwd_flags_none  = 0;
+
+    typedef struct {
+        signed32                    passwd_min_len;
+        sec_timeval_period_t        passwd_lifetime;
+        sec_timeval_sec_t           passwd_exp_date;
+        sec_timeval_period_t        acct_lifespan;
+        sec_rgy_plcy_pwd_flags_t    passwd_flags;
+    }               sec_rgy_plcy_t;
+
+
+    /*
+     * Authentication policy applies to registry as a whole and individual
+     * accounts.  The effective policy for an account is defined to be the
+     * more restrictive of the site and principal authentication policy 
+     *
+     */
+    typedef struct {
+        sec_timeval_period_t    max_ticket_lifetime;
+        sec_timeval_period_t    max_renewable_lifetime;
+    }               sec_rgy_plcy_auth_t;
+
+    typedef  bitset sec_rgy_properties_flags_t; 
+        const unsigned32  sec_rgy_prop_readonly                   = 0x1;
+        /* 
+         * Allow certificates to be generated for use at any site.  
+         */
+        const unsigned32 sec_rgy_prop_auth_cert_unbound           = 0x2;
+
+        /* 
+         * don't distribute passwords over the net 
+         */
+        const unsigned32 sec_rgy_prop_shadow_passwd               = 0x4;   
+        /* 
+         * All UUIDs contain embedded Unix ID; thus,
+         * unix IDs for rgy objects cannot be changed 
+         * (since UUIDs for rgy_objects are not modifiable.
+         */
+        const unsigned32 sec_rgy_prop_embedded_unix_id            = 0x8;
+        /*
+         * bits 6-32 unused 
+         */
+        const unsigned32  sec_rgy_properties_none                 = 0;
+
+ 	
+    typedef struct {
+        signed32                    read_version;
+        signed32                    write_version;
+        sec_timeval_period_t        minimum_ticket_lifetime;
+        /* 
+         * The "normal" lifetime  of an an authentication certificate
+         * (Ticket-Granting Ticket in Kerberos parlance). Processes may
+         * request authentication certificates with longer lifetimes up to,
+         * but not in excess of, the maximum allowable lifetime as determined
+         * by the effective policy for the account. 
+         *
+         */
+        sec_timeval_period_t        default_certificate_lifetime;   
+        /* The "low unix id" for each of the pgo domains is the
+         * lowest unix id that the rgy will use to begin a search
+         * for the next available unix_id to assign to an object 
+         * in the domain.
+         */
+        unsigned32                  low_unix_id_person;
+        unsigned32                  low_unix_id_group;
+        unsigned32                  low_unix_id_org;
+        unsigned32                  max_unix_id;
+
+        sec_rgy_properties_flags_t  flags;
+
+	/*
+  	 * The authentication realm for which this dce security server is
+         * the certificate authority.  The realm is assigned when the
+         * the master replica is created, and cannot be changed (this
+         * restriction may be relaxed in future versions of DCE)
+  	 */
+        sec_rgy_name_t              realm;
+        uuid_t                      realm_uuid;
+        /* Quota for unauthenticated users */
+        signed32                    unauthenticated_quota;
+    }               sec_rgy_properties_t;
+
+
+    /* Constants relating to the override functionality */
+    const unsigned char *     sec_rgy_wildcard_name = "*";
+
+    const unsigned char *     sec_rgy_wildcard_sid = "*.*.*";
+
+    typedef signed32    sec_rgy_override_t;
+
+    /* turn overrides off */
+    const signed32      sec_rgy_no_override = 0;
+
+    /* turn overrides on */
+    const signed32      sec_rgy_override = 1;
+
+    typedef signed32    sec_rgy_mode_resolve_t;
+
+    /* resolve apollo pathnames */
+    const signed32      sec_rgy_resolve_pname = 0;
+
+
+    /* don't resolve apollo pathnames */
+    const signed32      sec_rgy_no_resolve_pname = 1;
+
+
+    /*
+     * rgy_unix_ datatypes... 
+     */
+
+    /*
+     * sizeof sec_rgy_login_name_t plus padding for null terminator and
+     * natural alignment. 
+     */
+    typedef [string] char sec_rgy_unix_gecos_t[292];
+
+    typedef [string] char sec_rgy_unix_login_name_t[sec_rgy_name_t_size /* *3 */];
+
+    typedef struct {
+        sec_rgy_unix_login_name_t   name;
+        sec_rgy_unix_passwd_buf_t   passwd;
+        signed32                    uid;
+        signed32                    gid;
+        signed32                    oid;
+        sec_rgy_unix_gecos_t        gecos;
+        sec_rgy_pname_t             homedir;
+        sec_rgy_pname_t             shell;
+    }               sec_rgy_unix_passwd_t;
+
+    typedef [string] char sec_rgy_member_buf_t[sec_rgy_name_t_size * 10];
+
+    typedef struct {
+        sec_rgy_name_t              name;
+        signed32                    gid;
+        sec_rgy_member_buf_t        members;
+    }               sec_rgy_unix_group_t;
+}

@@ -1,0 +1,156 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for 
+# the full copyright text.
+#
+# HISTORY
+# $Log: test2,v $
+# Revision 1.1.6.1  1996/10/17  18:23:40  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:52:02  damon]
+#
+# Revision /main/HPDCE02/3  1995/06/22  20:14 UTC  maunsell_c
+# 	mothra C&S fixes
+# 
+# Revision /main/HPDCE02/2  1995/02/14  22:43 UTC  maunsell_c
+# 	@sys @host changes for nfs/dfs gateway
+# 
+# Revision /main/HPDCE02/1  1994/11/07  20:45 UTC  maunsell_c
+# 	test fixes-enhances from last pull up from OSF
+# 
+# Revision 1.1.2.2  1994/08/22  16:16:28  maunsell_c
+# 	test w/o realms file, restore realms file
+# 	[1994/08/22  16:06:05  maunsell_c]
+# 
+# 	boost coverage of test
+# 	[1994/08/10  16:48:09  maunsell_c]
+# 
+# Revision 1.1.2.1  1994/07/28  17:38:13  mckeen
+# 	Initial Revision
+# 	[1994/07/28  14:10:27  mckeen]
+# 
+# $EndLog$
+#
+###############################################################################
+# This test is applicable to DFS/NFS exporter.
+# The script tests the dfs_logout help and cmd line funtions
+###############################################################################
+#
+# if not run via the runtests script use          
+#         test2 >test2.log 2>&1
+# to log test data
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+rc=0
+ty=dfs_login
+
+: ${SERVER= `mount | grep "/\.\.\. on" | cut -d' ' -f3 | sed 's/:\/\.\.\.//'`}
+
+echo ""
+echo "RUNNING dfs_logout help COMMANDS on $hn."
+echo "========================================================================="
+date
+echo ""
+
+###############################################################################
+
+   echo ""
+   echo "dfs_logout -help"
+   dfs_logout -help 
+   rf=$?
+   if test $rf -ne 0 
+      then
+      echo "failed ($p: E1)"
+      rc=`expr $rc + 1`
+   fi 
+
+   echo ""
+   echo "dfs_logout -bogus_switch"
+   dfs_logout -bogus_switch
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($p: E2)"
+      rc=`expr $rc + 1`
+   fi
+
+###############################################################################
+echo ""
+echo "RUNNING dfs_logout COMMANDS on $hn using SERVER $SERVER."
+echo "========================================================================="
+date
+echo ""
+
+###############################################################################
+
+   echo ""
+   echo "dfs_logout -h bogusserver"
+   dfs_logout -h bogusserver
+   rf=$?
+   if test $rf -eq 0
+      then
+      echo "worked ($rf) ($p: E3)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "dfs_logout -h $SERVER bogususer"
+   dfs_logout -h $SERVER bogususer
+   rf=$?
+   if test $rf -eq 0
+      then
+      echo "worked ($rf) ($p: E4)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "dfs_logout -h $SERVER"
+   dfs_logout -h $SERVER
+      rf=$?
+   if test $rf -eq 0
+      then
+      echo "worked ($rf) ($p: E5)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "dfs_logout"
+   dfs_logout
+   rf=$?
+   if test $rf -eq 0
+      then
+      echo "failed ($rf) ($p: E6)"
+      rc=`expr $rc + 1`
+   fi 
+
+   echo ""
+   echo "dfs_login without a realms file"
+   mv /krb5/krb.realms /krb5/save.realms
+   dfs_login -h $SERVER root -dce-
+   rf=$?
+   if test $rf -eq 0
+      then
+      echo "failed ($rf) ($p: E7)"
+      rc=`expr $rc + 1`
+   fi
+   mv /krb5/save.realms /krb5/krb.realms
+
+   dfs_logout
+
+######################################
+
+echo ""
+echo "Done at `date`."
+echo ""
+if [ $rc -eq 0 ]
+   then
+   echo "$ty/$p PASSED"
+else 
+   echo "$ty/$p FAILED $rc errors"
+fi
+exit $rc

@@ -1,0 +1,442 @@
+#!/bin/sh
+
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: test7,v $
+# Revision 1.1.10.1  1996/10/17  18:30:33  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:55:22  damon]
+#
+# Revision 1.1.4.5  1993/01/11  18:36:10  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:19:27  htf]
+# 
+# Revision 1.1.4.4  1992/10/28  18:15:18  jaffe
+# 	Transarc delta: fred-ot5472-use-testhome-variable 1.1
+# 	  Selected comments:
+# 	    Fixed the fs and low tests to correctly use TESTTOP.  We were setting a
+# 	    variable, testhome, as the location for the test scripts and executables,
+# 	    but we did not use it to execute C programs.
+# 	    (I checked out some scripts which did not need this change.)
+# 	    Use testhome when referencing C executables.
+# 	Transarc delta: jess-add-dumpkernel-in-low-tests 1.5
+# 	  Selected comments:
+# 	    Add function call (icl_DumpKernel) in the test suite. In case of running
+# 	    error of C programmes in the test suite the "icl_DumpKernel" function
+# 	    will be called in errex() to do the kernel trace. The dump file is located
+# 	    in "/tmp/prog#.kernel.dump.pid". You have to have the debug flag set to
+# 	    have the dump file.
+# 	    See above.
+# 	    Process another C file and add "low" as dump file header.
+# 	    Turn on the prog3 debug flags.
+# 	    It should not create the zero length dumpfile when there is nothing wrong.
+# 	Transarc delta: jess-ot5320-fix-fs-low-testhome 1.1
+# 	  Selected comments:
+# 	    The fs and low test shell scripts have the following if statement
+# 	    if [ "$TESTTOP" = "`pwd`" ]
+# 	    then
+# 	    UTIL_DIR=../util
+# 	    testhome=$TESTTOP
+# 	    else
+# 	    UTIL_DIR=$TESTTOP/util
+# 	    testhome=$TESTTOP/$testSuiteType
+# 	    fi
+# 	    The problem is that variable testSuiteType is not defined at this time.
+# 	    See above.
+# 	[1992/10/28  14:58:12  jaffe]
+# 
+# Revision 1.1.4.3  1992/09/25  17:31:39  jaffe
+# 	Transarc delta: jess-ot5186-fix-low-test7-remove-files 1.1
+# 	  Selected comments:
+# 	    Make sure the test files deleted. See the defect record 5186.
+# 	    Make changes on the "trap handling's rm files" and clean up part.
+# 	Transarc delta: jess-ot5196-low-test-err-redirection 1.1
+# 	  Selected comments:
+# 	    Redirect stderr to stdout from running programs of low/tests
+# 	    same
+# 	[1992/09/24  12:52:52  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/28  18:18:21  jaffe
+# 	Transarc delta: rajesh-clean-low-tests 1.5
+# 	  Selected comments:
+# 	    To remove make and clean options from the low test suite. To change
+# 	    the scripts to use common shell functions. To create a file
+# 	    fs_functionsScript with the common shell functions in the util
+# 	    directory.
+# 	    To remove make and clean options. To change the scripts to use common
+# 	    shell functions from util/fs_functionsScript instead of inline code.
+# 	    Modify scripts to follow coding standards, simplify the code, increase
+# 	    readability etc.
+# 	    No changes yet
+# 	    More of above.
+# 	    Modify the tests to give them a simpler logical structure, modularity,
+# 	    readability ( one command per line) and to change then to use the
+# 	    common function created earlier.
+# 	    See above
+# 	    Modification of rtest1 and rtest2 to use the utility functions
+# 	    correctly.
+# 	[1992/08/28  12:36:44  jaffe]
+# 
+# Revision 1.1.2.3  1992/05/29  23:00:56  mason
+# 	Transarc delta: fred-3754-change-script-name 1.1
+# 	  Selected comments:
+# 	    To clean up a number of defects with the tests.  In addition to defect
+# 	    3754, the changes also fix defects 3750 and 3748.
+# 	    Fixed setting of TESTTOP variable.
+# 	[1992/05/29  13:16:31  mason]
+# 
+# Revision 1.1.2.2  1992/05/21  12:51:20  jaffe
+# 	Transarc delta: fred-merge-tests 1.1
+# 	  Selected comments:
+# 	    Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	    the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	    should be looking at the same test code.
+# 	    Changes to facilitate merge of local DFS test code with the OSF's.
+# 	Transarc delta: fred-remove-sys 1.1
+# 	  Selected comments:
+# 	    To remove dependency on the AFS sys command in the test scripts.
+# 	    To remove dependency on AFS sys command.
+# 
+# 	$TALog: test7,v $
+# 	Revision 4.25  1994/11/08  16:17:54  cfe
+# 	[merge of changes from 4.22 to 4.24 into 4.23]
+# 
+# 	[*** log entries omitted ***]
+# 
+# Revision 4.23  1994/08/23  19:04:40  berman
+# 	Change test to not use tdir.7/*
+# 
+# 	Rearrange the if-then to rm -fr tdir.7 then mkdir tdir.7.  Cleans up
+# 	without referencing tdir.7/*.
+# 	[from r4.22 by delta berman-db4889-low-test7-cmd-length, r1.1]
+# 
+# Revision 4.22  1993/01/14  17:40:58  jaffe
+# 	revdrop of latest OSF copyright changes to these files
+# 	[from r4.20 by delta osf-revdrop-01-12-92, r1.1]
+# 
+# 	[1992/05/20  21:02:55  jaffe]
+# 
+# $EndLog$
+#
+###############################################################################
+#     Copyright (C) 1990, 1992 Transarc Corporation - All rights reserved     #
+###############################################################################
+
+# This script runs a C program which tests hard links and symlinks. Both
+# types of links are made to several types of files and directories.
+
+# In case of error the C program will dump the kernel data into
+# a file "/tmp/prog#.kernel.dump.pid" if the debug flag is on.
+
+# Usage is:      test7 [-np #-procs] [-nt #-times] [-nd #-dirs] [-nf #-files]
+#                      [-nhl #-hard-links] [-nsl #-symlinks]
+#                      [-nnsl #-non-existent-symlinks] [-nsf #-subdir-files]
+# Default is  test7 -np 1 -nt 1 -nf 1 -nd 1 -nhl 1 -nsl 1 -nnsl 1 -nsf 1
+
+###############################################################################
+
+#
+# PrintUsage() -
+#   Prints the usage message for this script.
+
+PrintUsage()
+{
+    echo "$programName tests links and symlinks"
+    echo "Usage:"
+    echo "   $programName [-np #-procs] [-nt #-times] [-nd #-dirs] [-nf #-files]"
+    echo "      [-nhl #-hard-links] [-nsl #-symlinks] 
+    echo "      [-nnsl #-non-existent-symlinks] [-nsf #-subdir-files] "
+}
+
+#
+# remove test files when singnals caught or after the running of the test
+# (may be it needs to be added into the util subdir as a a utility functions)
+#
+
+RemoveTestFiles()
+{
+cd $currentDir; 
+finish=2;
+while [ $finish -ne 0 ] 
+do 
+    /bin/rm -rf $programName.*.out; 
+    /bin/rm -fr dir.[0-9]*.[0-9]*; 
+    /bin/rm -fr file.[0-9]*.[0-9]*;
+    if [ $? -eq 0 ] 
+    then 
+        finish=`expr $finish - 1`
+    fi
+    /bin/rm -fr tdir.7
+    if [ $? -eq 0 ] 
+    then 
+        finish=`expr $finish - 1`
+    fi
+done
+}
+
+#
+# Initialise some variables. UTIL_DIR is the directory containing 
+# the script fs_FunctionsScript with common functions.
+#
+
+TESTTOP=${TESTTOP:="`pwd`"}
+if [ "$TESTTOP" = "`pwd`" ]
+then
+    UTIL_DIR=../util
+    testhome=$TESTTOP
+else
+    UTIL_DIR=$TESTTOP/util
+    testhome=$TESTTOP/low
+fi
+
+. $UTIL_DIR/fs_FunctionsScript
+
+trap '
+    RemoveTestFiles;
+    echo "$programName killed; returning $scriptErrorExit" | tee -a $logFile; 
+    exit $scriptErrorExit
+     ' 2 3 15
+
+fs_InitSetup low
+
+#
+# Default option argument values
+#
+
+directoryCount=1; 
+fileCount=1; 
+hardLinkCount=1; 
+bogusSymLinkCount=1; 
+processCount=1; 
+subDirFileCount=1;
+symLinkCount=1;
+iterationCount=1; 
+
+#
+# Parse the command line
+#
+
+while [ "$1" != "" ]
+do 
+    case $1 in 
+        help|-help) PrintUsage;
+                    exit $successExit;
+                    ;;
+
+        nd|-nd)     CheckOptionValue "nd" $testSuiteType $programName $*;
+                    directoryCount=$2;
+                    shift; 
+                    shift;
+                    ;;
+
+        nf|-nf)     CheckOptionValue "nf" $testSuiteType $programName $*;
+                    fileCount=$2;
+                    shift; 
+                    shift;
+                    ;;
+
+        nhl|-nhl)   CheckOptionValue "nhl" $testSuiteType $programName $*;
+                    hardLinkCount=$2;
+                    shift; 
+                    shift;
+                    ;;
+
+        nnsl|-nnsl) CheckOptionValue "nnsl" $testSuiteType $programName $*;
+                    bogusSymLinkCount=$2;
+                    shift; 
+                    shift;
+                    ;;
+
+        np|-np)     CheckOptionValue "np" $testSuiteType $programName $*;
+                    processCount=$2;
+                    shift; 
+                    shift;
+                    ;;
+
+        nsf|-nsf)   CheckOptionValue "nsf" $testSuiteType $programName $*;
+                    subDirFileCount=$2;
+                    shift; 
+                    shift;
+                    ;;
+
+        nsl|-nsl)   CheckOptionValue "nsl" $testSuiteType $programName $*;
+                    symLinkCount=$2;
+                    shift; 
+                    shift;
+                    ;;
+
+        nt|-nt)     CheckOptionValue "nt" $testSuiteType $programName $*;
+                    iterationCount=$2;
+                    shift; 
+                    shift;
+                    ;;
+
+        *)          echo "ERROR $testSuiteType/$programName: invalid argument \"$1\"" | tee -a $logFile; 
+                    exit $scriptErrExit
+                    ;;
+    esac
+done
+
+#
+# Validate arguments
+#
+
+if [ $directoryCount -lt 0 ]
+then 
+    echo "$programName: number of directories must be >= 0" | tee -a $logFile; 
+    exit $scriptErrorExit
+elif [ $fileCount -lt 0 ]
+then 
+    echo "$programName: number of files must be >= 0" | tee -a $logFile; 
+    exit $scriptErrorExit
+elif [ $hardLinkCount -lt 0 ]
+then 
+    echo "$programName: number of hard links must be >= 0" | tee -a $logFile; 
+    exit $scriptErrorExit
+elif [ $bogusSymLinkCount -lt 0 ]
+then 
+    echo "$programName: number of non-existent symlinks must be >= 0" | tee -a $logFile; 
+    exit $scriptErrorExit
+elif [ $processCount -lt 1 ]
+then 
+    echo "$programName: number of processes must be >= 1" | tee -a $logFile; 
+    exit $scriptErrorExit
+elif [ $subDirFileCount -lt 1 ]
+then 
+    echo "$programName: number of subdir files must be >= 1" | tee -a $logFile; 
+    exit $scriptErrorExit
+elif [ $symLinkCount -lt 0 ]
+then 
+    echo "$programName: number of symlinks must be >= 0" | tee -a $logFile; 
+    exit $scriptErrorExit
+elif [ $iterationCount -lt 1 ]
+then 
+    echo "$programName: number of times must be >= 1" | tee -a $logFile; 
+    exit $scriptErrorExit
+fi
+
+###############################################################################
+
+fs_CheckBinaryExistence $testhome/$cProgramName
+
+#
+# Start test
+#
+
+(
+    echo "$programName (link) starting in $currentDir"; 
+    echo "Host `hostname` ($fs_sysName)"; 
+    date
+) |  tee -a $logFile
+
+echo "$processCount processes, parent process number $$, $iterationCount times" | tee -a $logFile
+echo "$fileCount files, $directoryCount directories, $subDirFileCount subdir files" | tee -a $logFile
+echo "$hardLinkCount hard links, $symLinkCount symlinks, $bogusSymLinkCount non-existent symlinks" | tee -a $logFile
+fs_DetermineFSType
+if [ -d tdir.7 ]
+then
+    /bin/rm -fr tdir.7
+fi
+
+mkdir tdir.7
+if [ \( $? -ne 0 \) -o \( ! -d tdir.7 \) ]
+then 
+    echo "$programName: cannot make tdir.7" | tee -a $logFile; 
+    errorCount=2
+fi
+
+processNum=1
+while [ \( $errorCount -eq 0 \) -a \( $processNum -le $processCount \) ]
+do
+    echo "$programName starting process number $processNum" | tee -a $logFile
+    (
+        $testhome/$cProgramName $iterationCount $subDirFileCount $fileCount $directoryCount $hardLinkCount $symLinkCount $bogusSymLinkCount > $currentDir/$programName.$processNum.out 2>&1
+        result=$?
+        if [ $result -ne 0 ]
+        then 
+            echo "- ERROR: $cProgramName process $processNum returned $result" >> $currentDir/$programName.$processNum.out
+        fi
+    ) &
+    processNum=`expr $processNum + 1`
+done
+
+###############################################################################
+
+echo ""
+wait
+
+processNum=1
+while [ $processNum -le $processCount ]
+do
+    echo "" | tee -a $logFile
+    cat $programName.$processNum.out | tee -a $logFile
+    grep -s 'ERROR' $programName.$processNum.out 2> /dev/null
+    if [ $? -ne 1 ]
+    then
+        echo "$programName process $processNum failed" | tee -a $logFile; 
+        errorCount=1
+    else 
+        echo "$programName process $processNum results OK" | tee -a $logFile
+    fi
+    processNum=`expr $processNum + 1`
+done
+
+if [ $errorCount -eq 0 ]
+then
+    ne=`ls $currentDir/dir.[0-9]*.[0-9]* 2> /dev/null | wc -l`
+    if [ $ne -ne 0 ]
+    then 
+        (
+            echo ""; 
+            echo "$programName left directories in $currentDir"
+        ) | tee -a $logFile; 
+        errorCount=1
+    fi
+    ne=`ls $currentDir/file.[0-9]*.[0-9]* 2> /dev/null | wc -l`
+    if [ $ne -ne 0 ]
+    then 
+        (
+            echo ""; 
+            echo "$programName left files in $currentDir"
+        ) | tee -a $logFile; 
+        errorCount=1
+    fi
+    ne=`ls -A tdir.7 2> /dev/null | wc -l`
+    if [ $ne -ne 0 ]
+    then 
+        (
+            echo ""; 
+            echo "$programName left files in tdir.7"
+        ) | tee -a $logFile; 
+        errorCount=1
+    fi
+fi
+
+###############################################################################
+
+#
+# Remove temporary file created by the test. (Previously done in -clean option)
+#
+(
+    echo "$programName cleaning up" ; 
+    date 
+) | tee -a $logFile
+
+RemoveTestFiles;
+
+(
+    echo ""; 
+    echo "$testSuiteType/$programName returning $errorCount in $currentDir"; 
+    date
+) | tee -a $logFile
+
+
+exit $errorCount
+
+###############################################################################

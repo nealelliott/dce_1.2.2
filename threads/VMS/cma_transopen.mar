@@ -1,0 +1,536 @@
+.title cma_transopen CMA$OPEN_SHARE transfer vector
+.ident 'V1.0'
+;++
+; @OSF_COPYRIGHT@
+; COPYRIGHT NOTICE
+; Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+; ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+; the full copyright text.
+; 
+; HISTORY
+; $Log: cma_transopen.mar,v $
+; Revision 1.1.6.2  1996/03/09  23:31:01  marty
+; 	Update OSF copyright year
+; 	[1996/03/09  22:46:15  marty]
+;
+; Revision 1.1.6.1  1995/12/07  21:58:43  root
+; 	Submit OSF/DCE 1.2.1
+; 	[1995/12/07  21:04:16  root]
+; 
+; Revision 1.1.4.1  1994/06/09  13:37:09  devsrc
+; 	 CR10892 - fix copyright in file
+; 	[1994/06/09  13:27:11  devsrc]
+; 
+; Revision 1.1.2.2  1992/12/15  22:25:11  alan
+; 	Insert copyright notices
+; 	[1992/12/07  19:33:58  alan]
+; 
+; $EndLog$
+;--
+;****************************************************************************
+;*                                                                          *
+;*  Copyright © 1990, 1991	                                            *
+;*  by DIGITAL Equipment Corporation, Maynard, Mass.                        *
+;*                                                                          *
+;*  This software is furnished under a license and may be used and  copied  *
+;*  only  in  accordance  with  the  terms  of  such  license and with the  *
+;*  inclusion of the above copyright notice.  This software or  any  other  *
+;*  copies  thereof may not be provided or otherwise made available to any  *
+;*  other person.  No title to and ownership of  the  software  is  hereby  *
+;*  transferred.                                                            *
+;*                                                                          *
+;*  The information in this software is subject to change  without  notice  *
+;*  and  should  not  be  construed  as  a commitment by DIGITAL Equipment  *
+;*  Corporation.                                                            *
+;*                                                                          *
+;*  DIGITAL assumes no responsibility for the use or  reliability  of  its  *
+;*  software on equipment which is not supplied by DIGITAL.                 *
+;*                                                                          *
+;****************************************************************************
+
+;****************************************************************************
+;  FACILITY:
+;
+;	CMA/VMS prototype/reference implementation
+;
+;  ABSTRACT:
+;
+;	This module contains the transfer vectors for entry into the CMA
+;	sharable image containing the "open" function interfaces.
+;
+;  AUTHORS:
+;
+;	Dave Butenhof
+;
+;  CREATION DATE:
+;
+;	23 August 1990
+;
+;  MODIFICATION HISTORY:
+;
+;	001	Paul Curtin	12 September 1990
+;		Added pthread exception routines: transfer_ptde/transfer_ptdenp
+;	002	Dave Butenhof	9 October 1990
+;		Add the exceptions and distinguished handles.
+;	003	Paul Curtin	15 October 1990
+;		Renamed $cmadef -> $cma$def; cma$_ ->;
+;	004	Dave Butenhof	27 December 1990
+;		Rename and rearrange some exceptions.
+;	005	Dave Butenhof	22 January 1991
+;		More work on exceptions.
+;	006	Dave Butenhof	4 February 1991
+;		Rename pthread exc interface names, to avoid confusion with
+;		the "pthread"-ized exception names.
+;	007	Dave Butenhof	7 February 1991
+;		New alert control names
+;	008	Dave Butenhof	18 March 1991
+;		Add cma_g_debug with address of cma_debug()
+;	009	Dave Butenhof	25 March 1991
+;		Add mini-entry point to return FP in frame
+;	010	Paul Curtin	25 June 1991
+;		Changed $cma$def to $cmadef 
+;	011	Paul Curtin	25 June 1991
+;		Removed dependency on cma$s_*
+;	012	DECthreads team		22 July 1991
+;		Added cma__save_exc_context
+;	013	Dave Butenhof	07 October 1991
+;		Add pthread get/set guardsize functions.
+;	014	Dave Butenhof	29 October 1991
+;		The current pass-through call from exc_handler to the real
+;		"exc$handler" in cma$rtl causes the mechanism array's depth
+;		argument to be off by one, messing up the sys$unwind. Create
+;		a local function that will patch the establisher depth before
+;		calling through to exc$handler (just to be safe, restore it
+;		after the return).
+;******************************************************************************
+
+.psect	$$transfer	pic,exe,nowrt,shr,page
+
+.external	cma$$unimplemented
+.external	cma$exc_handler
+
+	$cmadef
+	$ssdef
+	$sfdef
+
+.macro	client_handle	name
+	.align		quad
+	.transfer	'name'
+'name'::
+	.long		0, 0
+.endm	client_handle
+
+.macro	client_func	name
+	.external	cma$'name'
+	.align		quad
+	.transfer	cma_g_'name'
+cma_g_'name'::
+	.address	cma$'name'
+.endm	client_func
+
+.macro	exception	name
+	.align		quad
+	.transfer	cma_e_'name'
+cma_e_'name'::
+	.long		^x02130456		; MAGIC NUMBER for status exc
+	.long		cma$_'name'
+.endm	exception
+
+.macro	exc_eption	name	; Exceptions with "exc" prefix
+	.align		quad
+	.transfer	exc_e_'name'
+exc_e_'name'::
+	.long		^x02130456		; MAGIC NUMBER for status exc
+	.long		cma$_'name'
+.endm	exc_eption
+
+.macro	exc_ss_eption	name, ssname	; Exceptions with "exc" prefix & ss$_ code
+	.align		quad
+	.transfer	exc_e_'name'
+exc_e_'name'::
+	.long		^x02130456		; MAGIC NUMBER for status exc
+	.long		ss$_'ssname'
+.endm	exc_ss_eption
+
+.macro	null_exception
+	.long		0, 0
+.endm	null_exception
+
+.macro	transfer_cma	routine
+	.external	cma$'routine'
+	.align		quad			; quadword align entry
+	.transfer	cma_'routine'
+cma_'routine'::
+	.word		0
+	callg		(ap), g^cma$'routine'
+	ret
+.endm	transfer_cma
+
+.macro	transfer_exc	routine
+	.external	cma$exc_'routine'
+	.align		quad			; quadword align entry
+	.transfer	exc_'routine'
+exc_'routine'::
+	.word		0
+	callg		(ap), g^cma$exc_'routine'
+	ret
+.endm	transfer_exc
+
+.macro	transfer_icma	routine
+	.external	cma$$'routine'
+	.align		quad			; quadword align entry
+	.transfer	cma__'routine'
+cma__'routine'::
+	.word		0
+	callg		(ap), g^cma$$'routine'
+	ret
+.endm	transfer_icma
+
+;
+; NOTE: the callg transfer entries are 9 bytes long. As a result, the entire
+; transfer vector is actually octaword aligned, rather than quadword aligned.
+; even though this jmp vector fits within 8 bytes, we don't want to destroy
+; the alignment (especially since this used to be a callg, and that would
+; result in an incompatible change to the transfer vector). Therefore, we add
+; a NOP to the end, forcing the next ".align quad" to maintain the octaword
+; alignment.
+;
+.macro	trans_lcl_exc	routine, mask
+	.align		quad			; quadword align entry
+	.transfer	exc_'routine'
+exc_'routine'::
+	.word		'mask'
+	jmp		l^lcl_'routine'
+	nop
+.endm	trans_lcl_exc
+
+.macro	transfer_ptd	routine
+	.external	cma$ptd_'routine'
+	.align		quad			; quadword align entry
+	.transfer	pthread_'routine'
+pthread_'routine'::
+	.word		0
+	callg		(ap), g^cma$ptd_'routine'
+	ret
+.endm	transfer_ptd
+
+.macro	transfer_ptde	routine
+	.external	cma$ptdexc_'routine'
+	.align		quad			; quadword align entry
+	.transfer	ptdexc_'routine'
+ptdexc_'routine'::
+	.word		0
+	callg		(ap), g^cma$ptdexc_'routine'
+	ret
+.endm	transfer_ptde
+
+.macro	transfer_ptdenp	routine
+	.external	cma$ptdexc_'routine'_np
+	.align		quad			; quadword align entry
+	.transfer	ptdexc_'routine'_np
+ptdexc_'routine'_np::
+	.word		0
+	callg		(ap), g^cma$ptdexc_'routine'_np
+	ret
+.endm	transfer_ptdenp
+
+.macro	unimp
+	.align		quad
+	.word		0
+	callg		(ap), g^cma$$unimplemented
+	ret
+.endm	unimp
+
+.align quad
+
+client_handle	cma_c_null
+client_handle	pthread_attr_default
+client_handle	pthread_condattr_default
+client_handle	pthread_mutexattr_default
+
+.repeat 5
+	.align	quad		; Reserved handles for future use
+	.long	0,0
+.endr
+
+transfer_cma	alert_disable_asynch
+transfer_cma	alert_disable_general
+transfer_cma	alert_enable_asynch
+transfer_cma	alert_enable_general
+transfer_cma	alert_restore
+transfer_cma	alert_test
+transfer_cma	attr_create
+transfer_cma	attr_delete
+transfer_cma	attr_get_guardsize
+transfer_cma	attr_get_inherit_sched
+transfer_cma	attr_get_mutex_kind
+transfer_cma	attr_get_priority
+transfer_cma	attr_get_sched
+transfer_cma	attr_get_stacksize
+transfer_cma	attr_set_guardsize
+transfer_cma	attr_set_inherit_sched
+transfer_cma	attr_set_mutex_kind
+transfer_cma	attr_set_priority
+transfer_cma	attr_set_sched
+transfer_cma	attr_set_stacksize
+transfer_cma	cond_broadcast
+transfer_cma	cond_create
+transfer_cma	cond_delete
+transfer_cma	cond_signal
+transfer_cma	cond_signal_int
+transfer_cma	cond_timed_wait
+transfer_cma	cond_wait
+transfer_cma	dbgext
+transfer_cma	debug
+transfer_cma	debug_get
+transfer_cma	debug_register
+transfer_cma	debug_set
+transfer_cma	delay
+transfer_cma	errno
+trans_lcl_exc	handler, 0
+transfer_exc	pop_ctx
+transfer_exc	push_ctx
+transfer_exc	raise
+transfer_exc	raise_status
+transfer_exc	report
+transfer_cma	handle_assign
+transfer_cma	handle_equal
+transfer_cma	init
+transfer_cma	key_create
+transfer_cma	key_get_context
+transfer_cma	key_set_context
+transfer_cma	lock_global
+transfer_cma	mutex_create
+transfer_cma	mutex_delete
+transfer_cma	mutex_lock
+transfer_cma	mutex_try_lock
+transfer_cma	mutex_unlock
+transfer_cma	once
+transfer_cma	stack_assign_np
+transfer_cma	stack_call_routine_np
+transfer_cma	stack_check_limit_np
+transfer_cma	stack_create_np
+transfer_cma	stack_delete_np
+transfer_cma	thread_alert
+transfer_cma	thread_create
+transfer_cma	thread_detach
+transfer_cma	thread_exit_error
+transfer_cma	thread_exit_normal
+transfer_cma	thread_get_priority
+transfer_cma	thread_get_sched
+transfer_cma	thread_get_self
+transfer_cma	thread_join
+transfer_cma	thread_set_priority
+transfer_cma	thread_set_sched
+transfer_cma	time_get_expiration
+transfer_cma	unlock_global
+transfer_cma	yield
+
+transfer_ptd	attr_create
+transfer_ptd	attr_delete
+transfer_ptd	attr_getinheritsched
+transfer_ptd	attr_getprio
+transfer_ptd	attr_getsched
+transfer_ptd	attr_getstacksize
+transfer_ptd	attr_setinheritsched
+transfer_ptd	attr_setprio
+transfer_ptd	attr_setsched
+transfer_ptd	attr_setstacksize
+transfer_ptd	cancel
+transfer_ptd	cond_broadcast
+transfer_ptd	cond_destroy
+transfer_ptd	cond_init
+transfer_ptd	cond_signal
+transfer_ptd	cond_timedwait
+transfer_ptd	cond_wait
+transfer_ptd	condattr_create
+transfer_ptd	condattr_delete
+transfer_ptd	create
+transfer_ptd	detach
+transfer_ptd	exit
+transfer_ptd	getprio
+transfer_ptd	getscheduler
+transfer_ptd	getspecific
+transfer_ptd	join
+transfer_ptd	keycreate
+transfer_ptd	mutex_destroy
+transfer_ptd	mutex_init
+transfer_ptd	mutex_lock
+transfer_ptd	mutex_trylock
+transfer_ptd	mutex_unlock
+transfer_ptd	mutexattr_create
+transfer_ptd	mutexattr_delete
+transfer_ptd	once
+transfer_ptd	self
+transfer_ptd	setasynccancel
+transfer_ptd	setcancel
+transfer_ptd	setprio
+transfer_ptd	setscheduler
+transfer_ptd	setspecific
+transfer_ptd	testcancel
+transfer_ptd	yield
+
+transfer_ptd	delay_np
+transfer_ptd	get_expiration_np
+transfer_ptd	lock_global_np
+transfer_ptd	mutexattr_getkind_np
+transfer_ptd	mutexattr_setkind_np
+transfer_ptd	unlock_global_np
+
+transfer_ptde	attr_create
+transfer_ptde	attr_delete
+transfer_ptde	attr_getinheritsched
+transfer_ptde	attr_getprio
+transfer_ptde	attr_getsched
+transfer_ptde	attr_getstacksize
+transfer_ptde	attr_setinheritsched
+transfer_ptde	attr_setprio
+transfer_ptde	attr_setsched
+transfer_ptde	attr_setstacksize
+transfer_ptde	cancel
+transfer_ptde	cond_broadcast
+transfer_ptde	cond_destroy
+transfer_ptde	cond_init
+transfer_ptde	cond_signal
+transfer_ptde	cond_timedwait
+transfer_ptde	cond_wait
+transfer_ptde	condattr_create
+transfer_ptde	condattr_delete
+transfer_ptde	create
+transfer_ptde	detach
+transfer_ptde	exit
+transfer_ptde	getprio
+transfer_ptde	getscheduler
+transfer_ptde	getspecific
+transfer_ptde	join
+transfer_ptde	keycreate
+transfer_ptde	mutex_destroy
+transfer_ptde	mutex_init
+transfer_ptde	mutex_lock
+transfer_ptde	mutex_trylock
+transfer_ptde	mutex_unlock
+transfer_ptde	mutexattr_create
+transfer_ptde	mutexattr_delete
+transfer_ptde	once
+transfer_ptde	self
+transfer_ptde	setasynccancel
+transfer_ptde	setcancel
+transfer_ptde	setprio
+transfer_ptde	setscheduler
+transfer_ptde	setspecific
+transfer_ptde	testcancel
+transfer_ptde	yield
+
+transfer_ptdenp	delay
+transfer_ptdenp	get_expiration
+transfer_ptdenp	lock_global
+transfer_ptdenp	mutexattr_getkind
+transfer_ptdenp	mutexattr_setkind
+transfer_ptdenp	unlock_global
+
+;
+; Added for BL7
+;
+client_func	debug
+transfer_ptd	cond_signal_int_np
+transfer_ptdenp	cond_signal_int
+
+	.align	quad
+	.transfer exc_fetch_fp
+exc_fetch_fp::	.word	0
+	movl	b^sf$l_save_fp(fp), r0
+	ret
+
+transfer_icma   save_exc_context
+transfer_ptd	attr_getguardsize_np
+transfer_ptd	attr_setguardsize_np
+transfer_ptde	attr_getguardsize_np
+transfer_ptde	attr_setguardsize_np
+
+;
+; Added for BL9
+;
+transfer_cma	debug_cmd
+client_func	debug_cmd
+
+.repeat 9			; reserve some undefined entries
+unimp
+.endr
+
+exc_eption	uninitexc
+
+exc_ss_eption	illaddr, accvio
+exc_ss_eption	exquota, exquota
+exc_ss_eption	insfmem, insfmem
+exc_ss_eption	nopriv, nopriv
+exc_ss_eption	illinstr, opcdec
+exc_ss_eption	resaddr, radrmod
+exc_ss_eption	privinst, opcdec
+exc_ss_eption	resoper, roprand
+exc_ss_eption	SIGTRAP, break
+exc_ss_eption	SIGIOT, abort
+exc_ss_eption	SIGEMT, compat
+exc_ss_eption	aritherr, fltovf
+exc_ss_eption	SIGSYS, badparam
+exc_ss_eption	SIGPIPE, nombx
+exc_ss_eption	excpu, excputim
+exc_ss_eption	exfilsiz, exdiskquota
+exc_ss_eption	intovf, intovf
+exc_ss_eption	intdiv, intdiv
+exc_ss_eption	fltovf, fltovf
+exc_ss_eption	fltdiv, fltdiv
+exc_ss_eption	fltund, fltund
+exc_ss_eption	decovf, decovf
+exc_ss_eption	subrng, subrng
+
+exception	alerted
+exception	assertion
+exception	badparam
+exception	bugcheck
+exception	exit_thread
+exception	existence
+exception	in_use
+exception	use_error
+exception	wrongmutex
+exception	stackovf
+exception	nostackmem
+exception	notcmastack
+exception	unimp
+exception	inialrpro
+exception	defer_q_full
+exception	signal_q_full
+exception	alert_nesting
+
+.repeat	20
+null_exception
+.endr
+
+;;
+;; Local functions needed for transfers
+;;
+
+lcl_handler:
+	movl	8(ap), r0	; get mechanism array
+	movab	8(r0), r0	; calculate address of depth
+	pushl	r0
+	pushl	(r0)		; save the current establisher depth
+	incl	(r0)		; increment depth for call
+	callg	(ap), g^cma$exc_handler	; call real handler
+	movl	(sp)+, @(sp)+	; restore establisher depth
+	ret
+
+.end
+;;  DEC/CMS REPLACEMENT HISTORY, Element CMA_TRANSOPEN.MAR
+;;  *12   31-OCT-1991 12:36:55 BUTENHOF "Fix some exception problems"
+;;  *11   14-OCT-1991 13:47:58 BUTENHOF "Add pthread get/set guardsize transfers"
+;;  *10   26-JUL-1991 15:51:19 CURTIN "added cma%%save_exc_context"
+;;  *9    25-JUN-1991 16:31:11 CURTIN "changed some names"
+;;  *8    25-JUN-1991 15:49:36 CURTIN "changed $cma$def to $cmadef"
+;;  *7     1-APR-1991 18:07:57 BUTENHOF "QAR 93, exception text"
+;;  *6    21-MAR-1991 09:28:03 BUTENHOF "Fix up cma_debug access"
+;;  *5    12-FEB-1991 01:28:06 BUTENHOF "Change alert scoping primitives"
+;;  *4     5-FEB-1991 00:59:23 BUTENHOF "Change pthread exc interface names"
+;;  *3    24-JAN-1991 00:33:39 BUTENHOF "Exception changes"
+;;  *2    28-DEC-1990 00:04:13 BUTENHOF "Change exception names"
+;;  *1     5-DEC-1990 20:01:19 BUTENHOF "VAX/VMS open interface transfer vector"
+;;  DEC/CMS REPLACEMENT HISTORY, Element CMA_TRANSOPEN.MAR

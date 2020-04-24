@@ -1,0 +1,219 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: tc_concupd,v $
+# Revision 1.1.2.2  1996/03/09  20:52:23  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:57  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:53  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:32 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  20:19 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:54 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  19:38 UTC  gordon_l
+# 	Fixes for change_master/becom
+# 	e_master
+# 	[1995/12/11  22:22:40  root]
+# 
+# Revision 1.1.2.2  1993/08/02  17:41:25  sekhar
+# 	Replication system test. Initial version
+# 	[1993/08/02  17:31:45  sekhar]
+# 
+# $EndLog$
+# 
+
+if [ -z "${TC_CONCUPD_DEFINED}" ] ; then
+
+TC_CONCUPD_DEFINED=1
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  DESCRIPTION: 
+#      This test case is part of the security replication system test
+#      and tests the following:
+#
+#      Test purpose 1 : Concurrent additions and queries
+#
+#          This tests that concurrent additions and queries to the
+#          master registry work. 
+#
+#          This is done by starting the security functional tests 
+#          update and query on each slave in the cell.
+#          The update test on each slave binds to the master.
+#          The query test on each slave binds to the slave 
+#          on which the query test is running. The functions
+#          sft_x_update_all_slaves and sft_x_query_all_slaves 
+#          implement this.
+#
+#          The test then waits (using the function tc_wait_bgjobs) 
+#          until the completion of the update test on each slave.
+#
+#          Then the result of the update test on each slave is verified.
+#          ( using function sft_v_update_all_slaves ) .
+#
+#          The registry on each slave is checked for consistency 
+#          against the registry on the master security server.
+#          This is done in the function rgy_cmp_db (N.B. rgy_cmp_db
+#          stops and restarts the master and slave security servers)
+#
+#      Test purpose 2 : Concurrent deletions and queries
+#
+#          This tests that concurrent deletions and queries to the
+#          master registry work.
+#         
+#          The is identical to Test purpose 1 except that the items
+#          are deleted from instead of being added to the master
+#          registry.
+#          
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+tet_startup="tc_concupd_init"
+tet_cleanup="tc_concupd_cleanup"
+tet_testlist="tc_concadd tc_concdel"
+
+iclist="ic1 ic2"
+ic1="tc_concadd"
+ic2="tc_concdel"
+
+tc_concupd_init()
+{
+    typeset st 
+    tet_infoline "................. Test: tc_concupd"
+    tc_common_init ; st=$?
+    if [ $st -ne 0 ] ; then
+        tet_delete $ic1 "tc_concupd_init(): Initialization failed"
+        tet_delete $ic2 "tc_concupd_init(): Initialization failed"
+        return 
+    fi
+}
+
+tc_concupd_cleanup()
+{
+    sft_cleanup
+    tc_common_cleanup
+}
+
+tc_concadd()
+{
+    typeset st1 st2 st3 st
+
+    #   startup update and query test on every slave ; 
+    #   wait for the tests to complete
+    #   check and print the status of each test
+    #   check the consistency of the registry databases.
+
+    testdesc="Concurrent Registry Adds and Queries"
+    replog_testhdr "$testdesc"
+
+    sft_x_update_hosts "${REP_HOSTNAMES[*]}" $UPDATE_NPRINC $SFT_UPDATE_ADD
+    sft_x_query_hosts  "${REP_HOSTNAMES[*]}" "${REP_NAMES[*]}"
+    tc_wait_bgjobs "update and query tests"
+
+    sft_v_update_hosts "${REP_HOSTNAMES[*]}" $SFT_UPDATE_ADD ; st1=$?
+    sft_v_query_hosts  "${REP_HOSTNAMES[*]}" ; st2=$?
+
+    #   If there are any errors in the update or query
+    #   tests then abort the test
+
+    if [[ $st1 -ne 0 || $st2 -ne 0 ]] ; then
+        tet_delete "tc_concdel" "tc_concadd() : Update and query failed."
+        replog_testresult  "$testdesc" 1
+        return
+    fi
+
+    #   Wait for the updates to propagate to all the 
+    #   slaves. This must be done before trying to 
+    #   compare the registries for consistency.
+
+    sa_wait_prop_complete "${SLV_NAMES[*]}" ; st=$?
+    if [ $st -ne 0 ] ; then
+        tet_delete "tc_concdel" "tc_concadd() : Slave propagation failed."
+        replog_testresult  "$testdesc" $st
+        return
+    fi
+
+    #   Compare the registry databases.
+
+    rgy_cmp_db "${SLV_HOSTNAMES[*]}" "${SLV_NAMES[*]}"   ; st=$?
+
+    if [ $st -ne 0 ] ; then
+        tet_delete "tc_concdel" "tc_concadd() : Registries failed to compare"
+    fi
+    replog_testresult "$testdesc" $st
+    return
+}
+
+tc_concdel()
+{
+    typeset st1 st2 st
+
+    #   startup update test on every slave with -r option
+    #   to remove the principals, groups, organizations and 
+    #   accounts added by tc_concadd.
+    #
+    #   startup the query test on each slave .
+    #   wait for the tests to complete.
+    #   check and print the status of each test.
+    #   verify the consistency of registry databases.
+
+    testdesc="Concurrent Registry Deletes and Queries"
+    replog_testhdr "$testdesc"
+
+    sft_x_update_hosts "${REP_HOSTNAMES[*]}" $UPDATE_NPRINC $SFT_UPDATE_DEL
+    sft_x_query_hosts  "${REP_HOSTNAMES[*]}" 
+    tc_wait_bgjobs "update and query"
+
+    sft_v_update_hosts "${REP_HOSTNAMES[*]}" $SFT_UPDATE_DEL  ; st1=$?
+    sft_v_query_hosts  "${REP_HOSTNAMES[*]}" ; st2=$?
+
+    #   If there are any errors in the update or query
+    #   tests then abort the test
+    if [[ $st1 -ne 0 || $st2 -ne 0 ]] ; then
+        replog_testresult  "$testdesc" 1    # 1=> Failed 
+        return
+    fi
+
+    #   Wait for the updates to propagate to all the 
+    #   slaves. This must be done before trying to 
+    #   compare the registries for consistency.
+
+    sa_wait_prop_complete "${SLV_NAMES[*]}" ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult  "$testdesc" $st
+        return
+    fi
+
+    #   Compare the registry databases.
+
+    rgy_cmp_db "${SLV_HOSTNAMES[*]}" "${SLV_NAMES[*]}"   ; st=$?
+
+    replog_testresult "$testdesc" $st
+    return
+}
+
+. $TET_ROOT/profile.dcest
+. ./profile
+. ./replog
+. ./tc_common
+. ./slv
+. ./sft
+. $TCM
+#. $TET_ROOT/lib/xpg3sh/tcm.sh
+
+fi

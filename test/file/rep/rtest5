@@ -1,0 +1,2010 @@
+#!/bin/sh
+
+###############################################################################
+#    Copyright (C) 1996, 1995 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# Single server replication tests.
+# Tests require two aggregates on the same server.
+
+# Implements the following tests:
+#	TEST_SS_B_007
+#	TEST_SS_B_010
+#	TEST_SS_E_001
+#	TEST_SS_E_002
+#	TEST_SS_B_011
+#	TEST_SS_B_012
+# from replication checklist.
+
+#
+# optional argument: -verbose
+#
+
+# 
+# specify server by running this from runtest script
+#
+
+argcount=$#
+verbose=0
+date
+
+# check for verbose flag
+
+if test $argcount -gt 0
+then
+	verbose=1
+	echo OK, telling all!
+fi
+
+curdir=`pwd`
+prognam=`basename $0`
+p=$program
+dirnam=`dirname $0`
+pid=$$
+errcount=0
+cleanup_errcount=0
+
+FS_RELEASE=fs-release.$pid
+FS_SCHED=fs-sched.$pid
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo compute platform name
+fi
+
+uname=`uname -a | awk '{print $1}'`
+echo running on $uname
+
+# make sure we use the right version of ls
+
+LS="/bin/ls"
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo execute cm checkfilesets to get rid of
+	echo old cached fileset info
+fi
+
+cm checkfilesets > /dev/null 2>&1
+
+# load test context
+#
+# computes:
+# hostname in $hn
+# cellname in $CELL_NAME
+# aggregates $EPI_AGGRNAME_1 and $EPI_AGGRNAME_2 (may be the same)
+# servers $SERVER_1 and $SERVER_2 (may be the same)
+# DFS root/rtest $test_root
+#
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo loading context
+fi
+
+. $dirnam/statusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+# not used but keep around anyway
+
+host=$hn
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo host $host
+fi
+
+# set up for space tests
+
+FILESET_1=temp_fs.$pid.1
+FILESET_2=temp_fs.$pid.2
+FILESET_3=temp_fs.$pid.3
+FILESET_4=temp_fs.$pid.4
+
+MOUNT_1=$test_root/$FILESET_1.rw
+MOUNT_2=$test_root/$FILESET_2.rw
+MOUNT_3=$test_root/$FILESET_3.rw
+MOUNT_4=$test_root/$FILESET_4.rw
+
+# use these to setup single server
+
+AGGR_0=0
+AGGR_1=0
+
+get_aggr()
+{
+	AGGR_0=$1
+	AGGR_1=$2
+}
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo forcing single server testing
+	echo checking for more than one aggregate on $SERVER_1
+fi
+
+aggregate_list=""
+aggregate_list=`fts aggrinfo $SERVER_1|grep '^LFS'|sort +4nr -5 \
+	|awk '{print $3}'`
+
+i=0
+for aggre in $aggregate_list
+do
+	i=`expr $i + 1`
+done
+
+# i is a count of aggregates
+
+if test $i -gt 1
+then
+	# pull a couple of aggregates off list
+
+	get_aggr $aggregate_list
+	EPI_AGGRNAME_1=$AGGR_1
+	EPI_AGGRNAME_2=$AGGR_0
+
+	# reset SERVER_2
+
+	SERVER_2=$SERVER_1
+
+else
+	echo FATAL only one aggregate on $SERVER_1
+	echo named $EPI_AGGRNAME_1
+	echo bailing out
+	exit 1
+fi
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo ""
+	echo "*********************************"
+	echo SERVERS $SERVER_1 $SERVER_2
+	echo EPI_AGGRNAMES $EPI_AGGRNAME_1 $EPI_AGGRNAME_2
+	echo "*********************************"
+	echo ""
+fi
+
+# use these in testsourcespace and in testsource_cleanup
+filesets=-1
+server=$SERVER_1
+aggr=$EPI_AGGRNAME_1
+aggname=testsource.$pid
+FILESET_3=testsource.$pid.release
+MOUNT_3=/:/testsource.$pid.release.mount
+
+# use these in testtargetspace and in testtarget_cleanup
+fm_aggr=$EPI_AGGRNAME_1
+to_aggr=$EPI_AGGRNAME_2
+release_fileset=$FILESET_4
+fill_fileset=$FILESET_1
+release_mount=/:/testtargetspace.$pid.4
+fill_mount=/:/testtargetspace.$pid.1
+
+# cleanup routine
+
+abnormal=0
+
+cleanup()
+{
+	if test $1 -eq 0
+	then
+		echo Cleaning up
+	else
+		echo Abnormal exit: cleaning up
+		abnormal=1
+
+		# no need for verbose
+
+		verbose=0
+	fi
+
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo delete mount
+		echo at $test_root/fs.release.$pid.ro
+	fi
+	
+	fts delmount $test_root/fs.release.$pid.ro > /dev/null 2>&1
+	err=$?
+	if test $err -ne 0
+	then
+		cleanup_errcount=`expr $cleanup_errcount + 1`
+	fi
+	
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo delete mount
+		echo at $test_root/fs.release.$pid.rw
+	fi
+	
+	rm -rf $test_root/fs.release.$pid.rw/*
+	fts delmount $test_root/fs.release.$pid.rw > /dev/null 2>&1
+	err=$?
+	if test $err -ne 0
+	then
+		cleanup_errcount=`expr $cleanup_errcount + 1`
+	fi
+	
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo rem site for $FS_RELEASE
+		echo at host $SERVER_1 aggr $EPI_AGGRNAME_1
+	fi
+	
+	fts rmsite $FS_RELEASE $SERVER_1 $EPI_AGGRNAME_1>/dev/null 2>&1
+	err=$?
+	if test $err -eq 0 
+	then
+		cleanup_errcount=`expr $cleanup_errcount + 1`
+	fi
+	
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo delete $FS_RELEASE
+	fi
+	
+	fts delete $FS_RELEASE $SERVER_1 $EPI_AGGRNAME_1>/dev/null 2>&1
+	err=$?
+	if test $err -ne 0
+	then
+		cleanup_errcount=`expr $cleanup_errcount + 1`
+	fi
+	
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo delete mount
+		echo $test_root/fs.sched.$pid.ro
+	fi
+	
+	fts delmount $test_root/fs.sched.$pid.ro > /dev/null 2>&1
+	err=$?
+	if test $err -ne 0
+	then
+		cleanup_errcount=`expr $cleanup_errcount + 1`
+	fi
+	
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo delete mount
+		echo $test_root/fs.sched.$pid.rw
+	fi
+	
+	rm -rf $test_root/fs.sched.$pid.rw/*
+	fts delmount $test_root/fs.sched.$pid.rw > /dev/null 2>&1
+	err=$?
+	if test $err -ne 0
+	then
+		cleanup_errcount=`expr $cleanup_errcount + 1`
+	fi
+	
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo rem site for $FS_SCHED
+		echo at host $SERVER_2 aggr $EPI_AGGRNAME_2
+	fi
+	
+	fts rmsite $FS_SCHED $SERVER_2 $EPI_AGGRNAME_2 > /dev/null 2>&1
+	err=$?
+	if test $err -ne 0
+	then
+		cleanup_errcount=`expr $cleanup_errcount + 1`
+	fi
+	
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo delete $FS_SCHED
+	fi
+	
+	fts delete $FS_SCHED $SERVER_1 $EPI_AGGRNAME_1 > /dev/null 2>&1
+	err=$?
+	if test $err -ne 0
+	then
+		cleanup_errcount=`expr $cleanup_errcount + 1`
+	fi
+
+	if test $verbose -eq 1
+	then
+		echo fts delmount $MOUNT_4
+	fi
+	fts delmount $MOUNT_4 > /dev/null 2>&1
+	if test $verbose -eq 1
+	then
+		echo fts rmsite $FILESET_4 $SERVER_1 $EPI_AGGRNAME_1
+	fi
+	fts rmsite $FILESET_4 $SERVER_1 $EPI_AGGRNAME_1 > /dev/null 2>&1
+	if test $verbose -eq 1
+	then
+		echo fts rmsite $FILESET_4 $SERVER_2 $EPI_AGGRNAME_2
+	fi
+	fts rmsite $FILESET_4 $SERVER_2 $EPI_AGGRNAME_2 > /dev/null 2>&1
+	if test $verbose -eq 1
+	then
+		echo fts delete $FILESET_4 $SERVER_2 $EPI_AGGRNAME_2
+	fi
+	fts delete $FILESET_4 $SERVER_2 $EPI_AGGRNAME_2 > /dev/null 2>&1
+
+	if test $verbose -eq 1
+	then
+		echo fts delmount $MOUNT_3
+	fi
+	fts delmount $MOUNT_3 > /dev/null 2>&1
+	if test $verbose -eq 1
+	then
+		echo fts rmsite $FILESET_3 $SERVER_1 $EPI_AGGRNAME_1
+	fi
+	fts rmsite $FILESET_3 $SERVER_1 $EPI_AGGRNAME_1 > /dev/null 2>&1
+	if test $verbose -eq 1
+	then
+		echo fts delete $FILESET_3 $SERVER_1 $EPI_AGGRNAME_1
+	fi
+	fts delete $FILESET_3 $SERVER_1 $EPI_AGGRNAME_1 > /dev/null 2>&1
+	
+	if test $verbose -eq 1
+	then
+		echo fts delmount $MOUNT_2
+	fi
+	fts delmount $MOUNT_2 > /dev/null 2>&1
+	if test $verbose -eq 1
+	then
+		echo fts delete $FILESET_2 $SERVER_1 $EPI_AGGRNAME_1
+	fi
+	fts delete $FILESET_2 $SERVER_1 $EPI_AGGRNAME_1 > /dev/null 2>&1
+
+	if test $verbose -eq 1
+	then
+		echo fts delete $FILESET_1 $SERVER_1 $EPI_AGGRNAME_1
+	fi
+	fts delete $FILESET_1 $SERVER_1 $EPI_AGGRNAME_1 > /dev/null 2>&1
+	
+	# if abnormal exit, skip report of results
+	
+	if test $abnormal -eq 1
+	then
+		echo Abnormal exit: cleanup done
+		return
+	fi
+	
+	# report result
+	
+	if test $cleanup_errcount -ne 0
+	then
+		echo ""
+		echo $cleanup_errcount cleanup errors
+		echo check $test_root for detritus
+	fi
+	
+}
+
+# subtest cleanup routines
+
+testtarget_cleanup()
+{
+	if test $verbose -eq 1
+	then
+		echo fts delmount $release_mount $fill_mount
+	fi
+	fts delmount $release_mount $fill_mount > /dev/null 2>&1
+	if test $verbose -eq 1
+	then
+		echo fts rmsite $release_fileset $server $to_aggr
+	fi
+	fts rmsite $release_fileset $server $to_aggr > /dev/null 2>&1
+	if test $verbose -eq 1
+	then
+		echo fts delete $release_fileset $server $fm_aggr
+	fi
+	fts delete $release_fileset $server $fm_aggr > /dev/null 2>&1
+
+	if test $verbose -eq 1
+	then
+		echo fts delete $fill_fileset $server $to_aggr
+	fi
+	fts delete $fill_fileset $server $to_aggr > /dev/null 2>&1
+}
+
+testsource_cleanup()
+{
+	k=$filesets
+	filesets=`expr $filesets + 1`
+
+	echo "cleanup - deleting $filesets filesets"
+
+	if test $verbose -eq 1
+	then
+		echo fts delmount /:/testsource.$pid.tmp
+	fi
+	fts delmount /:/testsource.$pid.tmp > /dev/null 2>&1
+	if test $verbose -eq 1
+	then
+		echo fts delete testsource.$pid.tmp $server $aggr
+	fi
+	fts delete testsource.$pid.tmp $server $aggr > /dev/null 2>&1
+
+	if test $verbose -eq 1
+	then
+		echo fts delmount $MOUNT_3
+	fi
+	fts delmount $MOUNT_3 > /dev/null 2>&1
+	if test $verbose -eq 1
+	then
+		echo fts delete $FILESET_3 $server $aggr
+	fi
+	fts delete $FILESET_3 $server $aggr > /dev/null 2>&1
+
+	# how many filesets to cleanup
+	while :
+	do
+		if test $verbose -eq 1
+		then
+			echo fts rmsite $aggname.$k $server $aggr
+		fi
+		fts rmsite $aggname.$k $server $aggr > /dev/null 2>&1
+		if test $verbose -eq 1
+		then
+			echo fts delete $aggname.$k $server $aggr
+		fi
+		fts delete $aggname.$k $server $aggr > /dev/null 2>&1
+		k=`expr $k - 1`
+		if test $k -lt 0
+		then
+			k=0
+			break
+		fi
+	done
+
+	echo testsource cleanup done
+}
+
+# trap handler
+
+SIGINT=2
+SIGQUIT=3
+SIGTERM=15
+
+trap_handler()
+{
+	echo "abnormal exit"
+	testtarget_cleanup
+	testsource_cleanup
+
+	cleanup 1
+	date
+
+	exit 1
+}
+
+trap trap_handler $SIGINT $SIGQUIT $SIGTERM
+
+# =====================================================================
+# use these routines in testsourcespace and testtargetspace
+
+# create specified number of files in the current directory
+mkfiles()
+{
+
+	i=$1   # how many files to make
+
+	while :
+	do
+		if test $i -le 0
+		then
+			break
+		fi
+
+		touch file.$i
+		i=`expr $i - 1`
+	done
+}
+
+# create a large complex directory tree of specified width and depth
+# any fileset that contains this directory is expensive to clone
+mkbigdir()
+{
+	topdirname=$1
+	filecount=$2
+	dirwidth=$3
+	dirdepth=$4
+
+	here=`pwd`
+
+	mkdir $topdirname
+	cd $topdirname
+	mkfiles $filecount
+	topdirname=`pwd`
+	
+	# make one leg of the dir
+	depth=$dirdepth
+	
+	while :
+	do
+		mkdir dir.$dirwidth
+		cd dir.$dirwidth
+		mkfiles $filecount
+		
+		depth=`expr $depth - 1`
+		if test $depth -le 0
+		then
+			break
+		fi
+	done
+	
+	# At this point we have a chain of dirs of depth $dirdepth
+	# Each dir has $filecount many files in it
+	# We are in the leaf dir
+	
+	# now go back up the chain copying the subtrees
+	depth=$dirdepth
+	
+	# start counting
+	totalfiles=$filecount
+	
+	while :
+	do
+		cd ..
+	
+		totalfiles=`expr $totalfiles + 1`
+		echo $totalfiles
+		count=$totalfiles	# files in subtree
+	
+		width=`expr $dirwidth - 1`
+	
+		while :
+		do
+			# copy the subtree
+			cp -r dir.$dirwidth dir.$width
+			if test $? -ne 0
+			then
+				echo "not enough space in $topdirname"
+				cd $here
+				return 1
+			fi
+	
+			totalfiles=`expr $totalfiles + $count`
+			echo $totalfiles
+	
+			width=`expr $width - 1`
+			if test $width -le 0
+			then
+				break
+			fi
+		done
+	
+		totalfiles=`expr $totalfiles + $filecount`
+	
+		depth=`expr $depth - 1`
+		if test $depth -le 0
+		then
+			break
+		fi
+	done
+	
+	# Now we have $dirwidth subtrees in each subdir
+	totalfiles=`expr $totalfiles + 1`
+	echo $totalfiles
+	
+	echo "done making test dir $topdirname"
+
+	cd $here
+	return 0
+}
+
+# fill most of the aggregate with a big file
+# uses auxiliary c-routine 'mkfile'
+mkbigfile()
+{
+	# server
+	se=$1
+
+	# aggregate
+	ag=$2
+
+	space_in_agg=`fts aggrinfo $se $ag | awk '{print $5}'`
+	echo "free space = $space_in_agg kbytes"
+
+	space_reserved=`fts aggrinfo $se $ag | awk '{print $12}' \
+		| awk -F'(' '{print $2}'`
+	echo "reserved space = $space_reserved"
+
+	filesets_needed=`expr $space_reserved / 2000`
+	filesets_needed=`expr $filesets_needed + 1`
+	echo "need $filesets_needed filesets to exhaust the reserve"
+
+	space_allowed=`expr $filesets_needed \* 10000`
+	echo "we need $space_allowed kbytes for complex filesets"
+
+	space_to_use=`expr $space_in_agg - $space_allowed`
+	echo "we need to use up $space_to_use kbytes in this aggregate"
+
+	if test $space_to_use -lt 0
+	then
+		echo "insufficient space in aggregate for this test"
+		return 1
+	fi
+
+	blocks_in_file=`expr $space_to_use \* 1000 / 8192`
+	echo "will create file with $blocks_in_file 8 kbyte blocks"
+
+	# don't bother with small beer
+	if test $blocks_in_file -lt 1000
+	then
+		blocks_in_file=0
+	fi
+
+	if test $blocks_in_file -gt 0
+	then
+		# fileset to contain big file 
+		if test $verbose -eq 1
+		then
+			echo fts create testsource.$pid.tmp $se $ag
+		fi
+		fts create testsource.$pid.tmp $se $ag > /dev/null 2>&1
+		if test $verbose -eq 1
+		then
+			echo create mount /:/testsource.$pid.tmp
+		fi
+		fts crmount /:/testsource.$pid.tmp testsource.$pid.tmp \
+			 > /dev/null 2>&1
+		if test $verbose -eq 1
+		then
+			echo setq /:/testsource.$pid.tmp $space_in_agg
+		fi
+		fts setquota /:/testsource.$pid.tmp $space_in_agg \
+			 > /dev/null 2>&1
+		chmod 777 /:/testsource.$pid.tmp
+
+		if test -f $dirnam/mkfile
+		then
+			# the big file
+
+			$dirnam/mkfile /:/testsource.$pid.tmp/file.tmp \
+				$blocks_in_file
+		else
+			echo "cannot find 'mkfile' in current directory"
+			return 1
+		fi
+	else
+		echo "space OK, skip file creation"
+	fi
+	return 0
+}
+
+# fill aggregate with hard-to-clone filesets
+# then use up reserve with clones
+fillupaggr()
+{
+	# server
+	ser=$1
+
+	# aggregate
+	agg=$2
+
+	# base name for filesets
+	name=$3
+
+	fill_mount=/:
+
+	cm checkfilesets > /dev/null 2>&1
+	fts aggrinfo $ser $agg
+	
+	i=0
+	while :
+	do
+		echo "fts create $name.$i $ser $agg"
+		fts create $name.$i $ser $agg > /dev/null 2>&1
+		if test $? -ne 0
+		then
+			# assume aggr full
+			echo aggregate $agg is full
+			full_agg=1
+			break
+		fi
+		if test $verbose -eq 1
+		then
+			echo fts crmount $fill_mount/$name.$i $name.$i
+		fi
+		fts crmount $fill_mount/$name.$i $name.$i>/dev/null 2>&1
+		chmod 777 $fill_mount/$name.$i > /dev/null 2>&1
+		if test $verbose -eq 1
+		then
+			echo fts setquota $fill_mount/$name.$i 10000
+		fi
+		fts setquota $fill_mount/$name.$i 10000 > /dev/null 2>&1
+	
+		cp -r $dir/* $fill_mount/$name.$i > /dev/null 2>&1
+		if test $? -ne 0
+		then
+			echo "insufficient space in aggregate"
+			fts lsft -path $fill_mount/$name.$i
+			if test $verbose -eq 1
+			then
+				echo fts delmount $fill_mount/$name.$i
+			fi
+			fts delmount $fill_mount/$name.$i>/dev/null 2>&1
+			full_agg=1
+			break
+		fi
+	
+		cm flush $fill_mount/$name.$i > /dev/null 2>&1
+		fts lsquota $fill_mount/$name.$i
+		if test $verbose -eq 1
+		then
+			echo fts delmount $fill_mount/$name.$i
+		fi
+		fts delmount $fill_mount/$name.$i > /dev/null 2>&1
+		if test $verbose -eq 1
+		then
+			echo fts aggrinfo $ser $agg
+		fi
+		i=`expr $i + 1`
+		filesets=$i
+		cm checkfilesets > /dev/null 2>&1
+	done
+	
+	# how many filesets
+	filesets=$i
+	i=`expr $i + 1`
+	echo "Created $i filesets in $ser $agg"
+	
+	# use up reserve by cloning these filesets
+	cm checkfilesets > /dev/null 2>&1
+	j=$filesets
+	while :
+	do
+		if test $verbose -eq 1
+		then
+			echo "fts setrepinfo $name.$j -release"
+		fi
+		fts setrepinfo $name.$j -release > /dev/null 2>&1
+		if test $? -ne 0
+		then
+			echo "could not setrepinfo for $name.$j"
+			break
+		fi
+		echo "fts addsite $name.$j $ser $agg"
+		fts addsite $name.$j $ser $agg > /dev/null 2>&1
+		if test $? -ne 0
+		then
+			echo "could not addsite $name.$j $ser $agg"
+			break
+		fi
+		echo "fts release $name.$j"
+		fts release $name.$j > /dev/null 2>&1
+		if test $? -ne 0
+		then
+			echo "could not release $name.$j"
+			used_reserve=1
+			break
+		fi
+	
+		if test $verbose -eq 1
+		then
+			fts aggrinfo $ser $agg
+		fi
+		j=`expr $j - 1`
+		if test $j -lt 0
+		then
+			j=0
+			break
+		fi
+		cm checkfilesets > /dev/null 2>&1
+	done
+	
+	# how many clones
+	count=`expr $filesets - $j`
+	echo "Released $count clones"
+}
+
+# end routines for testsource
+# ===================================================================
+
+# verify that an attempt to release a fileset to a full aggregate
+# fails
+
+testtargetspace()
+{
+
+	# state of aggregate
+
+	echo "executing testtargetspace"
+	fts aggrinfo $server
+
+	cm checkfilesets > /dev/null 2>&1
+
+	# fill up target aggregate
+
+	echo "fill up target aggregate $to_aggr"
+	space_in_to_aggr=`fts aggrinfo $server $to_aggr \
+		| awk '{print $5}'`
+	blocks_in_fill_file=`expr $space_in_to_aggr \* 1024 / 8192`
+	echo "create file with $blocks_in_fill_file blocks in $to_aggr"
+
+	fts create $fill_fileset $server $to_aggr > /dev/null 2>&1
+	if test $? -ne 0
+	then
+		echo "could not create $fill_fileset"
+		return 1
+	fi
+	if test $verbose -eq 1
+	then
+		echo fts crmount $fill_mount $fill_fileset
+	fi
+	fts crmount $fill_mount $fill_fileset > /dev/null 2>&1
+	if test $? -ne 0
+	then
+		echo "could not mount on $fill_mount"
+		return 1
+	fi
+	if test $verbose -eq 1
+	then
+		echo fts setquota $fill_mount $space_in_to_aggr
+	fi
+	fts setquota $fill_mount $space_in_to_aggr > /dev/null 2>&1
+	if test $? -ne 0
+	then
+		echo "could not setq $fill_mount"
+		return 1
+	fi
+	chmod 777 $fill_mount
+
+	if test -f $dirnam/mkfile
+	then
+		$dirnam/mkfile $fill_mount/file.tmp $blocks_in_fill_file
+	else
+		echo "cannot find 'mkfile' in current directory"
+	fi
+
+	# make biggish fileset in source aggregate
+
+	echo "create fileset on source aggregate $fm_aggr"
+	space_in_fm_aggr=`fts aggrinfo $server $fm_aggr \
+		| awk '{print $5}'`
+	blocks_in_release_file=`expr $space_in_fm_aggr \* 1024 / 8192`
+	echo "$fm_aggr: create file with $blocks_in_release_file blocks"
+
+	fts create $release_fileset $server $fm_aggr > /dev/null 2>&1
+	if test $? -ne 0
+	then
+		echo "could not create $release_fileset"
+		return 1
+	fi
+	if test $verbose -eq 1
+	then
+		echo fts crmount $release_mount $release_fileset
+	fi
+	fts crmount $release_mount $release_fileset > /dev/null 2>&1
+	if test $? -ne 0
+	then
+		echo "could not mount on $release_mount"
+		return 1
+	fi
+	if test $verbose -eq 1
+	then
+		echo fts setquota $release_mount $space_in_fm_aggr
+	fi
+	fts setquota $release_mount $space_in_fm_aggr > /dev/null 2>&1
+	if test $? -ne 0
+	then
+		echo "could not setq $release_mount"
+		return 1
+	fi
+	chmod 777 $release_mount
+
+	$dirnam/mkfile $release_mount/file.tmp $blocks_in_release_file
+
+	# now release release_fileset to to_aggr
+
+	echo "release $release_fileset: $fm_aggr -> $to_aggr"
+	fts aggrinfo $server
+	if test $verbose -eq 1
+	then
+		echo fts setrepinfo $release_fileset -release
+	fi
+	fts setrepinfo $release_fileset -release > /dev/null 2>&1
+	if test $? -ne 0
+	then
+		echo "could not setrepinfo for $release_fileset"
+		return 1
+	fi
+
+	# now the test
+
+	fts addsite $release_fileset $server $to_aggr
+	if test $? -ne 0
+	then
+		echo "could not addsite for $release_fileset"
+		return 1
+	fi
+
+	# record the error and the output
+	temp=/tmp/testtarget.$pid.tmp
+	echo "release $release_fileset: $fm_aggr -> $to_aggr"
+	fts release $release_fileset > $temp 2>&1
+	err=$?
+
+	cat $temp
+
+	# cleanup
+
+	testtarget_cleanup
+
+	if test $err -ne 0
+	then
+		echo cannot release $release_fileset
+		message=`cat $temp|grep Error \
+			|awk '{print $4,$5,$6,$7,$8}'`
+		echo $message
+		echo TEST SUCCEEDED
+		rm -f $temp
+		return 0
+	else
+		echo test failed
+		echo able to release
+		rm -f $temp
+		return 1
+	fi
+}
+
+# verify that an attempt to release a fileset from a full aggregate
+# fails because it cannot clone
+
+testsourcespace()
+{
+	# we want to fill the aggregate and use up the reserve
+	# track whether we succeed in our laudable task
+	full_agg=0
+	used_reserve=0
+
+	# state of aggregate
+
+	echo "executing testsourcespace"
+	fts aggrinfo $server
+
+	cm checkfilesets > /dev/null 2>&1
+	
+	# where to put complex directory to fill filesets with
+	dir=/opt/deepdir.10000
+	
+	# remove old testdir
+	rm -rf $dir
+	
+	# make a large complex directory tree
+
+	echo "make test dir $dir"
+	echo "will contain about 10000 files"
+
+	mkbigdir $dir 12 5 4
+	if test $? -ne 0
+	then
+		echo "unable to create complex directory tree"
+		return 1
+	fi
+
+	# setup FILESET_3 on EPI_AGGRNAME_1 for replication
+	# mount it on MOUNT_3
+
+	if test $verbose -eq 1
+	then
+		echo fts create $FILESET_3 $server $aggr
+	fi
+	fts create $FILESET_3 $server $aggr > /dev/null 2>&1
+	if test $? -ne 0
+	then
+		echo "could not create $FILESET_3"
+		return 1
+	fi
+
+	if test $verbose -eq 1
+	then
+		echo fts crmount $MOUNT_3 $FILESET_3
+	fi
+	fts crmount $MOUNT_3 $FILESET_3 > /dev/null 2>&1
+	if test $? -ne 0
+	then
+		echo "could not mount $FILESET_3"
+		testsource_cleanup
+		return 1
+	fi
+
+	chmod 777 $MOUNT_3
+
+	# make it a complex fileset
+
+	echo "make $FILESET_3 a complex fileset"
+
+	if test $verbose -eq 1
+	then
+		echo fts setquota $MOUNT_3 10000
+	fi
+	fts setquota $MOUNT_3 10000 > /dev/null 2>&1
+	cp -r $dir/* $MOUNT_3 > /dev/null 2>&1
+	if test $? -ne 0
+	then
+		echo "insufficient space in aggregate"
+		fts aggrinfo $server $aggr
+		fts lsft -path $MOUNT_3
+		testsource_cleanup
+		return 1
+	fi
+
+	cm flush $MOUNT_3 > /dev/null 2>&1
+	fts lsquota $MOUNT_3
+
+	# now fill up whatever is left in EPI_AGGRNAME_1
+	# so there won't be room to clone
+	# do this by releasing filesets to the aggregate
+	# necessary in order to use the reserve space
+
+	# fill up most of the aggregate with a big file
+	# we do this so the test doesn't run forever
+	mkbigfile $server $aggr
+	if test $? -ne 0
+	then
+		echo "unable to fill aggr with big file"
+		testsource_cleanup
+		return 1
+	fi
+	
+	# fill up aggr with small, complex filesets
+	# use up reserve by cloning all the filesets
+	fillupaggr $server $aggr $aggname
+	
+	if test $full_agg -ne 0
+	then
+		echo "used all space in aggregate"
+	else
+		echo "still unused space in aggregate"
+	fi
+	
+	if test $used_reserve -ne 0
+	then
+		echo "used all reserve space"
+	else
+		echo "still unused reserve space"
+	fi
+
+	# come here with EPI_AGGRNAME_1 full
+	# and reserve space nearly exhausted
+
+	if test $verbose -eq 1
+	then
+		echo "$EPI_AGGRNAME_1 is nearly full"
+		echo "and reserve space nearly exhausted"
+	fi
+
+	rm -rf $dir
+
+	# now do the test
+
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo finally, do the test
+	fi
+
+	if test $verbose -eq 1
+	then
+		echo fts setrepinfo $FILESET_3 -release
+	fi
+	fts setrepinfo $FILESET_3 -release > /dev/null 2>&1
+	err=$?
+	if test $err -ne 0
+	then
+		echo cannot setrepinfo for $FILESET_3
+		echo error $err
+		testsource_cleanup
+		return 1
+	fi
+
+	# use the distinguished replica
+
+	if test $verbose -eq 1
+	then
+		echo fts setrepinfo $FILESET_3 -release
+	fi
+	fts addsite $FILESET_3 $SERVER_1 $EPI_AGGRNAME_1
+	err=$?
+	if test $err -ne 0
+	then
+		echo cannot addsite for $FILESET_3
+		echo error $err
+		testsource_cleanup
+		return 1
+	fi
+
+	temp=/tmp/temp.$pid
+
+	if test $verbose -eq 1
+	then
+		echo fts release $FILESET_3
+	fi
+	fts release $FILESET_3>$temp 2>&1
+	last_err=$?
+
+	# cleanup
+
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo cleanup after test
+	fi
+
+	testsource_cleanup
+
+	if test $last_err -eq 0
+	then
+		echo release succeeded
+		echo TEST FAILED
+		rm -f $temp
+		return 1
+	else
+		echo cannot release $FILESET_3
+		message=`cat $temp|grep Error \
+			|awk '{print $4,$5,$6,$7,$8}'`
+		echo $message
+		rm -f $temp
+		echo TEST SUCCEEDED
+		return 0
+	fi
+}
+
+# wait until replica appears
+# when repwait returns, test again to be sure
+# replica still there
+# tune values of dally and sleep as needed
+
+repwait()
+{
+	wait_server=$1
+	aggregate=$2
+	fileset=$3
+
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo wait for replication
+		echo $wait_server $aggregate $fileset
+	fi
+
+	# check for readonly
+
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo check for presence of readonly
+	fi
+
+	dally=10
+	while :
+	do
+		temp=`fts lsheader $wait_server $aggregate \
+			|grep $fileset.readonly|grep On-line`
+		if test "$temp" != ""
+		then
+			# in progress
+
+			break
+		fi
+
+		# not started yet
+
+		dally=`expr $dally - 1`
+		if test $dally -le 0
+		then
+			echo FATAL ERROR cannot update $fileset
+			echo HINT retune dally and sleep
+			echo for more retries and longer wait
+			return 1
+		fi
+		echo sleeping at `date` for $fileset
+		sleep 30
+	done
+
+	# check for clone
+
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo wait for clone to go away
+	fi
+
+	dally=10
+	while :
+	do
+		temp=`fts lsheader $wait_server $aggregate \
+			|grep $fileset.clone|grep On-line`
+		if test "$temp" != ""
+		then
+			# still in progress
+
+			dally=`expr $dally - 1`
+			if test $dally -le 0
+			then
+				echo FATAL cannot update $fileset
+				echo HINT retune dally and sleep
+				echo for more retries and longer wait
+				return 1
+			fi
+			echo sleep at `date` for $fileset
+			sleep 60
+		else
+			# done
+
+			break
+		fi
+	done
+
+	return 0
+}
+
+# main code path
+
+echo ""
+echo $prognam starting as $pid at `date` on $host
+echo in cell $CELL_NAME
+echo using aggregate $EPI_AGGRNAME_1 on host $SERVER_1
+echo using aggregate $EPI_AGGRNAME_2 on host $SERVER_2
+echo ""
+
+# set up for release rep tests
+# put first RO on same aggregate as RW
+
+# in this cell
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo creating $FS_RELEASE on host $SERVER_1
+	echo aggregate $EPI_AGGRNAME_1
+fi
+
+fts create $FS_RELEASE $SERVER_1 $EPI_AGGRNAME_1 > /dev/null 2>&1
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR: cannot create $FS_RELEASE
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+	exit 1
+fi
+
+# get fileset id, looks like redundant calculation
+
+fs_release_id=`fts lsfldb $FS_RELEASE \
+	| awk '/readWrite/{print $3}' \
+	 | awk -F, '{print $3}'`
+
+# mount point
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo mounting $FS_RELEASE
+	echo at $test_root/fs.release.$pid.rw
+fi
+
+fts crmount $test_root/fs.release.$pid.rw $FS_RELEASE > /dev/null 2>&1
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR: cannot mount $FS_RELEASE
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+	exit 1
+
+fi
+setFsetRootProt $test_root/fs.release.$pid.rw $testuid "root dir $FS_RELEASE"
+err=$?
+if test $err -ne 0
+then 
+	cleanup 1
+	exit 1
+fi
+
+
+# some replication
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo setrepinfo for $FS_RELEASE
+fi
+
+fts setrepinfo $FS_RELEASE -release > /dev/null 2>&1
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR: cannot set rep info for release rep
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+	exit 1
+fi
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo add site for $FS_RELEASE
+	echo on host $SERVER_1 aggr $EPI_AGGRNAME_1
+fi
+
+fts addsite $FS_RELEASE $SERVER_1 $EPI_AGGRNAME_1 > /dev/null 2>&1
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR: cannot add site $FS_RELEASE
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+	exit 1
+fi
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo create mount for $FS_RELEASE.readonly
+	echo at $test_root/fs.release.$pid.ro
+fi
+
+fts crmount $test_root/fs.release.$pid.ro $FS_RELEASE.readonly \
+	 > /dev/null 2>&1
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR: cannot mount $FS_RELEASE.readonly
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+	exit 1
+fi
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo releasing $FS_RELEASE
+fi
+
+fts release $FS_RELEASE > /dev/null 2>&1
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR: cannot release $FS_RELEASE
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+	exit 1
+fi
+
+# a few good files
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo copy files from $dirnam to $test_root/fs.release.$pid.rw
+fi
+
+needspace=`du -s $dirnam|awk '{print $1}'`
+
+# needspace better be less than quota
+# also need the space in the aggregate
+# for now, don't check
+
+cp -r $dirnam/* $test_root/fs.release.$pid.rw
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR: cannot access fs.release.$pid.rw
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+	exit 1
+fi
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo releasing $FS_RELEASE
+fi
+
+fts release $FS_RELEASE > /dev/null 2>&1
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR: cannot release $FS_RELEASE
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+	exit 1
+fi
+
+# set up for sched rep tests
+# put RO on different aggregate from RW
+
+# in this cell
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo creating $FS_SCHED at host $SERVER_1
+	echo aggregate $EPI_AGGRNAME_1
+fi
+
+fts create $FS_SCHED $SERVER_1 $EPI_AGGRNAME_1 > /dev/null 2>&1
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR: cannot create $FS_SCHED
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+	exit 1
+fi
+
+# get fileset id, redundant but keep around for now
+
+fs_sched_id=`fts lsfldb $FS_SCHED \
+	| awk '/readWrite/{print $3}' \
+	 | awk -F, '{print $3}'`
+
+# mount point
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo mounting $FS_SCHED
+	echo at $test_root/fs.sched.$pid.rw
+fi
+
+fts crmount $test_root/fs.sched.$pid.rw $FS_SCHED > /dev/null 2>&1
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR cannot mount $FS_SCHED
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+	exit 1
+fi
+setFsetRootProt $test_root/fs.sched.$pid.rw $testuid "root dir $FS_SCHED"
+err=$?
+if test $err -ne 0
+then
+	cleanup 1
+	exit 1
+fi
+
+# some replication
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo setting rep info for $FS_SCHED
+fi
+
+fts setrepinfo $FS_SCHED -scheduled > /dev/null 2>&1
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR cannot set rep info for sched rep
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+	exit 1
+fi
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo adding site for $FS_SCHED
+	echo at host $SERVER_2 aggr $EPI_AGGRNAME_2
+fi
+
+fts addsite $FS_SCHED $SERVER_2 $EPI_AGGRNAME_2 > /dev/null 2>&1
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR: cannot add site $FS_SCHED
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+	exit 1
+fi
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo mounting $FS_SCHED.readonly
+	echo at $test_root/fs.sched.$pid.ro
+fi
+
+fts crmount $test_root/fs.sched.$pid.ro $FS_SCHED.readonly \
+	 > /dev/null 2>&1
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR: cannot mount $FS_SCHED.readonly
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+	exit 1
+fi
+
+if test $verbose -eq 1
+then
+	echo fts update $FS_SCHED -all
+fi
+fts update $FS_SCHED -all > /dev/null 2>&1
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR: cannot update $FS_SCHED
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+	exit 1
+fi
+
+# wait for the update to complete
+
+repwait $SERVER_2 $EPI_AGGRNAME_2 $FS_SCHED
+if test $? -ne 0
+then
+	echo update failed, bailing out
+	cleanup 1
+	exit 1
+fi
+
+# a few good files
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo copying files from $dirnam to
+	echo $test_root/fs.sched.$pid.rw
+fi
+
+cp -r $dirnam/* $test_root/fs.sched.$pid.rw
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR: cannot access fs.sched.$pid.rw
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+	exit 1
+fi
+
+if test $verbose -eq 1
+then
+	echo fts update $FS_SCHED -all
+fi
+fts update $FS_SCHED -all > /dev/null 2>&1
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR: cannot update $FS_SCHED
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+	exit 1
+fi
+
+# verify replicas present
+
+echo ""
+echo verify replicas present
+
+repwait $SERVER_1 $EPI_AGGRNAME_1 $FS_RELEASE
+if test $? -ne 0
+then
+	echo update failed, bailing out
+	cleanup 1
+	exit 1
+fi
+echo $FS_RELEASE.readonly OK
+
+repwait $SERVER_2 $EPI_AGGRNAME_2 $FS_SCHED
+if test $? -ne 0
+then
+	echo update failed, bailing out
+	cleanup 1
+	exit 1
+fi
+echo $FS_SCHED.readonly OK
+
+# do the tests
+# TEST_SS_B_007
+# use fts lsheader and verify fileset version numbers
+
+echo ""
+echo TEST_SS_B_007
+echo use fts lsheader and verify fileset version numbers
+
+# compute version numbers
+# SunOS awk braindead, use nawk
+# come here with fileset already released
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo computing version numbers
+	echo on platform $uname
+fi
+
+case $uname in
+SunOS )
+	# for sched rep, the RW is invisible
+	# while cloning, so wait for the clone
+
+	version_sched_rw=""
+	while :
+	do
+		version_sched_rw=`fts lsheader $SERVER_1 \
+			$EPI_AGGRNAME_1 -long \
+			| nawk -v RS="" -v fs="$FS_SCHED " \
+			'{if(match($0,fs))print}' \
+			|awk '/Version/{print $6}' \
+			|awk -F, '{print $3}'`
+		if test "$version_sched_rw" != ""
+		then
+			break
+		fi
+	done
+	version_release_rw=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 -long \
+		| nawk -v RS="" -v fs="$FS_RELEASE " \
+		'{if(match($0,fs))print}' \
+		|awk '/Version/{print $6}' \
+		|awk -F, '{print $3}'`
+	version_sched_ro=`fts lsheader $SERVER_2 $EPI_AGGRNAME_2 -long \
+		| nawk -v RS="" -v fs="$FS_SCHED.readonly " \
+		'{if(match($0,fs))print}' \
+		|awk '/Version/{print $6}' \
+		|awk -F, '{print $3}'`
+	version_sched_clone=`fts lsheader $SERVER_2 \
+		$EPI_AGGRNAME_2 -long \
+		| nawk -v RS="" -v fs="$FS_SCHED.clone " \
+		'{if(match($0,fs))print}' \
+		|awk '/Version/{print $6}' \
+		|awk -F, '{print $3}'`
+	version_release_ro=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 -long \
+		| nawk -v RS="" -v fs="$FS_RELEASE.readonly " \
+		'{if(match($0,fs))print}' \
+		|awk '/Version/{print $6}' \
+		|awk -F, '{print $3}'`
+;;
+* )
+	version_sched_rw=""
+	while :
+	do
+		version_sched_rw=`fts lsheader $SERVER_1 \
+			$EPI_AGGRNAME_1 -long \
+			|awk 'BEGIN{RS=""};{if(match($0,fs))print}' \
+			fs="$FS_SCHED " \
+			|awk '{if(/Version/)print $6}' \
+			|awk -F, '{print $3}'`
+		if test "$version_sched_rw" != ""
+		then
+			break
+		fi
+	done
+	version_release_rw=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 -long \
+		|awk 'BEGIN{RS=""};{if(match($0,fs))print}' \
+		fs="$FS_RELEASE " \
+		|awk '{if(/Version/)print $6}' \
+		|awk -F, '{print $3}'`
+	version_sched_ro=`fts lsheader $SERVER_2 $EPI_AGGRNAME_2 -long \
+		|awk 'BEGIN{RS=""};{if(match($0,fs))print}' \
+		fs="$FS_SCHED.readonly " \
+		|awk '{if(/Version/)print $6}' \
+		|awk -F, '{print $3}'`
+	version_sched_clone=`fts lsheader $SERVER_2 \
+		$EPI_AGGRNAME_2 -long \
+		|awk 'BEGIN{RS=""};{if(match($0,fs))print}' \
+		fs="$FS_SCHED.clone " \
+		|awk '{if(/Version/)print $6}' \
+		|awk -F, '{print $3}'`
+	version_release_ro=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 -long \
+		|awk 'BEGIN{RS=""};{if(match($0,fs))print}' \
+		fs="$FS_RELEASE.readonly " \
+		|awk '{if(/Version/)print $6}' \
+		|awk -F, '{print $3}'`
+;;
+esac
+
+# test for clone
+
+if test "$version_sched_clone" != ""
+then
+	version_sched_ro=$version_sched_clone
+fi
+
+pass=1
+
+if test $version_sched_rw -eq $version_sched_ro
+then
+	echo uptodate version number for $FS_SCHED is $version_sched_rw
+else
+	echo outofsynch version numbers for $FS_SCHED $version_sched_rw
+	echo and $version_sched_ro
+	echo ERROR: TEST_SS_B_007 check version numbers failed
+	echo error in $prognam testpoint E1
+	errcount=`expr $errcount + 1`
+	pass=0
+fi
+
+if test $version_release_rw -eq $version_release_ro
+then
+	echo uptodate version number for $FS_RELEASE $version_release_rw
+else
+	echo outofsynch version numbers for $FS_RELEASE
+	echo $version_release_rw and $version_release_ro
+	echo ERROR: TEST_SS_B_007 check version numbers failed
+	echo error in $prognam testpoint E2
+	errcount=`expr $errcount + 1`
+	pass=0
+fi
+
+if test $pass -ne 0
+then
+	echo TEST_SS_B_007 PASSED
+fi
+
+# TEST_SS_B_010
+# ensure that fts delete RW does the right thing when
+# there are outstanding replicas
+
+echo ""
+echo TEST_SS_B_010
+echo ensure that fts delete RW does right thing when
+echo there are outstanding replicas
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo deleting $FS_RELEASE
+	echo should fail
+fi
+
+pass=1
+
+fts delete $FS_RELEASE $SERVER_1 $EPI_AGGRNAME_1 > /dev/null 2>&1
+err=$?
+if test $err -eq 0
+then
+	echo ERROR: TEST_SS_B_010 release rep failed
+	echo errno $err in $prognam testpoint E3
+	errcount=`expr $errcount + 1`
+	pass=0
+fi
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo deleting $FS_SCHED
+fi
+
+fts delete $FS_SCHED $SERVER_1 $EPI_AGGRNAME_1 > /dev/null 2>&1
+err=$?
+if test $err -eq 0
+then
+	echo ERROR: TEST_SS_B_010 sched rep failed
+	echo errno $err in $prognam testpoint E4
+	errcount=`expr $errcount + 1`
+	pass=0
+fi
+
+if test $pass -ne 0
+then
+	echo TEST_SS_B_010 PASSED
+fi
+
+# TEST_SS_E_001
+# ensure can't do fts addsite to add existing repsite
+
+echo ""
+echo TEST_SS_E_001
+echo ensure cannot do fts addsite to existing repsite
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo attempting to add site $FS_RELEASE
+	echo at host $SERVER_1 aggr $EPI_AGGRNAME_1
+fi
+
+pass=1
+fts addsite $FS_RELEASE $SERVER_1 $EPI_AGGRNAME_1 > /dev/null 2>&1
+err=$?
+if test $err -eq 0
+then
+	echo ERROR: TEST_SS_E_001 release rep failed
+	echo errno $err in $prognam testpoint E5
+
+	if test $verbose -eq 1
+	then
+		echo fts rmsite $FS_RELEASE $SERVER_1 $EPI_AGGRNAME_1
+	fi
+	fts rmsite $FS_RELEASE $SERVER_1 $EPI_AGGRNAME_1>/dev/null 2>&1
+	errcount=`expr $errcount + 1`
+	pass=0
+fi
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo attempting to add site $FS_SCHED
+	echo at host $SERVER_2 aggr $EPI_AGGRNAME_2
+fi
+
+fts addsite $FS_SCHED $SERVER_2 $EPI_AGGRNAME_2 > /dev/null 2>&1
+err=$?
+if test $err -eq 0
+then
+	echo ERROR: TEST_SS_E_001 sched rep failed
+	echo errno $err in $prognam testpoint E6
+	errcount=`expr $errcount + 1`
+	pass=0
+
+	if test $verbose -eq 1
+	then
+		echo fts rmsite $FS_RELEASE $SERVER_2 $EPI_AGGRNAME_2
+	fi
+	fts rmsite $FS_RELEASE $SERVER_2 $EPI_AGGRNAME_2>/dev/null 2>&1
+fi
+
+if test $pass -ne 0
+then
+	echo TEST_SS_E_001 PASSED
+fi
+
+# TEST_SS_E_002
+# ensure can't add second repsite to second aggregate on
+
+echo ""
+echo TEST_SS_E_002
+echo ensure cannot add second repsite on same server
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo attempting to add site $FS_RELEASE
+	echo at host $SERVER_1 aggr $EPI_AGGRNAME_2
+fi
+
+pass=1
+
+fts addsite $FS_RELEASE $SERVER_1 $EPI_AGGRNAME_2 > /dev/null 2>&1
+err=$?
+if test $err -eq 0
+then
+	pass=0
+	echo test failed for release rep
+
+	if test $verbose -eq 1
+	then
+		fts rmsite $FS_RELEASE $SERVER_1 $EPI_AGGRNAME_2
+	fi
+	fts rmsite $FS_RELEASE $SERVER_1 $EPI_AGGRNAME_2>/dev/null 2>&1
+fi
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo attempting to add site $FS_SCHED
+	echo at host $SERVER_1 aggr $EPI_AGGRNAME_1
+fi
+
+fts addsite $FS_SCHED $SERVER_1 $EPI_AGGRNAME_1 > /dev/null 2>&1
+err=$?
+if test $err -eq 0
+then
+	pass=0
+	echo test failed for scheduled rep
+	echo SEE DEFECT 5014
+
+	if test $verbose -eq 1
+	then
+		echo fts rmsite $FS_SCHED $SERVER_1 $EPI_AGGRNAME_1
+	fi
+	fts rmsite $FS_SCHED $SERVER_1 $EPI_AGGRNAME_1 > /dev/null 2>&1
+fi
+if test $pass -eq 0
+then
+	echo ERROR: TEST_SS_E_002 failed
+	echo errno $err in $prognam testpoint E7
+	errcount=`expr $errcount + 1`
+else
+	echo TEST_SS_E_002 PASSED
+fi
+
+# clean slate
+cleanup 0
+
+# TEST_SS_B_011
+# propagate a replica to a filled up aggregate
+
+echo TEST_SS_B_011
+echo propagate a replica to a filled up aggregate
+
+testtargetspace
+if test $? -ne 0
+then
+	echo TEST_SS_B_011 did not succeed
+	echo failed in $prognam testpoint E8
+	errcount=`expr $errcount + 1`
+else
+	echo TEST_SS_B_011 PASSED
+fi
+
+# TEST_SS_B_012
+# propagate a replica from an aggregate with no free space
+
+echo TEST_SS_B_012
+echo propagate a replica from an aggregate with no free space
+
+testsourcespace
+if test $? -ne 0
+then
+	echo TEST_SS_B_012 did not succeed
+	echo failed in $prognam testpoint E9
+	errcount=`expr $errcount + 1`
+else
+	echo TEST_SS_B_012 PASSED
+fi
+
+# tests done
+
+echo ""
+echo Tests done
+echo errors: $errcount
+date

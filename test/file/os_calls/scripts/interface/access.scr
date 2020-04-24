@@ -1,0 +1,571 @@
+*
+* ID: $Id:
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+*  access.scr --
+*	This script implements miscellaneous system calls such as
+*        access, stat (uid, dev), utimes, quota control, check executables etc.
+
+
+* Usage: file_test -I access.scr
+*        file_test -I access.scr -D
+*        or
+*        file_test <access.scr
+*        or
+*        See file_test -help
+
+
+* Requirements to run the script:
+*  1. If run on a aix machine check the linker "/usr/lib/bind" is the
+*     bind.ais31 otherwise itl will fail to copile the samll c program.
+
+
+*  Terminology:
+*  PASSED -- no problem for the testings.
+*  FAILED -- failed when doing basic checks.
+*  WARNING-- skip a check point.
+*  XXXXXX -- needs to be enhanced.
+*
+
+*
+*  Errors: 17
+*
+
+*
+* Have common variables and procedures set.
+*
+include common1.env
+
+echo
+echo Running access.scr
+echo
+
+**********************************************************************o*
+!*                  BASIC CHECKING
+************************************************************************
+
+!* Change to the DFS conjunction $dfsConjunc to test
+chdir $dfsConjunc
+
+*  Clear test fileset and their mount points if they exist
+set ITL_IgnoreShellError 1
+set commd ( "fts aggrinfo " + $ITL_HostName + " " + $aggrName )
+shellexe commd
+if ( $CommandResult == 0 && $numFilesets != 0 ) {
+  * Delete filesets and mount them
+  loop x 0 1 ($numFilesets-1)
+    set fileSetName ( $baseFtName + "." + $x )
+    set commd ("fts delmount " + $fileSetName+" "+$fileSetName)
+    shellexe commd
+    set commd ("fts delete " + $fileSetName + " " + $ITL_HostName + " " + $aggrName)
+    shellexe commd
+  endloop
+}
+set ITL_IgnoreShellError 0
+
+* < Check virtual CDS dir (vdir) and non-vdir cases. >
+*
+!* This should be a directory $dfsConjunc.
+*
+stat . var1
+
+* The status must indicate a dir flag.
+assert ($var1.st_mode & $S_IFDIR)
+
+* This dir should allow read, write and search by anyone.
+assert ($var1.st_mode & $S_IRWXO)
+
+getwd dirName
+
+* Permission tests are implemented in ditl script.
+
+* We can utimes the dir.
+utimes . "" "" 0 "" "" 0
+stat . var2
+if ( $var1.st_ctime > $var2.st_ctime ) {
+   set errorMessage "FAILED: The ctime should be changed this time. --E1"
+   exec err_Process
+}  
+if ( $var1.st_mtime == $var2.st_mtime ) {
+   set errorMessage "FAILED: The mtime should be changed this time. --E2"
+   exec err_Process
+}
+if ( $var1.st_atime == %var2.st_atime ) {
+   set errorMessage "FAILED: The atime should be changed this time. --E3"
+   exec err_Process
+}
+
+chdir ..
+getwd dirName
+
+*
+!*  Change to the vdir $dirName to test.
+*
+* Check the DFS conjunction 'fs' 
+stat fs var1
+
+* Should be a dir indication.
+assert ($var1.st_mode & $S_IFDIR)
+
+stat . var1
+!* Should be a dir.
+assert ($var1.st_mode & $S_IFDIR)
+
+!* Should be read only for others.
+assert ($var1.st_mode & $S_IROTH)
+
+!* Check that if it is writable by assert.
+assert (!($var1.st_mode & $S_IWOTH))
+
+!* It is not writable dir by utimes.
+verifyStatus false
+utimes . "" "" 0 "" "" 0
+if ( $ITL_Status == 0 ) {
+  set errorMessage "FAILED: This dir should be read only, "+$dirName+". --E4"
+  exec err_Process
+}
+verifyStatus true
+
+*
+!* Change to the virtual dir $dceRoot to test
+*
+chdir ..
+
+getwd dirName
+!* It is $dirName .
+
+stat . var1
+* Should be a dir indication.
+assert ($var1.st_mode & $S_IFDIR)
+
+* Should be read only for others.
+assert ($var1.st_mode & $S_IROTH)
+
+!* Check that if it is writable by assert calls. 
+assert (!($var1.st_mode & $S_IWOTH))
+
+!* The following test should failed. Turning the verifyStatus off.
+verifyStatus false
+utimes . "" "" 0 "" "" 0
+if ( $ITL_Status == 0 ) {
+  set errorMessage "FAILED: This dir should be read only, "+$dceRoot+". --E5"
+  exec err_Process
+}
+verifyStatus true
+
+!* Should allow read and search but write. 
+assert ($var1.st_mode & $S_IXOTH)
+assert (!($var1.st_mode & $S_IWOTH))
+
+!* Should allow read. 
+assert ($var1.st_mode & $S_IROTH )
+
+*
+!* Check non-vdir cases by stat syscalls.
+*
+*  Make two test dirs under dfs conjunction.
+chdir $dfsConjunc 
+set testDir1 ( $testDir+"1" )
+set testDir2 ( $testDir+"2" )
+
+verifyStatus false
+* Check the dir existence, if non exist, create one.
+access $testDir1 $accessFlagE
+if ( $ITL_Status != 0 ) {
+  mkdir $testDir1 0777
+  if ( $ITL_Status != 0 ) {
+    set errorMessage "FAILED: Can not Make $testDir1"
+    exec err_Process
+  }
+}
+access $testDir2 $accessFlagE
+if ( $ITL_Status != 0 ) {
+  mkdir $testDir2 0777
+  if ( $ITL_Status != 0 ) {
+    set errorMessage "FAILED: Can not Make $testDir2"
+    exec err_Process
+  }
+}
+verifyStatus true
+
+stat $testDir1 var1
+
+sleep $sleepTime
+
+set modbit $var1.st_mode
+
+* Cause the change of ctime by doing a chmod, chown.
+chmod $testDir1 $S_IRWXO
+stat $testDir1 var2
+if ( $var1.st_ctime == $var2.st_ctime ) {
+  set errorMessage "FAILED: The ctime should be changed at this time. --E6"
+  exec err_Process
+}
+
+* Change back to the originals.
+chmod $testDir1 $modbit
+
+
+* set the test dir to the current time.
+utimes $testDir1 "" "" 0 "" "" 0
+stat $testDir1 var2
+* Check the modBit first
+if ( $var1.st_mode > $modbit ) {
+   set errorMessage "FAILED: The mode bit could not be set back"
+   exec err_Process
+}  
+if ( $var1.st_ctime > $var2.st_ctime ) {
+   set errorMessage "FAILED: The ctime should be changed this time. --E8"
+   exec err_Process
+}  
+if ( $var1.st_mtime == $var2.st_mtime ) {
+   set errorMessage "FAILED: The mtime should be changed this time. --E9"
+   exec err_Process
+}
+if ( $var1.st_atime == %var2.st_atime ) {
+   set errorMessage "FAILED: The atime should be changed this time. --E10"
+   exec err_Process
+}
+
+*
+!* Set client current time by utimes system call.
+*  (tv_sec = 0; tv_usec = -1 means use client current time)
+*
+stat $testDir1 var1
+sleep $sleepTime
+
+* It should work according to the check list.
+*
+if ( $ITL_SystemType != solaris ) {
+  utimes $testDir1 "" "" -1 "" "" -1
+  stat $testDir1 var2
+  if ( $var1.st_atime == $var2.st_atime ) {
+    set errorMessage "FAILED: Client time is not used, atime does not changed. --E11"
+    exec err_Process
+  }
+  if ( $var1.st_mtime == $var2.st_mtime ) {
+    set errorMessage "FAILED: Client time is not used, mtime does not changed. --E12"
+    exec err_Process
+  }
+  if ( $var1.st_ctime == $var2.st_ctime ) {
+    set errorMessage "FAILED: Client time is not used, atime does not changed. --E13"
+    exec err_Process
+  }
+}
+
+*
+!* Set explicit time reference by utimes.
+*
+utimes $testDir1 "12/31/91" "23:59:59" 0 "12/31/91" "23:59:59" 0
+stat $testDir1 var1
+* 694241999 is the number from the given date and time.
+if ( $var1.st_mtime != 694241999 ) {
+  set errorMessage "FAILED: Utimes does not work. --E14"
+  exec err_Process
+}
+if ( $var1.st_atime != 694241999 ) {
+  set errorMessage "FAILED: Utimes does not work. --E15"
+  exec err_Process
+}
+if ( $var1.st_ctime == 691649999 ) {
+  set errorMessage "FAILED: Ctime should be the current time. --E16"
+  exec err_Process
+}
+
+
+!* Access checks (lookup checks by either access, open or stat).
+
+*
+!* <Test ".." in a volume root works, as well as ".." between DFS and vdir space.
+*
+
+* Use stat sys calls.
+chdir $testDir1
+
+!* Stat the dfs conjunction $dfsConjunc (exercise the lookup).
+stat .. var1
+
+!* Stat $testDir1, otherwise ITL will blow up rightway.
+stat ("../"+$testDir2) var1
+
+!* Stat $testDir2, otherwise ITL will blow up rightway.
+stat ("../"+$testDir1) var1
+
+!* Lookup by ".."
+
+!* Stat the cellname (vdir).
+stat "../../" var
+
+!* Stat the dce root /... (vdir).
+stat "../../../" var
+
+!* Stat the dfs conjunction $dfsConjunc .
+stat "../../fs" var
+
+!* Stat the $dfsConjunc/$testDir1 .
+stat ("../../fs/"+$testDir1) var
+
+!* Stat the $dfsConjunc/$testDir2 .
+stat ("../../fs/"+$testDir2) var
+
+*
+!* Test ".." works between vdir region and its UFS mount point.
+*
+*
+!* This also tests crossing mount points into a fileset's root directory.
+*
+
+chdir $dfsConjunc
+* Check the existency of the exported aggregate
+set ITL_IgnoreShellError 1
+set commd ( "fts aggrinfo " + $ITL_HostName + " " + $aggrName )
+shellexe commd
+if ( $CommandResult != 0 || $numFilesets == 0 ) {
+  set ITL_IgnoreShellError 0
+  echo WARNING: You have to have an exported aggregate to have all tests done.
+  set numFilesets 0
+}
+else {
+  set ITL_IgnoreShellError 0
+  * Create filesets and mount them
+  loop x 0 1 ($numFilesets-1)
+    set fileSetName ( $baseFtName + "." + $x )
+    set commd ("fts create " + $fileSetName + " " + $ITL_HostName + " " + $aggrName)
+    shellexe commd
+    set commd ("fts crmount " + $fileSetName+" "+$fileSetName )
+    shellexe commd
+    set mountPoint[$x] $fileSetName
+    chmod $fileSetName 0777
+  endloop
+
+  set commd "cm checkf"
+  shellexe commd
+
+  * Test the mount points.
+  loop x 0 1 ($numFilesets-1)
+    set dirName ( $dfsConjunc+"/"+$mountPoint[$x] ) 
+    access $dirName $accessFlagE
+    chdir $dirName
+    verifyStatus false
+    access $testDir $accessFlagE
+    if ( $ITL_Status != 0 ) {
+      verifyStatus true
+      mkdir $testDir 0777
+    }
+    else { 
+      verifyStatus true
+    }
+    chdir $testDir
+    stat . var
+    stat .. var
+
+* Stat $testDir1 under /: (crossing file system).
+    stat ($dfsConjunc + "/" + $testDir1 ) var
+
+* Stat $mountPoint[$x] under /: .
+    stat ( $dfsConjunc + "/" +  $mountPoint[$x]) var
+
+* Stat dfs conjunction.
+    stat $dfsConjunc var
+
+* Change to $testDir1 under dfs conjunction.
+    chdir ($dfsConjunc+"/"+$testDir1)
+
+* Stat $testDir under $mountPoint (crossing mount point).
+    stat ("../"+$mountPoint[$x]+"/"+$testDir) var
+
+* remove test dir under mount point.
+    chdir ..
+    rmdir ($mountPoint[$x]+"/"+$testDir)
+  endloop
+}
+set ITL_IgnoreShellError 0
+
+chdir $currentDir
+chdir $testDir
+
+!* Quota control
+* Check that quota can be read and written via appropriate syscalls.
+* In fact, there are two ways to get quota, one is call statfs and
+* one is to call "fts lstquota" and "fts setq", but there seems no way 
+* to write quota currently. "statfs" won't work anyway, which return 
+* faked data through CM/DFS.
+
+!* Read quota via fts command through dfs root.
+
+* Use statfs (does not mean anything currently).
+statfs . var
+
+* Use fts command (how about set quota).
+set commd "fts lsquota"
+shellexec commd
+
+chdir $dfsConjunc
+if ( $numFilesets != 0 ) {
+  echo Read quota from mount point.
+  loop x 0 1 ($numFilesets-1)
+      set dirName ( $dfsConjunc+"/"+$mountPoint[$x] ) 
+      access $dirName $accessFlagE
+      chdir $mountPoint[$x]
+* do the test.
+      shellexec commd
+* Use statfs (does not mean anything currently).
+      statfs . var
+      chdir ..
+  endloop
+}
+else {
+  echo  "There is no mount point to test. --WARNING"
+}  
+
+*
+* Make sure executable works and make sure executable can be overwritten 
+* properly with direct copies when no one is executing the code, and
+* ensure that the running the new program works (not the old one).
+*
+
+!* Test executing programs from mount point.
+
+chdir $dfsConjunc
+if ( $numFilesets != 0 ) {
+  loop x 0 1 ($numFilesets-1)
+      set dirName ( $dfsConjunc+"/"+$mountPoint[$x] ) 
+      access $dirName $accessFlagE
+* Prepare two c progs
+      chdir $dfsConjunc 
+      open cprog1.c ($O_CREAT|$O_WRONLY) 0777 fid1
+      write $fid1 "#include <stdio.h>\n"
+      write $fid1 "main()\n{ \nint i,x;\n for ( i = 0 ; i < 100000000 ; i++ )\n {"
+      write $fid1 "x = i * i; }\n exit(0); \n}\n"
+      close $fid1
+
+      set ccp1 "cc -o cprog1 cprog1.c"
+      shellexec ccp1
+
+      open cprog2.c ($O_CREAT|$O_WRONLY) 0777 fid1
+      write $fid1 "#include <stdio.h>\n"
+      write $fid1 "main()\n{ \nint i,x; for ( i = 0 ; i < 10000 ; i++ )\n {"
+      write $fid1 "x = i * i; }\n exit(1); \n}\n"
+      close $fid1
+
+      set ccp2 "cc -o cprog2 cprog2.c"
+      shellexec ccp2
+
+      set commd2 "chmod 777 cprog1 cprog2"
+      shellexec commd2
+      set commd "./cprog1"
+      shellexec commd
+      set commd1 "cp cprog2 cprog1"
+      shellexec commd1
+      set ITL_IgnoreShellError 1
+      shellexec commd
+      if ( $CommandResult == 0 ) {
+        set errorMessage "FAILED: Ctime should be the current time. --E17"
+        exec err_Process
+      }
+      set ITL_IgnoreShellError 0
+      remove cprog1.c
+      remove cprog1
+      remove cprog2.c
+      remove cprog2
+      chdir ..
+  endloop
+}
+else {
+  echo There is no mount point to test. --WARNING
+}
+
+!* Test executing under current dir.
+
+verifyStatus true
+chdir $currentDir
+
+!* Create small c programs
+open cprog1.c ($O_CREAT|$O_WRONLY) 0777 fid1
+write $fid1 "#include <stdio.h>\n"
+write $fid1 "main()\n{ \nint i,x;\n for ( i = 0 ; i < 10000000 ; i++ )\n {"
+write $fid1 "x = i * i; }\n exit(0); \n}\n"
+close $fid1
+
+set ccp1 "cc -o cprog1 cprog1.c"
+shellexec ccp1
+
+open cprog2.c ($O_CREAT|$O_WRONLY) 0777 fid1
+write $fid1 "#include <stdio.h>\n"
+write $fid1 "main()\n{ \nint i,x; for ( i = 0 ; i < 10000000 ; i++ )\n {"
+write $fid1 "x = i * i; }\n exit(1); \n}\n"
+close $fid1
+
+!* Execute small programs
+set ccp2 "cc -o cprog2 cprog2.c"
+shellexec ccp2
+
+set commd2 "chmod 777 cprog1 cprog2"
+shellexec commd2
+set commd "./cprog1"
+shellexec commd
+set commd1 "cp cprog2 cprog1"
+shellexec commd1
+
+!* Check the results.
+set ITL_IgnoreShellError 1
+shellexec commd
+if ( $CommandResult == 0 ) {
+  set errorMessage "FAILED: The binary executed is not the one we want. --E18"
+  exec err_Process
+}
+set ITL_IgnoreShellError 0
+
+remove cprog1.c
+remove cprog1
+remove cprog2.c
+remove cprog2
+
+************************************************************************
+!* Cleaning up.
+************************************************************************
+*
+*
+
+chdir $dfsConjunc
+
+* Clear filesets and mountpoints.
+if ( $numFilesets != 0 ) {
+  * Delete filesets and mount them
+  loop x 0 1 ($numFilesets-1)
+    set fileSetName ( $baseFtName + "." + $x )
+    set commd ("fts delmount " + $fileSetName)
+    shellexe commd
+    set commd ("fts delete " + $fileSetName + " " + $ITL_HostName + " " + $aggrName)
+    shellexe commd
+  endloop
+}
+
+
+rmdir $testDir1
+rmdir $testDir2
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+*rmdir $testDir
+exec report_Proc "access.scr" $errorCounter
+echo
+quit

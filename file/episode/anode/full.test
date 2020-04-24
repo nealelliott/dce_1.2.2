@@ -1,0 +1,802 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: full.test,v $
+# Revision 1.1.12.1  1996/10/02  17:17:50  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:27:33  damon]
+#
+# $EndLog$
+# /* Copyright (C) 1994, 1990 Transarc Corporation - All rights reserved */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/full.test,v 1.1.12.1 1996/10/02 17:17:50 damon Exp $
+
+full 1
+modify_afsdb logbuf on 31		# turn on new buffer randomization
+modify_afsdb anode on 31		# turn on code block counting
+set_withholding 0 0 0			# turn off withholding code
+
+open_device 1 4096 1024 74
+create_aggregate 25
+
+# first try some clone cases that don't need a full aggregate
+create_vol clone_backing 74,,1 1000
+create_file back1
+write_file 4096 4000
+set_status Q=0				# zero visible quota 
+
+# This leaves an empty volume since vol create succeeds but creation of
+# the root directory causes a quota error.
+(code = VOLUMEFULL) create_vol clone_cow 74,,2 1000 0	# visible quota zero
+open_vol 74,,2
+delete_vol				# just to make sure we're okay so far
+
+# Now try creating a clone
+(code = VOLUMEFULL) create_vol clone_cow 74,,2 1000 0	# visible quota zero
+open_vol 74,,2
+
+(code = VOLUMEFULL) create_file cow1 "" "" clone_backing.root
+vol_info q=1000 Q=0
+set_status q=0 Q=1000
+(code = VOLUMEFULL) create_file cow1 "" "" clone_backing.root
+delete_vol
+
+# now try reclone case
+create_vol clone_cow 74,,2 1000
+create_file cow2
+write_file 4096 4000
+open_vol 74,,1
+(code = VOLUMEFULL) splice_file back2 "" "" cow2
+set_status q=1000 Q=1000
+splice_file back2 "" "" cow2
+set_status q=0 Q=0
+open_file cow2
+(code = VOLUMEFULL) reclone
+unclone
+delete_file back2
+
+open_file back1
+open_vol 74,,2
+set_status q=0 Q=1000
+(code = VOLUMEFULL) create_file cow1 "" "" back1
+set_status q=1000 Q=0
+(code = VOLUMEFULL) create_file cow1 "" "" back1
+#
+# defer aggregate full test to the end.
+check_device
+
+aggr_info f=152
+create_vol promote 0,,0 4 1000
+vol_info g=4 q=4
+create_file p
+(code = VOLUMEFULL) write_file 300000 10
+get_info z=0
+truncate 0
+set_status q=8
+(code = VOLUMEFULL) write_file 300000 10
+delete_file
+create_file p
+set_status q=4
+write_file 0 30
+(code = VOLUMEFULL) write_file 1000 10
+(code = VOLUMEFULL) write_file 30000 10
+(code = VOLUMEFULL) write_file 300000 10
+get_info l=30
+set_status q=5
+write_file 1000 10
+(code = VOLUMEFULL) write_file 3000 10
+get_info l=1010
+set_status q=7
+write_file 3000 10
+(code = VOLUMEFULL) write_file 30000 10
+get_info l=3010
+check_device
+delete_volume
+
+aggr_info f=152
+create_vol bar 0,,0 110
+vol_info g=4
+
+# Now do file tests.
+#
+# Grow the volume table first:
+
+create_file little
+
+create_file consume0
+write_file 0 1000
+create_file consume1
+write_file 0 3000
+create_file consume2
+write_file 0 1000
+create_file consume3
+write_file 0 1000
+create_file consume4
+write_file 0 1000
+create_file consume5
+write_file 0 3000
+create_file consume6
+write_file 0 2000
+create_file consume7
+write_file 0 3000
+create_file consume8
+write_file 0 2000
+create_file consume9
+write_file 0 3000
+create_file consume10
+write_file 0 2000
+create_file consume11
+write_file 0 1000
+create_file consume12
+write_file 0 2000
+create_file consume13
+write_file 0 3000
+create_file consume14
+write_file 0 3000
+create_file consume15
+write_file 0 3000
+create_file consume16
+write_file 0 1000
+create_file consume17
+write_file 0 2000
+create_file consume18
+write_file 0 2000
+create_file consume19
+write_file 0 2000
+create_file consume20
+write_file 0 3000
+create_file consume21
+write_file 0 3000
+create_file consume22
+write_file 0 1000
+create_file consume23
+write_file 0 2000
+create_file consume24
+write_file 0 3000
+create_file consume25
+write_file 0 2000
+create_file consume26
+write_file 0 2000
+create_file consume27
+write_file 0 2000
+create_file consume28
+write_file 0 2000
+create_file consume29
+write_file 0 2000
+create_file consume30
+write_file 0 2000
+create_file consume31
+write_file 0 3000
+create_file consume32
+write_file 0 3000
+create_file consume33
+write_file 0 1000
+create_file consume34
+write_file 0 2000
+create_file consume35
+write_file 0 3000
+create_file consume36
+write_file 0 3000
+create_file consume37
+write_file 0 1000
+create_file consume38
+write_file 0 1000
+create_file consume39
+write_file 0 1000
+create_file consume40
+write_file 0 1000
+create_file consume41
+write_file 0 2000
+create_file consume42
+write_file 0 2000
+create_file consume43
+write_file 0 1000
+create_file consume44
+write_file 0 3000
+create_file consume45
+vol_info g=108
+(code = VOLUMEFULL) write_file 0 3000
+get_info z=2
+vol_info g=110
+aggr_info f=42				 # 152-110
+create_file consume46
+(code = VOLUMEFULL) write_file 0 3000
+get_info l=0
+create_file consume47
+(code = VOLUMEFULL) write_file 0 3000
+create_file consume48
+(code = VOLUMEFULL) write_file 0 1000
+create_file consume49
+(code = VOLUMEFULL) write_file 0 2000
+create_file consume50
+(code = VOLUMEFULL) write_file 0 2000
+
+open_file little
+write_file 0 10
+(code = VOLUMEFULL) write_file 0 1000	# inline to 1 frag
+(code = VOLUMEFULL) write_file 0 10000	# inline to blocked
+get_info l=10 z=0
+
+open_file consume0
+(code = VOLUMEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume1
+(code = VOLUMEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume2
+(code = VOLUMEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume3
+(code = VOLUMEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume4
+(code = VOLUMEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume5
+(code = VOLUMEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume6
+(code = VOLUMEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume7
+(code = VOLUMEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume8
+(code = VOLUMEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume9
+(code = VOLUMEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume10
+(code = VOLUMEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume11
+(code = VOLUMEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume12
+(code = VOLUMEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume13
+(code = VOLUMEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume14
+(code = VOLUMEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume15
+(code = VOLUMEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume16
+(code = VOLUMEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume17
+(code = VOLUMEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume18
+(code = VOLUMEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume19
+(code = VOLUMEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume20
+(code = VOLUMEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume21
+(code = VOLUMEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume22
+(code = VOLUMEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume23
+(code = VOLUMEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume24
+(code = VOLUMEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume25
+(code = VOLUMEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume26
+(code = VOLUMEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume27
+(code = VOLUMEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume28
+(code = VOLUMEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume29
+(code = VOLUMEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume30
+(code = VOLUMEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume31
+(code = VOLUMEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume32
+(code = VOLUMEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume33
+(code = VOLUMEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume34
+(code = VOLUMEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume35
+(code = VOLUMEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume36
+(code = VOLUMEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume37
+(code = VOLUMEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume38
+(code = VOLUMEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume39
+(code = VOLUMEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume40
+(code = VOLUMEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume41
+(code = VOLUMEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume42
+(code = VOLUMEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume43
+(code = VOLUMEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume44
+(code = VOLUMEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume45
+(code = VOLUMEFULL) write_file 3000 1000
+get_info z=2
+open_file consume46
+(code = VOLUMEFULL) write_file 3000 1000
+get_info z=0
+open_file consume47
+(code = VOLUMEFULL) write_file 3000 1000
+get_info z=0
+open_file consume48
+(code = VOLUMEFULL) write_file 1000 1000
+get_info z=0
+open_file consume49
+(code = VOLUMEFULL) write_file 2000 1000
+get_info z=0
+open_file consume50
+(code = VOLUMEFULL) write_file 0 1000
+get_info z=0
+
+aggr_info f=42
+check_device
+delete_volume
+check_device
+aggr_info f=152
+
+create_vol foo 0,,0 1000
+vol_info g=4
+
+# Grow the volume table first:
+
+create_file little
+
+create_file cracks0
+create_file cracks1
+create_file cracks2
+create_file cracks3
+create_file cracks4
+create_file cracks5
+create_file cracks6
+create_file cracks7
+create_file cracks8
+create_file cracks9
+create_file cracks10
+create_file cracks11
+create_file cracks12
+create_file cracks13
+create_file cracks14
+create_file cracks15
+create_file cracks16
+create_file cracks17
+create_file cracks18
+create_file cracks19
+create_file cracks20
+create_file cracks21
+create_file cracks22
+create_file cracks23
+create_file cracks24
+create_file cracks25
+create_file cracks26
+create_file cracks27
+create_file cracks28
+create_file cracks29
+create_file cracks30
+
+create_file consume0
+write_file 0 1000
+create_file consume1
+write_file 0 3000
+create_file consume2
+write_file 0 1000
+create_file consume3
+write_file 0 1000
+create_file consume4
+write_file 0 1000
+create_file consume5
+write_file 0 3000
+create_file consume6
+write_file 0 2000
+create_file consume7
+write_file 0 3000
+create_file consume8
+write_file 0 2000
+create_file consume9
+write_file 0 3000
+create_file consume10
+write_file 0 2000
+create_file consume11
+write_file 0 1000
+create_file consume12
+write_file 0 2000
+create_file consume13
+write_file 0 3000
+create_file consume14
+write_file 0 3000
+create_file consume15
+write_file 0 3000
+create_file consume16
+write_file 0 1000
+create_file consume17
+write_file 0 2000
+create_file consume18
+write_file 0 2000
+create_file consume19
+write_file 0 2000
+create_file consume20
+write_file 0 3000
+create_file consume21
+write_file 0 3000
+create_file consume22
+write_file 0 1000
+create_file consume23
+write_file 0 2000
+create_file consume24
+write_file 0 3000
+create_file consume25
+write_file 0 2000
+create_file consume26
+write_file 0 2000
+create_file consume27
+write_file 0 2000
+create_file consume28
+write_file 0 2000
+create_file consume29
+write_file 0 2000
+create_file consume30
+write_file 0 2000
+create_file consume31
+write_file 0 3000
+create_file consume32
+write_file 0 3000
+create_file consume33
+write_file 0 1000
+create_file consume34
+write_file 0 2000
+create_file consume35
+write_file 0 3000
+create_file consume36
+write_file 0 3000
+create_file consume37
+write_file 0 1000
+create_file consume38
+write_file 0 1000
+create_file consume39
+write_file 0 1000
+create_file consume40
+write_file 0 1000
+create_file consume41
+write_file 0 2000
+create_file consume42
+write_file 0 2000
+create_file consume43
+write_file 0 1000
+create_file consume44
+write_file 0 3000
+create_file consume45
+write_file 0 3000
+create_file consume46
+write_file 0 3000
+create_file consume47
+write_file 0 3000
+create_file consume48
+write_file 0 1000
+create_file consume49
+write_file 0 2000
+create_file consume50
+write_file 0 2000
+
+# now fill up the cracks
+
+open_file cracks0
+write_file 0 1000
+open_file cracks1
+write_file 0 1000
+open_file cracks2
+write_file 0 1000
+open_file cracks3
+write_file 0 1000
+open_file cracks4
+write_file 0 1000
+open_file cracks5
+write_file 0 1000
+open_file cracks6
+write_file 0 1000
+open_file cracks7
+write_file 0 1000
+open_file cracks8
+write_file 0 1000
+open_file cracks9
+write_file 0 1000
+open_file cracks10
+write_file 0 1000
+open_file cracks11
+write_file 0 1000
+open_file cracks12
+write_file 0 1000
+open_file cracks13
+write_file 0 1000
+open_file cracks14
+write_file 0 1000
+open_file cracks15
+write_file 0 1000
+open_file cracks16
+write_file 0 1000
+
+aggr_info f=1				# one frag left
+open_file cracks17
+(code = AGGREGATEFULL) write_file 0 4000# can't write a block
+get_info z=0
+(code = AGGREGATEFULL) write_file 0 3000# can't write three frags
+get_info z=0
+(code = AGGREGATEFULL) write_file 0 2000# can't write two frags
+get_info z=0
+write_file 0 1000
+get_info z=1
+aggr_info f=0
+
+(code = AGGREGATEFULL) write_file 3000 10
+(code = AGGREGATEFULL) write_file 30000 10
+
+open_file cracks18
+(code = AGGREGATEFULL) write_file 0 1000
+get_info l=0 z=0
+write_file 0 10				# make it inline
+get_info l=10 z=0
+(code = AGGREGATEFULL) write_file 3000 10
+(code = AGGREGATEFULL) write_file 30000 10
+get_info l=10 z=0
+# open_file cracks19
+# write_file 0 1000
+# open_file cracks20
+# write_file 0 1000
+# open_file cracks21
+# write_file 0 1000
+# open_file cracks22
+# write_file 0 1000
+# open_file cracks23
+# write_file 0 1000
+# open_file cracks24
+# write_file 0 1000
+# open_file cracks25
+# write_file 0 1000
+# open_file cracks26
+# write_file 0 1000
+# open_file cracks27
+# write_file 0 1000
+# open_file cracks28
+# write_file 0 1000
+# open_file cracks29
+# write_file 0 1000
+# open_file cracks30
+# write_file 0 1000
+
+open_file little
+write_file 0 10
+(code = AGGREGATEFULL) write_file 0 1000	# inline to 1 frag
+(code = AGGREGATEFULL) write_file 0 10000	# inline to blocked
+get_info l=10 z=0
+
+open_file consume0
+(code = AGGREGATEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume1
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume2
+(code = AGGREGATEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume3
+(code = AGGREGATEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume4
+(code = AGGREGATEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume5
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume6
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume7
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume8
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume9
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume10
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume11
+(code = AGGREGATEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume12
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume13
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume14
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume15
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume16
+(code = AGGREGATEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume17
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume18
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume19
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume20
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume21
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume22
+(code = AGGREGATEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume23
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume24
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume25
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume26
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume27
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume28
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume29
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume30
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume31
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume32
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume33
+(code = AGGREGATEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume34
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume35
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume36
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume37
+(code = AGGREGATEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume38
+(code = AGGREGATEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume39
+(code = AGGREGATEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume40
+(code = AGGREGATEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume41
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume42
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume43
+(code = AGGREGATEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume44
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume45
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume46
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume47
+(code = AGGREGATEFULL) write_file 3000 1000
+get_info l=3000 z=3
+open_file consume48
+(code = AGGREGATEFULL) write_file 1000 1000
+get_info l=1000 z=1
+open_file consume49
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+open_file consume50
+(code = AGGREGATEFULL) write_file 2000 1000
+get_info l=2000 z=2
+
+(code = AGGREGATEFULL) create_vol cant_create 0,,0
+aggr_info f=0
+
+# Now go back to clone tests this time with full aggregate.  These
+# shouldn't fail since we're just shuffling blocks...
+open_vol 74,,1
+set_status q=1000 Q=1000
+splice_file back2 "" "" cow2
+open_file cow2
+#
+open_file back1
+open_vol 74,,2
+set_status q=1000 Q=1000
+create_file cow1 "" "" back1
+get_info Z=4
+create_file cow1.a "" "" back1		# create enough to grow VT
+create_file cow1.b "" "" back1
+create_file cow1.c "" "" back1
+create_file cow1.d "" "" back1
+create_file cow1.e "" "" back1
+create_file cow1.f "" "" back1
+create_file cow1.g "" "" back1
+create_file cow1.h "" "" back1
+create_file cow1.i "" "" back1
+create_file cow1.j "" "" back1
+create_file cow1.k "" "" back1
+(code = AGGREGATEFULL) create_file cow1.l "" "" back1
+#
+check_device
+delete_vol 74,,2			# delete volume with COW anodes first
+delete_vol 74,,1
+
+end

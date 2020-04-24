@@ -1,0 +1,343 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: daclmgr.idl,v $
+ * Revision 1.1.8.2  1996/03/09  23:27:49  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:16  marty]
+ *
+ * Revision 1.1.8.1  1995/12/08  17:31:10  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:54:52  root]
+ * 
+ * Revision 1.1.6.2  1994/06/02  21:28:24  mdf
+ * 	hp_sec_to_osf_3 drop, merge up with latest.
+ * 	[1994/05/24  15:15:57  mdf]
+ * 
+ * 	hp_sec_to_osf_3 drop
+ * 
+ * Revision 1.1.6.1  1994/01/28  23:10:43  burati
+ * 	Delegation changes (rpc_authz_cred_handle_t) (dlg_bl1)
+ * 	[1994/01/18  20:51:55  burati]
+ * 
+ * Revision 1.1.4.2  1992/12/29  13:29:01  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:48:12  zeliff]
+ * 
+ * Revision 1.1.2.2  1992/05/08  14:48:58  burati
+ * 	Add sec_acl_mgr_get_mgr_types_semantics
+ * 	[1992/05/07  19:11:07  burati]
+ * 
+ * Revision 1.1  1992/01/19  14:54:37  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+
+/*
+** Copyright (c) Hewlett-Packard Company 1991, 1994
+** Unpublished work. All Rights Reserved.
+**
+*/
+/* Server ACL manager - provides authorization checking at a server.
+** 
+**  This is a local interface providing access to the acl manager.
+**  Applications that provide controlled access to objects must
+**  acquire a privilege attribute certificate and will then submit
+**  that certificate to the acl manager through this interface.
+**
+**  Common Usage:
+**      Server routine exporting controlled access to an object.  ACL entries
+**      are keyed by the object identifier.  The acl_mgr has been previously
+**      initialized and the package configuration is available via the
+**      application global variable sec_acl_mgr_handle.
+**
+**  application_op(handle_t h, ... ) {
+**      ...
+**      rpc_binding_inq_auth_client(h, &PAC, &server_name, &authn_level,
+**                                  &authn_svc, &authz_svc, &st);
+**      rpc_inq_object(h, &object, &st);
+**
+**      if (authentication_levels_are_appropriate(server_name, authn_level,
+**                                                  authn_svc, authz_svc) &&
+**          sec_acl_mgr_is_authorized(sec_acl_mgr_handle, <needed permissions>,
+**                                  &PAC, (sec_acl_key_t) &object,
+**                                  sec_acl_type_object, NULL, NULL, &st)) {
+**
+**           *Application code to perform operation*
+**          . . .
+**      } else {
+**           * Caller is not authorized, perform appropriate application
+**           * logging and notification etc.
+**           *
+**          . . .
+**      }
+**  }
+**
+*/
+
+[
+    local
+]
+
+interface sec_acl_mgr {
+
+    import "dce/aclbase.idl";
+    import "dce/id_base.idl";
+    import "dce/lbase.idl";
+    import "dce/rpcbase.idl";
+
+    /* s e c _ a c l _ m g r _ h a n d l e _ t
+     *
+     *  a handle to an acl manager configuration.  This is returned by
+     *  sec_acl_mgr_configure and/or by sec_acl_mgr_replace. It allows the
+     *  application to use different storage managers for different types of
+     *  objects.
+     */
+    typedef void * sec_acl_mgr_handle_t;
+
+    /* s e c _ a c l _ k e y _ t
+     *
+     *  A sec_acl_key_t provides the key for accessing an acl.  This can be
+     *  any data, but must be compatible with the key comparison functions
+     *  established with the sec_acl_mgr_configure operation.  The default key
+     *  type (that selected if the configure operation is not invoked) is
+     *  a key compatible with the "symtab" package.
+     */
+    typedef void * sec_acl_key_t;
+
+    /* s e c _ a c l _ m g r _ c o n f i g _ t
+     *
+     *  Configuration parameters.
+     */
+    typedef unsigned32 sec_acl_mgr_config_t;
+        /*
+         * Create a new database - return an error if named database already
+         * exists.
+         */
+        const unsigned32 sec_acl_mgr_config_create = 0x1;
+
+        /*
+         * Provide stable storage for the database state.  The default
+         * configuration assumes that the application has dealt with stable
+         * storage issues - and will not provide them.
+         */
+        const unsigned32 sec_acl_mgr_config_stable = 0x2;
+
+
+    /* s e c _ a c l _ m g r _ c o n f i g u r e
+     *
+     *  Configure the acl manager.  This operation provides a handle that
+     *  refers to the particular acl database in use and is necessary for all
+     *  other acl manager operations.  The db_name identifies which acl
+     *  database to use (and generally refers to the file system object that
+     *  represents the persistent storage for the database).  The config_info
+     *  provides information on how to configure this database.
+     *
+     *  NOTE: This operation has to tie the acl manager to a storage manager
+     *      the current interface does not seem to have enough generality to
+     *      accomplish this - it assumes we are connected to a storage manager
+     *      that is compatible with the DAM.
+     *      There is no mechanism for connecting to a storage manager that
+     *      does not have a separate backing store file.  The application
+     *      may want to store acls in the same database as data that the
+     *      acl protects.  We expect that this operation will have to change
+     *      to accomodate these desires.
+     */
+    void sec_acl_mgr_configure (
+        [in]            sec_acl_mgr_config_t    config_info,
+        [in]            unsigned_char_p_t       db_name,
+        [out, ref]      sec_acl_mgr_handle_t    *sec_acl_mgr,
+        [out, ref]      error_status_t          *st
+    );
+
+    /* s e c _ a c l _ m g r _ i s _ a u t h o r i z e d
+     *
+     *  The basic operation in the authorization package, this function will
+     *  yield true if the principal (as described in the privilege attribute
+     *  certificate referred to by "accessor_info") is authorized to perform
+     *  the requested operation.  The acl controlling this decision is
+     *  not passed directly to this function, but is referred to via the
+     *  sec_acl_key and the sec_acl_type parameters.  (Objects are assumed
+     *  to be protected by an acl of type acl_type_object.)
+     *
+     *  The user_obj and group_obj identity blocks contain the identity that
+     *  should be used when the acl manager encounter USER_OBJ or GROUP_OBJ
+     *  acl entries.  For applications that do not support these types of
+     *  acl entries, the parameters may be passed as NULL references.  If
+     *  the application does not supply these identities and the acl contains
+     *  these types of acl entries, an error is returned and access is denied.
+     */
+    boolean32 sec_acl_mgr_is_authorized (
+        [in]        sec_acl_mgr_handle_t    sec_acl_mgr,
+        [in]        sec_acl_permset_t       desired_access,
+        [in]        rpc_authz_cred_handle_t *accessor_info,
+        [in]        sec_acl_key_t           sec_acl_key,
+        [in, ref]   uuid_t                  *manager_type,
+        [in]        sec_id_t                *user_obj,      /* May be NULL */
+        [in]        sec_id_t                *group_obj,     /* May be NULL */
+        [out]       error_status_t          *st
+    );
+
+    /* s e c _ a c l _ m g r _ g e t _ a c c e s s
+     *
+     *  Determine the caller's access to the specified object.  This is
+     *  useful for implenting operations like the conventional UNIX access
+     *  function.
+     */
+    void sec_acl_mgr_get_access (
+        [in]        sec_acl_mgr_handle_t    sec_acl_mgr,
+        [in]        rpc_authz_cred_handle_t accessor_info,
+        [in]        sec_acl_key_t           sec_acl_key,
+        [in, ref]   uuid_t                  *manager_type,
+        [in]        sec_id_t                *user_obj,      /* May be NULL */
+        [in]        sec_id_t                *group_obj,     /* May be NULL */
+        [out, ref]  sec_acl_permset_t       *net_rights,
+        [out]       error_status_t          *st
+    );
+
+    /* s e c _ a c l _ m g r _ r e p l a c e
+     *
+     *  Replace the acl associated with the key.  This package treats acls as
+     *  immutable objects - the old acl is thrown away and the new one created
+     *  Some implementations of this interface may choose to optimize storage
+     *  and share acl representation for many objects - in which case the real
+     *  acl storage must be reference counted, but that is of no concern to
+     *  the consumer of the interface.
+     *
+     *  NOTE: there is no authorization checking performed on this operation -
+     *          it is stricly local.  We assume that the application will
+     *          have called sec_acl_mgr_is_authorized with desired access set
+     *          to "permission setting" or "owner" or some equivalent notion
+     *          that implies the ability to set the acl before actually
+     *          attempting the replace.
+     */
+    void sec_acl_mgr_replace (
+        [in]        sec_acl_mgr_handle_t    sec_acl_mgr,
+        [in]        sec_acl_key_t           sec_acl_key,
+        [in, ref]   uuid_t                  *manager_type,
+        [in]        sec_acl_type_t          sec_acl_type,
+        [in, ref]   sec_acl_list_t          *sec_acl_list,
+        [out, ref]  error_status_t          *st
+    );
+
+    /* s e c _ a c l _ m g r _ l o o k u p
+     *
+     *  Extract the acl associated with the key.
+     *  Space for acl_list and associated acls is allocated within this
+     *  routine; however, it will be automatically freed.
+     *  Caller does not need to free sec_acl_list.
+     */
+    void sec_acl_mgr_lookup (
+        [in]        sec_acl_mgr_handle_t    sec_acl_mgr,
+        [in]        sec_acl_key_t           sec_acl_key,
+        [in]        uuid_t                  *manager_type,
+        [in]        sec_acl_type_t          sec_acl_type,
+        [out]       sec_acl_list_t          **sec_acl_list,
+        [out, ref]  error_status_t          *st
+    );
+
+    /* s e c _ a c l _ m g r _ g e t _ m a n a g e r _ t y p e s
+     *
+     * Determine the types of acls protecting an object. ACL editors/browsers
+     * use this operation to determine the acl manager types that a particular
+     * reference monitor is using to manage the acls of a particular type
+     * on a selected entity.
+     *
+     * num_types is the total number of acl manager types supported by this
+     * entity for the given acl_type - if it is greater than the size avail,
+     * this rtn should be invoked again with a buffer of the appropriate size.
+     *
+     * If num_types is greater than 1, the object is polymorphic - i.e., the
+     * named object supports acl manager types for each form of the selected
+     * entity.
+     *
+     */
+    void sec_acl_mgr_get_manager_types (
+        [in]        sec_acl_mgr_handle_t        sec_acl_mgr,
+        [in]        sec_acl_key_t               sec_acl_key,
+        [in]        sec_acl_type_t              sec_acl_type,
+        [in]        unsigned32                  size_avail,
+        [out]       unsigned32                  *size_used,
+        [out]       unsigned32                  *num_types,
+        [out, size_is(size_avail), length_is(*size_used)]
+                    uuid_t                      manager_types[],
+        [out]       error_status_t              *st
+    );
+
+    /* s e c _ a c l _ m g r _ g e t _ t y p e s _ s e m a n t i c s
+     *
+     * Determine the types of acls protecting an object. ACL editors/browsers
+     * use this operation to determine the acl manager types that a particular
+     * reference monitor is using to manage the acls of a particular type
+     * on a selected entity.
+     *
+     * num_types is the total number of acl manager types supported by this
+     * entity for the given acl_type - if it is greater than the size avail,
+     * this rtn should be invoked again with a buffer of the appropriate size.
+     *
+     * If num_types is greater than 1, the object is polymorphic - i.e., the
+     * named object supports acl manager types for each form of the selected
+     * entity.
+     *
+     * For each manager_type, determine which, if any, POSIX semantics the
+     * manager supports.
+     */
+    void sec_acl_mgr_get_types_semantics(
+        [in]        sec_acl_mgr_handle_t        sec_acl_mgr,
+        [in]        sec_acl_key_t               sec_acl_key,
+        [in]        sec_acl_type_t              sec_acl_type,
+        [in]        unsigned32                  size_avail,
+        [out]       unsigned32                  *size_used,
+        [out]       unsigned32                  *num_types,
+        [out, size_is(size_avail), length_is(*size_used)]
+                    uuid_t                      manager_types[],
+        [out, size_is(size_avail), length_is(*size_used)]
+                    sec_acl_posix_semantics_t   posix_semantics[],
+        [out]       error_status_t              *st
+    );
+
+    /* s e c _ a c l _ m g r _ g e t _ p r i n t s t r i n g
+     *
+     * Retrieve printable representations for each permission bit that the
+     * sec_acl manager will support.  There may be aliases for common
+     * permission combinations - by convention simple entries should
+     * appear at the beginning of the array, and combinations should
+     * appear at the end.  When false the tokenize flag indicates that
+     * permission printstrings are unambiguous and therefore printstrings
+     * for various permissions can be concatenated.  When true, however,
+     * this property does not hold and the strings should be tokenized
+     * before input or output. The manager_info string provides a name and
+     * help info for the manager type as well as the complete set of
+     * supported permission bits. total_num_printstrings is the total
+     * number of acl printstrings supported by this acl manager type - if
+     * it is greater than the size avail, this function should be invoked
+     * again with a buffer of the appropriate size.
+     *
+     * If the acl for the target object contains more than 32 permission
+     * bits, multiple manager types can be used - one for each 32 bit wide
+     * slice of permissions.  When this is the case the manager_type_chain
+     * parameter is set to the uuid of the next manager type in the set.  The
+     * final result for the chain returns uuid_nil in the manager_type_chain
+     * parameter.
+     */
+     void sec_acl_mgr_get_printstring (
+        [in]        sec_acl_mgr_handle_t    sec_acl_mgr,
+        [in]        uuid_t                  *manager_type,
+        [in]        unsigned32              size_avail,
+        [out]       uuid_t                  *manager_type_chain,
+        [out]       sec_acl_printstring_t   *manager_info,
+        [out, ref]  boolean32               *tokenize,
+        [out, ref]  unsigned32              *total_num_printstrings,
+        [out, ref]  unsigned32              *size_used,
+        [out, size_is(size_avail), length_is(*size_used)]
+                    sec_acl_printstring_t   printstrings[],
+        [out, ref]  error_status_t          *st
+    );
+}

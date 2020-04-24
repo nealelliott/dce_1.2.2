@@ -1,0 +1,655 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: dir_ops.dcecp,v $
+# Revision 1.1.4.2  1996/03/09  23:06:31  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:25:22  marty]
+#
+# Revision 1.1.4.1  1995/12/08  21:23:59  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/7  1995/10/10  14:59 UTC  truitt
+# 	Merge changes.
+# 
+# 	HP revision /main/HPDCE02/truitt_dcecp_chfts49/1  1995/10/05  15:09 UTC  truitt
+# 	CHFts16537: Upgrade to new functionality.
+# 
+# 	HP revision /main/HPDCE02/6  1995/08/22  20:25 UTC  truitt
+# 	Merge discard work.
+# 
+# 	HP revision /main/HPDCE02/truitt_dcecp_chfts45/1  1995/08/22  20:24 UTC  truitt
+# 	CHFts16021: The 'cdscache discard' command should not use the 'server'
+# 	command when operating on the local host, even if specified on the command line.
+# 
+# 	HP revision /main/HPDCE02/5  1995/07/26  19:11 UTC  truitt
+# 	Merge script changes.
+# 
+# 	HP revision /main/HPDCE02/truitt_dcecp_chfts43/1  1995/07/26  19:10 UTC  truitt
+# 	CHFts14274: Change 'destroy' to 'discard'.
+# 
+# 	HP revision /main/HPDCE02/4  1995/07/21  12:53 UTC  truitt
+# 	Merge cdscache addition.
+# 
+# 	HP revision /main/HPDCE02/truitt_dcecp_chfts40/1  1995/07/21  12:52 UTC  truitt
+# 	CHFts14274: Add new cdscache command.
+# 
+# 	HP revision /main/HPDCE02/3  1995/04/07  16:51 UTC  truitt
+# 	Merge dir work.
+# 
+# 	HP revision /main/HPDCE02/truitt_mothra_chfts25/1  1995/04/07  16:50 UTC  truitt
+# 	CHFts14469: Clean up tree error messages.
+# 
+# 	HP revision /main/HPDCE02/2  1995/02/24  17:27 UTC  truitt
+# 	Pass the correct parameters to the delete tree function.
+# 
+# 	HP revision /main/HPDCE02/truitt_dcecp_chfts16/1  1995/02/24  17:26 UTC  truitt
+# 	Pass the correct parameters to the delete tree function.
+# 
+# 	HP revision /main/HPDCE02/1  1995/02/24  15:35 UTC  truitt
+# 	Merge directory work.
+# 
+# 	HP revision /main/truitt_dcecp_chfts15/1  1995/02/24  15:32 UTC  truitt
+# 	CHFts14284: Add an input parameter to the function
+# 	that supports recursive directory deletes.  The new
+# 	option, -force, will allow dcecp to delete a directory
+# 	even if it is replicated.
+# 	[1995/12/08  17:57:44  root]
+# 
+# Revision 1.1.2.5  1994/09/07  22:05:34  coren
+# 	Corrected reference to Clearinghouse_Name attribute to use more recent
+# 	name, CH_Name (CR 12022).
+# 	[1994/09/07  18:09:05  coren]
+# 
+# Revision 1.1.2.4  1994/07/12  19:42:47  zee
+# 	Added CDS_CellAliases and CDS_ParentCellPointers to _read_only_attr.
+# 	[1994/07/12  15:52:52  zee]
+# 
+# Revision 1.1.2.3  1994/06/09  16:02:32  devsrc
+# 	cr10892 - fix copyright
+# 	[1994/06/09  15:48:08  devsrc]
+# 
+# Revision 1.1.2.2  1994/05/09  14:53:59  coren
+# 	Some updates for dir merge.
+# 	[1994/05/06  17:33:44  coren]
+# 
+# 	Added dir_merge.
+# 	[1994/04/20  15:35:22  coren]
+# 
+# Revision 1.1.2.1  1994/04/05  20:48:32  coren
+# 	Initial version.
+# 	[1994/04/05  19:10:48  coren]
+# 
+# 	Initial version.
+# 	[1994/04/01  20:50:42  coren]
+# 
+# $EndLog$
+
+#
+# dir_delete_tree implements the dcecp command
+#	directory delete NAME -tree
+#
+# If the specified directory contains other directories, this
+# procedure will be called recursively.
+#
+# The directory delete command will be called with the -force option
+# if required.
+#
+# In the error cases, the error code is returned to the calling
+# function so that both the error message can be displayed correctly
+# and the global error code variable can be set correctly.  This
+# will help in the internationalization of the error messages.
+#
+proc dir_delete_tree {force dir_name} {
+
+    # declaring the convenience variables as global is necessary as a
+    # temporary workaround to make the dcecp commands work; otherwise they
+    # are scoped as local.
+    global _n
+    global _o
+    global _p
+    global _e
+
+    if [catch {set dirs [directory list $dir_name -directories]} result] {
+        return -code error [format "%d" $_e]
+    }
+
+    if {[llength $dirs] > 0} {
+        foreach one_dir $dirs {
+            if [catch {dir_delete_tree $force $one_dir} result] {
+                return -code error $result
+            }
+        }
+    }
+
+    # The directory now contains no child directories, so just delete its
+    # other contents (if any)
+    if [catch {set objects [directory list $dir_name -objects]} result] {
+        return -code error [format "%d" $_e]
+    }
+
+    if {[llength $objects] > 0} {
+        if [catch {object delete $objects} result] {
+            return -code error [format "%d" $_e]
+        }
+    }
+
+    if [catch {set links [directory list $dir_name -links]} result] {
+        return -code error [format "%d" $_e]
+    }
+
+    if {[llength $links] > 0} {
+        if [catch {link delete $links} result] {
+            return -code error [format "%d" $_e]
+        }
+    }
+
+    # The directory should now be empty, so delete it
+    if { $force == "0" } {
+        if [catch {directory delete $dir_name} result] {
+            return -code error [format "%d" $_e]
+        }
+    } else {
+        if [catch {directory delete -force $dir_name} result] {
+            return -code error [format "%d" $_e]
+        }
+    }
+
+    return
+}
+
+
+#
+# dir_merge implements "directory merge" command.
+#   directory merge source_dir -into dest_dir [-nocheck] [-tree] \
+#                [-clearinghouse clearinghouse]
+# 
+# "nocheck" and "tree" are boolean-type parameters; "clearinghouse" is
+# the name of the clearinghouse in which new directories are to be
+# created, or "0" if the default is to be used.
+#
+proc dir_merge {source_dir dest_dir nocheck tree clearinghouse} {
+
+    global _merge_error
+    global _merge_error_list
+    global _read_only_attr
+    global _dir_read_only_attr
+
+    global _n
+    global _o
+    global _p
+    global _e
+
+    set _merge_error 0
+    set _merge_error_list ""
+
+    # set up "from" array of lists of objects to copy. If source_dir can't
+    # be listed, exit immediately.
+
+    if [catch {set from(directory) [directory list $source_dir -directories]} result] {
+        return -code error [format "{%s {%s}}" $source_dir $result]
+    }
+
+    if [catch {set from(object) [directory list $source_dir -objects]} result] {
+        return -code error [format "{%s {%s}}" $source_dir $result]
+    }
+
+    if [catch {set from(link) [directory list $source_dir -links]} result] {
+        return -code error [format "{%s {%s}}" $source_dir $result]
+    }
+
+    # if -tree specified, add all contents of directories
+
+    if {$tree} {
+        set tree_dirs $from(directory)
+        while {[llength $tree_dirs] > 0} {
+            set next_dirs ""
+            foreach one_dir $tree_dirs {
+                if [catch {set temp_dirs [directory list $one_dir -directories]} result] {
+	            set_error $one_dir $result
+                }
+
+                if [catch {set temp_obj [directory list $one_dir -objects]} result] {
+	            set_error $one_dir $result
+                } else {
+                    set from(object) [concat $from(object) $temp_obj]
+                    set subobj($one_dir) $temp_obj
+                }
+
+                if [catch {set temp_link [directory list $one_dir -links]} result] {
+	            set_error $one_dir $result
+                } else {
+                    set from(link) [concat $from(link) $temp_link]
+                    set subobj($one_dir) [concat $subobj($one_dir) $temp_link]
+                }
+
+                set next_dirs [concat $next_dirs $temp_dirs]
+            }
+
+            set from(directory) [concat $from(directory) $next_dirs]
+            set tree_dirs $next_dirs
+        }
+    }
+
+    set fromlen [string length $source_dir]
+
+    # get attributes for all objects
+
+    set existing_dir {}
+    foreach type {directory object link} {
+        set to($type) {}
+        foreach name $from($type) {
+            if [catch {set attributes($name) [$type show $name]} result] {
+                set_error $name $result
+                set no_attr 1
+            } else {
+
+                # remove read-only attributes
+                set no_attr 0
+                for {set i [expr [llength $attributes($name)] - 1]} {$i >= 0} {incr i -1} {
+                    set test_attr [lindex [lindex $attributes($name) $i] 0]
+                    if {$type == "directory"} {
+                        set ro_attr $_dir_read_only_attr
+                    } else {
+                        set ro_attr $_read_only_attr
+                    }
+                    if {[lsearch -exact $ro_attr $test_attr] != -1} {
+                        set attributes($name) [lreplace $attributes($name) $i $i]
+                    }
+                }
+            }
+
+            # build "to" lists and check for existence of targets
+
+            set copyname [string range $name $fromlen end]
+	    set to_name [format "%s%s" $dest_dir $copyname]
+        
+            set dir_exists 0
+            if {[expr {$nocheck == 0}] || [expr {$type == "directory"}]} {
+                set pathlist [split $to_name /]
+                set objname [lindex $pathlist [expr [llength $pathlist] -1]]
+                set pathlist [lrange $pathlist 0 [expr [llength $pathlist] -2]]
+                set to_dir [join $pathlist /]
+
+                if {[catch {set testlist [directory list $to_dir]}]} {
+                    if {$to_dir == $dest_dir} {
+                        set_error $dest_dir "Cannot test for existence of objects"
+                    }
+                } else {
+                    if {[lsearch -exact $testlist $to_name] != -1} {
+
+                        # object exists; but this is OK if both source and target are
+                        # directores.
+
+                        if {$type != "directory"} {
+                            set_error $to_name "object already exists"
+                        } elseif {[lsearch -exact [directory list $to_dir -directories] \
+                                  $to_name] == -1} {
+                            set_error $to_name "object already exists"
+                        } else {
+                            set dir_exists 1
+                        }
+                    }
+                }
+            }
+
+            # assuming there were no errors above, if the target is an existing
+            # directory, save its name in a separate list so we don't try to
+            # create it.
+
+            if {! $no_attr} {
+                if {$dir_exists} {
+                    set existing_dir [concat $existing_dir $to_name]
+
+                    # remember if we will need to create any (nondirectory) objects in the
+                    # existing dir, and save the names of subdirectories for later
+                    # checking
+
+                    if {! $nocheck} {
+                        if {$tree} {
+                            set create_in($to_name) [expr [llength $subobj($name)] > 0]
+                            set createdir($to_name) [directory list $name -directories -simplename]
+                        }
+                    }
+
+                } else {
+                    set to($type) [concat $to($type) $to_name]
+                }
+                set attributes($to_name) $attributes($name)
+            }
+        }
+    }
+
+    # Check if ACLs will permit creation of objects in target dir
+
+    if {! $nocheck} {
+        check_perms $dest_dir $clearinghouse [expr [llength $to(directory)] > 0]
+
+        # We need to find out whether we're going to be creating objects in
+        # any of the existing directories. $create_dir($target_dir) is the
+        # list of (simple) names of directories in the corresponding source
+        # dir. If there are any such, and at least one of the corresponding
+        # target directories doesn't already exist, then we have to check
+        # directory-create access on the existing target dir.
+
+        if {$tree} {
+            foreach this_dir $existing_dir {
+                set check_dir 0
+                if {[llength $createdir($this_dir)] > 0} {
+                    if [catch {set exist_subdir [directory list $this_dir -directories -simplename]} result] {
+                        set_error $this_dir $result
+                    } else {
+                        if {[llength $exist_subdir] > 0} {
+                            foreach testdir $createdir($this_dir) {
+                                if {[lsearch -exact $exist_subdir $testdir] == -1} {
+                                    set check_dir 1
+                                    break
+                                }
+                            }
+                        } else {
+                            set check_dir 1
+                        }
+                    }
+                }
+
+                if {$check_dir || $create_in($this_dir)} {
+                     check_perms $this_dir $clearinghouse $check_dir
+                }
+            }
+        }
+    }
+
+    # we've done all the checking we can do, stop if there's a problem
+
+    if {$_merge_error} {
+        return -code error $_merge_error_list
+    }
+
+    # finally, time to create objects in target directory
+
+    # Try to set attributes on already-existing directories to match
+    # writable attributes on source dirs. For each one, find out if it's
+    # already there so we know whether to -change or -add it.
+
+    foreach name $existing_dir {
+        if {[llength $attributes($name)] > 0} {
+            set addattr {}
+            set chattr {}
+            set testattr [directory show $name]
+            foreach attr $attributes($name) {
+                set attrname [format "%s*" [lindex $attr 0]]
+                if {[lsearch $testattr $attrname] == -1} {
+                    set addattr [concat $addattr [list $attr]]
+                } else {
+                    set chattr [concat $chattr [list $attr]]
+                }
+            }
+
+            if {[llength $chattr] > 0} {
+                if {[catch {directory modify $name -change $chattr} result]} {
+                    return -code error [format "{%s {%s}}" $name $result]
+                }
+            }
+            if {[llength $addattr] > 0} {
+                if {[catch {directory modify $name -add $addattr} result]} {
+                    return -code error [format "{%s {%s}}" $name $result]
+                }
+            }
+        }
+    }
+
+    foreach name $to(directory) {
+        set command [format "directory create %s" $name]
+        if {[llength $attributes($name)] > 0} {
+            set command [format "%s -attribute {%s}" $command $attributes($name)]
+        }
+        if {$clearinghouse != "0"} {
+            set command [format "%s -clearinghouse %s" $command $clearinghouse]
+        }
+
+        if {[catch $command result]} {
+            return -code error [format "{%s {%s}}" $name $result]
+        }
+    }
+
+    foreach type {object link} {
+        foreach name $to($type) {
+            if {[llength $attributes($name)] > 0} {
+                if {[catch {$type create $name -attribute $attributes($name)} result]} {
+                     return -code error [format "{%s {%s}}" $name $result]
+                }
+            } else {
+                if {[catch {$type create $name} result]} {
+                    return -code error [format "{%s {%s}}" $name $result]
+                }
+            }
+        }
+    }
+    return
+}
+
+
+#
+# _dcp_cache_discard implements the dcecp command
+#	cdscache discard [hostname]
+#
+# If the hostname is NULL, or if the hostname matches the name
+# of the local host, then the command will be performed on the
+# local host without using the 'server' command.  If the operation
+# is to be done remotely, the 'server' command will be used.
+#
+proc _dcp_cache_discard {host_name} {
+    #
+    # Declaring the convenience variables as global is necessary as a
+    # temporary workaround to make the dcecp commands work; otherwise they
+    # are scoped as local.
+    #
+    global dcelocal_path
+    global _n
+    global _o
+    global _p
+    global _e
+    global _h
+
+    if {$host_name == "NULL"} {
+        set localexec "true"
+    } else {
+        set local_host [exec hostname]
+        set host_prefix [string range $host_name 0 4]
+        if {"$host_prefix" == "hosts"} {
+            set local_name [format "%s/%s" $host_prefix $local_host]
+        } else {
+            set local_name $local_host
+        }
+        if {"$local_name" == "$host_name"} {
+            set localexec "true"
+        } else {
+            set localexec "false"
+        }
+    }
+
+    if {$localexec == "true"} {
+        #
+        # Stop the cds advertiser on the local node.
+        #
+        if {[catch {cdsclient disable /.:/$_h/cds-clerk} msg] != 0} {
+            error "Unable to stop cdsadv - $msg"
+        } else {
+            exec sleep 5
+        }
+
+        #
+        # Figure out which directory the cache files are hiding in.
+        #
+        set cache_directory [format "%s/var/adm/directory/cds" $dcelocal_path]
+
+        #
+        # Figure out which version of the cache file to delete.
+        #
+        set file_id [open $cache_directory/cds_cache.version]
+        set cache_version [read $file_id]
+        close $file_id
+
+        #
+        # Delete the two cache files.
+        #
+        set file_to_del_1 [format "%s/cds_cache.version" $cache_directory]
+        set file_to_del_2 [format "%s/cds_cache.%s" $cache_directory $cache_version]
+        if {[catch {exec rm $file_to_del_1 $file_to_del_2} msg] != 0} {
+            error "Unable to delete cdsadv cache files - $msg"
+        }
+
+        #
+        # Restart the cds advertiser on the local node.
+        #
+        if {[catch {exec $dcelocal_path/bin/cdsadv &} msg] != 0} {
+            error "Unable to start cdsadv - $msg"
+        } else {
+            exec sleep 5
+        }
+    } else {
+        #
+        # Set up a server entry that will run the 'cdscache discard'
+        # script on the specified node.
+        #
+        set cell_name [lindex [name parse /.:] 0]
+        set host_prefix [string range $host_name 0 4]
+        if {"$host_prefix" == "hosts"} {
+            set server_name [format "%s/%s/config/srvrconf/cdiscard" $cell_name $host_name]
+        } else {
+            set server_name [format "%s/hosts/%s/config/srvrconf/cdiscard" $cell_name $host_name]
+        }
+
+        if {[catch {server create $server_name -program "/usr/bin/dcecp" \
+                                               -arguments "-c {cdscache discard}" \
+                                               -starton "explicit"} msg] != 0} {
+            error "Unable to create server object - $msg"
+        }
+
+        if {[catch {server start $server_name} msg] != 0} {
+            error "Unable to start server object - $msg"
+        } else {
+            exec sleep 20
+        }
+
+        if {[catch {server delete $server_name} msg] != 0} {
+            error "Unable to delete server object - $msg"
+        }
+    }
+    return
+}
+
+
+#
+# Create or append to a list of objects on which to report errors.  This
+# will be returned as a string formatted so as to produce a list of
+# {object error} pairs, where each "error" is also a list.
+#
+proc set_error {name message} {
+
+    global _merge_error
+    global _merge_error_list
+
+    if {$_merge_error} {
+        set _merge_error_list [format "%s\n" $_merge_error_list]
+    }
+    set _merge_error_list [format "%s{%s {%s}}" $_merge_error_list $name $message]
+    set _merge_error 1
+}
+
+
+#
+# A function to see if the invoking principal has sufficient permissions
+# to create objects in the specified directory.  The "somedirs" parameter
+# indicates whether it is necessary to be able to create directories as
+# well as other objects.
+#
+proc check_perms {dest_dir clearinghouse somedirs} {
+
+    set noperms 0
+    if {[catch {set perms [acl check $dest_dir]} result]} {
+        set_error $dest_dir $result
+        set noperms 1
+    } else {
+        if {[string first i $perms] == -1} {
+            set_error $dest_dir "No permission to add objects"
+        }
+    }
+
+    # if there are any directories to be copied, also need "r" on target
+    # dir and "w" on its master clearinghouse
+
+    if {$somedirs} {
+        if {! $noperms} {
+            if {[string first r $perms] == -1} {
+                set_error $dest_dir "No permission to add directories"
+            }
+        }
+
+        # find name of clearinghouse containing master replica of target dir
+        # (or clearinghouse in which new directories will be created, if
+        # specified)
+
+        if {$clearinghouse == "0"} {
+            set ch_name ""
+            if {[catch {set dirattr [directory show $dest_dir]} result]} {
+                set_error $dest_dir $result
+            } else {
+                set rindex [lsearch $dirattr CDS_Replicas*]
+                if {$rindex != -1} {
+                    set replist [lindex $dirattr $rindex]
+                    set master_rep {}
+                    for {set avalue 1} {$avalue < [llength $replist] && [expr [llength $master_rep] == 0]} {incr avalue 1} {
+                        set rvalues [lindex $replist $avalue]
+                        set tindex [lsearch $rvalues Replica_Type*]
+                        if {[expr {$tindex != -1}] && \
+                            [expr {[lindex [lindex $rvalues $tindex] 1] == "Master"}]} {
+                            set master_rep $rvalues
+                        }
+                    }
+
+                    if {[llength $master_rep] != 0} {
+                        set cindex [lsearch $master_rep CH_Name*]
+                        if {$cindex != -1} {
+                            set ch_name [lindex [lindex $master_rep $cindex] 1]
+                        }
+                    }
+                }
+            }
+        } else {
+            set ch_name $clearinghouse
+        }
+        if {$ch_name != ""} {
+            if {[catch {set perms [acl check $ch_name]} result]} {
+                set_error $ch_name $result
+            } elseif {[string first w $perms] == -1} {
+                set_error $ch_name "No permission to add directories"
+            }
+        } else {
+            set_error $dest_dir "Cannot find master clearinghouse"
+        }
+    }
+}
+
+
+#
+# set list of read-only attributes so that merge can filter them out
+# of the attribute lists of things to be copied
+#
+set _read_only_attr {CDS_CTS CDS_UTS CDS_Replicas CDS_AllUpTo \
+    CDS_ParentPointer CDS_DirectoryVersion CDS_GDAPointers \
+    CDS_ReplicaVersion CDS_ReplicaState CDS_ReplicaType CDS_InCHName \
+    CDS_LastSkulk CDS_LastUpdate CDS_RingPointer CDS_Epoch \
+    CDS_CellAliases CDS_ParentCellPointers}
+
+
+#
+# A few additional attributes are read-only in directories but writable
+# in other objects.
+#
+set _dir_read_only_attr [concat $_read_only_attr {CDS_ObjectUUID}]

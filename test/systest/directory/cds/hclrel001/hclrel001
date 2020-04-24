@@ -1,0 +1,260 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: hclrel001,v $
+# Revision 1.1.4.2  1996/03/11  02:40:21  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:06:09  marty]
+#
+# Revision 1.1.4.1  1995/12/11  21:57:19  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:57:04  root]
+# 
+# Revision 1.1.2.1  1994/09/22  21:27:08  fadden
+# 	Initial version of HCLREL001
+# 	[1994/09/22  18:59:58  fadden]
+# 
+# $EndLog$
+#
+# This test creates users and adminstrative principals to test a variety
+# of intercell operations, focusing on CDS objects and acls.
+#
+
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="hclrel001"
+
+test_purp_list="hclrel001"
+
+startup()
+{
+    if [ -x /opt/dcelocal/bin/dce_login -a ! -x /usr/bin/dce_login_noexec ]
+    then
+            ln -s /opt/dcelocal/bin/dce_login /usr/bin/dce_login_noexec
+    fi
+
+    if [ -n "$RUN_TIME" ]
+    then
+        SECONDS=0
+        SECONDS_TO_EXECUTE=`awk "BEGIN { printf (\"%d\", 3600 * $RUN_TIME); exit; }"`
+    fi
+
+
+    if [ -z "$CELLS" ]
+    then
+        CELLS=`/opt/dcelocal/bin/getcellname`
+        if [ -z "$CELLS" ]
+        then
+                tet_infoline "The cell list is null"
+                del_test_purp
+                return
+        fi
+    fi
+
+    tet_infoline "Using cell list: $CELLS"
+    export CELLS
+
+    PID=$$
+    FAIL_STAT=0
+
+    # NOTE all administrative principals use the password in the 
+    # data file
+
+    # Generate the lists of admin and user principals
+    generate_princs
+
+    CONFIDENCE=${CONFIDENCE:-"medium"}
+    STATES=${STATES:-""}
+
+    export FAILURES=0
+    export CMD_F FAIL_STAT CONFIDENCE PID DEBUG
+
+    if [ "$STNUM" -ne 0 -a "$ONE_STATE" = "false" ]
+    then
+        N=0
+        while [ "$N" -lt "$STNUM" ]
+        do
+                N=`expr $N + 1`
+                STATES="$STATES st$N"
+        done
+    else
+        if [ "$STNUM" -ne 0 -a "$ONE_STATE" = "true" ]
+        then
+                STATES="$STATES st$STNUM"
+        fi
+    fi
+    if [ "$STNUM" -eq 0 ]
+    then
+        STATES="$STATES st1"
+    fi
+    tet_infoline "This test will use the following clearinghouse states:"
+    tet_infoline "        $STATES"
+
+    export PS=0 TOTAL_FAILS=0 OPS_TOTAL=0
+    export MATCH_STR="Clearinghouse Name = "
+
+    export CDSSHOST=`hostname`
+
+} #end startup
+
+# Run the test
+hclrel001()
+{
+    export CELL
+    for CELL in $CELLS
+    do
+	get_allch $CELL
+	if [ "$?" -ne 0 ]
+	then
+	    tet_infoline "Initial access to cell $CELL failed"
+	    ((TOTAL_FAILS+=1))
+	    continue
+        else
+	    tet_infoline "Clearinghouses in cell $CELL are $CHS_LST"
+	fi
+
+        for ST in $STATES
+        do
+            FIRST=0
+            for CHS in $CHS_LST
+            do
+                if [ "$FIRST" = "0" ]
+                then
+                    FIRST=1
+                    if [ -f primary_ch.${ST} ]
+                    then
+                            cp primary_ch.${ST} ${CHS}.${ST}
+                    fi
+                else
+                    if [ -f secondary_ch.${ST} ]
+                    then
+                        cp secondary_ch.${ST} ${CHS}.${ST}
+                    fi
+                fi
+            done
+        done
+	
+        # setup the namespace and registry entries
+	setup_cell $CELL 
+	if [ "$?" -ne 0 ]
+	then
+	    tet_infoline "setup() for $CELL didn't work"
+	    continue
+	fi
+
+        for STATE in $STATES
+        do
+            tet_infoline "Running STATE Series: $STATE"
+	    for PRINC in $ADM
+            do
+                for CHS in $CHS_LST
+                do
+                    prvtotfail=$TOTAL_FAILS
+                    if [ ! -f $CHS.$STATE ]
+                    then
+                        continue
+                    fi
+
+                    echo "   Clearinghouse: $CELL/$CHS,"
+                    echo "        principal: ${PRINC}, state: $STATE."
+                    if [ "$DEBUG" -gt 0 ]
+                    then
+                        tet_infoline "Using $CELL/$CHS as clearinghouse for principal ${PRINC} "
+                        tet_infoline "Log Attempt: $CELL/${PRINC} ${ADM_PWD}"
+                    fi
+                    export KRB5CCNAME
+                    KRB5CCNAME=`dce_login_noexec $CELL/${PRINC} ${ADM_PWD}`
+                    if [ "$?" != "0" ]
+                    then
+                        tet_infoline "-:) Failure: Unable to authenticate $CELL/${PRINC}"
+                        tet_infoline "KRB5CCNAME=$KRB5CCNAME"
+                        ((TOTAL_FAILS+=1))
+			tet_infoline "TOTAL_FAILS=$TOTAL_FAILS"
+                        continue
+                    fi
+
+                    # execute the commands for this principal
+                    # as defined in the corresponding state file
+                    
+                    cmd_exc ${PRINC} ${ADM_PWD} $CHS.$STATE
+
+                    ((x= TOTAL_FAILS - prvtotfail))
+                    if ((x != 0 ))
+                    then
+                        echo "        Got $x failures in this case."
+                    fi
+
+                done # end Clearinghouse loop
+            done # end principal id loop
+
+	    # execute the user principal loop once
+	    for CHS in $CHS_LST
+	    do
+		prvtotfail=$TOTAL_FAILS
+		tst_acl $CHS.$STATE $PNUM
+		((x = TOTAL_FAILS - prvtotfail))
+		if ((x != 0))
+		then 
+		    echo "       Got $x failures in this case."
+		fi 
+            done  # end user principal loop
+
+        done #end state loop
+    done #end cell loop
+
+    # perform state-specific cleanup
+    # note this is done at the end to allow implementing state
+    #   files that make use of operations done in previous
+    #   state files, and be able to execute the necessary cleanup
+    #   afterwards
+    for CELL in $CELLS
+    do
+        get_allch $CELL
+	if [ "$?" -ne 0 ]
+	then
+	    tet_infoline "Access to cell failed during cleanup"
+	    ((TOTAL_FAILS+=1))
+        fi
+        for STATE in $STATES
+        do
+            tet_infoline "Cleaning up STATE Series: $STATE"
+	    for CHS in $CHS_LST
+	    do
+		cmd_exc $SETUP_PRINC $SETUP_PW $CHS.$STATE cleanup
+	    done # end Clearinghouse loop
+        done #end state loop
+    done #end cell loop
+
+    if (( ((TOTAL_FAILS == 0) && (OPS_TOTAL > 0)) ))
+    then
+        tet_infoline "All $OPS_TOTAL test cases passed."
+        tet_infoline "HCLREL001 passed"
+        tet_result PASS
+    else
+        tet_infoline "Total failures: $TOTAL_FAILS/$OPS_TOTAL"
+        (( OPS_TOTAL <= 0 )) && tet_infoline "No test cases were executed!"
+        tet_infoline "HCLREL001 failed"
+        tet_result FAIL
+    fi
+}
+
+cleanup()
+{
+
+    # remove test specific accounts and change acls
+    for CELL in $CELLS
+    do
+	cleanup_cell $CELL
+    done
+}
+
+. $TET_ROOT/system/profile.dcest.tet
+. $TET_ROOT/system/directory/cds/ts/hclrel001/hclrel001.data
+. $TET_ROOT/system/directory/cds/ts/hclrel001/hcl_st_utils
+. $TET_ROOT/lib/ksh/tcm.ksh

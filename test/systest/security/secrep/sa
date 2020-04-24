@@ -1,0 +1,686 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: sa,v $
+# Revision 1.1.2.2  1996/03/09  20:52:05  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:44  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:21  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:04 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  19:59 UTC  bissen
+# 	 merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:54 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  19:35 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 	[1995/12/11  22:22:27  root]
+# 
+# Revision 1.1.2.2  1993/08/02  17:40:35  sekhar
+# 	Replication system test. Initial version
+# 	[1993/08/02  17:30:19  sekhar]
+# 
+# $EndLog$
+#
+
+#
+#  History of changes
+#     Added sa_become_master sa_become_slave, sa_change_master
+#
+#     removed secd_print_state_all - callers are now responsible
+#     for calling this.
+#
+#     Modified several functions to perform operations on lists
+#     of replicas instead of a single replica:
+
+if [ -z "${SA_DEFINED}" ] ; then
+
+SA_DEFINED=1
+
+. $PHOME/profile
+. $PHOME/replog
+. $PHOME/repdb
+
+#-----------------------------------------------------------------------
+#  sa_x_cmd : Executes a sec_admin command on the given replica. 
+#             The output of the command is in file $SA_OUTF . This
+#             function is not exported outside of this module.
+#
+#  IN arg1 .. sec_admin cmd to be executed.
+#     arg2 .. (OPTIONAL) Replica to bind to prior to executing the
+#                        command. 
+# 
+#-----------------------------------------------------------------------
+
+sa_x_cmd()
+{
+        typeset st
+
+        #   **** N.B. *****
+        #
+        #   When binding to a replica use the full name of the
+        #   replica - not the name used on the replica list.
+        #   The reason is that the replica may not be on the
+        #   default replica's replica list. And so the binding
+        #   to the replica would fail if the name on the replica 
+        #   list is used.
+        #
+        #   ***************
+
+        if [ -z "$2" ] ; then
+                cat > $sa_tmpf <<- FILE_EOF
+		sec_admin -nq 
+			$1
+		FILE_EOF
+                sec_admin -nq > $SA_OUTF 2>&1 <<- !EOF
+			$1
+		!EOF
+        else
+                #   Note that the binding to the replica must be
+                #   done on the command line. This is because
+                #   if there is a binding failure then the
+                #   shelll status code variable $? would be set 
+                #   correctly to the error.  
+                #
+                #   If the binding to the replica were done as 
+                #   as follows:
+                # 
+                #    sec_admin -nq > $SA_OUTF 2>&1 <<- !EOF
+                #          site /.:/$2
+                #          $1
+                #    !EOF
+                #    
+                #    and if there is a failure trying to bind to 
+                #    the replica then the shell status variable
+                #    would be set 0.
+                #
+
+                cat > $sa_tmpf <<- FILE_EOF
+		sec_admin -s /.:/$2 -nq
+			$1
+		FILE_EOF
+                sec_admin -s /.:/$2 -nq > $SA_OUTF 2>&1 <<- !EOF
+			$1
+		!EOF
+        fi
+        st=$?
+        replog_blank
+        replog_dumpfile_fmt $sa_tmpf
+        replog_blank
+        replog_dumpfile_fmt $SA_OUTF
+        replog_blank
+        
+        #  If $st is not 0 then print a message rather than an
+        #  error. This is because if the replica has just been
+        #  restarted then sec_admin will fail to  bind for 
+        #  sometime  but it will eventually succeed.
+
+        if [ $st -ne 0 ] ; then
+            if [ -z "$2" ] ; then
+                replog_msg "sec_admin could not bind"
+            else
+                replog_msg "sec_admin could not bind to /.:/$2"
+            fi
+        fi
+        return $st
+}
+
+#-----------------------------------------------------------------------
+#  sa_bind_rep - Tries to bind to the specified replica.
+#
+#  IN : arg1 - Name of the replica to bind to . 
+#-----------------------------------------------------------------------
+
+sa_bind_rep()
+{
+    sa_x_cmd "quit" $1 ; st=$? 
+#
+#   N.B. If sa_x_cmd returns an error status, the current state
+#        of replicas is not dumped (as is the case in other sa_funcs)
+#        because this func is used to test if sec_admin can bind to 
+#        the replica in $1 and thus may be called repetedly
+#        until the binding succeeds. And if the binding still fails
+#        after repetead attempts the caller can dump the information.
+
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#  sa_lrep - Invokes lrep on the specified slave with options (if specified)
+#            The output of the lrep command is in file SA_OUTF .
+#
+#  IN : arg1 - Name of the replica to bind to . 
+#       arg2 - (OPTIONAL) options to lrep cmd ( -prop -state etc).
+#-----------------------------------------------------------------------
+
+sa_lrep()
+{
+    sa_x_cmd "lrep $2" $1 ; st=$? 
+    return $st
+}
+
+#-----------------------------------------------------------------------
+# sa_destroy - destroys replicas
+# 
+# IN : arg1 - List of replicas to be destroyed
+#-----------------------------------------------------------------------
+
+sa_destroy()
+{
+    typeset  st save_st rl rl_list
+
+    set -A rl_list $1  ; save_st=0
+
+    for rl in ${rl_list[*]}
+    do
+        replog_msg "Attempting to destroy replica $rl "
+        sa_x_cmd "destroy $rl" $rl ; st=$?
+        if [ $st -ne 0 ] ; then
+            replog_error "Failed to destroy replica $rl"
+            save_st=1
+        fi 
+    done
+    return $save_st
+}
+
+#-----------------------------------------------------------------------
+#  sa_delete - deletes the replicas either forcibly or gracefully.
+#
+#  IN  : arg1 - Array of replicas to be deleted.
+#        arg2 (OPTIONAL) - $DELREP_FORCE - to delete a replica forcibly
+#                        - not passed in for normal deletion of replica
+#-----------------------------------------------------------------------
+
+sa_delete()
+{
+    typeset  st save_st rl rl_list
+
+    set -A rl_list $1  ; save_st=0
+
+    st=0
+#     sa_wait_prop_complete "$1" ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_error "Slaves are in an inconsistent state and cannot be deleted"
+        replog_abort "sa_delete" "sa_wait_prop_complete"
+    fi
+    for rl in ${rl_list[*]}
+    do
+        replog_msg "Attempting to delete replica $rl ( delrep $2) "
+        sa_x_cmd "delrep $rl $2" $MASTER_NAME ; st=$?
+        if [ $st -ne 0 ] ; then
+            replog_error "Failed to delete replica $1 $2"
+            save_st=1
+        fi
+        repdb_del_slv $rl
+    done
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#  sa_set_state - Sets the state of the master to the specified state.
+#
+#  IN  : arg1 - State to be set ( e.g. service, maintenance ).
+#-----------------------------------------------------------------------
+
+sa_set_state()
+{
+    typeset st
+
+    replog_msg "Setting state of master to -$1"
+
+#   N.B. It does not matter what the current site is
+#        sec_admin will automatically rebind to master
+#        on state cmd
+#
+    sa_x_cmd "state -$1"  ; st=$?
+    if [ $st -ne 0 ] ; then
+        secd_print_state_all
+        replog_error "Failed to set state of master to -$1"
+    fi 
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#  sa_stop - Stops the list of specified replicas
+#
+#  IN  : arg1 List of Replica to be stopped.
+#-----------------------------------------------------------------------
+
+sa_stop()
+{
+    typeset st save_st rl rl_list
+
+    set -A rl_list $1
+    save_st=0
+    for rl in ${rl_list[*]}
+    do
+        replog_msg "Stopping security server $rl"
+        sa_x_cmd "stop" $rl ; st=$?
+        if [ $st -ne 0 ] ; then
+            replog_error "Failed to stop security server $rl"
+            save_st=1
+        fi
+    done
+    return $save_st
+}
+
+#-----------------------------------------------------------------------
+#  sa_change_key - changes the master key.
+# 
+#  IN : arg1 - List of replicas whose master key is to be changed.
+#-----------------------------------------------------------------------
+
+sa_change_key()
+{
+    typeset st save_st rl rl_list 
+
+    set -A rl_list $1
+    save_st=0
+    for rl in ${rl_list[*]}
+    do
+        replog_msg "Attempting to change the master key for replica $rl"
+        sa_x_cmd "master_key" $rl ; st=$?
+        if [ $st -ne 0 ] ; then
+            replog_error "Failed to change the master key for replica $rl"
+            save_st=1
+        fi 
+    done
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#  sa_initrep - initializes replicas
+#
+#  IN  : arg1 - List of replicas to be inited (e.g. subsys/dce/sec/<slave_name>)
+#-----------------------------------------------------------------------
+
+sa_initrep()
+{
+    typeset st save_st rl rl_list
+
+    set -A rl_list $1  ; save_st=0
+
+    for rl in ${rl_list[*]}
+    do
+        replog_msg "Initrep replica $1"
+        sa_x_cmd "initrep $rl" $MASTER_NAME  ; st=$?
+        if [ $st -ne 0 ] ; then
+            replog_error "Failed to initrep replica $1"
+            save_st=1
+        fi 
+    done
+    return $save_st
+}
+
+#-----------------------------------------------------------------------
+#  sa_change_master - Changes the master to the slave specified in arg1.
+#
+#  IN : arg1 - Name of the slave to change to the master.
+#
+#-----------------------------------------------------------------------
+
+sa_change_master()
+{
+    typeset st
+
+    replog_msg "Attempting to change master to $1"
+    replog_msg "MASTER_NAME is $MASTER_NAME"
+    sa_x_cmd "change_master -to $1" $MASTER_NAME ; st=$? 
+    if [ $st -ne 0 ] ; then
+        secd_print_state_all
+        replog_error "Failed to change master to $1"
+    else
+        repdb_change_master $1
+    fi
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#  sa_become_master - Make the slave specified in arg1 the new master.
+#
+#  IN : arg1 - Name of the slave.
+#
+#-----------------------------------------------------------------------
+
+sa_become_master()
+{
+    typeset st
+
+    replog_msg "Attempting to become master : Slave is $1"
+    sa_x_cmd "become -master" $1 ; st=$? 
+    if [ $st -ne 0 ] ; then
+        secd_print_state_all
+        replog_error "become -master failed ( Slave was $1)"
+#    else
+#        repdb_become_master $1
+    fi
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#  sa_become_slave - Make the replica specified in arg1 a slave.
+#
+#  IN : arg1 - Name of the replica.
+#
+#-----------------------------------------------------------------------
+
+sa_become_slave()
+{
+    typeset st
+
+    replog_msg "Attempting to become slave. Master is $1"
+    sa_x_cmd "become -slave" $1 ; st=$? 
+    if [ $st -ne 0 ] ; then
+        secd_print_state_all
+        replog_error "become -slave failed ( Master was $1)"
+    else
+        repdb_become_slave $1
+    fi
+    return $st
+}
+
+#
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+
+#   Extract the information from a field in the propagation queue.
+#   The fields are extracted only for the specified replicas.
+
+sa_extract_field()
+{
+    typeset retst i rv
+
+    sa_lrep $MASTER_NAME "-prop" ; retst=$?
+    if [ $retst -ne 0 ] ; then
+        return 1
+    fi
+    retst=0
+    rm -f $sa_tmpf 
+    #  Strip leading blanks,tabs and blanks lines - to reduce work for awk
+    sed -e 's/^ 	*//' -e '/^$/D' $SA_OUTF | awk -F ":" '
+        BEGIN {
+            r="NULL"
+        }
+        {
+            #   Check if the first field is a replica name by checking
+            #   the list of all replicas.
+
+            if ( R_DEBUG ) {
+                print "Field to be extracted : " R_FIELD 
+                print "Current first field   : " $1
+            }
+
+            if (match(ALLR_LIST,$1)) {
+
+                #    Check if the replica is on the list of replicas whose
+                #    fields are to be extracted. 
+                if ( R_DEBUG )
+                    print "Replica name read : " $1
+
+                if (match(R_LIST,$1)) {
+                    r=$1 ;
+                    if ( R_DEBUG )
+                        print "Field must be extracted for this replica " $1
+                }
+                else
+                    r="NULL"
+            }
+            if (r != "NULL" && match($1,R_FIELD)) {
+                if (R_DEBUG) {
+                    print "Retrieving field " R_FIELD " from current line:"
+                    print $0
+                }
+                print substr($0,length($1)+2) >> "'$sa_tmpf'"
+            }
+        }' R_LIST="$1" R_FIELD="$2" ALLR_LIST="${REP_NAMES[*]}" R_DEBUG=$SA_DEBUG
+
+    #  Use sed to strip leading blanks and tabs from the field value.
+    #  Note that there is a hardcoded tab in the command to sed.
+
+    i=0
+    unset SA_PROPQ_FVAL
+    if [ -f $sa_tmpf ] ; then
+        sed 's/^[ 	]*//' $sa_tmpf  | while read v
+                                          do
+                                              SA_PROPQ_FVAL[i]=$v
+                                              i=`expr $i + 1`
+                                          done 
+        if [[ $SA_DEBUG -ne 0 ]] ; then
+            replog_msg "SA_PROPQ_FVAL set to : ${SA_PROPQ_FVAL[*]}"
+        fi
+    else
+        replog_msg "Field \"$2\" not found"
+        if [[ $SA_DEBUG -ne 0 ]] ; then
+            replog_msg "SA_PROPQ_FVAL not set"
+        fi
+    fi
+    return $retst
+}
+    
+#  IN arg1 ..... Replica list to check for propgagation of updates
+
+sa_wait_prop_complete()
+{
+    typeset r_list r j lc sleep_flag
+
+    set -A r_list $1
+    if [ ${#r_list[*]} -eq 0 ] ; then
+        return 0   # No replicas to wait for
+    fi
+
+    replog_msg  "Attempting to wait until all updates propagate"
+    replog_msg  "to : ( ${r_list[*]} )"
+
+    lc=1 ;  fail=1
+    let IL=IL+1 
+    while [ $lc -le $SA_PROP_LOOP_CNT ] 
+    do
+        sa_extract_field "${r_list[*]}" "Number of outstanding updates" ; st=$?
+        if [ $st -ne 0 ] ; then
+             replog_abort "sa_wait_prop_complete" "sa_extract_field"
+             break
+        fi
+        sleep_flag=0
+        if [[ -z "$SA_PROPQ_FVAL" ]] ; then
+            sleep_flag=1
+        elif [ ${#SA_PROPQ_FVAL[*]} -ne ${#r_list[*]} ] ; then
+            sleep_flag=1
+        else
+            j=0
+            while [ $j -lt ${#SA_PROPQ_FVAL[*]} ]
+            do
+                replog_msg "Number of outstanding updates for ${r_list[j]} = ${SA_PROPQ_FVAL[j]}"
+                if [ ${SA_PROPQ_FVAL[j]} != "0" ] ; then
+                    sleep_flag=1
+                fi
+                j=`expr $j + 1`
+            done
+            replog_blank
+        fi
+        if [ $sleep_flag -ne 0 ] ; then
+            replog_msg "Waiting $SA_PROP_LOOP_INT secs for updates to propagate"
+            replog_msg  "to : ( ${r_list[*]} )"
+            replog_blank
+            sleep $SA_PROP_LOOP_INT
+        else
+            fail=0
+            break ;
+        fi
+        lc=`expr $lc + 1`
+    done
+    let IL=IL-1
+    if [ $fail -eq 0 ] ; then
+        replog_msg "Successfully propagated updates to slaves"
+    else
+        replog_error "Failed to propagate updates to slaves"
+        secd_print_state_all
+    fi
+    return $fail
+}
+
+#
+#  IN arg1 : Replica which was marked for initialization
+#
+sa_wait_slv_mrkinit()
+{
+    typeset i st
+
+    i=1 ; st=1
+    while [ $i -le $SA_MRKINIT_LOOP_CNT ]
+    do 
+        sa_extract_field $1 "Propagation state" ; st=$?
+        if [ $st -ne 0 ] ; then
+            replog_abort "sa_wait_slv_mrkinit" "sa_extract_field"
+            return
+        fi
+        if [[ -z "$SA_PROPQ_FVAL" || "$SA_PROPQ_FVAL" != "marked for initialization" ]] ; then
+            replog_msg "Waiting $SA_MRKINIT_LOOP_INT secs for $1 to be marked for initialization"
+            sleep $SA_MRKINIT_LOOP_INT
+        else
+            st=0
+            break 
+        fi
+        i=`expr $i + 1`
+    done
+    return $st
+}
+
+#
+#  In arg1 : Replica which was marked for initialization
+#
+
+sa_tst_slv_mrkinit()
+{
+    sa_extract_field $1 "Propagation state" ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_abort "sa_tst_slv_mrkinit" "sa_extract_field"
+        return
+    fi
+    if [[ -z "$SA_PROPQ_FVAL" || "$SA_PROPQ_FVAL" != "marked for initialization" ]] ; then
+        return 1
+    else
+        return 0
+    fi
+}
+
+#-----------------------------------------------------------------------
+#  sa_v_initrep - Verify that initrep of replica was successful.
+#
+#  IN arg1 ...... Replica for which initrep was done.
+#-----------------------------------------------------------------------
+
+sa_v_initrep()
+{
+    typeset st
+
+    sa_wait_prop_complete  $1 ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_abort "sa_v_initrep" "sa_wait_prop_complete"
+    fi
+    
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#  sa_bind_rep_wait : waits until sec_admin can bind to replicas.
+#
+#  IN arg1 ...... List of replicas to bind to.
+#
+#  returns :   0 on success ; 1 on failure
+#-----------------------------------------------------------------------
+
+sa_bind_rep_wait()
+{
+    typeset st st1 i sleep_flag rl rl_list 
+
+    set -A rl_list $1
+
+    replog_blank
+    replog_msg "Attempting to wait until sec_admin can bind to : $1"
+    let IL=IL+1 ; i=1 ; st=1
+    while [ $i -le $SA_BIND_LOOP_CNT ] 
+    do 
+        #   N.B. The reason for trying to bind more than
+        #   once to a slave is that if a slave has been
+        #   just started and sec_admin tries to bind to it,
+        #   sec_admin will fail with a "registry server unavailable" 
+        #   message . so retry $SA_BIND_LOOP_CNT times
+
+        sleep_flag=0
+        for rl in ${rl_list[*]}
+        do
+            sa_bind_rep $rl ; st1=$?
+            if [ $st1 -ne 0 ] ; then
+                sleep_flag=1
+            fi
+        done
+        if [ $sleep_flag -ne 0 ] ; then
+            replog_blank
+            replog_msg  "Waiting $SA_BIND_LOOP_INT secs and retrying"
+            sleep $SA_BIND_LOOP_INT
+        else 
+            st=0     # Successfully bound to all replicas.
+            break
+        fi
+        i=`expr $i + 1`
+    done
+    let IL=IL-1
+    replog_blank
+    if [ $st -ne 0 ] ; then
+        replog_error "Failed to bind to at least one replica"
+        secd_print_state_all
+    fi
+    replog_msg "Successfully bound to $1"
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#  sa_bind_master_wait : waits until sec_admin can bind to the 
+#                        master security server.
+#
+#  returns :   0 on success ; 1 on failure
+#-----------------------------------------------------------------------
+
+sa_bind_master_wait()
+{
+    sa_bind_rep_wait $MASTER_NAME ; return $?
+}
+
+
+sa_cleanup()
+{
+    rm -f $SA_OUTF $sa_tmpf
+}
+
+sa_init()
+{
+    sa_tmpf=/tmp/sa_tmpf_$HOSTNM
+
+    #   SA_OUTF is defined in $PHOME/profile since this
+    #   file is used outside of this module as well.
+
+    rm -f $sa_tmpf  $SA_OUTF
+    SA_DEBUG=${SA_DEBUG:-0}   # By default no debugging output is produced
+}
+
+#  Only called from slv_global_cleanup
+
+sa_global_cleanup()
+{
+    rm -f $sa_tmpf $SA_OUTF
+}
+
+fi

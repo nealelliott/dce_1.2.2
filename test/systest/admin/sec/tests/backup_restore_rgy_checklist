@@ -1,0 +1,803 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: backup_restore_rgy_checklist,v $
+# Revision 1.1.7.2  1996/03/11  02:37:26  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:04:54  marty]
+#
+# Revision 1.1.7.1  1995/12/11  21:54:17  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:54:51  root]
+# 
+# Revision 1.1.5.2  1993/11/02  20:57:52  dassarma
+# 	Use secd -restore_master to start security
+# 	after the registry has been restored.
+# 	[1993/11/02  20:57:06  dassarma]
+# 
+# Revision 1.1.5.1  1993/11/01  20:52:54  dassarma
+# 	Modifications were made to this script to represent
+# 	current output from commands (e.g. sec_admin) and
+# 	error messages.
+# 	[1993/11/01  20:52:15  dassarma]
+# 
+# Revision 1.1.2.3  1993/02/05  15:17:08  cjd
+# 	Embedded copyright notice
+# 	[1993/02/05  14:36:12  cjd]
+# 
+# Revision 1.1.3.2  1993/02/04  21:44:44  cjd
+# 	Embedded copyright notice
+# 
+# Revision 1.1.2.2  1992/12/26  21:39:18  pellis
+# 	Initial version of test.
+# 	[1992/12/26  21:35:06  pellis]
+# 
+# $EndLog$
+#
+#   FILE_NAME: backup_restore_rgy.ksh
+#
+#   COMPONENT_NAME: dce.admin_test
+#
+#   FUNCTIONS:
+#
+#   USAGE:
+#
+#	backup_restore_rgy.ksh
+#
+#   DESCRIPTION:
+#
+#	This test verifies that a backup and restore of a registry functions
+#	properly.  Client access to the registry is verified throughout the
+#	test to check how clients react when the registry is being enabled
+#	and disabled (i.e. maintenance and service modes).
+#
+#   DCE 1.0.2 TEST PLAN COVERAGE ( ++ = covered ):
+#
+#	I)	Security
+#
+# ++		A) Install
+# ++			1) Security Server
+# ++		B) Configure
+# ++			1) Security Server
+#		C) Create
+#		D) Disable/Enable
+#			1) How Does Client React When Master Site is Disabled,
+#			   Does it Switch to Replica?
+#			2) How Does Client React When Master Site is Reenabled?
+#		E) Update/Modify
+#			1) Change Master Site
+#				a) Move Security Tree to New Server
+#				b) Change_master -to <new master>
+#				c) How Does Client React When the Master Site is
+#				   Changed?
+#			2) Change Master Site Using Remote Backup
+#				a) Restore Security Tree From Backup to New
+#				   Server
+#				b) secd -restore_master &
+#				c) How Does Client React When the Master Site is
+#				   Changed?
+#		F) Start/Stop
+#			1) How Does Client React When Master Site is Stopped,
+#			   Does it Switch to Replica?
+#			2) How Does Client React When Master Site is Restarted?
+#		G) Backup
+#			1) Using Replication
+# ++			2) Remote
+# ++				a) sec_admin: state -maintenance
+# ++				b) Save /opt/dcelocal/var/security/rgy_data
+# ++				   Remotely
+# ++				c) sec_admin: state -service
+# ++				d) How Do Clients React When Server is in
+# ++				   Maintenance Mode?
+#		H) Cleanup
+#		I) Monitoring
+#		J) Reconfigure
+#		K) Unconfigure/Delete
+#			1) Client
+#				a) Remove All Registry References to Client and
+#				   Attempt to Reconfigure it
+#		L) Crash Response
+#			1) How Does Client React When Master Site Goes Away
+#			   During a Request?
+#			2) How Does Server React When Client Goes Away During a
+#			   Request?
+#		M) Crash Recovery
+#			1) From Replica
+# ++			2) From Remote Backup Created With sec_admin
+#		N) Compatibility
+#			1) Use PMAX Registry Database on RIOS
+#			2) Use RIOS Registry Database on PMAX
+#			3) Use DCE 1.0.1 Registry Database With DCE 1.0.2
+#
+################################################################################
+
+- SEC Commands: passwd_export, passwd_import, rgy_edit, sec_admin, sec_clientd,
+		sec_create_db and secd
+
+- The execution of this test requires at least a two machine cell.  The two
+  machines will be referred to as admintest1 and admintest2 throughout this
+  test and the cell will be called admin_cell.
+
+- Install SEC and CDS on admintest1.
+  Install DCE Client on admintest2.
+
+- Configure SEC and CDS on admintest1 calling the cell admin_cell.
+  Configure DCE Client on admintest2.
+
+- On admintest2 verify that the master registry on admintest1 is accessible by
+  doing a "dce_login cell_admin -dce-".
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  exit
+
+  >  No Output Expected
+
+- On admintest1 change the state of the master registry to "maintenance" to
+  prepare for doing a backup of the original master registry.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  sec_admin
+
+  >  Default replica:  /.../admin_cell/subsys/dce/sec/master
+  >  Default cell:     /.../admin_cell
+  >  sec_admin> state -maintenance
+  >  sec_admin> quit
+  >  bye.
+
+  exit
+
+  >  No Output Expected
+
+- On admintest1 backup the original master registry by saving the following
+  files to disk or tape:
+
+  cp -pr /opt/dcelocal/var/security/rgy_data ./backup/original/rgy_data
+
+  >  No Output Expected
+
+  cp -p /opt/dcelocal/var/security/.mkey ./backup/original/.mkey
+
+  >  No Output Expected
+
+  cp -pr /opt/dcelocal/var/security/lrgy_data ./backup/original/lrgy_data
+
+  >  No Output Expected (Note that the files lrgy_data and lrgy_tgts may not
+                         exist all machines)
+
+  cp -pr /opt/dcelocal/var/security/lrgy_tgts ./backup/original/lrgy_tgts
+
+  >  No Output Expected (Note that the files lrgy_data and lrgy_tgts may not
+                         exist all machines)
+
+  cp -p /opt/dcelocal/etc/security/pe_site ./backup/original/pe_site
+
+  >  No Output Expected
+
+  cp -p /krb5/v5srvtab ./backup/original/v5srvtab
+
+  >  No Output Expected
+
+  cp -p /krb5/krb.conf ./backup/original/krb.conf
+
+  >  No Output Expected
+
+- On admintest2 verify access to the master registry by attempting a dce_login
+  cell_admin -dce- and adding a new user.  The registry should still be read-
+  only so the adding of a new user should be disallowed.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  rgy_edit
+
+  >  Current site is: registry server at /.../admin_cell/subsys/dce/sec/master
+  >> rgy_edit=> domain principal
+  >  Domain changed to: principal
+  >> rgy_edit=> add
+  >> Add Principal=> Enter name: test_user
+  >> Enter UNIX number: (auto assign)
+  >> Enter full name: () Test User
+  >> Enter object creation quota: (unlimited)
+  >  ?(rgy_edit) Unable to add principal  "test_user" - bad state (dce / sec)
+  >> Do you wish to try again  [y/n]? (n) n
+  >> rgy_edit=> quit
+
+  exit
+
+  >  No Output Expected
+
+- On admintest1 change the state of the master registry to "service" to make
+  the registry read/write.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  sec_admin
+
+  >  Default replica:  /.../admin_cell/subsys/dce/sec/master
+  >  Default cell:     /.../admin_cell
+  >  sec_admin> state -service
+  >  sec_admin> quit
+  >  bye.
+
+  exit
+
+  >  No Output Expected
+
+- On admintest2 verify access to the master registry by attempting a dce_login
+  cell_admin -dce- and by adding five users named adminuser[1-5].  A group
+  named admingroup will also be added.  Now that the registry is in the read/
+  write service mode the new users should be added with no problem.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  rgy_edit
+
+  >  Current site is: registry server at /.../admin_cell/subsys/dce/sec/master
+  >> rgy_edit=> domain principal
+  >  Domain changed to: principal
+  >> rgy_edit=> add
+  >> Add Principal=> Enter name: adminuser1
+  >> Enter UNIX number: (auto assign)
+  >> Enter full name: () Admin User #1
+  >> Enter object creation quota: (unlimited)
+  >> Add Principal=> Enter name: adminuser2
+  >> Enter UNIX number: (auto assign)
+  >> Enter full name: () Admin User #2
+  >> Enter object creation quota: (unlimited)
+  >> Add Principal=> Enter name: adminuser3
+  >> Enter UNIX number: (auto assign)
+  >> Enter full name: () Admin User #3
+  >> Enter object creation quota: (unlimited)
+  >> Add Principal=> Enter name: adminuser4
+  >> Enter UNIX number: (auto assign)
+  >> Enter full name: () Admin User #4
+  >> Enter object creation quota: (unlimited)
+  >> Add Principal=> Enter name: adminuser5
+  >> Enter UNIX number: (auto assign)
+  >> Enter full name: () Admin User #5
+  >> Enter object creation quota: (unlimited)
+  >> Add Principal=> Enter name:
+  >> rgy_edit=> view
+  >  nobody                                        -2
+  >  root                                           0
+  >  daemon                                         1
+  >  sys                                            2
+  >  bin                                            3
+  >  uucp                                           4
+  >  who                                            5
+  >  mail                                           6
+  >  tcb                                            9
+  >  dce-ptgt                                      20
+  >  dce-rgy                                       21
+  >  cell_admin                                   100
+  >  krbtgt/admin_cell                            101
+  >  hosts/dce9/self                              102
+  >  hosts/dce9/cds-server                        103
+  >  hosts/dce9/gda                               104
+  >  hosts/dce7/self                              105
+  >  hosts/dce7/cds-server                        106
+  >  hosts/dce7/gda                               107
+  >  adminuser1                                   108
+  >  adminuser2                                   109
+  >  adminuser3                                   110
+  >  adminuser4                                   111
+  >  adminuser5                                   112
+  >> rgy_edit=> v adminuser1 -f
+  >  adminuser1                                   108
+  >    Full name:  Admin User #1
+  >    Uuid:       0000006C-28D7-2B1D-A100-08002B12C6F5
+  >    Primary:  pr   Reserved:   --
+  >    Quota: unlimited
+  >> rgy_edit=> v adminuser2 -f
+  >  adminuser2                                   109
+  >    Full name:  Admin User #2
+  >    Uuid:       0000006D-28E9-2B1D-A100-08002B12C6F5
+  >    Primary:  pr   Reserved:   --
+  >    Quota: unlimited
+  >> rgy_edit=> v adminuser3 -f
+  >  adminuser3                                   110
+  >    Full name:  Admin User #3
+  >    Uuid:       0000006E-2900-2B1D-A100-08002B12C6F5
+  >    Primary:  pr   Reserved:   --
+  >    Quota: unlimited
+  >> rgy_edit=> v adminuser4 -f
+  >  adminuser4                                   111
+  >    Full name:  Admin User #4
+  >    Uuid:       0000006F-290C-2B1D-A100-08002B12C6F5
+  >    Primary:  pr   Reserved:   --
+  >    Quota: unlimited
+  >> rgy_edit=> v adminuser5 -f
+  >  adminuser5                                   112
+  >    Full name:  Admin User #5
+  >    Uuid:       00000070-291C-2B1D-A100-08002B12C6F5
+  >    Primary:  pr   Reserved:   --
+  >    Quota: unlimited
+  >> rgy_edit=> domain group
+  >  Domain changed to: group
+  >> rgy_edit=> add
+  >> Add Group=> Enter name: admingroup
+  >> Enter UNIX number: (auto assign)
+  >> Enter full name: () Admin Group
+  >> Include group on PROJLIST [y/n]? (y) n
+  >> Add Group=> Enter name:
+  >> rgy_edit=> v
+  >  nogroup                                       -2
+  >  system                                         0
+  >  daemon                                         1
+  >  uucp                                           2
+  >  bin                                            3
+  >  kmem                                           4
+  >  mail                                           6
+  >  tty                                            7
+  >  none                                          12
+  >  tcb                                           18
+  >  acct-admin                                   100
+  >  subsys/dce/sec-admin                         101
+  >  subsys/dce/cds-admin                         102
+  >  subsys/dce/dfs-admin                         103
+  >  subsys/dce/dts-admin                         104
+  >  subsys/dce/dskl-admin                        105
+  >  subsys/dce/cds-server                        106
+  >  subsys/dce/dts-servers                       107
+  >  subsys/dce/dfs-fs-servers                    108
+  >  subsys/dce/dfs-bak-servers                   109
+  >  admingroup                                   110
+  >> rgy_edit=> v admingroup -f
+  >  admingroup                                   110
+  >    Full name:  Admin Group
+  >    Uuid:       0000006E-2A8A-2B1D-A101-08002B12C6F5
+  >    Primary:  pr   Reserved:   --
+  >    Project List:nl
+  >> rgy_edit=> domain account
+  >  Domain changed to: account
+  >> rgy_edit=> add adminuser1 -g admingroup -o none -pw admin -mp -dce-
+  >> rgy_edit=> add adminuser2 -g admingroup -o none -pw admin -mp -dce-
+  >> rgy_edit=> add adminuser3 -g admingroup -o none -pw admin -mp -dce-
+  >> rgy_edit=> add adminuser4 -g admingroup -o none -pw admin -mp -dce-
+  >> rgy_edit=> add adminuser5 -g admingroup -o none -pw admin -mp -dce-
+  >> rgy_edit=> view
+  >  nobody [nogroup none]:*:-2:-2::/::
+  >  root [system none]:*:0:0::/::
+  >  daemon [daemon none]:*:1:1::/::
+  >  uucp [uucp none]:*:4:2::/usr/spool/uucppublic:/usr/lib/uucp/uucico:
+  >  bin [bin none]:*:3:3::/bin::
+  >  dce-ptgt [none none]:*:20:12::/::
+  >  dce-rgy [none none]:*:21:12::/::
+  >  krbtgt/admin_cell [none none]:*:101:12::/::
+  >  cell_admin [none none]:*:100:12::/::
+  >  hosts/dce9/self [none none]:*:102:12::/::
+  >  hosts/dce9/cds-server [subsys/dce/cds-server none]:*:103:106::/::
+  >  hosts/dce9/gda [subsys/dce/cds-server none]:*:104:106::/::
+  >  hosts/dce7/self [none none]:*:105:12::/::
+  >  hosts/dce7/cds-server [subsys/dce/cds-server none]:*:106:106::/::
+  >  hosts/dce7/gda [subsys/dce/cds-server none]:*:107:106::/::
+  >  adminuser1 [admingroup none]:*:108:110::/::
+  >  adminuser2 [admingroup none]:*:109:110::/::
+  >  adminuser3 [admingroup none]:*:110:110::/::
+  >  adminuser4 [admingroup none]:*:111:110::/::
+  >  adminuser5 [admingroup none]:*:112:110::/::
+  >> rgy_edit=> v adminuser1
+  >  adminuser1 [admingroup none]:*:108:110::/::
+  >> rgy_edit=> v adminuser2
+  >  adminuser2 [admingroup none]:*:109:110::/::
+  >> rgy_edit=> v adminuser3
+  >  adminuser3 [admingroup none]:*:110:110::/::
+  >> rgy_edit=> v adminuser4
+  >  adminuser4 [admingroup none]:*:111:110::/::
+  >> rgy_edit=> v adminuser5
+  >  adminuser5 [admingroup none]:*:112:110::/::
+
+- On admintest1 verify that the five new users added on admintest2 exist in
+  the master registry which is located on admintest1.  Attempt to login is
+  adminuser1, adminuser2, adminuser3, adminuser4 and adminuser5.
+
+  dce_login adminuser1 admin
+
+  >  No Output Expected
+
+  klist
+
+  >  DCE Identity Information:
+  >          Warning: Identity information is not certified
+  >          Global Principal: /.../admin_cell/adminuser1
+  >          Cell:      003D8E52-CB9E-1B1B-9455-08002B12C6F5 /.../admin_cell
+  >          Principal: 0000006C-28D7-2B1D-A100-08002B12C6F5 adminuser1
+  >          Group:     0000006E-2A8A-2B1D-A101-08002B12C6F5 admingroup
+  >  
+  >  Identity Info Expires: 92/12/08:00:29:21
+  >  Account Expires:       never
+  >  Passwd Expires:        never
+  >  
+  >  Kerberos Ticket Information:
+  >  Ticket cache: /opt/dcelocal/var/security/creds/dcecred_01301400
+  >  Default principal: adminuser1@admin_cell
+  >  Server: krbtgt/admin_cell@admin_cell
+  >          valid 92/12/07:14:29:21 to 92/12/08:00:29:21
+  >  Server: dce-rgy@admin_cell
+  >          valid 92/12/07:14:29:23 to 92/12/08:00:29:21
+  >  Server: dce-ptgt@admin_cell
+  >          valid 92/12/07:14:29:31 to 92/12/07:16:29:31
+  >  Client: dce-ptgt@admin_cell     Server: krbtgt/admin_cell@admin_cell
+  >          valid 92/12/07:14:29:31 to 92/12/07:16:29:31
+
+  exit
+
+  >  No Output Expected
+
+  dce_login adminuser2 admin
+
+  >  No Output Expected
+
+  klist
+
+  >  DCE Identity Information:
+  >          Warning: Identity information is not certified
+  >          Global Principal: /.../admin_cell/adminuser2
+  >          Cell:      003D8E52-CB9E-1B1B-9455-08002B12C6F5 /.../admin_cell
+  >          Principal: 0000006D-28E9-2B1D-A100-08002B12C6F5 adminuser2
+  >          Group:     0000006E-2A8A-2B1D-A101-08002B12C6F5 admingroup
+  >  
+  >  Identity Info Expires: 92/12/08:00:30:29
+  >  Account Expires:       never
+  >  Passwd Expires:        never
+  >  
+  >  Kerberos Ticket Information:
+  >  Ticket cache: /opt/dcelocal/var/security/creds/dcecred_01345800
+  >  Default principal: adminuser2@admin_cell
+  >  Server: krbtgt/admin_cell@admin_cell
+  >          valid 92/12/07:14:30:29 to 92/12/08:00:30:29
+  >  Server: dce-rgy@admin_cell
+  >          valid 92/12/07:14:30:32 to 92/12/08:00:30:29
+  >  Server: dce-ptgt@admin_cell
+  >          valid 92/12/07:14:30:39 to 92/12/07:16:30:39
+  >  Client: dce-ptgt@admin_cell     Server: krbtgt/admin_cell@admin_cell
+  >          valid 92/12/07:14:30:40 to 92/12/07:16:30:39
+
+  dce_login adminuser3 admin
+
+  >  No Output Expected
+
+  klist
+
+  >  DCE Identity Information:
+  >          Warning: Identity information is not certified
+  >          Global Principal: /.../admin_cell/adminuser3
+  >          Cell:      003D8E52-CB9E-1B1B-9455-08002B12C6F5 /.../admin_cell
+  >          Principal: 0000006E-2900-2B1D-A100-08002B12C6F5 adminuser3
+  >          Group:     0000006E-2A8A-2B1D-A101-08002B12C6F5 admingroup
+  >
+  >  Identity Info Expires: 92/12/03:04:31:31
+  >  Account Expires:       never
+  >  Passwd Expires:        never
+  >
+  >  Kerberos Ticket Information:
+  >  Ticket cache: /opt/dcelocal/var/security/creds/dcecred_60945600
+  >  Default principal: adminuser3@admin_cell
+  >  Server: krbtgt/admin_cell@admin_cell
+  >          valid 92/12/02:18:31:31 to 92/12/03:04:31:31
+  >  Server: dce-rgy@admin_cell
+  >          valid 92/12/02:18:31:34 to 92/12/03:04:31:31
+  >  Server: dce-ptgt@admin_cell
+  >          valid 92/12/02:18:31:43 to 92/12/02:20:31:43
+  >  Client: dce-ptgt@admin_cell     Server: krbtgt/admin_cell@admin_cell
+  >          valid 92/12/02:18:31:43 to 92/12/02:20:31:43
+
+  exit
+
+  >  No Output Expected
+
+  dce_login adminuser4 admin
+
+  >  No Output Expected
+
+  klist
+
+  >  DCE Identity Information:
+  >          Warning: Identity information is not certified
+  >          Global Principal: /.../admin_cell/adminuser4
+  >          Cell:      003D8E52-CB9E-1B1B-9455-08002B12C6F5 /.../admin_cell
+  >          Principal: 0000006F-290C-2B1D-A100-08002B12C6F5 adminuser4
+  >          Group:     0000006E-2A8A-2B1D-A101-08002B12C6F5 admingroup
+  >  
+  >  Identity Info Expires: 92/12/08:00:31:02
+  >  Account Expires:       never
+  >  Passwd Expires:        never
+  >  
+  >  Kerberos Ticket Information:
+  >  Ticket cache: /opt/dcelocal/var/security/creds/dcecred_01387900
+  >  Default principal: adminuser4@admin_cell
+  >  Server: krbtgt/admin_cell@admin_cell
+  >          valid 92/12/07:14:31:02 to 92/12/08:00:31:02
+  >  Server: dce-rgy@admin_cell
+  >          valid 92/12/07:14:31:05 to 92/12/08:00:31:02
+  >  Server: dce-ptgt@admin_cell
+  >          valid 92/12/07:14:33:14 to 92/12/07:16:33:14
+  >  Client: dce-ptgt@admin_cell     Server: krbtgt/admin_cell@admin_cell
+  >          valid 92/12/07:14:33:15 to 92/12/07:16:33:14
+
+  exit
+
+  >  No Output Expected
+
+  dce_login adminuser5 admin
+
+  >  No Output Expected
+
+  klist
+
+  >  DCE Identity Information:
+  >          Warning: Identity information is not certified
+  >          Global Principal: /.../admin_cell/adminuser5
+  >          Cell:      003D8E52-CB9E-1B1B-9455-08002B12C6F5 /.../admin_cell
+  >          Principal: 00000070-291C-2B1D-A100-08002B12C6F5 adminuser5
+  >          Group:     0000006E-2A8A-2B1D-A101-08002B12C6F5 admingroup
+  >  
+  >  Identity Info Expires: 92/12/08:00:33:38
+  >  Account Expires:       never
+  >  Passwd Expires:        never
+  >  
+  >  Kerberos Ticket Information:
+  >  Ticket cache: /opt/dcelocal/var/security/creds/dcecred_013c1500
+  >  Default principal: adminuser5@admin_cell
+  >  Server: krbtgt/admin_cell@admin_cell
+  >          valid 92/12/07:14:33:38 to 92/12/08:00:33:38
+  >  Server: dce-rgy@admin_cell
+  >          valid 92/12/07:14:33:40 to 92/12/08:00:33:38
+  >  Server: dce-ptgt@admin_cell
+  >          valid 92/12/07:14:33:48 to 92/12/07:16:33:48
+  >  Client: dce-ptgt@admin_cell     Server: krbtgt/admin_cell@admin_cell
+  >          valid 92/12/07:14:33:49 to 92/12/07:16:33:48
+
+  exit
+
+  >  No Output Expected
+
+- On admintest1 change the state of the master registry to "maintenance" to
+  prepare for doing a backup of the test master registry.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  sec_admin
+
+  >  Default replica:  /.../admin_cell/subsys/dce/sec/master
+  >  Default cell:     /.../admin_cell
+  >  sec_admin> state -maintenance
+  >  sec_admin> quit
+  >  bye.
+
+- On admintest1 backup the test master registry by saving the following files
+  to disk or tape:
+
+  cp -pr /opt/dcelocal/var/security/rgy_data ./backup/test/rgy_data
+
+  >  No Output Expected
+
+  cp -p /opt/dcelocal/var/security/.mkey ./backup/test/.mkey
+
+  >  No Output Expected
+
+  cp -pr /opt/dcelocal/var/security/lrgy_data ./backup/test/lrgy_data
+
+  >  No Output Expected (Note that the files lrgy_data and lrgy_tgts may not
+                         exist all machines)
+
+  cp -pr /opt/dcelocal/var/security/lrgy_tgts ./backup/test/lrgy_tgts
+
+  >  No Output Expected (Note that the files lrgy_data and lrgy_tgts may not
+                         exist all machines)
+
+  cp -p /opt/dcelocal/etc/security/pe_site ./backup/test/pe_site
+
+  >  No Output Expected
+
+  cp -p /krb5/v5srvtab ./backup/test/v5srvtab
+
+  >  No Output Expected
+
+  cp -p /krb5/krb.conf ./backup/test/krb.conf
+
+  >  No Output Expected
+
+- On admintest1 change the state of the master registry to "service" to make
+  the registry read/write.
+
+  sec_admin
+
+  >  Default replica:  /.../admin_cell/subsys/dce/sec/master
+  >  Default cell:     /.../admin_cell
+  >  sec_admin> state -service
+  >  sec_admin> quit
+  >  bye.
+
+- On admintest1 shutdown the master registry by doing a sec_admin: stop com-
+  mand so that the original master registry can be restored.
+
+  sec_admin
+
+  >  Default replica:  /.../admin_cell/subsys/dce/sec/master
+  >  Default cell:     /.../admin_cell
+  >  sec_admin> stop
+  >  sec_admin> quit
+  >  bye.
+
+- On admintest2 attempt to login as adminuser3 while the registry is stopped,
+  this test should fail.
+
+  dce_login adminuser3 admin
+
+  >  Sorry.
+  >  User Identification Failure. - Registry server unavailable (dce / sec)
+
+- On admintest1 restore the original master registry which was saved earlier
+  by copying the following files back into the /opt/dcelocal tree:
+
+  rm -r /opt/dcelocal/var/security/rgy_data
+
+  >  No Output Expected
+
+  cp -pr ./backup/original/rgy_data /opt/dcelocal/var/security/rgy_data
+
+  >  No Output Expected
+
+  cp -p ./backup/original/.mkey /opt/dcelocal/var/security/.mkey
+
+  >  No Output Expected
+
+  rm -r /opt/dcelocal/var/security/lrgy_data
+
+  >  No Output Expected (Note that the files lrgy_data may not exist)
+
+  cp -pr ./backup/original/lrgy_data /opt/dcelocal/var/security/lrgy_data
+
+  >  No Output Expected (Note that the files lrgy_data may not exist)
+
+  rm -r /opt/dcelocal/var/security/lrgy_tgts
+
+  >  No Output Expected (Note that the files lrgy_tgts may not exist)
+
+  cp -pr ./backup/original/lrgy_tgts /opt/dcelocal/var/security/lrgy_tgts
+
+  >  No Output Expected (Note that the files lrgy_tgts may not exist)
+
+  cp -p ./backup/original/pe_site /opt/dcelocal/etc/security/pe_site
+
+  >  No Output Expected
+
+  cp -p ./backup/original/v5srvtab /krb5/v5srvtab
+
+  >  No Output Expected
+
+  cp -p ./backup/original/krb.conf /krb5/krb.conf
+
+  >  No Output Expected
+
+- On admintest1 restart the security server using the secd command.
+
+  secd -restore_master
+
+  >  No Output Expected
+
+- On admintest1 verify that the original registry has been restored by attempt-
+  ing to view the adminuser[1-5] entries in rgy_edit.
+
+  rgy_edit
+
+  >  Current site is: registry server at /.../admin_cell/subsys/dce/sec/master
+  >> rgy_edit=> do principal
+  >  Domain changed to: principal
+  >> rgy_edit=> v
+  >  nobody                                        -2
+  >  root                                           0
+  >  daemon                                         1
+  >  sys                                            2
+  >  bin                                            3
+  >  uucp                                           4
+  >  who                                            5
+  >  mail                                           6
+  >  tcb                                            9
+  >  dce-ptgt                                      20
+  >  dce-rgy                                       21
+  >  cell_admin                                   100
+  >  krbtgt/admin_cell                            101
+  >  hosts/dce9/self                              102
+  >  hosts/dce9/cds-server                        103
+  >  hosts/dce9/gda                               104
+  >  hosts/dce7/self                              105
+  >  hosts/dce7/cds-server                        106
+  >  hosts/dce7/gda                               107
+  >> rgy_edit=> do account
+  >  Domain changed to: account
+  >> rgy_edit=> v
+  >  nobody [nogroup none]:*:-2:-2::/::
+  >  root [system none]:*:0:0::/::
+  >  daemon [daemon none]:*:1:1::/::
+  >  uucp [uucp none]:*:4:2::/usr/spool/uucppublic:/usr/lib/uucp/uucico:
+  >  bin [bin none]:*:3:3::/bin::
+  >  dce-ptgt [none none]:*:20:12::/::
+  >  dce-rgy [none none]:*:21:12::/::
+  >  krbtgt/admin_cell [none none]:*:101:12::/::
+  >  cell_admin [none none]:*:100:12::/::
+  >  hosts/dce9/self [none none]:*:102:12::/::
+  >  hosts/dce9/cds-server [subsys/dce/cds-server none]:*:103:106::/::
+  >  hosts/dce9/gda [subsys/dce/cds-server none]:*:104:106::/::
+  >  hosts/dce7/self [none none]:*:105:12::/::
+  >  hosts/dce7/cds-server [subsys/dce/cds-server none]:*:106:106::/::
+  >  hosts/dce7/gda [subsys/dce/cds-server none]:*:107:106::/::
+
+  quit
+
+  >  bye.
+
+- On admintest2 verify that the five new users added previousely on admintest2
+  DO NOT exist in the original master registry which has been just restored on
+  admintest1.  Attempt to login is adminuser1, adminuser2, adminuser3, admin-
+  user4 and adminuser5, none of these login names should exist.  Also use the
+  rgy_edit view command to verify that they do not exist.
+
+  dce_login adminuser1 admin
+
+  >  Sorry.
+  >  User Identification Failure. - Registry object not found (dce / sec)
+
+  dce_login adminuser2 admin
+
+  >  Sorry.
+  >  User Identification Failure. - Registry object not found (dce / sec)
+
+  dce_login adminuser3 admin
+
+  >  Sorry.
+  >  User Identification Failure. - Registry object not found (dce / sec)
+
+  dce_login adminuser4 admin
+
+  >  Sorry.
+  >  User Identification Failure. - Registry object not found (dce / sec)
+
+  dce_login adminuser5 admin
+
+  >  Sorry.
+  >  User Identification Failure. - Registry object not found (dce / sec)
+
+  rgy_edit
+
+  >  Current site is: registry server at /.../admin_cell/subsys/dce/sec/master
+  >> rgy_edit=> domain account
+  >  Domain changed to: account
+  >> rgy_edit=> v
+  >  nobody [nogroup none]:*:-2:-2::/::
+  >  root [system none]:*:0:0::/::
+  >  daemon [daemon none]:*:1:1::/::
+  >  uucp [uucp none]:*:4:2::/usr/spool/uucppublic:/usr/lib/uucp/uucico:
+  >  bin [bin none]:*:3:3::/bin::
+  >  dce-ptgt [none none]:*:20:12::/::
+  >  dce-rgy [none none]:*:21:12::/::
+  >  krbtgt/admin_cell [none none]:*:101:12::/::
+  >  cell_admin [none none]:*:100:12::/::
+  >  hosts/dce9/self [none none]:*:102:12::/::
+  >  hosts/dce9/cds-server [subsys/dce/cds-server none]:*:103:106::/::
+  >  hosts/dce9/gda [subsys/dce/cds-server none]:*:104:106::/::
+  >  hosts/dce7/self [none none]:*:105:12::/::
+  >  hosts/dce7/cds-server [subsys/dce/cds-server none]:*:106:106::/::
+  >  hosts/dce7/gda [subsys/dce/cds-server none]:*:107:106::/::
+  >  rgy_edit=> quit
+  >  bye.

@@ -1,0 +1,375 @@
+Main Test Driver config file:
+
+A record is used to describe each type of object to be handled by
+driver.  The record contains fields that describe various attributes
+of the object.  An OPTIONAL attribute is described in the record
+format by being enclosed in square parenthesis. All other attributes
+are REQUIRED and not specifying such an attribute will cause error
+Default values will be assumed for some optional attributes. Any such default values are mentioned below.
+
+The format used in describing an attribute is given below. The meaning
+of each field on the RHS should be obvious from the context.
+
+Attribute Name      Attribute description
+                    [ Attribute format ]
+                    Special and default values 
+                    [ Examples ]
+                    Other special information
+
+Whenever a size needs to be specified, the unit is a singular object.
+If a K is tagged on at the end, multiply number by 1024 and for a M
+suffix, multiply by 1024*1024.
+
+-------------------------------------------------------------------------------
+AGGREGATES:
+
+Currently the UFS partitions are expected to be formatted. LFS
+partitions will be reformatted.
+
+Format:
+
+SECTION AGGR 
+
+    [ NOINIT ]
+
+    AGGRTYPE
+    CELLNAME
+    [ MACHINE ]
+    DEVNAME
+    [ DEVSIZE ]
+    [ AGGRNAME ]
+    AGGRID
+
+    # for LFS aggregates
+    [ BLKSIZE ]
+    [ FRAGSIZE ]
+
+    # for UFS partitions under DFS
+    [ FSETNAME ]
+
+Flags:
+
+[ NOINIT ]      Do not initialize aggregate
+                Default     Initialize the aggregate.
+
+Attribute values:
+
+AGGRTYPE        Type of aggregate
+                UFS          UFS Aggregate
+                LFS          LFS Aggregate
+
+CELLNAME        Cellname without /...
+                noExport    For standalone aggregate
+                Default     Local cell (localCell)
+
+[ MACHINE   ]   Machine on which aggregate resides
+                Default     Local machine (localHost)
+
+DEVNAME         Device name 
+                absolute e.g. /dev/xxxx> or relative to /dev
+
+[ DEVSIZE  ]    Device size in bytes.
+
+[ AGGRNAME ]    Aggregate name. 
+                The aggregate  name  of a non-LFS partition must match
+                the name of the partition's local mount point (for
+                example, /usr).
+                Default     The last component of the absolute device pathname
+                These have to be UNIQUE in each machine in each cell.
+                Optimization: If aggregate names are unique in each
+                cell, then the MACHNAME attribute can be omitted in a
+                FSET record. If aggregate names are unique across
+                all cells then both CELLNAME and MACHNAME attributes
+                can be ommitted from the FSET record.
+        
+                Currently aggregate names are assumed to be unique across
+                all machines, all cells, i.e. code does NOT IMPLEMENT necessary
+                support for non-unique aggregate names.
+
+AGGRID          Aggregate id
+
+Additional Attributes for LFS type aggregates:
+
+[ BLKSIZE ]     Aggregate block size in bytes
+                Default     8192 bytes
+
+[ FRAGSIZE ]    Aggregate fragment size
+                Default     1024 bytes
+
+Additional Attributes for UFS type aggregates:
+
+[ FSETNAME ]    Fileset name for the UFS aggregate.
+
+-------------------------------------------------------------------------------
+FILESETS:
+
+Format:
+
+SECTION FSET 
+    [ NOINIT ]
+    [ DISALLOWOVERALLOC ]
+
+    AGGRNAME    
+    [ CELLNAME ]
+    [ MACHINE ]
+    FSETNAME    
+    [ FSETQUOTA ]   
+    [ FSETCNT ]
+
+Flags:
+
+[ NOINIT ]      Do not initialize aggregate
+                Default     Create and initialize the fileset
+
+[ DISALLOWOVERALLOC ]   Sum of space allocated to each dir in the fileset must
+                        be <= fileset quota.
+Attribute values:
+
+AGGRNAME        As specified in a AGGR record.
+
+[ CELLNAME ]    Required if aggregate names are not unique across all cells
+
+[ MACHINE ]     Required if aggregate names are not unique in each cell
+
+                Currently, aggregate names are assumed to be unique
+                across all cells. So CELLNAME and MACHINE do not need
+                to be specified. i.e support for these attributes is
+                NOT IMPLEMENTED.
+
+FSETNAME        File set name
+
+                If FSETCNT is > 1, this is a fileset name format string, else
+                it is the fileset name
+                A %d in the name format string will be substituted with
+                the fileset number. %d NOT IMPLEMENTED.
+
+[ FSETQUOTA ]   Fileset quota in bytes.
+                Default     5M
+
+[ FSETCNT ]     Number of filesets. If the count is  > 1, FSETNAME acts as the
+                fileset name format string.
+                Default     1 
+                NOT IMPLEMENTED.                
+
+-------------------------------------------------------------------------------
+FILESET MOUNT POINTS:
+
+Format:
+
+SECTION FSET_MNT_PT
+    FSETNAME
+    FSETMNTDIR
+    [ FSETRANGE ] 
+
+Attribute values:
+
+FSETNAME        File set name. If FSETRANGE is defined, it is the fileset 
+                name format string.
+
+FSETMNTDIR      File set mount point. If FSETRANGE is defined, it is the 
+                fileset mount dir name format string.
+
+[ FSETRANGE ]   < [ low index, ] high index>. 
+                Default low index   zero.
+                NOT IMPLEMENTED.
+
+-------------------------------------------------------------------------------
+FILESET TO DIR MAPPINGS:
+
+Format: 
+
+SECTION FSET_DIR_MAP
+    FSETNAME   
+    [ FSETRANGE ]
+    DIRNAME     
+    [ DIRQUOTA ]
+    [ DIRCNT ]
+
+Attribute values:
+
+FSETNAME        File set name. If FSETRANGE is defined, it is the fileset 
+                name format string.
+
+[ FSETRANGE ]   < [ low index, ] high index>. If the low index is not specified
+                it is assumed to be zero.
+                NOT IMPLEMENTED.
+
+DIRNAME         Dir path name relative to fileset mnt point.
+                If DIRCNT is specified, this acts as a dir name format string.
+                The dir pathnames have to be unique for each entry.
+                
+[ DIRQUOTA ]    Space allocated to the directory.
+                <number> or <number>K or <number>M.
+                If DISALLOWOVERALLOC flag is specified for the fileset,
+                then sum of the space allocated to each fileset must
+                be <= fileset quota. 
+                Default     Fileset quota
+
+[ DIRCNT ]      Number of directories. If value > 1, DIRNAME specifies 
+                the format string for directory names.
+                All dirs will have the specified space usage. If different 
+                dirs should have different space usages, use separate dir 
+                specification entries.
+                NOT IMPLEMENTED
+
+-----------------------------------------------------------------------------
+LOAD SUITE:
+
+Format:
+
+SECTION LOADSUITE <loadName>
+    [ LS_DIRS ]            DirName     [ DirRange ]
+    [ LS_FSETNAMES ]    
+
+    [ LS_MACHINE ]
+    [ LS_CELLNAME ]
+
+    [ LS_AGGRS ]
+    [ LS_DURATION ]
+    [ LS_INTENSITY ]
+    [ LS_CONCURRENCY ]
+
+    [ LS_CMDARGS ]
+    [ LS_ENVVARS ]      EnvVar  Value
+    
+Attribute values:
+
+LS_DIRS             List of directories for the load suite.
+                    DirName     [ DirRange ]
+                    <dirName1>  <dirRange1>
+                    <dirName2>
+
+                    DirName         Dir absolute name or absolute name format 
+                                    string.
+                    [ DirRange ]    Dir index range.
+                                    < [ low index , ] high index>
+                                    If range specified, DirName is dir name
+                                    format string.
+                                    Default low index   Zero
+                    DirRange feature NOT IMPLEMENTED.
+
+LS_FSETNAMES        List of fileset names
+                    Usually this attribute will be used by fileset operation 
+                    loads.
+
+LS_AGGRS            List of aggregates
+                    Potential attribute for aggregate operation loads.
+                    NOT IMPLEMENTED.        
+
+[ LS_MACHINE ]      Machine name.
+                    Default     Local machine
+                    NOT IMPLEMENTED.
+
+[ LS_CELLNAME ]     Cell name
+                    Default     Local cell
+                    NOT IMPLEMENTED.
+
+LS_DURATION         Advisory knob to control duration of load suite run.
+                    Default     Forever
+                    ( No of. iterations of load suite run = LS_DURATION divided
+                      by LS_CONCURRENCY )
+
+LS_CONCURRENCY      Advisory knob to control concurrency of operations
+                    exercised by load suite.
+                    Default     No concurrency
+                    ( Usually this boils down to number of parallel processes
+                      running the load suite )
+
+LS_INTENSITY        Advisory knob to control stress exerted by load suite
+                    Default     Load suite dependent
+
+[ LS_CMDARGS ]      Command arguments list
+                    NOT REALLY  USED.
+
+[ LS_ENVVARS ]      List of environment variable and values
+                    EnvVar  Value
+                    <envVar1> <value>
+                    <envVar2> <value>
+                    ...
+                    NOT REALLY USED.
+
+[ <other> ]         As required for each individual load driver. 
+                    This section will have some common terms that 
+                    could be common among most drivers e.g. usernames etc.
+                    The load suite specific attributes are outlined below.
+
+-------------------------------------------------------------------------------
+Connect-a-thon load suite (Cthon)
+
+Attribute values:
+
+LS_CTHON_SRCDIR     Location of cthon tests.
+
+-------------------------------------------------------------------------------
+AIM III load suite
+
+Flags:
+
+[ LS_AIM3_NO_VM_TESTS ]         No virtual memory test
+                                Default     Run virtual memory tests.
+
+[ LS_AIM3_NO_ADAPTIVE_TIMER ]   Do not user adaptive timer.
+                                Default     Run in adaptive timer mode.
+
+Attribute values:
+
+LS_AIM3_SRCDIR                  Location of AIM III benchmark
+
+[ LS_AIM3_INITIAL_NUSERS ]      Initial number of users to simulate
+                                Default     1           
+
+[ LS_AIM3_FINAL_NUSERS ]        Final number of users to simulate
+                                Default     100
+
+[ LS_AIM3_INCR_NUSERS ]         Step increment in number of users to simulate
+                                Default     10
+
+-------------------------------------------------------------------------------
+GCC compilation
+
+Attribute values:
+
+LS_GCC_SRCDIR                   Location of gcc source files.
+
+[ LS_GCC_NO_BOOTSTRAP ]         Do not run self checking phases. 
+                                The self checking phases recompile gcc
+                                using gcc compiled in the previous phase
+                                and compare binaries to ensure consistency.
+                                Default     Run self checking phases.
+
+-------------------------------------------------------------------------------
+Posix Compliance Test Suite (PCTS)
+
+Attribute values:
+
+LS_PCTS_TESTER                  Login name of user to run PCTS tests as.
+
+[ LS_PCTS_TESTER_DCE_PASSED ]   DCE password for the above user.
+                                Required if exercising DFS filesystem.
+
+[ LS_PCTS_LIBROOT ]             The directory containg the LIB directory 
+                                that contains site specific binaries for PCTS
+                                It understands NFS directories.
+                                Specifying <machine>:<dir> will result in 
+                                "mount <machine>:<dir> <dir>" and <dir> will
+                                be used as the attribute value.
+                                Default     /cts
+        
+[ LS_PCTS_CTSROOT ]             The directory containing PCTS sources
+                                Default     /afs/tr/fs/dev/test/cts
+
+[ LS_PCTS_DEVICES ]             The scratch devices needed by PCTS. Each
+                                PCTS thread needs 2 such devices.
+                                Default     /dev/scratch1 and /dev/scratch2
+
+[ LS_PCTS_TESTS ]               Names of PCTS tests to run
+                                Default     As specified by 
+                                            ${LS_PCTS_LIBROOT}/LIB/RSRestrict.
+                                NOT IMPLEMENTED.
+
+-------------------------------------------------------------------------------
+
+# Emacs settings for this file follow.
+# Local Variables:
+# tab-width:4
+# End:

@@ -1,0 +1,258 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+# Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS exporting Episode.
+# The script tests the fts setquota and lsquota subcommands.
+
+###############################################################################
+
+# Usage:                test9
+
+# Typically run via:    test9 >& test9.out
+# or via the fts/runtests script.
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode.
+# DFS server $SERVER_1 must export Episode aggregate $EPI_AGGRNAME_1.
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1, in order to
+# run the fts commands contained in this script. You must also be able
+# to create mount points in $export_root.
+
+# Highest error number is: 61.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname|cut -f1 -d"." 2>/dev/null`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${EPI_AGGRNAME_1=epi1}
+: ${SERVER_1=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name=/.../$CELL_NAME}
+: ${dns_server_prefix=/.:/hosts/}
+: ${export_root=/.../$CELL_NAME/fs}
+
+av_arg="$AUTH_ARG $VERB_ARG"
+ca_arg="$CELL_ARG $AUTH_ARG"
+
+cleanup()
+{
+# Nothing yet.
+return 0
+}
+
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+base_name=BamBam.$$
+mount_base=$export_root/test/BB.$$
+
+###############################################################################
+
+echo ""
+date
+echo "Running fts QUOTA COMMANDS on SERVER $SERVER_1 in CELL $CELL_NAME."
+echo "========================================================================"
+echo ""
+
+###############################################################################
+
+echo ""; echo "Running fts create, fts crmount, and fts lsmount"
+   n=1
+   count=0
+   while test $n -le 14
+      do
+      count=`expr $count + 1`
+      fts create $base_name.$n $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+          $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E$count rc
+
+      count=`expr $count + 1`      
+      fts crmount $mount_base.$n $base_name.$n
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E$count rc
+
+      setFsetRootProt $mount_base.$n $testuid "E100"
+
+      count=`expr $count + 1`      
+      fts lsmount $mount_base.$n
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E29 rc
+
+      n=`expr $n + 1`
+      done
+
+echo ""; echo "Running fts lsheader"
+   fts lsheader $dns_server_prefix$SERVER_1 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E30 rc
+
+echo ""
+
+
+echo ""; echo "Running fts setquota"
+   fts setquota $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E31 rc
+
+   fts setquota fubar_argument $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E32 rc
+
+   fts setquota $mount_base.1 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E33 rc
+
+   fts setquota $mount_base.2 2000 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E34 rc
+
+   fts setquota $mount_base.3 5000 $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E35 rc
+
+   fts setquota -fileset $base_name.4 -size 5000 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E36 rc
+
+   id=`fts lsft $mount_base.5 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   fts setquota -cell $dns_cell_name -size 5000 -fileset $id $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E37 rc
+
+   fts setquota -cell fubar_cell -size 7000 -fileset $mount_base.6 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E38 rc
+
+   fts setquota -cell $dns_cell_name -size fubar_size -fileset $mount_base.7 \
+       $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E39 rc
+
+   fts setquota -cell $dns_cell_name -size 9000 -fileset fubar_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E40 rc
+
+   fts setquota -fileset $mount_base.8 $mount_base.9 -size 2122 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E41 rc
+
+   fts setquota $base_name.10 8000 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E42 rc
+
+   id=`fts lsfldb $base_name.11 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   fts setquota $id 9000 $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E43 rc
+
+   fts setquota -fileset $base_name.12 -size 9110 -cell $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E44 rc
+
+   fts setquota -cell $dns_cell_name -size 9140 -fileset fubar_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E45 rc
+
+   fts setquota -fileset $base_name.13 $base_name.14 -size 2324 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E46 rc
+
+
+echo ""; echo "Running fts lsheader"
+   fts lsheader $dns_server_prefix$SERVER_1 -long $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E47 rc
+
+   echo ""
+
+echo ""; echo "Running fts lsquota"
+
+   if [ -d $mount_base.1 ]
+   then
+      cd /tmp; cd $mount_base.1
+      fts lsquota $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E48 rc
+      cd /tmp
+   fi
+
+   fts lsquota fubar_argument $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E49 rc
+
+   fts lsquota $mount_base.1 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E50 rc
+
+   fts lsquota -fileset $base_name.2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E51 rc
+
+   id=`fts lsft $mount_base.3 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   fts lsquota -fileset $id $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E52 rc
+
+   fts lsquota $mount_base.4 $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E53 rc
+
+   fts lsquota $mount_base.5 -cell $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E54 rc
+
+   fts lsquota -fileset $base_name.6 -cell $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E55 rc
+
+   fts lsquota -path $mount_base.7 -cell $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E56 rc
+
+   fts lsquota -cell $dns_cell_name -path $mount_base.8 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E57 rc
+
+   fts lsquota -cell fubar_cell -path $mount_base.9 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E58 rc
+
+   fts lsquota -cell $dns_cell_name -path fubar_path $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E59 rc
+
+   fts lsquota -path $mount_base.10 $mount_base.11 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E60 rc
+
+
+echo ""; echo "Running fts lsheader"
+   fts lsheader $dns_server_prefix$SERVER_1 -long $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E61 rc
+
+   echo ""
+
+###############################################################################
+
+echo ""; echo "Cleaning up"
+   n=1
+   count=62
+   while test $n -le 14
+      do
+      count=`expr $count + 1`
+      fts delete $base_name.$n $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E$count rc
+
+      count=`expr $count + 1`
+      fts delmount $mount_base.$n
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E$count rc
+
+      n=`expr $n + 1`
+      done
+
+
+
+sync; sync; sleep 2
+
+echo ""; echo "Done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################

@@ -1,0 +1,249 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * @HP_DCE_VERSION@
+ * @(#)Module: dtsprovider.idl $Revision: 1.1.4.2 $ $Date: 1996/03/09 23:31:48 $
+ */
+/*
+ * HISTORY
+ * $Log: dtsprovider.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:31:48  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:46:54  marty]
+ *
+ * 	Initial King Kong branch
+ * 	[1993/07/08  20:15:09  root]
+ *
+ * Revision 1.1.4.1  1995/12/08  18:13:40  root
+ * 	Submit OSF/DCE 1.2.1
+ * 
+ * 	HP revision /main/HPDCE02/1  1994/06/29  15:17 UTC  pare
+ * 	Merge hpdce02 (DCE 1.1 beta) and HP
+ * 	DCE01 into HPDCE02
+ * 	[1995/12/08  17:25:45  root]
+ * 
+ * 	Add new version control string.
+ * 	[1993/05/25  12:59:29  truitt]
+ * 
+ * 	Embedding copyright notice
+ * 	[1992/12/30  19:22:27  htf]
+ * 
+ * Revision 1.1.1.10  1993/05/04  22:40:03  mgm
+ * 	    Loading drop DCE1_0_2FNL
+ * 
+ * Revision 1.1  1992/01/19  15:34:17  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+/*
+ * 	Module DTSPROVIDER_RPC.IDL
+ */
+/*
+ * Copyright (c) 1990 by
+ * Digital Equipment Corporation, Maynard, Mass.
+ *
+ * This software is furnished under a license and may be used and copied
+ * only  in  accordance  with  the  terms  of such  license and with the
+ * inclusion of the above copyright notice.  This software or any  other
+ * copies thereof may not be provided or otherwise made available to any
+ * other person.  No title to and ownership of the  software  is  hereby
+ * transferred.
+ *
+ * The information in this software  is subject to change without notice
+ * and  should  not be  construed  as a commitment by Digitial Equipment
+ * Corporation.
+ *
+ * Digital assumes no responsibility for the use or  reliablity  of its
+ * software on equipment which is not supplied by Digital.
+ *
+ *
+ */
+
+/*
+ * 		Time Service Provider Interface
+ *
+ * This is interface is defined through the Network Interface 
+ * Definition Language (NIDL).
+ */
+ 
+
+[uuid (bfca1238-628a-11c9-a073-08002b0dea7a),
+    version(1)
+]
+
+interface time_provider
+{
+
+ import "dce/nbase.idl";
+ import "dce/utctypes.idl";
+
+/*
+ * Minimum and Maximum number of times to read time source at each
+ * synchronization
+ */
+
+const long K_MIN_TIMESTAMPS   = 1;	
+const long K_MAX_TIMESTAMPS   = 6;
+
+/*
+ * Message status field return values
+ */
+const long K_TPI_FAILURE        = 0;
+const long K_TPI_SUCCESS        = 1;
+
+/*
+ * This structure contains one reading of the TP wrapped in the time
+ * stamps of the local clock.  
+ */
+
+typedef struct TimeResponseType
+{
+   utc_t beforeTime;		/* local clk just before getting UTC */
+   utc_t TPtime;		/* source UTC; inacc also supplies   */
+   utc_t afterTime;		/* local clk just after getting UTC  */
+} TimeResponseType;
+
+/*
+ * Time provider control message.  The first message broadcast in 
+ * response to a time service request.  The status field retuerns TP
+ * success or failure.  The nextPoll gives the client the time at
+ * which to poll the TP next. The timeout value tells the client how 
+ * long to wait for a time response from the TP.  The noClockSet will 
+ * tell the client whether or not it is allowed alter the system clock
+ * after a synchronization with the TP.
+ */
+
+typedef struct TPctlMsg
+{
+    unsigned long 	status;
+    unsigned long	nextPoll;   
+    unsigned long	timeout;
+    unsigned long	noClockSet;
+} TPctlMsg;
+
+
+/*
+ * TP time stamp message.  The actual time provider synchronization
+ * data.  The status is the result of the operation (success or
+ * failure).  The timeStampCount paramter returns the number of time
+ * stamps being returned in this message.  The timeStampList is the 
+ * set of time stamps being returned from the TP.
+ */
+
+typedef struct TPtimeMsg
+{
+    unsigned long	status; 
+    unsigned long	timeStampCount;
+    TimeResponseType	timeStampList[K_MAX_TIMESTAMPS];  
+
+} TPtimeMsg;    
+
+
+/*
+ * The Time Provider Interface structures are described here.
+ * There are two types of response messages from the TP: control 
+ * message and data message.
+ *
+ *	   <<<< TPI CONTROL MESSAGE >>>>
+ *
+ * 31						0
+ * +--------------------------------------------+
+ * |    	Time-Provider Status		|
+ * +--------------------------------------------+
+ * |		Next Poll Delta     		|
+ * +--------------------------------------------+
+ * | 		Message Time Out		|
+ * +--------------------------------------------+
+ * | 		NoSet Flag			|
+ * +--------------------------------------------+
+ *
+ *
+ * 	<<<< a single time stamp >>>>
+ *
+ * 128						0
+ * +--------------------------------------------+
+ * | 		Before Time			|
+ * +--------------------------------------------+
+ * |		TP Time 			|
+ * +--------------------------------------------+
+ * |		After Time			|
+ * +--------------------------------------------+
+ *
+ *
+ *	<<<< TPI DATA MESSAGE >>>>
+ * 
+ * 31						0
+ * +--------------------------------------------+
+ * |		Time Provider Status		|
+ * +--------------------------------------------+
+ * | 		Time Stamp Count		|
+ * +--------------------------------------------+
+ * | 						|
+ * |            <time stamp one>		|
+ * | 						|
+ * +--------------------------------------------+
+ * |                  .				|
+ * |                  .				|
+ * |                  .				|
+ * |                  .				|
+ * |                  .				|
+ * +--------------------------------------------+
+ * | 						|
+ * |            <time stamp six>		|
+ * | 						|
+ * +--------------------------------------------+ 
+ *
+ */
+
+/*
+ * The RPC-based Time Provider Program (TPP) interfaces are defined
+ * here. These calls are invoked by a Time Service daemon running as
+ * a server (in this case it makes an RPC client call to the TPP server).
+ */
+
+
+/*
+ * CONTACT_PROVIDER
+ *
+ * Send initial contact message to the TPP.  The TPP server
+ * responds with a control message.
+ */
+
+void ContactProvider
+	(
+	[in]	handle_t	bind_h,
+	[out]	TPctlMsg	*ctrlRespMsg,
+	[out] 	error_status_t	*comStatus
+	);
+
+
+/*
+ * SERVER_REQUEST_PROVIDER_TIME
+ *
+ * The client sends a request to the TPP for times.
+ * The TPP server responds with an array of time stamps 
+ * obtained by querying the Time Provider hardware that it polls.
+ */
+
+void ServerRequestProviderTime
+	(
+	[in]	handle_t	bind_h,
+	[out]	TPtimeMsg	*timesRspMsg,
+	[out]	error_status_t	*comStatus
+	);
+
+}
+
+
+
+
+
+

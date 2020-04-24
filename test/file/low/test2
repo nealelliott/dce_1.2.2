@@ -1,0 +1,257 @@
+#!/bin/sh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: test2,v $
+# Revision 1.1.10.1  1996/10/17  18:30:25  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:55:17  damon]
+#
+# Revision 1.1.4.5  1993/01/11  18:35:57  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:18:54  htf]
+# 
+# Revision 1.1.4.4  1992/10/28  18:14:58  jaffe
+# 	Transarc delta: fred-ot5472-use-testhome-variable 1.1
+# 	  Selected comments:
+# 	    Fixed the fs and low tests to correctly use TESTTOP.  We were setting a
+# 	    variable, testhome, as the location for the test scripts and executables,
+# 	    but we did not use it to execute C programs.
+# 	    (I checked out some scripts which did not need this change.)
+# 	    No changes made.
+# 	Transarc delta: jess-ot5320-fix-fs-low-testhome 1.1
+# 	  Selected comments:
+# 	    The fs and low test shell scripts have the following if statement
+# 	    if [ "$TESTTOP" = "`pwd`" ]
+# 	    then
+# 	    UTIL_DIR=../util
+# 	    testhome=$TESTTOP
+# 	    else
+# 	    UTIL_DIR=$TESTTOP/util
+# 	    testhome=$TESTTOP/$testSuiteType
+# 	    fi
+# 	    The problem is that variable testSuiteType is not defined at this time.
+# 	    See above.
+# 	[1992/10/28  14:53:43  jaffe]
+# 
+# Revision 1.1.4.3  1992/09/25  17:31:24  jaffe
+# 	Transarc delta: jess-ot5196-low-test-err-redirection 1.1
+# 	  Selected comments:
+# 	    Redirect stderr to stdout from running programs of low/tests
+# 	    no change.
+# 	[1992/09/24  12:51:10  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/28  18:17:40  jaffe
+# 	Transarc delta: rajesh-clean-low-tests 1.5
+# 	  Selected comments:
+# 	    To remove make and clean options from the low test suite. To change
+# 	    the scripts to use common shell functions. To create a file
+# 	    fs_functionsScript with the common shell functions in the util
+# 	    directory.
+# 	    To change the scripts to use common shell functions from
+# 	    util/fs_functionsScript instead of inline code.
+# 	    Modify scripts to follow coding standards, simplify the code, increase
+# 	    readability etc.
+# 	    Change variable names used in the test scripts to follow coding standards.
+# 	    More of above.
+# 	    Modify the tests to give them a simpler logical structure, modularity,
+# 	    readability ( one command per line) and to change then to use the
+# 	    common function created earlier.
+# 	    See above.
+# 	    Modification of rtest1 and rtest2 to use the utility functions
+# 	    correctly.
+# 	[1992/08/28  12:35:13  jaffe]
+# 
+# Revision 1.1.2.3  1992/05/29  23:00:26  mason
+# 	Transarc delta: fred-3754-change-script-name 1.1
+# 	  Selected comments:
+# 	    To clean up a number of defects with the tests.  In addition to defect
+# 	    3754, the changes also fix defects 3750 and 3748.
+# 	    Fixed setting of TESTTOP variable.
+# 	[1992/05/29  13:04:50  mason]
+# 
+# Revision 1.1.2.2  1992/05/21  12:50:38  jaffe
+# 	Transarc delta: fred-merge-tests 1.1
+# 	  Selected comments:
+# 	    Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	    the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	    should be looking at the same test code.
+# 	    Changes to facilitate merge of local DFS test code with the OSF's.
+# 	Transarc delta: fred-remove-sys 1.1
+# 	  Selected comments:
+# 	    To remove dependency on the AFS sys command in the test scripts.
+# 	    To remove dependency on AFS sys command.
+# 	[1992/05/20  20:56:34  jaffe]
+# 
+# $EndLog$
+###############################################################################
+#    Copyright (C) 1990, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This script runs a B-tree database program in the current directory.
+
+# Usage: test2 
+
+# Filesizes: ctrl.asc =  98,972    ctrl.dat = 119,000    ctrl.idx =  79,872
+#        styl.asc = 621,550    styl.dat = 700,064    styl.idx = 475,136
+# Total dat + idx = 1,374,072
+
+###############################################################################
+
+#
+# PrintUsage() -
+#   Prints the usage message for this script.
+
+PrintUsage()
+{
+    echo "$programName runs a B-tree database program"
+    echo "Usage: $programName"
+}
+
+#
+# Initialise some variables. UTIL_DIR is the directory containing 
+# the script fs_FunctionsScript with common functions.
+#
+
+TESTTOP=${TESTTOP:="`pwd`"}
+if [ "$TESTTOP" = "`pwd`" ]
+then
+    UTIL_DIR=../util
+    testhome=$TESTTOP
+else
+    UTIL_DIR=$TESTTOP/util
+    testhome=$TESTTOP/low
+fi
+
+#
+# Source script containing common functions
+#
+. $UTIL_DIR/fs_FunctionsScript
+
+trap '
+     rm -f ctrl.dat ctrl.idx styl.dat styl.idx $programName.out
+     echo "$programName killed; returning 2" | tee -a $lf; exit 2
+     ' 2 3 15
+
+#
+# Initialise more variables
+#
+
+fs_InitSetup low
+
+while [ "$1" != "" ] 
+do
+    case $1 in
+      help|-help) PrintUsage;
+          exit $successExit
+          ;;
+      
+      *)      echo "$programName: invalid argument \"$1\"" | tee -a $logFile; 
+          exit $scriptErrExit
+          ;;
+
+      make|-make) (echo "$p make" ; date ) | tee -a $lf
+          if test -n "$testhome"
+          then
+            cd $testhome
+            if test `pwd` != $d
+            then 
+                cp ctrl.asc styl.asc $cp.c $d; 
+                if test -f $cp; 
+                then 
+                    cp $cp $d; 
+                fi
+            fi
+            cd $d
+          fi
+          if test ! -f ctrl.asc -o ! -f styl.asc
+          then 
+            echo "$p: cannot find temp files" | tee -a $lf; 
+            exit 2
+          fi
+          if test ! -f $cp.c
+          then 
+            echo "$p: cannot find C program" | tee -a $lf; 
+            exit 2
+          fi
+          if test ! -f $cp
+          then
+            cc -g $cp.c -o $cp; exit $?
+          else 
+            exit 0
+          fi
+    esac
+done
+
+
+if test $func != void
+          then echo "$p: cannot do both $func and $a"; exit 2
+          fi
+          func=make
+          ;;
+      run|-run) if test $func != void
+        then echo "$programName: cannot do both $func and $a"; exit 2
+        fi
+        func=run
+        ;;
+      clean|-clean) if test $func != void
+            then echo "$p: cannot do both $func and $a"; exit 2
+            fi
+            func=clean
+            ;;
+      help|-help) echo "$p runs a small database program"
+          echo "Usage: $p make|run|clean"; exit 2 ;;
+      *) echo "$p: invalid argument \"$a\"" | tee -a $lf; exit 2 ;;
+   esac
+done
+
+###############################################################################
+
+if test $func = void; then func=run; fi
+
+
+elif test $func = clean
+   then
+   (echo "$p clean" ; date ) | tee -a $lf
+   rm -f ctrl.dat ctrl.idx styl.dat styl.idx $cp $p.out
+   if test -n "$testhome"
+      then
+      cd $testhome
+      if test `pwd` != $d -a -f ctrl.asc -a -f styl.asc -a -f $cp.c
+     then rm -f $d/ctrl.asc $d/styl.asc $d/$cp.c
+     fi
+      cd $d
+      fi
+   exit 0
+
+elif test $func = run
+   then
+   
+   fs_CheckBinaryExistence $cp
+   fs_CheckFileExistence ctrl.asc
+   fs_CheckFileExistence styl.asc
+
+else echo "$p: requires an argument" | tee -a $lf; exit 2
+
+fi
+
+###############################################################################
+
+(echo "$p (db_test) starting in $d"; echo "Host `hostname` ($fs_sysName)"; date) |
+   tee -a $lf
+fs_DetermineFSType
+$cp -exercise > $p.out; rc=$?; cat $p.out | tee -a $lf
+
+###############################################################################
+
+rm -f ctrl.dat ctrl.idx styl.dat styl.idx $p.out
+
+(echo ""; echo "$ty/$p returning $rc in $d"; date) | tee -a $lf
+
+exit $rc
+
+###############################################################################

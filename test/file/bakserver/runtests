@@ -1,0 +1,298 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+###  Copyright (C) 1993 Transarc Corporation - All rights reserved  ###
+#
+#  runtests -
+#	This script implements a single script to execute all
+#	the bakserver tests. 
+#
+#  Usage:
+#	runtests [-count #] [-help]  [<output_file>]
+#
+#  Defaults:
+#	-count - (number of times to cycle through test scripts) = 1
+#	-help - print a help (usage) message
+#	<output_file> - overrides default for output,  bakservtests_OUT.$$
+#
+###############################################################################
+
+# Test environment:
+# This test requires that the machine on which test is being running be running
+# the bakserver
+#
+# Privilege required:
+# You must be logged in as local root, and authenticated to DCE as cell_admin
+#
+# Environment Variables:
+# set DFS_TESTINSTALL to point to the direcrtory where the runtest script resides
+# DFS_TESTINSTALL = /afs/tr/proj/fs/dev/integ/dfs-102-2.2/install/rios/dcetest/dce1.0/test/file/bakserver
+###############################################################################
+
+
+#
+#  Define script variables and their default values.
+#
+
+DCE_PATH="/opt/dcelocal"
+programName=`basename $0`
+outputFile="bakservtests_OUT.$$"
+Bos="$DCE_PATH/bin/bos"
+testTitle="Bakserver API Tests"
+totalCount=1
+CELL_NAME=`sed -n '/cellname/s/cellname//p' /opt/dcelocal/dce_cf.db`
+hostName=`hostname | sed 's/\..*$//p'`
+DCE_HOST_NAME=$CELL_NAME/hosts/$hostName
+
+#
+# Check and set environment variables
+#
+
+if [ "$DFS_TESTINSTALL" = "" ] 
+then
+	DFS_TESTINSTALL="."
+fi
+
+itlbakservtest=$DFS_TESTINSTALL/bakserver_test
+SCRIPTS=$DFS_TESTINSTALL/scripts
+
+#
+# PrintUsage() -
+#	Prints the usage message for this script.
+#
+PrintUsage()
+{
+    echo "Usage: $programName [-count #] [-cont] [-help] [<output_file>]"
+    echo "\t-count        - number of iterations through the tests (default = 1)"
+    echo "\t-help         - print this usage message."
+    echo "\t<output_file> - where to store output (default is runtests_OUT.\$\$)"
+}
+
+#
+# Cleanup()
+#	Cleans up database between tests
+#
+#  Arguments:
+#	hostname
+#
+Cleanup()
+{
+echo Cleaning up database  >> $outputFile
+
+$Bos shutdown -server $DCE_HOST_NAME  -process bakserver
+
+/bin/rm $DCE_PATH/var/dfs/backup/bkdb.*
+
+$Bos start -server $DCE_HOST_NAME  -process bakserver
+	
+}
+#
+# runallTests() 
+#	# runs all Bakserver API tests
+#	
+
+runallTests()
+{
+
+# 
+Cleanup
+
+echo Run Sequential addition/deletion tests >> $outputFile
+
+$itlbakservtest -b -I $SCRIPTS/sequential_add.itl  >> $outputFile
+
+echo  >> $outputFile
+echo  >> $outputFile
+Cleanup
+
+echo Run Concurrent addition/deletion tests >> $outputFile
+
+$itlbakservtest -b -I $SCRIPTS/concurrent_add.itl  >> $outputFile
+echo  >> $outputFile
+echo  >> $outputFile
+
+Cleanup
+
+echo Run Lookup tests   >> $outputFile 
+
+$itlbakservtest -b -I $SCRIPTS/lookup.itl  >> $outputFile
+
+echo  >> $outputFile
+echo  >> $outputFile
+
+Cleanup
+
+echo Run Find Dump tests   >> $outputFile 
+
+$itlbakservtest -b -I $SCRIPTS/finddump.itl  >> $outputFile
+
+echo  >> $outputFile
+echo  >> $outputFile
+
+Cleanup
+
+echo Run Restore header  test   >> $outputFile 
+
+$itlbakservtest -b -I $SCRIPTS/restore_header.itl  >> $outputFile
+
+echo  >> $outputFile
+echo  >> $outputFile
+
+Cleanup
+
+echo Run Text Locking tests >> $outputFile
+
+$itlbakservtest -b -I $SCRIPTS/text_locks.itl >> $outputFile
+
+echo  >> $outputFile
+echo  >> $outputFile
+
+
+echo Run Text version incrementing test >> $outputFile
+
+$itlbakservtest -b -I $SCRIPTS/text_version.itl >> $outputFile
+
+echo  >> $outputFile
+echo  >> $outputFile
+
+echo Run Text Addition tests >> $outputFile 
+
+$itlbakservtest -b -I $SCRIPTS/text_add.itl >> $outputFile
+
+echo  >> $outputFile 
+echo  >> $outputFile 
+
+Cleanup
+
+echo Run Text Locking tests >> $outputFile
+
+$itlbakservtest -b -I $SCRIPTS/text_locks.itl >> $outputFile
+
+echo  >> $outputFile
+echo  >> $outputFile
+
+
+echo Run Text version incrementing test >> $outputFile
+
+$itlbakservtest -b -I $SCRIPTS/text_version.itl >> $outputFile
+
+echo  >> $outputFile
+echo  >> $outputFile
+
+echo Run Dump DB test >> $outputFile 
+
+$itlbakservtest -b -I $SCRIPTS/dumpdb.itl >> $outputFile
+
+echo  >> $outputFile 
+echo  >> $outputFile 
+
+Cleanup
+
+}
+
+
+#
+#  Parse the command line.
+#
+while [ "$1" != "" ] 
+do
+    case $1 in
+      -count)    shift;
+	         if [ "$1" != "" ]
+	         then
+	             totalCount=$1;
+	         else
+		     echo "${programName}: -count requires numeric parameter.";
+		     PrintUsage;
+		     exit $scriptErrExit
+	         fi
+                 ;;
+      -help)     PrintUsage;
+                 exit $successExit
+                 ;;
+       -*)       echo "${programName}: Invalid option, $1." | tee -a $outputFile;
+	         PrintUsage;
+                 exit $scriptErrExit
+                 ;;
+      *)         outputFile=$1
+                 ;;
+      esac
+      shift
+done
+
+#
+#  If an output file already exist remove it.
+#
+if [ -f $outputFile ]
+then
+    /bin/rm -f $outputFile
+    if [ $? -ne 0 ]
+    then
+	echo "$programName: Could not remove existing file, $outputFile" | tee -a $outputFile
+	exit $scripErrExit
+    fi
+fi
+
+#
+#  Now run the tests.
+#
+#
+
+echo "$testTitle tests  - Starting" >> $outputFile
+echo >> $outputFile
+echo "Machine: `hostname`" >> $outputFile
+echo "Cellname: $CELL_NAME" >> $outputFile
+
+#  If running under DFS print our principal id.
+#
+pwd | fgrep "/..." > /dev/null 2>&1
+if [ $? -eq 0 ]
+then
+    echo "DCE User: `klist | grep '	Principal' | cut -f3 -d' '" >> $outputFile
+fi
+
+echo >> $outputFile
+date >> $outputFile
+echo >> $outputFile
+
+runTests="true"
+loopCount=0
+
+
+while [ "$runTests" = "true" ]
+do
+    #
+    #  Now run the tests
+    #
+    echo "" >> $outputFile
+
+    runallTests
+
+
+    loopCount=`expr $loopCount + 1`
+    #
+    #  If totalCount is 0 (user passed in 0 as argument to -count) then
+    #  the script runs forever.
+    #
+    if [ $totalCount -ne 0 ]
+    then
+	if [ $loopCount -eq $totalCount ]
+	then
+	    runTests="false"
+	fi
+    fi
+done
+
+echo "Number of loops: $loopCount" >> $outputFile
+echo >> $outputFile
+pstat -s >> $outputFile
+echo >> $outputFile
+date >> $outputFile
+echo >> $outputFile
+echo "$testTitle - Completed Successfuly." >> $outputFile
+exit $successExit
+

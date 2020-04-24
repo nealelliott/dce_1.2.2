@@ -1,0 +1,199 @@
+# Copyright (C) 1996 Transarc Corporation - All rights reserved.
+
+# Test Suite For Multi-homed DFS Server Support - README file
+#
+#   This file contains information on running the test suite.
+
+# ----------------------------------------------------------------------------
+
+INTRODUCTION
+------------
+
+This directory contains the test suite described in detail in
+"Test Plan for OSF-RFC 77.0: Supporting Multi-homed DFS Servers".
+Below is a brief outline of the required test cell configuration,
+and information on executing the tests.
+
+Please read this entire file before attempting to execute any tests.
+
+
+IMPLEMENTATION
+--------------
+
+The test suite is implemented in Perl.  Therefore it is necessary to
+ensure that Perl is accessible from the machine executing the tests.
+Check that the first line of the following files contains the correct
+path to the Perl executable: mhstest.pl.
+
+
+CELL CONFIGURATION:
+-------------------
+
+The test cell must contain at least two DFS server machines: A and B.
+  + Machine A is a multi-homed host with (at least) network connections
+    A1 and A2 that executes a file-server, repserver and flserver; this
+    flserver must be the only one in the cell.
+  + Machine B is a multi-homed host with (at least) network connections
+    B1 and B2 that executes a file-server and repserver.
+The test script is to be executed on a client machine that is neither A nor B.
+
+[Throughout this text, the names A1, A2, B1 and B2 refer to physical
+ connections or connection-addresses, as the context dictates.]
+
+The DFS server machines A and B must be configured such that server
+processes export bindings to CDS for only A2 and B2, respectively,
+allowing other connections to be configured down as testing requires.
+The simplest method of achieving this is to have only a single interface
+active when configuring DCE/DFS on these machines.
+The test script will examine the CDS and FLDB to determine that the
+cell is configured as expected.
+
+Both the CDS and FLDB will be altered during the course of testing, but
+will be restored on exit, whether normal or due to error.  Similarly,
+filesets created for use by this test will also be removed on exit.
+
+
+NETWORK CONFIGURATION:
+----------------------
+
+The DFS server machines A and B must have direct routes to gateways via
+A1/A2 and B1/B2, respectively.
+
+At the start of testing, there must be no host-route for the client machine
+in either servers' routing tables.
+
+
+RSH REQUIREMENTS:
+-----------------
+
+In order to generate controlled failures, the tests will need to
+execute both 'ifconfig' and 'route' commands on server machines A and B.
+Thus entries must be made in the appropriate file(s) to allow
+a root user on the client machine to perform remote executions on
+the server machines.  See 'man rsh' for details.
+
+
+TEST CONFIGURATION PARAMETERS:
+------------------------------
+
+Before executing the test suite, a number of configuration parameters
+must be set in the file mhsconfig.pl.  Edit this file as indicated there.
+
+Example:  The following example demonstrates how network parameters in
+mhsconfig.pl are to be set.  Two DFS server machines, A and B, are
+illustrated, as described above.  The machine executing the test script
+is labeled "client", and a router which is directly connected to each
+subnet is labeled "GW".  Server and gateway network connections are
+labeled with their DNS (or other name service) names; for server connections,
+interface names are also given in parenthesis.
+
+
+    -------------------------------------------------------------------
+           |                       |                     |
+           | GW-1                  | srvA-1 (le0)        | srvB-1 (le0)
+        -------                ---------             ---------
+        | GW  |                |   A   |             |   B   |
+        -------                ---------             ---------
+           | GW-2                  | srvA-2 (le1)        | srvB-2 (le1)
+           |                       |                     |
+    -------------------------------------------------------------------
+                                              |
+                                              |
+                                          ----------
+                                          | client |
+                                          ----------
+
+
+Given this configuration, the network parameters in mhsconfig.pl would
+be set as follows:
+
+# Server-hosts' network connection information
+$dnA1 = "srvA-1";    # server-host-A ntwk-connection-1 domain name
+$ifA1 = "le0";       # server-host-A ntwk-connection-1 interface name
+$gwA1 = "GW-1";      # gateway on server-host-A ntwk-connection-1 subnet
+
+$dnA2 = "srvA-2";    # server-host-A ntwk-connection-2 domain name
+$ifA2 = "le1";       # server-host-A ntwk-connection-2 interface name
+$gwA2 = "GW-2";      # gateway on server-host-A ntwk-connection-2 subnet
+
+$dnB1 = "srvB-1";    # server-host-B ntwk-connection-1 domain name
+$ifB1 = "le0";       # server-host-B ntwk-connection-1 interface name
+$gwB1 = "GW-1";      # gateway on server-host-B ntwk-connection-1 subnet
+
+$dnB2 = "srvB-2";    # server-host-B ntwk-connection-2 domain name
+$ifB2 = "le1";       # server-host-B ntwk-connection-2 interface name
+$gwB2 = "GW-2";      # gateway on server-host-B ntwk-connection-2 subnet
+
+
+RUNNING TESTS:
+--------------
+
+Run the test suite by executing the mhstest.pl script; no arguments are
+required.
+
+Individual tests may be executed by supplying the test name(s) as command
+line arguments to mhstest.pl.  Valid test names are as follows:
+
+    1) roaccess: Multi-server binding test - replicated fileset access
+    2) rwaccess: Multi-server binding test - read-write fileset access
+    3) sstatus : Single-server binding test - server status check
+    4) ftloc   : CDS address acquisition test - fileset location check
+
+NOTE:
+    1) The mhstest.pl script must be executed as cell_admin and root.
+    2) The test must be executed from, and log files must be written to,
+       a non-DFS file system.
+    3) If a test fails, another test should not be run for 15 minutes
+       AFTER all server interfaces are configured back up; server interfaces
+       are normally configured back up on exit.
+
+
+TEST RESULTS:
+-------------
+
+Each test writes to stdout a running log of actions and their intended
+results.  To determine if the DFS cache manager (CM) is behaving as
+expected, the CM trace log is examined, via dfstrace, for evidence that
+the CM is responding correctly to test activity.
+
+A number of characteristics of the IP host specification (IETF RFC 1122)
+conspire to make automatic, generic network failure testing difficult, and
+can at times cause a test in this suite to incorrectly indicate a failure.
+Fortunately, such false failures are normally detected, though the
+affected test is still aborted and must be rerun.
+
+
+ABORTING TESTS:
+---------------
+
+The test suite can be aborted via a SIGINT (ctrl-C).  A best-effort
+attempt will be made to cleanup the environment, but this is not
+guaranteed to be successful.
+
+
+MANUAL CLEANUP:
+---------------
+
+Though the test suite normally performs a complete cleanup on exit, whether
+normal or due to error, there may be times when manual cleanup is required.
+The following is a list of resources that are created or altered during
+the course of the test suite:
+
+[Note: variables are defined in mhsconfig.pl]
+
+1) Fileset $ftName.$$ is created on server $dirA, and replicated on
+   servers $dirA and $dirB.
+
+2) Mount-point $mtPath.RW is created for fileset $ftName.$$; similarly,
+   mount-point $mtPath.RO is created for fileset $ftName.$$.readonly.
+
+3) Server $dirA's network interface $ifA1 may be configured down; likewise
+   for $ifB1 on server $dirB.
+
+4) Host routes may be entered into the routing tables of $dirA and $dirB
+   for the machine executing the test suite.
+
+5) The binding information in $dirA/self may be altered.
+
+6) The FLDB address lists for $dirA and $dirB may be altered.
+

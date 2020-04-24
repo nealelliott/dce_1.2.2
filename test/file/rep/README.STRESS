@@ -1,0 +1,101 @@
+		       REPLICATION STRESS TESTS
+
+This file describes the replication stress tests.  The replication
+stress tests are named with the "rstest" prefix to distinguish them
+from the replication function tests which are named with the "rtest"
+prefix.  There is currently only one test in this category:
+rstest1_aux.  The test is meant to serve as the core of a more
+friendly "invoke-and-go" test, but as yet, the test is provided only
+in its raw form.  For now, the tester is required to do the setup that
+is necessary to run the test.
+
+TEST DESCRIPTION
+
+The basic idea is to fork off two processes for each replicated
+fileset named as an argument to the test.  One process, the writer,
+updates the test file's mtime (touches it).  The other process, the
+reader, keeps track of how often the file's stat information shows
+that the file is within the fileset's max age.  The reader reports its
+findings back to the main program via a pipe, and the main program
+tallies the results and prints them.
+
+Each fileset is expected to have two mount points: one for the RW and
+one for the RO, so if "ft1" is the name of a fileset we expect mount
+points named "ft1" and "ft1.readonly".
+
+TEST SETUP
+
+1. Decide how many filesets you want to involve in the test, the more
+   filesets, the more stress.
+2. Create the filesets using "fts create".  They can all exist on one
+   server or can be spread among several.
+3. Set the filesets up for scheduled replication via "fts setrepinfo".
+   Use a low maxage to induce the most stress.
+4. Create mount points for both the read/write and readonly copies of
+   the filesets.
+5. Creat a file called "junk" in each of the filesets.
+6. Start the repserver with one main thread and one token thread for each
+   replicated fileset.
+7. Start the test running, giving the R/W fileset names as arguments.
+8. Interrupt the test when you're tired of watching it.
+
+TEST SETUP EXAMPLE
+
+One of my benchmark tests involves 8 filesets on a single server with
+2 minute maxage parameters.  Here, in pseudo shell code, is how to set
+that scenario up.
+
+for i in 0 1 2 3 4 5 6 7; do
+    fileset="ft${i}"
+    fts create ${fileset} ${server} ${aggr}
+    fts setrepinfo ${fileset} -scheduled -maxage 2m	# 2min==lowest maxage
+    fts addsite ${server} ${aggr}
+    fts crmount ${fileset} ${fileset}
+    fts crmount ${fileset}.readonly ${fileset}.readonly
+    touch ${fileset}/junk
+done
+
+/opt/dcelocal/bin/repserver -main 8 -token 8 &
+
+./rstest1_aux ft{0,1,2,3,4,5,6,7}
+... # let test run
+^C  # interrupt when finished
+
+TEST CONFIGURATION
+
+The stress tests can be configured via a number of environment
+variables.  The variables and their defaults are shown below.  Note
+that the default values assume that the filesets' maxage replication
+parameter is set to 2 minutes (the minimum).
+
+ RS_CHECK_FREQ (default: 5 seconds)
+    This variable controls how often the reader process checks the
+    test file to see if it is up to date.
+
+ RS_MAX_AGE (default: 120 seconds)
+    This variable should be set to reflect the filesets' maxage
+    replication parameter.
+
+ RS_REPORT_INTERVAL (default: 5 iterations)
+    This variable controls how often the reader process reports its
+    results back to the master process.
+
+ RS_TEST_DIR (default: ".")
+    Set this variable to the name of the directory that contains the
+    test fileset mount points.
+
+ RS_TIME_LIMIT (default: 0 seconds [unlimited])
+    Set this variable to a non-zero value if you want the test to stop
+    itself after running for the specified period of time.  If this
+    variable is not set, the test can be stopped by sending it an
+    interrupt signal.
+
+ RS_UPDATE_FREQ (default: 30 seconds)
+    This variable controls how often the writer process modifies the
+    test file's mtime.
+
+FUTURE
+
+It is our intention to provide a covering shell script that does all
+of the necessary setup and cleanup before running rstest1_aux, but
+that work is not currently scheduled.

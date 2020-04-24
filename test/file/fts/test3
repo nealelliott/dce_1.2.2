@@ -1,0 +1,495 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+# Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS exporting Episode and UFS.
+# The script tests the fts aggrinfo, lsaggr, lsfldb, lsft, and lsheader
+# subcommands.
+
+###############################################################################
+
+# Usage:                test3
+
+# Typically run via:    test3 >& test3.out
+# or via the fts/runtests script.
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode and UFS.
+# DFS server $SERVER_2 must export $EPI_AGGRNAME_3 for Episode testing
+# and $UFS_AGGRNAME_2 for UFS testing.
+
+# Privilege required:
+# FIX - pdh.
+
+# Highest error number is: 76.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname|cut -f1 -d"." 2>/dev/null`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${EPI_AGGRNAME_3=epi1}
+: ${EPI_FSNAME_2=fileset.epi.$$}
+: ${EPI_MP_NAME_2=epifs2.$$}
+: ${UFS_FSNAME_2=tmp.ufs}
+: ${UFS_MP_NAME_2=tmp.ufs.$$}
+: ${UFS_AGGRNAME_2=/ufs2}
+: ${SERVER_2=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name=/.../$CELL_NAME}
+: ${dns_server_prefix=/.:/hosts/}
+: ${export_root=/.../$CELL_NAME/fs}
+: ${mount_prefix=$export_root/test}
+
+av_arg="$AUTH_ARG $VERB_ARG"
+ca_arg="$CELL_ARG $AUTH_ARG"
+
+cleanup()
+{
+# Nothing yet.
+ return 0
+}
+
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+###############################################################################
+#
+# Check which AGGREGATES exist and run tests only on those aggregates.
+#
+if test "$dfs_FileSysType" = "$DFS_WORKS_ON_LFS" 
+then
+  filesetTypes="episode"
+fi
+if test "$dfs_FileSysType" = "$DFS_WORKS_ON_UFS" 
+then
+  filesetTypes="ufs"
+fi
+
+if [ "$filesetTypes" = "" ] 
+then
+   date
+   echo "FTS test $p requires an exported aggregate. "
+   echo "Either no aggregates are exported or the variables EPI_AGGRNAME_3 and"
+   echo "UFS_AGGRNAME_2 are not set correctly. Please correct situation and rerun"
+   rc=`expr $rc + 1`
+   exit $rc
+fi
+
+#
+# Set other variables 
+#
+for type in $filesetTypes
+do
+
+if [ "$type" = "episode" ]
+   then 
+	fts lsaggr $SERVER_2 | grep $EPI_AGGRNAME_2; rf=$?
+	if test $rf -ne 0
+	   then
+		do_within_server=FALSE
+	        aggr_2=""
+	   else
+		do_within_server=TRUE
+	        fi
+	if [ "$EPI_AGGRNAME_3" = "" ]
+	 then
+	   do_across_server=FALSE
+	 else
+	   fts lsaggr $SERVER_2 | grep $EPI_AGGRNAME_3; rf=$?
+	   if test $rf -ne 0
+	    then
+	      do_across_server=FALSE
+	    else
+	      do_across_server=TRUE
+	    fi
+	 fi
+	if [ $do_across_server = TRUE ]
+	then
+	  aggr=$EPI_AGGRNAME_3
+        elif [ $do_within_server = TRUE ]
+        then
+	  aggr=$EPI_AGGRNAME_2
+	else
+   	  fts lsaggr $SERVER_2 | grep $EPI_AGGRNAME_1; rf=$?
+	  if test $rf -ne 0
+          then
+  	   echo "";echo "no aggregate $EPI_AGGRNAME_1 to run test, quitting..."
+	   rc=`expr $rc + 1`
+  	   exit $rc
+          else
+	   aggr=$EPI_AGGRNAME_1
+	  fi
+        fi
+	ft=$EPI_FSNAME_2; mp=$mount_prefix/$EPI_MP_NAME_2
+	fts create -ftname $ft -server $SERVER_2 -aggregate $aggr
+	if [ $? -ne 0 ]
+        then 
+	     echo "creation of $ft failed, terminating..."
+	     rc=`expr $rc + 1` 
+             exit $rc
+	fi
+	fts crmount -dir $mp -fileset $ft
+	if [ $? -ne 0 ]
+	then
+	     echo "creation of mount point $mp failed, terminating..."
+	     fts delete -fileset $ft -server $SERVER_2 -aggregate $aggr
+	     rc=`expr $rc + 1`
+	     exit $rc
+	fi
+
+	setFsetRootProt $mp $testuid "E80"
+   else 
+	aggr=$UFS_AGGRNAME_2; ft=$UFS_FSNAME_2; mp=$mount_prefix/$UFS_MP_NAME_2
+# In the case of UFS, the fileset must exist, we do the mount point
+	fts crmount -dir $mp -fileset $ft
+	if [ $? -ne 0 ]
+	then
+	     echo "creation of mount point $mp failed, terminating..."
+	     fts delete -fileset $ft -server $SERVER_2 -aggregate $aggr
+	     rc=`expr $rc + 1`
+	     exit $rc
+	fi
+   fi
+
+ftid=`fts lsfldb $ft $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+
+if [ "$ftid" = "" ]
+then
+   echo "FTS test $p requires an exported fileset."
+   echo "The fileset $ft does not exist at the server, terminating..."
+   fts delmount -dir $mp	#ignoring the error
+   rc=`expr $rc + 1`
+   exit $rc
+fi
+	
+#
+# Run tests
+#
+
+date
+echo "RUNNING fts LIST COMMANDS on SERVER $SERVER_2 in CELL $CELL_NAME."
+echo "========================================================================"
+echo ""
+echo "Using $type aggregate $aggr, fileset $ft, fileset ID $ftid."
+echo "Mount point is $mp."
+echo ""
+fts lsm $mp; fts lsquota -fileset $ftid; ls $mp
+echo ""
+
+###############################################################################
+
+echo ""; echo "Running fts aggrinfo"
+   fts aggrinfo $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E1 rc
+
+   fts aggrinfo fubar_argument $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E2 rc
+
+   fts aggrinfo $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E3 rc
+
+   fts aggrinfo $dns_server_prefix$SERVER_2 $aggr $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E4 rc
+
+   fts aggrinfo $dns_server_prefix$SERVER_2 $aggr $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E5 rc
+
+   fts aggrinfo $dns_server_prefix$SERVER_2 $aggr $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E6 rc
+
+   fts aggrinfo $dns_server_prefix$SERVER_2 -cell $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E7 rc
+
+   fts aggrinfo -cell $dns_cell_name $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E8 rc
+
+   fts aggrinfo $aggr $dns_cell_name $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E9 rc
+
+   fts aggrinfo -aggregate $aggr -cell $dns_cell_name \
+       -server $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E10 rc
+
+   fts aggrinfo -aggregate fubar_aggr -cell $dns_cell_name -server \
+       $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E11 rc
+
+   fts aggrinfo -aggregate $aggr -cell fubar_cell \
+       -server $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E12 rc
+
+   fts aggrinfo -aggregate $aggr -cell $dns_cell_name -server fubar_server \
+       $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E13 rc
+
+
+echo ""; echo "Running fts lsaggr"
+   fts lsaggr $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E14 rc
+
+   fts lsaggr fubar_argument $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E15 rc
+
+   fts lsaggr $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E16 rc
+
+   fts lsaggr $dns_server_prefix$SERVER_2 $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E17 rc
+
+   fts lsaggr $dns_server_prefix$SERVER_2 -cell $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E18 rc
+
+   fts lsaggr -cell $dns_cell_name $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E19 rc
+
+   fts lsaggr $dns_cell_name $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E20 rc
+
+   fts lsaggr -cell $dns_cell_name -server $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E21 rc
+
+   fts lsaggr -cell fubar_cell -server $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E22 rc
+
+   fts lsaggr -cell $dns_cell_name -server fubar_server $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E23 rc
+
+
+echo ""; echo "Running fts lsfldb"
+   fts lsfldb $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E24 rc
+
+   fts lsfldb fubar_argument $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E25 rc
+
+   fts lsfldb $ftid $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E26 rc
+
+   fts lsfldb $ft $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E27 rc
+
+   fts lsfldb -fileset $ftid -server $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E28 rc
+
+   fts lsfldb -fileset $ft -aggregate $aggr $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E29 rc
+
+   fts lsfldb -fileset $ft -locked $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E30 rc
+
+   fts lsfldb $aggr $dns_cell_name $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E31 rc
+
+   fts lsfldb -aggr $aggr -locked -cell $dns_cell_name \
+       -server $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E32 rc
+
+   fts lsfldb -aggr fubar_aggr -locked -cell $dns_cell_name \
+       -server $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E33 rc
+
+   fts lsfldb -fileset fubar_fileset $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E34 rc
+
+   fts lsfldb -aggr $aggr -locked -cell fubar_cell \
+       -server $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E35 rc
+
+   fts lsfldb -aggr $aggr -locked -cell $dns_cell_name -server fubar_server \
+       $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E36 rc
+
+
+echo ""; echo "Running fts lsft"
+# Don't depend on the fact that pwd will be in DFS
+   cd /tmp; cd $mp
+   fts lsft $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E37 rc
+   cd /tmp
+
+   fts lsft fubar_argument $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E38 rc
+
+   fts lsft $mp $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E39 rc
+
+   fts lsft $mp/foo $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E40 rc
+
+   fts lsft -path $mp -cell $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E41 rc
+
+   fts lsft $mp -cell $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E42 rc
+
+   fts lsft -cell $dns_cell_name $mp $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E43 rc
+
+   fts lsft $dns_cell_name $mp $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E44 rc
+
+   fts lsft -cell $dns_cell_name -path $mp/foo $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E45 rc
+
+   fts lsft -cell fubar_cell -path $mp $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E46 rc
+
+   fts lsft -cell $dns_cell_name -path fubar_path $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E47 rc
+
+
+   fts lsft -fileset $ft $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E48 rc
+
+   fts lsft -fileset $ftid $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E49 rc
+
+   fts lsft -cell $dns_cell_name -fileset $ft $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E50 rc
+
+   fts lsft -cell $dns_cell_name -fileset $ftid $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E51 rc
+
+
+echo ""; echo "Running fts lsheader"
+   fts lsheader $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E52 rc
+
+   fts lsheader fubar_argument $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E53 rc
+
+   fts lsheader $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E54 rc
+
+   fts lsheader $dns_server_prefix$SERVER_2 $aggr $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E55 rc
+
+   fts lsheader $dns_server_prefix$SERVER_2 $aggr $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E56 rc
+
+   fts lsheader $dns_server_prefix$SERVER_2 $aggr $dns_cell_name -long $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E57 rc
+
+   fts lsheader $dns_server_prefix$SERVER_2 $aggr $dns_cell_name -long \
+       $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E58 rc
+
+   fts lsheader $dns_server_prefix$SERVER_2 -cell $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E59 rc
+
+   fts lsheader -cell $dns_cell_name $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E60 rc
+
+   fts lsheader $aggr $dns_cell_name $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E61 rc
+
+   fts lsheader -long -aggregate $aggr -cell $dns_cell_name \
+       -server $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E62 rc
+
+   fts lsheader -long -aggregate fubar_aggr -cell $dns_cell_name \
+       -server $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E63 rc
+
+   fts lsheader -long -aggregate $aggr -cell fubar_cell \
+       -server $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E64 rc
+
+   fts lsheader -long -aggregate $aggr -cell $dns_cell_name \
+       -server fubar_server $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E65 rc
+
+   echo ""
+
+   # Try command with -fast options instead of 
+   fts lsheader $dns_server_prefix$SERVER_2 $aggr $dns_cell_name  -fast \
+       $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E66 rc
+
+
+   fts lsheader  -aggregate $aggr -fast -cell $dns_cell_name \
+       -server $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E67 rc
+
+   fts lsheader  -aggregate fubar_aggr -fast -cell $dns_cell_name \
+       -server $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E68 rc
+
+   fts lsheader  -aggregate $aggr -fast -cell fubar_cell \
+       -server $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E69 rc
+
+   fts lsheader  -aggregate $aggr -fast -cell $dns_cell_name \
+       -server fubar_server $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E70 rc
+
+
+   # Try commands with both long and fast options. Expect them to return failure.
+   fts lsheader $dns_server_prefix$SERVER_2 $aggr $dns_cell_name -long -fast \
+       $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E71 rc
+
+   fts lsheader -long -aggregate $aggr -fast -cell $dns_cell_name \
+       -server $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E72 rc
+
+   fts lsheader -long -aggregate fubar_aggr -fast -cell $dns_cell_name \
+       -server $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E73 rc
+
+   fts lsheader -long -aggregate $aggr -fast -cell fubar_cell \
+       -server $dns_server_prefix$SERVER_2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E74 rc
+
+   fts lsheader -long -aggregate $aggr -fast -cell $dns_cell_name \
+       -server fubar_server $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E75 rc
+
+# Clean up before the next round
+
+   fts delmount -dir $mp
+   if [ "$type" = "episode" ]
+   then
+	fts delete -fileset $ft -server $SERVER_2 -aggr $aggr
+        dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E76 rc
+   fi
+
+done # for type = episode ufs
+
+
+###############################################################################
+
+sync; sync; sleep 2
+
+echo ""; echo "Done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################

@@ -1,0 +1,580 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# (c) Copyright International Business Machines Corp. 1994, 1996
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+#
+#  02/14/94	Weisz 	Initial design.  
+
+#cp_auditd: test case for audit
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1 ic2 ic3 ic4 ic5 ic6 ic7 ic8 ic9"
+ic1="cp_auditd01"
+ic2="cp_auditd02"
+ic3="cp_auditd03"
+ic4="cp_auditd04"
+ic5="cp_auditd05"
+ic6="cp_auditd06"
+ic7="cp_auditd07"
+ic8="cp_auditd08"
+ic9="cp_auditd09"
+
+# preparation of DCE audit suite
+startup() {
+
+	print "\nSTART DCE audit functional: cp_auditd; DATE: `date`"
+	tet_infoline "START DCE audit functional: ${TET_PNAME}; DATE: `date`"
+
+	if [ "`uname`" = "OSF1" ]
+	then
+		PS_FLAGS="-e -o ucomm"
+	else
+		PS_FLAGS="-e"
+	fi
+ 
+ auditd  # auditd must be running 
+ sleep 10
+}
+
+#========================================================================
+
+cp_auditd01() {
+#set -x
+
+ print "\nSTART: cp_auditd01 started"
+ tet_infoline "START: cp_auditd01 started"
+
+if (( $AUDITCP ))
+then
+  auditcp aud show <<EOF > /tmp/state
+0
+EOF
+ 
+else
+  dcecp -c aud show > /tmp/state
+fi
+
+ (( return_value = $(grep -c 'enabled' /tmp/state) ))
+ if (( $return_value == 1 ))
+ then
+   print "\nOK: aud show state - successful"
+   tet_infoline "OK:  aud show state - successful"
+   tet_result PASS
+   print "\nPASS: cp_auditd01 passed"
+   tet_infoline "PASS: cp_auditd01 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: cp_auditd01 failed"
+   tet_infoline "ERROR: cp_auditd01 failed"
+ fi
+}
+
+#========================================================================
+
+cp_auditd02() {
+#set -x
+
+ print "\nSTART: cp_auditd02 started"
+ tet_infoline "START: cp_auditd02 started"
+
+if (( $AUDITCP ))
+then
+ auditcp aud show <<EOF > /tmp/stostrategy
+1
+EOF
+
+else
+  dcecp -c aud show > /tmp/stostrategy
+fi
+
+ (( return_value = $(grep -c 'Save' /tmp/stostrategy) || $(grep -c 'save' /tmp/stostrategy) )) 
+ if (( $return_value == 1 ))
+ then
+   print "\nOK: aud show stostrategy - successful"
+   tet_infoline "OK: aud show stostrategy - successful"
+   tet_result PASS
+   print "\nPASS: cp_auditd02 passed"
+   tet_infoline "PASS: cp_auditd02 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: cp_auditd02 failed"
+   tet_infoline "ERROR: cp_auditd02 failed"
+ fi
+}
+
+
+#========================================================================
+
+
+cp_auditd03() {
+#set -x
+
+ print "\nSTART: cp_auditd03 started"
+ tet_infoline "START: cp_auditd03 started"
+
+if (( $AUDITCP ))
+then
+  auditcp aud modify <<EOF
+0
+1
+EOF
+
+  auditcp aud show <<EOF > /tmp/state
+0
+EOF
+
+else
+  dcecp -c aud modify -state disabled
+  dcecp -c aud show > /tmp/state
+fi
+
+ (( return_value = $(grep -c 'disabled' /tmp/state) ))
+ if (( $return_value == 1 ))
+ then
+   print "\nOK: aud modify state - successful"
+   tet_infoline "OK: aud modify state - successful"
+   tet_result PASS
+   print "\nPASS: cp_auditd03 passed"
+   tet_infoline "PASS: cp_auditd03 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: cp_auditd03 failed"
+   tet_infoline "ERROR: cp_auditd03 failed"          
+ fi
+}
+
+#========================================================================
+
+
+cp_auditd04() {
+#set -x
+
+ print "\nSTART: cp_auditd04 started"
+ tet_infoline "START: cp_auditd04 started"
+
+if (( $AUDITCP ))
+then
+  auditcp aud modify <<EOF
+1
+256
+EOF
+
+  auditcp aud show <<EOF > /tmp/stostrategy
+1
+EOF
+
+else
+  dcecp -c aud modify -stostrategy wrap
+  dcecp -c aud show > /tmp/stostrategy
+fi
+
+ (( return_value = $(grep -c 'wrap' /tmp/stostrategy) ))
+ if (( $return_value == 1 ))
+ then
+   print "\nOK: aud modify stostrategy - successful"
+   tet_infoline "OK: aud modify stostrategy - successful"
+   tet_result PASS
+   print "\nPASS: cp_auditd04 passed"
+   tet_infoline "PASS: cp_auditd04 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: cp_auditd04 failed"
+   tet_infoline "ERROR: cp_auditd04 failed"          
+ fi
+}
+
+#========================================================================
+
+
+cp_auditd05() {
+#set -x
+
+ print "\nSTART: cp_auditd05 started"
+ tet_infoline "START: cp_auditd05 started"
+
+if (( $AUDITCP ))
+then
+  auditcp aud show <<EOF > /tmp/state
+0
+EOF
+
+else
+  dcecp -c aud show > /tmp/state
+fi
+
+ (( return_value = $(grep -c 'disabled' /tmp/state) ))
+ if (( $return_value == 1 ))
+ then
+   if (( $AUDITCP ))
+   then
+     auditcp aud enable
+     auditcp aud show <<EOF > /tmp/state
+0
+EOF
+   else
+     dcecp -c aud modify -state enabled
+     dcecp -c aud show > /tmp/state
+   fi
+
+   (( return_value = $(grep -c 'enabled' /tmp/state) ))
+   if (( $return_value == 1 ))
+   then
+     FAIL=N
+   else
+     FAIL=Y
+   fi
+ else
+   print "\nERROR: precondition not met"
+   FAIL=Y
+ fi                                    
+ if [[ $FAIL = N ]]
+ then
+   print "\nOK: aud modify state - successful"
+   tet_infoline "OK:  aud modify state - successful"
+   tet_result PASS
+   print "\nPASS: cp_auditd05 passed"
+   tet_infoline "PASS: cp_auditd05 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: cp_auditd05 failed"
+   tet_infoline "ERROR: cp_auditd05 failed"          
+ fi
+}
+
+#========================================================================
+
+cp_auditd06() {
+#set -x
+
+ print "\nSTART: cp_auditd06 started"
+ tet_infoline "START: cp_auditd06 started"     
+
+# should be in enabled state from previous test
+ if (( $AUDITCP ))
+ then
+   auditcp aud disable
+   auditcp aud show <<EOF > /tmp/state
+0
+EOF
+ else
+   dcecp -c aud modify -state disabled
+   dcecp -c aud show > /tmp/state
+ fi
+
+ (( return_value = $(grep -c 'disabled' /tmp/state) ))
+ if (( $return_value == 1 ))
+ then
+   print "\nOK: aud disable - successful"
+   tet_infoline "OK: aud disable - successful"
+   tet_result PASS
+   print "\nPASS: cp_auditd06 passed"
+   tet_infoline "PASS: cp_auditd06 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: cp_auditd06 failed"
+   tet_infoline "ERROR: cp_auditd06 failed"          
+ fi
+}
+
+#========================================================================
+
+cp_auditd07() {
+#set -x
+
+ print "\nSTART: cp_auditd07 started"
+ tet_infoline "START: cp_auditd07 started"     
+
+# auditd should be still running here from previous tests
+
+ if (( $AUDITCP ))
+ then
+   auditcp aud stop
+ else
+   dcecp -c aud stop
+ fi
+
+
+ FAIL=Y
+ time_elapsed=0
+
+ while (( time_elapsed < 120 ))
+ do
+    sleep 5
+    (( time_elapsed = time_elapsed + 5 ))
+
+    total_auditd=$( ps $PS_FLAGS | grep -c auditd )
+    cp_auditd=$( ps $PS_FLAGS | grep -c cp_auditd )
+    ((nr_of_auditds = total_auditd - cp_auditd))
+    if (( $nr_of_auditds == 0 ))
+    then
+       FAIL=N
+       break
+    fi
+ done
+
+ print "\n time elapsed till auditd stopped = $time_elapsed"
+
+ if [[ $FAIL = N ]]
+ then
+   print "\nOK: aud stop - successful"
+   tet_infoline "OK: aud stop - successful"
+   tet_result PASS
+   print "\nPASS: cp_auditd07 passed"
+   tet_infoline "PASS: cp_auditd07 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: cp_auditd07 failed"
+   tet_infoline "ERROR: cp_auditd07 failed"
+ fi
+}
+
+#========================================================================
+#=== rerun previous tests, this time with self auditing enabled.
+
+cp_auditd08() {
+#set -x
+
+ print "\nSTART: cp_auditd08 started"
+ tet_infoline "START: cp_auditd08 started"     
+
+ auditd -a  # auditd must be running, this time with self audit enabled 
+ sleep 10
+
+ FAIL=N
+
+
+  dcecp -c aud show > /tmp/state
+ (( return_value = $(grep -c 'enabled' /tmp/state) ))
+ if (( $return_value == 1 ))
+ then
+   print "\nOK: aud show state - successful"
+ else
+   print "\nERROR: aud show state - failed"
+   FAIL=Y
+ fi
+
+ (( return_value = $(grep -c 'Save' /tmp/state) || $(grep -c 'save' /tmp/state) ))
+ if (( $return_value == 1 ))
+ then
+   print "\nOK: aud show stostrategy - successful"
+ else
+   print "\nERROR: aud show stostrategy - failed"
+   FAIL=Y
+ fi
+
+  dcecp -c aud modify -state disabled
+  dcecp -c aud show > /tmp/state
+
+ (( return_value = $(grep -c 'disabled' /tmp/state) ))
+ if (( $return_value == 1 ))
+ then
+   print "\nOK: aud modify state (disable) - successful"
+ else
+   print "\nERROR: aud modify state (disable) - failed"
+   FAIL=Y
+ fi
+
+  dcecp -c aud modify -state enabled
+  dcecp -c aud show > /tmp/state
+
+ (( return_value = $(grep -c 'enabled' /tmp/state) ))
+ if (( $return_value == 1 ))
+ then
+   print "\nOK: aud modify state (enable) - successful"
+ else
+   print "\nERROR: aud modify state (enable) - failed"
+   FAIL=Y
+ fi
+
+
+  dcecp -c aud modify -stostrategy wrap
+  dcecp -c aud show > /tmp/stostrategy
+
+ (( return_value = $(grep -c 'wrap' /tmp/stostrategy) ))
+ if (( $return_value == 1 ))
+ then
+   print "\nOK: aud modify stostrategy - successful"
+ else
+   print "\nERROR: aud modify stostrategy - failed"
+   FAIL=Y
+ fi
+
+
+ dcecp -c aud stop
+
+ FAIL=Y
+ time_elapsed=0
+
+ while (( time_elapsed < 120 ))
+ do
+    sleep 5
+    (( time_elapsed = time_elapsed + 5 ))
+
+    total_auditd=$( ps $PS_FLAGS | grep -c auditd )
+    cp_auditd=$( ps $PS_FLAGS | grep -c cp_auditd )
+    ((nr_of_auditds = total_auditd - cp_auditd))
+    if (( $nr_of_auditds == 0 ))
+    then
+       FAIL=N
+       break
+    fi
+ done
+
+ print "\n time elapsed till auditd stopped = $time_elapsed"
+
+ if [[ $FAIL = N ]]
+ then
+   tet_result PASS
+   print "\nPASS: cp_auditd08 passed"
+   tet_infoline "PASS: cp_auditd08 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: cp_auditd08 failed"
+   tet_infoline "ERROR: cp_auditd08 failed"
+ fi
+}
+
+#========================================================================
+#=== rerun previous tests, with self auditing enabled but not as root,
+#=== but as aud_test_princ1, which should have no permissions to do stuff
+
+cp_auditd09() {
+#set -x
+
+ print "\nSTART: cp_auditd09 started"
+ tet_infoline "START: cp_auditd09 started"
+
+cellpw=-dce-
+
+# use -up for rgy_edit to ensure master is updated.
+  dce_login cell_admin $cellpw -e rgy_edit -up <<EOF
+domain principal
+add aud_test_princ1
+domain group
+add aud_test_group1
+domain account
+add aud_test_princ1 -g aud_test_group1 -o none -pw princ1 -mp $cellpw
+quit
+EOF
+
+
+ auditd -a  # auditd must be running with self audit enabled 
+ sleep 10
+
+ FAIL=N
+
+dce_login aud_test_princ1 princ1 -e dcecp -c aud show
+
+ if (( $? == 0 ))
+ then
+   print "\nOK: aud show state - successful"
+ else
+   print "\nERROR: aud show state - failed"
+   FAIL=Y
+ fi
+
+dce_login aud_test_princ1 princ1 -e   dcecp -c aud modify -state disabled
+
+ if (( $? == 0 ))
+ then
+   print "\nERROR: aud modify state - successful"
+   FAIL=Y
+ else
+   print "\nOK: aud modify state - failed"
+ fi
+
+dce_login aud_test_princ1 princ1 -e   dcecp -c aud modify -stostrategy wrap
+
+ if (( $? == 0 ))
+ then
+   print "\nERROR: aud modify stostrategy - successful"
+   FAIL=Y
+ else
+   print "\nOK: aud modify stostrategy - failed"
+ fi
+
+
+dce_login aud_test_princ1 princ1 -e  dcecp -c aud rewind
+
+ if (( $? == 0 ))
+ then
+   print "\nERROR: aud rewind - successful"
+   FAIL=Y
+ else
+   print "\nOK: aud rewind - failed"
+ fi
+
+dce_login aud_test_princ1 princ1 -e  dcecp -c aud stop
+
+ if (( $? == 0 ))
+ then
+   print "\nERROR: aud stop - successful"
+   FAIL=Y
+ else
+   print "\nOK: aud stop - failed"
+ fi
+
+# use -up for rgy_edit to ensure master is updated.
+  dce_login cell_admin $cellpw -e rgy_edit -up <<EOF
+domain group
+del aud_test_group1
+domain principal
+del aud_test_princ1
+quit
+EOF
+
+ dcecp -c aud stop
+
+ FAIL=Y
+ time_elapsed=0
+
+ while (( time_elapsed < 120 ))
+ do
+    sleep 5
+    (( time_elapsed = time_elapsed + 5 ))
+
+    total_auditd=$( ps $PS_FLAGS | grep -c auditd )
+    cp_auditd=$( ps $PS_FLAGS | grep -c cp_auditd )
+    ((nr_of_auditds = total_auditd - cp_auditd))
+    if (( $nr_of_auditds == 0 ))
+    then
+       FAIL=N
+       break
+    fi
+ done
+
+ print "\n time elapsed till auditd stopped = $time_elapsed"
+
+
+ if [[ $FAIL = N ]]
+ then
+   tet_result PASS
+   print "\nPASS: cp_auditd09 passed"
+   tet_infoline "PASS: cp_auditd09 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: cp_auditd09 failed"
+   tet_infoline "ERROR: cp_auditd09 failed"
+ fi
+}
+
+#========================================================================
+
+
+cleanup() {
+
+     rm /tmp/state
+     rm /tmp/stostrategy
+     rm /opt/dcelocal/var/audit/adm/central_trail*
+	print "\nEND DCE audit functional: cp_auditd; DATE: `date`"
+	tet_infoline "END DCE audit functional: ${TET_PNAME}; DATE: `date`"
+}
+
+#source tcm
+. $TET_ROOT/lib/ksh/tcm.ksh

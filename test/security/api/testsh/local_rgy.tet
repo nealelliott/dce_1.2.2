@@ -1,0 +1,92 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: local_rgy.tet,v $
+# Revision 1.1.2.2  1996/03/09  20:50:28  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:28:35  marty]
+#
+# Revision 1.1.2.1  1995/12/11  21:50:39  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:53:17  root]
+# 
+# $EndLog$
+#local_rgy.tet (security): local_rgy test case for security
+#    You need to be local "root" account to run the test.
+#    This test is supposed to run on the same node as secd (security server) is running
+#     on.  Please NOTE and pay spcific attention.
+# set -x
+#
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1 "
+ic1="test1"
+
+startup()       # preparation of DCE security suite
+{
+        tet_infoline "START DCE SECURITY tests: ${TET_PNAME}; DATE: `date`"
+        NLSPATH=/usr/lib/nls/%L/%N
+        export NLSPATH
+                CELLADMIN=cell_admin
+                export CELLADMIN
+        PATH=${TET_ROOT}/test/security/api/control:${TET_ROOT}/test/security/api/testsh:${PATH}
+        export PATH
+        HOST=`hostname`
+        export HOST
+	LOGDIR=${LOGDIR:-/tet/test/results}
+        LOGFILE=${LOGDIR}/security_local_rgy_log.$(date +%h%d_%H:%M)
+        touch ${LOGFILE}
+        link=0
+        if [ -f /usr/bin/dce_login -a ! -f /usr/bin/dce_login_noexec ]
+        then
+           ln -s /usr/bin/dce_login /usr/bin/dce_login_noexec >/dev/null
+           link=1
+        fi
+        KRB5CCNAME=`dce_login_noexec cell_admin -dce-`
+        export KRB5CCNAME
+        cd $TET_ROOT/test/security/api/control
+        SERVER_MODE=server_local
+        export SERVER_MODE
+        return
+
+}
+
+
+test1()
+{
+
+        tet_infoline "DCE SECURITY Tests"
+        testsh -I $TET_ROOT/test/security/api/control -I $TET_ROOT/test/security/api/moretests -d63 $TET_ROOT/test/security/api/control/local_rgy.tsh >>${LOGFILE} 2>&1
+       if (( $? == 0 ))
+        then
+                print "PASSED, local_rgy "SECURITY Functional Tests":  Test ran successfully.  "
+                tet_result PASS
+        else
+                print "FAILED, local_rgy "SECURITY Functional Tests":  Test ran unsuccessfully."
+                tet_result FAIL
+        fi
+        tet_infoline "END TEST: ${tet_thistest};"
+}
+
+cleanup()       # cleanup of DCE security tests
+{
+
+        tet_infoline "END DCE SECURITY tests: ${TET_PNAME}; DATE: `date`"
+
+    if ((link == 1))
+        then
+           rm /usr/bin/dce_login_noexec
+           link=0
+        fi
+
+}
+
+#source tcm
+. ${TET_ROOT:?}/lib/ksh/tcm.ksh
+

@@ -1,0 +1,653 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: dcesepol,v $
+# Revision 1.1.13.2  1996/03/11  02:47:31  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:08:47  marty]
+#
+# Revision 1.1.13.1  1995/12/11  22:44:44  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/1  1994/07/01  19:00 UTC  bissen
+# 	Merge hpdce02 (DCE 1.1 beta) and HPDCE01 into HPDCE02
+# 	[1995/12/11  22:21:12  root]
+# 
+# Revision 1.1.10.1  1993/12/27  15:52:02  pellis
+# 	Changed account and password lifespans from days to minutes.
+# 	[1993/12/27  15:50:58  pellis]
+# 
+# 	HP revision /main/HPDCE01/1  1994/01/28  19:15  bissen
+# 	merge kk and hpdce01
+# 
+# Revision 1.1.6.2  1993/07/09  14:15:29  root
+# 	Initial King Kong branch
+# 	[1993/07/09  14:15:00  root]
+# 
+# 	svr4 port 0t 8596
+# 	[1993/10/19  20:41:11  ohara]
+# 
+# Revision 1.1.8.5  1993/10/19  14:23:09  pellis
+# 	Corrected check for closeness to midnight, math was backwards.
+# 	[1993/10/19  14:22:56  pellis]
+# 
+# Revision 1.1.8.4  1993/10/18  22:08:46  pellis
+# 	Fixed a problem in verify_exp with expiration checking.
+# 	[1993/10/18  22:08:22  pellis]
+# 
+# Revision 1.1.8.3  1993/10/15  21:40:08  pellis
+# 	Cleaned up logging and also fixed verify function of test.
+# 	[1993/10/15  21:38:47  pellis]
+# 
+# Revision 1.1.8.2  1993/10/08  19:50:09  pellis
+# 	Fixed problem with password expiratiom test.
+# 	[1993/10/08  19:49:55  pellis]
+# 
+# Revision 1.1.8.1  1993/09/09  15:37:09  pellis
+# 	Pretty much rewrote do_test section of test, the logic was completely
+# 	wrong.  The test thought all passwords and accounts expired at mid-
+# 	night but they didn't.  Only the password expiration on a day expired
+# 	at midnight, the other two policies expired "valid_days * 24 hours"
+# 	after creation.
+# 	[1993/09/09  15:36:57  pellis]
+# 
+# Revision 1.1.6.4  1993/08/13  17:59:11  cmckeen
+# 	Changes made to reflect the new install tree structure.  The system
+# 	tests files are now under TET_ROOT/system instead of directly under
+# 	TET_ROOT.
+# 	[1993/08/13  17:56:33  cmckeen]
+# 
+# Revision 1.1.6.3  1993/08/11  17:43:31  pellis
+# 	Merged with final version of test from DCE 1.0.2.
+# 	[1993/08/11  17:39:18  pellis]
+# 
+# Revision 1.1.6.2  1993/07/28  19:55:51  cmckeen
+# 	HP's TET'ized version of the system tests
+# 	[1993/07/28  13:53:25  cmckeen]
+# 
+# Revision 1.1.8.2  1993/05/28  16:06:24  eheller
+# 	Tet'ified file for reference platform testing
+# 	[1993/05/28  16:04:20  eheller]
+# 
+# Revision 1.1.4.2  1993/03/31  12:53:15  mgm
+# 	Initial GAMERA branch
+# 
+# Revision 1.1.3.5  1993/02/02  14:21:18  mgm
+# 	Replaced remove_KRB5CCNAME with kdestroy
+# 	[1993/02/02  14:18:37  mgm]
+# 
+# Revision 1.1.3.4  1993/01/11  14:37:09  mgm
+# 	Changed test_result to tet_result in delete_obj
+# 	[1993/01/11  14:35:16  mgm]
+# 
+# Revision 1.1.3.3  1992/11/12  15:08:22  mgm
+# 	Changed back to NUMBER OF DAYS.
+# 	[1992/11/12  15:07:59  mgm]
+# 
+# Revision 1.1.3.2  1992/11/03  15:16:52  mgm
+# 	Ported to TET. This file replaces dcesepol.main
+# 	[1992/11/03  15:15:51  mgm]
+# 
+# Revision 1.1.3.3  1992/07/24  14:29:58  macgregor_m
+# 	Ported to HPUX. Took out hard-coded pathnames.
+# 	Changed days to hours for more control over run.
+# 	[1992/07/24  14:29:34  macgregor_m]
+# 
+# Revision 1.1.3.2  1992/06/11  20:02:23  mcfarland
+# 	changed files from test_latest
+# 	[1992/06/09  13:09:02  mcfarland]
+# 
+# 	new systests changes for security
+# 	[1992/05/08  15:55:05  bmw]
+# 
+# Revision 1.1.1.2  1992/05/28  15:16:30  root
+# 	    Loading drop Dce1_0_1b15
+# 
+# $EndLog$
+#
+# FILE: dcesepol		DATE: 91/06/10		VERSION: 1.5
+#
+# TEST_NAME:  dcesepol
+#
+# COMPONENT_NAME:  dce.systest
+#
+# FILE:  dcesepol.data
+#        sec.functions
+#
+# DESCRIPTION:
+#
+#	To test the setting and enforcement of registry policies.  Create three
+#	new organizations, set the password expiration date on the first one,
+#	set the password life span on the second one, and set the account life
+#	span on the third one. Create principals and accounts using the new
+#	organizations. Create a password override for the first account on the 
+#	first machine in the machine list (SEC_MACHINES/dcesepol.data). 
+#	Constantly log in accounts on different machines in the machine list 
+#	until the number of valid days is exceeded.  The password expiration
+#	date account should begin getting warning messages at midnight of the
+#	day before it was to expire.  The password life span account should
+#	start getting warning messages the number of valid days times 24 hours
+#	from the time the account was created. The account life span account
+#	should start getting login failures the number of valid days times 24
+#	hours from the time the account was created.  This test will run a
+#	minimum of 24 hours from the time it is started since the smallest
+#	number of valid days is 1 (1d).  If you kill the test before 24 hours,
+#	you can check for "Logins: Pass = #, Fail = #, Total = #" in the
+#	journal file to determine the status of the test when you killed it.
+#
+# CHANGE HISTORY
+# 3/12/92			Update to the current interface.
+#
+# 6/30/92	Mary MacGregor	Changed /bin/sh to /bin/ksh
+#				Removed hard-coded pathnames
+#				Changed %j to %H so we can run for hours and
+#				not days
+# 11/3/92	Mary MacGregor	Ported to TET
+#
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1 ic2 ic3"
+ic1="check_rgy"
+ic2="rgy_init"
+ic3="run_test verify_exp del_obj"
+test_purp_list="check_rgy rgy_init run_test"
+
+startup ()
+{
+        fail=0
+        test_fail=0
+        tet_infoline "Starting test DCESEPOL"
+
+        # Use a feature of dce_login that allows authentication from a shell script
+        if [ -f /usr/bin/dce_login -a ! -f /usr/bin/dce_login_noexec ]
+        then
+                ln -s /usr/bin/dce_login /usr/bin/dce_login_noexec >/dev/null
+        fi
+
+	# Authenticate the cell 
+
+        dce_auth $PARENT_ACCOUNT $PARENT_PASSWD 1>/dev/null 2>&1
+
+        if [ $fail -ne 0 ] ; then
+		del_test_purp
+                return
+        fi
+
+        # Make sure that rgy_edit can be accessed as current user.
+
+        tet_infoline "Attempting to access rgy_edit as current user."
+
+	${RGY_EXEC} < /dev/null 1>/dev/null 2>&1
+        check_return "$?" "ERROR: ${RGY_EXEC} cannot be accessed by current user." \
+                                "Current user can access registry...end rgy_access"
+        if [ $fail -ne 0 ]
+        then
+		del_test_purp
+		kdestroy
+                return
+        fi
+
+        # Remove authenticated tickets
+
+	kdestroy
+
+        # Create passwd_override file on first machine in list.
+
+        FIRST_MACHINE=`echo ${SEC_MACHINES} | \
+                awk '{split($1,word,":"); print word[1]}'`
+
+        tet_infoline "Creating password override file on $FIRST_MACHINE"
+        create_override ${FIRST_MACHINE} ${SEC_PREFIX}1p ${PASSWD_OVERRIDE_FILE}
+
+        if [ "$?" = 0 ] ; then
+                OVERRIDE_USER="${SEC_PREFIX}1p"
+        else
+                OVERRIDE_USER=""
+                tet_infoline "FAILURE: Unable to create override file on ${FIRST_MACHINE} in startup()"
+		del_test_purp
+                return
+        fi
+
+        # Setup file to clean up the registry
+
+	CLEAN_FILE="${STTMPDIR}/clean_str_`uname -n`_$$"
+
+	echo "do o"  > ${CLEAN_FILE}
+	echo "del ${SEC_PREFIX}1o" >> ${CLEAN_FILE}
+	echo "del ${SEC_PREFIX}2o" >> ${CLEAN_FILE}
+	echo "del ${SEC_PREFIX}3o" >> ${CLEAN_FILE}
+	echo "do p" >> ${CLEAN_FILE}
+	echo "del ${SEC_PREFIX}1p" >> ${CLEAN_FILE}
+	echo "del ${SEC_PREFIX}2p" >> ${CLEAN_FILE}
+	echo "del ${SEC_PREFIX}3p" >> ${CLEAN_FILE}
+	echo "q"  >> ${CLEAN_FILE}
+
+	chmod 777 ${CLEAN_FILE}
+
+}	# end startup
+
+cleanup ()
+{
+        tet_infoline "Cleaning up"
+
+        # Authenticate the cell
+
+        dce_auth $PARENT_ACCOUNT $PARENT_PASSWD 1>/dev/null 2>&1
+
+        if [ $fail -eq 0 ] ; then
+                ${RGY_EXEC} < ${CLEAN_FILE} 1>/dev/null 2>&1
+
+                # Remove authenticated tickets
+
+		kdestroy
+        else
+                tet_infoline "ERROR: Can't login to run cleanup...in cleanup()"
+        fi
+
+	rm -f ${CLEAN_FILE} ${RGY_INPUT} ${RGY_OUTPUT} ${STTMPDIR}/VALID_INFO
+	rshsp ${FIRST_MACHINE} rm -f ${PASSWD_OVERRIDE_FILE}
+
+}	# end cleanup
+
+check_rgy ()
+{
+        fail=0
+
+        tet_infoline "Verifying state of registry...begin check_rgy()"
+
+        # Authenticate the cell
+
+        dce_auth $PARENT_ACCOUNT $PARENT_PASSWD 1>/dev/null 2>&1
+
+	state_of_rgy -p "${SEC_PREFIX}1p" -o "${SEC_PREFIX}1o"
+
+	state_of_rgy -p "${SEC_PREFIX}2p" -o "${SEC_PREFIX}2o"
+
+	state_of_rgy -p "${SEC_PREFIX}3p" -o "${SEC_PREFIX}3o"
+
+        if [ $fail -eq 0 ]
+        then
+	        # Remove authenticated tickets
+		kdestroy
+		tet_infoline "SUCCESSFULLY completed check_rgy()"
+                tet_result PASS
+        else
+		tet_infoline "FAILURE: Members already exist in registry in check_rgy()"
+	        # Remove authenticated tickets
+		kdestroy
+                tet_result DCE_FAIL
+        fi
+}
+
+
+rgy_init ()
+{
+	fail=0
+
+	tet_infoline "Initializing registry...begin rgy_init()"
+
+        # Authenticate the cell
+
+	dce_auth $PARENT_ACCOUNT $PARENT_PASSWD 1>/dev/null 2>&1
+
+	# Add the required persons to registry
+
+	tet_infoline "Adding objects to registry"	
+
+	PERSON_ID1=${SEC_PERSON_ID}
+	add_person ${SEC_PREFIX}1p ${PERSON_ID1} "$FULL_NAME${SEC_PREFIX}1p"
+
+	PERSON_ID2=`expr ${SEC_PERSON_ID} + 1`
+	add_person ${SEC_PREFIX}2p ${PERSON_ID2} "$FULL_NAME${SEC_PREFIX}2p"
+
+	PERSON_ID3=`expr ${SEC_PERSON_ID} + 2`
+	add_person ${SEC_PREFIX}3p ${PERSON_ID3} "$FULL_NAME${SEC_PREFIX}3p"
+
+	# Add the required organizations to registry
+
+	ORG_ID=${SEC_ORG_ID}
+	add_org ${SEC_PREFIX}1o ${ORG_ID}
+
+	ORG_ID=`expr ${ORG_ID} + 1`
+	add_org ${SEC_PREFIX}2o ${ORG_ID}
+
+	ORG_ID=`expr ${ORG_ID} + 1`
+	add_org ${SEC_PREFIX}3o ${ORG_ID}
+
+	# Set policies for organizations:
+	# The first organization (${SEC_PREFIX}1o) has password life span,
+	# the second (${SEC_PREFIX}2o) has a password expiration date and
+	# the third (${SEC_PREFIX}3o) has an account life span.
+
+	set_policies "${SEC_PREFIX}1o" ${SEC_VALID_MINS} -pls
+
+	# Get the date the account will be valid until
+
+	PED_VALID_DATE=`calc_valid_date ${SEC_VALID_DAYS}`
+
+	set_policies "${SEC_PREFIX}2o" ${PED_VALID_DATE} -ped
+
+	set_policies "${SEC_PREFIX}3o" ${SEC_VALID_MINS} -als
+
+	# Add the required accounts
+	add_account "${SEC_PREFIX}1p" "none" "${SEC_PREFIX}1o"\
+	             $SEC_LOGIN_PASSWD $PARENT_PASSWD $VALID\
+	             $SEC_HOME_DIR $SEC_SHELL
+
+	# Calculate the number of seconds the password is valid for
+
+	PLS_VALID_SECS=`expr ${SEC_VALID_MINS} \* 60 + ${SECONDS}`
+
+	add_account "${SEC_PREFIX}2p" "none" "${SEC_PREFIX}2o"\
+	             $SEC_LOGIN_PASSWD $PARENT_PASSWD $VALID\
+	             $SEC_HOME_DIR $SEC_SHELL
+
+	add_account "${SEC_PREFIX}3p" "none" "${SEC_PREFIX}3o"\
+	             $SEC_LOGIN_PASSWD $PARENT_PASSWD $VALID\
+	             $SEC_HOME_DIR $SEC_SHELL
+
+	# Calculate the number of seconds the account is valid for
+
+	ALS_VALID_SECS=`expr ${SEC_VALID_MINS} \* 60 + ${SECONDS}`
+
+        if [ $fail -eq 0 ] ; then
+
+                # Remove authenticated tickets
+
+		kdestroy
+		tet_infoline "SUCCESSFULLY initialized registry in rgy_init()"
+                tet_result PASS
+        else
+                tet_infoline "FAILURE: Unable to initialize registry in rgy_init()"
+                # Remove authenticated tickets
+
+		kdestroy
+                tet_result FAIL
+        fi
+
+	echo "PED_VALID_DATE = $PED_VALID_DATE" > ${STTMPDIR}/VALID_INFO
+	echo "PLS_VALID_SECS = $PLS_VALID_SECS" >> ${STTMPDIR}/VALID_INFO
+	echo "ALS_VALID_SECS = $ALS_VALID_SECS" >> ${STTMPDIR}/VALID_INFO
+
+}	# end rgy_init
+
+run_test ()
+{
+	PED_VALID_DATE=`grep "PED_VALID_DATE" ${STTMPDIR}/VALID_INFO | \
+		awk '{print $NF}'`
+	PLS_VALID_SECS=`grep "PLS_VALID_SECS" ${STTMPDIR}/VALID_INFO | \
+		awk '{print $NF}'`
+	ALS_VALID_SECS=`grep "ALS_VALID_SECS" ${STTMPDIR}/VALID_INFO | \
+		awk '{print $NF}'`
+
+	tet_infoline "Starting batch logins...begin run_test()"
+
+	# Execute function to do batch mode logins.	
+	# Set variable to include list of persons.
+
+	PERSONS="${SEC_PREFIX}1p ${SEC_PREFIX}2p ${SEC_PREFIX}3p"
+	export PERSONS
+
+	LOGIN_PASSED=0
+	LOGIN_FAILED=0
+	LOGIN_TOTAL=0
+
+	tet_infoline "Beginning remote logins for ~${SEC_VALID_MINS} minute(s)"
+
+	while [ ${SECONDS} -le ${ALS_VALID_SECS} ] ; do	
+
+	  for MACHINE in ${SEC_MACHINES} ; do  
+
+	    tet_infoline "Executing remote logins to ${MACHINE}"
+
+	    for NAME in ${PERSONS} ; do
+
+	      # Get current time to determine how close we are to the midnight
+	      # expiration
+
+	      PED_CUR_TIME=`date +"%H%M"`
+
+	      # Define maximum time to reach before there is any chance
+	      # of the test running while the expirations start to occur.
+	      # 2360 = midnight
+
+	      PED_MAX_TIME=2360
+
+	      # If we are too close to midnight, sleep for "minutes to midnight"
+	      # + 1 minute
+
+	      if [ `expr ${PED_MAX_TIME} \- ${PED_CUR_TIME}` -le 1 ] ; then
+	        DIFF=`expr ${PED_MAX_TIME} \- ${PED_CUR_TIME} \+ 1`
+	        DELAY=`expr ${DIFF} \* 60`
+	        tet_infoline "PED_CUR_TIME = ${PED_CUR_TIME}, PED_MAX_TIME = ${PED_MAX_TIME}, DIFF = ${DIFF}"
+	        tet_infoline "Sleeping ${DELAY} seconds to avoid password expiration by date during test"
+	        sleep ${DELAY}
+	      fi
+
+	      # Get current time to determine how close we are to the valid days
+	      # expirations
+
+	      LS_TIME_TO_EXP=`expr ${PLS_VALID_SECS} \- ${SECONDS}`
+
+	      # If we are too close to the valid day expirations, sleep for
+	      # "minutes to valid day expirations" + 1 minute
+	      # 60 = 1 minute
+
+	      if [ ${LS_TIME_TO_EXP} -lt 60 ] && \
+	           [ ${LS_TIME_TO_EXP} -gt 0 ] ; then
+	        DELAY=`expr ${LS_TIME_TO_EXP} \+ 60`
+	        tet_infoline "PLS_VALID_SECS = ${PLS_VALID_SECS}, LS_TIME_TO_EXP = ${LS_TIME_TO_EXP}"
+	        tet_infoline "Sleep for ${DELAY} seconds to avoid life span expirations during test"
+	        sleep ${DELAY}
+	      fi
+
+	      fail=0
+	      tet_infoline "Current date and time is: `date`"
+	      CURRENT_DATE=`calc_valid_date 0`
+	      CURRENT_SECS=${SECONDS}
+	      remote_login ${MACHINE} ${NAME} ${SEC_LOGIN_PASSWD}
+	      STATUS=$?
+	      if [ ${STATUS} -eq 0 ] ; then
+
+	        # Check to see if the user was supposed to Pass or Fail
+
+	        case ${NAME} in
+	          *"1p") if [ ${CURRENT_SECS} -ge ${PLS_VALID_SECS} ] ; then
+	                   tet_infoline "ERROR: ${NAME} passed login test UNEXPECTEDLY, password should be expired"
+	                   tet_infoline "ERROR: STATUS=${STATUS}, CURRENT_SECS = ${CURRENT_SECS}, PLS_VALID_SECS = ${PLS_VALID_SECS}"
+	                   fail=1
+	                 fi ;;
+	          *"2p") if [ "${CURRENT_DATE}" = "${PED_VALID_DATE}" ] ; then
+	                   tet_infoline "ERROR: ${NAME} passed login test UNEXPECTEDLY, password should be expired"
+	                   tet_infoline "ERROR: STATUS=${STATUS}, CURRENT_DATE = ${CURRENT_DATE}, PED_VALID_DATE = ${PED_VALID_DATE}"
+	                   fail=1
+	                 fi ;;
+	          *"3p") if [ ${CURRENT_SECS} -ge ${ALS_VALID_SECS} ] ; then
+	                   tet_infoline "ERROR: ${NAME} passed login test UNEXPECTEDLY, account should be expired"
+	                   tet_infoline "ERROR: STATUS=${STATUS}, CURRENT_SECS = ${CURRENT_SECS}, ALS_VALID_SECS = ${ALS_VALID_SECS}"
+	                   fail=1
+	                 fi ;;
+	          *) if [ ${NAME} = ${OVERRIDE_USER} ] && \
+	                    [ ${MACHINE} = ${FIRST_MACHINE} ] ; then
+	               tet_infoline "ERROR: The password override user ${NAME} passed login test UNEXPECTEDLY"
+	               tet_infoline "ERROR: STATUS=${STATUS}, MACHINE = ${MACHINE}, FIRST_MACHINE = ${FIRST_MACHINE}"
+	               fail=1
+	             else
+	               tet_infoline "${NAME} was able to login to ${MACHINE}"
+	             fi ;;
+	        esac
+	      else
+
+	        # Check to see if the user was supposed to Pass or Fail
+
+	        case ${STATUS} in
+	          1)  if [ \( "${NAME}" = "${SEC_PREFIX}1p" -o \
+	                  "${NAME}" = "${SEC_PREFIX}2p" \) -a \
+	                    \( ${CURRENT_SECS} -ge ${PLS_VALID_SECS} -o \
+	                     "${CURRENT_DATE}" = "${PED_VALID_DATE}" \) ] ; then
+	                tet_infoline "${NAME} login SUCCESSFUL with password expired warning on ${MACHINE} as expected"
+	              else
+	                tet_infoline "ERROR: NAME = ${NAME}, STATUS = ${STATUS}"
+	                tet_infoline "ERROR: CURRENT_SECS = ${CURRENT_SECS}, CURRENT_DATE = ${CURRENT_DATE}"
+	                tet_infoline "ERROR: PLS_VALID_SECS = ${PLS_VALID_SECS}, PED_VALID_DATE = ${PED_VALID_DATE}"
+	                fail=1
+	              fi ;;
+	          2)  if [ "${NAME}" = "${SEC_PREFIX}3p" ] && \
+	                  [ ${CURRENT_SECS} -ge ${ALS_VALID_SECS} ] ; then
+	                tet_infoline "${NAME} login UNSUCCESSFUL on ${MACHINE} because the account expired as expected"
+	              else
+	                fail=1
+	              fi ;;
+	          4)  if [ "${NAME}" = "${OVERRIDE_USER}" ] && \
+	                  [ "${MACHINE}" = "${FIRST_MACHINE}" ] ; then
+	                tet_infoline "${NAME} login UNSUCCESSFUL on ${MACHINE} because of password override as expected"
+	              else
+	                fail=1
+	              fi ;;
+	          *)  fail=1 ;;
+	        esac
+
+	        if [ ${fail} = 1 ] ; then
+	          tet_infoline "ERROR: ${NAME} unable to login to ${MACHINE}, STATUS = ${STATUS}"
+	        fi
+              fi
+
+	      if [ ${fail} = 1 ] ; then
+	        LOGIN_FAILED=`expr ${LOGIN_FAILED} \+ 1`
+	      else
+	        LOGIN_PASSED=`expr ${LOGIN_PASSED} \+ 1`
+	      fi
+	    done
+	  done
+	  LOGIN_TOTAL=`expr ${LOGIN_PASSED} \+ ${LOGIN_FAILED}`
+	  tet_infoline "Logins: Pass = ${LOGIN_PASSED}, Fail = ${LOGIN_FAILED}, Total = ${LOGIN_TOTAL}"
+	done
+
+	if [ ${LOGIN_FAILED} -eq 0 ] ; then
+		tet_infoline "SUCCESSFULLY completed all remote logins"
+		tet_result PASS
+	else
+		tet_infoline "ERROR: Unable to complete all remote logins"
+		tet_result FAIL
+	fi
+
+	tet_infoline "Final Logins: Pass = ${LOGIN_PASSED}, Fail = ${LOGIN_FAILED}, Total = ${LOGIN_TOTAL}"
+
+}	# end run_test
+
+verify_exp ()
+{
+	PED_VALID_DATE=`grep "PED_VALID_DATE" ${STTMPDIR}/VALID_INFO | \
+		awk '{print $NF}'`
+	PLS_VALID_SECS=`grep "PLS_VALID_SECS" ${STTMPDIR}/VALID_INFO | \
+		awk '{print $NF}'`
+	ALS_VALID_SECS=`grep "ALS_VALID_SECS" ${STTMPDIR}/VALID_INFO | \
+		awk '{print $NF}'`
+
+	# Try to login to account after expiration of dates and verify that
+	# all logins failed.
+
+	tet_infoline "Passwords and accounts should have expired, attempting"
+	tet_infoline "logins on all machines to verify that users CANNOT login"
+
+	PERSONS="${SEC_PREFIX}1p ${SEC_PREFIX}2p ${SEC_PREFIX}3p"
+	export PERSONS
+
+	for MACHINE in ${SEC_MACHINES} ; do  
+
+	  tet_infoline "Executing remote logins to ${MACHINE}"
+
+	  for NAME in ${PERSONS} ; do
+	    fail=0
+	    CURRENT_DATE=`calc_valid_date 0`
+	    CURRENT_SECS=${SECONDS}
+	    remote_login ${MACHINE} ${NAME} ${SEC_LOGIN_PASSWD}
+	    STATUS=$?
+
+	    # Check to see if the user was supposed to Pass or Fail
+
+	    case ${STATUS} in
+	      1)  if [ \("${NAME}" = "${SEC_PREFIX}1p" -o \
+	              "${NAME}" = "${SEC_PREFIX}2p" \) -a \
+	                \( ${CURRENT_SECS} -ge ${PLS_VALID_SECS} -o \
+	                 "${CURRENT_DATE}" = "${PED_VALID_DATE}" \) ] ; then
+	            tet_infoline "${NAME} login SUCCESSFUL with password expired warning on ${MACHINE} as expected"
+	          else
+	            fail=1
+	          fi ;;
+	      2)  if [ "${NAME}" = "${SEC_PREFIX}3p" ] && \
+	              [ ${CURRENT_SECS} -ge ${ALS_VALID_SECS} ] ; then
+	            tet_infoline "${NAME} login UNSUCCESSFUL on ${MACHINE} because the account expired as expected"
+	          else
+	            fail=1
+	          fi ;;
+	      4)  if [ "${NAME}" = "${OVERRIDE_USER}" ] && \
+	              [ "${MACHINE}" = "${FIRST_MACHINE}" ] ; then
+	            tet_infoline "${NAME} login UNSUCCESSFUL on ${MACHINE} because of password override as expected"
+	          else
+	            fail=1
+	          fi ;;
+	      *)  fail=1 ;;
+	    esac
+	  done
+	done
+
+	if [ ${fail} -eq 0 ] ; then
+		tet_infoline "SUCCESSFULLY verified that users cannot login or appropriate warning messages appear"
+		tet_result PASS
+	else
+		tet_infoline "ERROR: Some users were able to login UNEXPECTEDLY or warning messages did not appear"
+		tet_result FAIL
+	fi
+
+}	# end verify_exp
+
+del_obj ()
+{
+	fail=0
+
+        # Authenticate the cell
+
+	dce_auth $PARENT_ACCOUNT $PARENT_PASSWD
+
+	# Delete the added objects from registry
+
+	delete_objects -p "${SEC_PREFIX}1p" -o "${SEC_PREFIX}1o"
+
+	delete_objects -p "${SEC_PREFIX}2p" -o "${SEC_PREFIX}2o"
+
+	delete_objects -p "${SEC_PREFIX}3p" -o "${SEC_PREFIX}3o"
+
+	# Remove password override file from remote machine
+	tet_infoline "Attempting to remove file from $FIRST_MACHINE"
+	rshsp $FIRST_MACHINE rm $PASSWD_OVERRIDE_FILE
+	check_return "$?" "ERROR: Unable to remove file $PASSWD_OVERRIDE_FILE from $FIRST_MACHINE" \
+		"$PASSWD_OVERRIDE_FILE was removed from $FIRST_MACHINE"
+
+        # Remove authenticated tickets
+	kdestroy
+
+	# Output final message about completed tests.
+
+	if [ $fail -eq 0 ] ; then
+		tet_infoline "SUCCESSFULLY deleted objects"
+		tet_result PASS
+	else
+		tet_infoline "ERROR: Unable to delete all objects in test_run()"
+		tet_result DCE_ERROR
+	fi
+
+}	# End del_obj
+
+# tcc will fail if these files don't exist and get sourced
+# so there is no need to check that this happens
+
+. $TET_ROOT/profile.dcest
+. ./dcesepol.data
+. $TET_ROOT/security/ts/sec.functions
+. $TCM

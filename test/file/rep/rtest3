@@ -1,0 +1,871 @@
+#!/bin/sh
+
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+#    Copyright (C) 1996, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This test is applicable to DFS exporting Episode.
+# The script tests the fts addsite, statrepserver, lsreplicas, release,
+# rmsite, setrepinfo, syncfldb, syncserv and update subcommands.
+
+###############################################################################
+
+# Usage:                rtest3
+
+# Typically run via:    rtest3 >& rtest3.out
+# or via the rep/runtests script.
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode.
+# DFS server $SERVER_1 must export Episode aggregate $EPI_AGGRNAME_1, and
+# $SERVER_2 must export $EPI_AGGRNAME_2.
+# $SERVER_1 and $SERVER_2 must *not* be the same machine.
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1 and $SERVER_2, in
+# order to run the fts commands contained in this script.
+
+# Highest error number is: 125.
+
+###############################################################################
+
+d=`pwd`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=rep
+
+# Load the test context.
+. $dn/statusCheck
+
+base_name=Rubble.$$
+
+###############################################################################
+
+if test $SERVER_1 = $SERVER_2
+   then echo "You must have 2 distinct servers in order to run this test."
+        exit 2
+   fi
+SHORT_SERVER_1=`echo $SERVER_1 | sed -e 's;/.*/\([^/]*\);\1;'`
+SHORT_SERVER_2=`echo $SERVER_2 | sed -e 's;/.*/\([^/]*\);\1;'`
+
+echo ""
+echo ""
+date
+echo "RUNNING fts REPLICATION COMMANDS on SERVER $SERVER_1 in CELL $CELL_NAME."
+echo "========================================================================"
+echo ""
+
+###############################################################################
+
+echo ""; echo "Checking FLDB info, first time"
+   for n in 1 2 3 4 5
+       do
+       echo $base_name.$n fldb entry:
+       fts lsfldb $base_name.$n $av_arg
+          dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E0 rc
+       done
+
+echo ""; echo "Running fts create"
+   for n in 1 2 3 4 5
+       do
+       fts create $base_name.$n $SERVER_1 $EPI_AGGRNAME_1 $av_arg
+          dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E1 rc
+       done
+
+echo ""; echo "Checking FLDB info, second time"
+   for n in 1 2 3 4 5
+       do
+       echo $base_name.$n fldb entry:
+       fts lsfldb $base_name.$n $av_arg
+          dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E0 rc
+       done
+
+echo ""; echo "Running fts setrepinfo"
+   fts setrepinfo $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E2 rc
+       
+   fts setrepinfo fubar_argument $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E3 rc
+       
+   fts setrepinfo $base_name.1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E4 rc
+       
+   fts setrepinfo $base_name.1 -release -change $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E5 rc
+       
+   fts setrepinfo $base_name.1 -release $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E6 rc
+      
+   fts setrepinfo $base_name.1 -release $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E7 rc
+       
+   fts setrepinfo $base_name.1 -maxage $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E8 rc
+       
+   fts setrepinfo $base_name.1 -maxage fubar_maxage $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E9 rc
+       
+   fts setrepinfo $base_name.1 -maxage 3h $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E10 rc
+     
+   fts setrepinfo $base_name.1 -failage 2d $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E11 rc
+       
+   fts setrepinfo $base_name.1 -reclaimwait 19h $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E12 rc
+   
+   fts setrepinfo $base_name.1 -minrepdelay 6m $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E13 rc
+       
+   fts setrepinfo $base_name.1 -defaultsiteage 31m $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E14 rc
+      
+
+echo ""; echo Checking fileset $base_name.1
+# Expect $base_name.1 to be release replication, maxage 3h, failage 2d,
+# reclaimwait 19h, minrepdelay 6m, defaultsiteage 31m
+   id=`fts lsfldb $base_name.1 $av_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   ty=`fts lsfldb $id | sed -n 's/^ *\([^ ]*\) repl:.*/\1/p'`
+   if test "$ty" != "Release"; then echo "- type is $ty, not Release"; fi
+   ma=`fts lsfldb $id | sed -n 's/.*maxAge=\([^;]*\).*/\1/p'`
+   if test "$ma" != "3:00:00"; then echo "- maxAge is $ma, not 3:00:00"; fi
+   fa=`fts lsfldb $id | sed -n 's/.*failAge=\([^;]*\).*/\1/p'`
+   if test "$fa" != "2d0:00:00"
+      then echo "- failAge is $fa, not 2d0:00:00"
+      fi
+   rw=`fts lsfldb $id | sed -n 's/.*reclaimWait=\([^;]*\).*/\1/p'`
+   if test "$rw" != "19:00:00"
+      then echo "- reclaimWait is $rw, not 19:00:00"
+      fi
+
+echo ""; echo Setting fileset $base_name.2
+   id=`fts lsfldb $base_name.2 $av_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   fts setrepinfo $id -release -maxage 2h30m -failage 1d2h10m \
+       -reclaimwait 20h19m18s $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E15 rc
+      
+
+echo ""; echo Checking fileset $base_name.2
+# Expect $base_name.2 to be release replication, maxage 2h30m, failage 1d2h10m,
+# reclaimwait 20h19m18s, minrepdelay 5m, defaultsiteage 30m
+   id=`fts lsfldb $base_name.2 $av_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   ty=`fts lsfldb $id | sed -n 's/^ *\([^ ]*\) repl:.*/\1/p'`
+   if test "$ty" != "Release"; then echo "- type is $ty, not Release"; fi
+   ma=`fts lsfldb $id | sed -n 's/.*maxAge=\([^;]*\).*/\1/p'`
+   if test "$ma" != "2:30:00"; then echo "- maxAge is $ma, not 2:30:00"; fi
+   fa=`fts lsfldb $id | sed -n 's/.*failAge=\([^;]*\).*/\1/p'`
+   if test "$fa" != "1d2:10:00"
+      then echo "- failAge is $fa, not 1d2:10:00"
+      fi
+   rw=`fts lsfldb $id | sed -n 's/.*reclaimWait=\([^;]*\).*/\1/p'`
+   if test "$rw" != "20:19:18"
+      then echo "- reclaimWait is $rw, not 20:19:18"
+      fi
+
+echo ""; echo Setting fileset $base_name.2 again
+   fts setrepinfo $id -clear $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E16 rc
+       
+   fts setrepinfo $base_name.2 -minrepdelay 10m -defaultsiteage 10m $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E17 rc
+      
+
+echo ""; echo Checking fileset $base_name.2 again
+# Expect $base_name.2 to be release replication, maxage 2h, failage 1d,
+# reclaimwait 18h, minrepdelay 10m, defaultsiteage 10m
+   id=`fts lsfldb $base_name.2 $av_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   ty=`fts lsfldb $id | sed -n 's/^ *\([^ ]*\) repl:.*/\1/p'`
+   if test "$ty" != "Release"; then echo "- type is $ty, not Release"; fi
+   ma=`fts lsfldb $id | sed -n 's/.*maxAge=\([^;]*\).*/\1/p'`
+   if test "$ma" != "2:00:00"; then echo "- maxAge is $ma, not 2:00:00"; fi
+   fa=`fts lsfldb $id | sed -n 's/.*failAge=\([^;]*\).*/\1/p'`
+   if test "$fa" != "1d0:00:00"
+      then echo "- failAge is $fa, not 1d0:00:00"
+      fi
+   rw=`fts lsfldb $id | sed -n 's/.*reclaimWait=\([^;]*\).*/\1/p'`
+   if test "$rw" != "18:00:00"
+      then echo "- reclaimWait is $rw, not 18:00:00"
+      fi
+
+   fts setrepinfo $base_name.3 -scheduled -change $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E18 rc
+    
+   fts setrepinfo $base_name.3 -scheduled $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E19 rc
+   
+   fts setrepinfo $base_name.3 -scheduled $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E20 rc
+     
+   fts setrepinfo $base_name.3 -maxage $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E21 rc
+     
+   fts setrepinfo $base_name.3 -maxage 0s $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E22 rc
+    
+   fts setrepinfo $base_name.3 3h 2d 19h 6m 31m $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E23 rc
+     
+
+echo ""; echo Checking fileset $base_name.3
+# Expect $base_name.3 to be scheduled replication, maxage 3h, failage 2d,
+# reclaimwait 19h, minrepdelay 6m, defaultsiteage 31m
+   id=`fts lsfldb $base_name.3 $av_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   ty=`fts lsfldb $id | sed -n 's/^ *\([^ ]*\) repl:.*/\1/p'`
+   if test "$ty" != "Sched"; then echo "- type is $ty, not Sched"; fi
+   ma=`fts lsfldb $id | sed -n 's/.*maxAge=\([^;]*\).*/\1/p'`
+   if test "$ma" != "3:00:00"; then echo "- maxAge is $ma, not 3:00:00"; fi
+   fa=`fts lsfldb $id | sed -n 's/.*failAge=\([^;]*\).*/\1/p'`
+   if test "$fa" != "2d0:00:00"
+      then echo "- failAge is $fa, not 2d0:00:00"
+      fi
+   rw=`fts lsfldb $id | sed -n 's/.*reclaimWait=\([^;]*\).*/\1/p'`
+   if test "$rw" != "19:00:00"
+      then echo "- reclaimWait is $rw, not 19:00:00"
+      fi
+   mr=`fts lsfldb $id | sed -n 's/.*minRepDelay=\([^;]*\).*/\1/p'`
+   if test "$mr" != "0:06:00"
+      then echo "- minRepDelay is $mr, not 0:06:00"
+      fi
+   ds=`fts lsfldb $id | sed -n 's/.*defaultSiteAge=\([^;]*\).*/\1/p'`
+   if test "$ds" != "0:31:00"
+      then echo "- defaultSiteAge is $ds, not 0:31:00"
+      fi
+
+echo ""; echo Setting fileset $base_name.4
+   id=`fts lsfldb $base_name.4 $av_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   fts setrepinfo -fileset $id -scheduled -maxage 1:40:00 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E24 rc
+       
+   fts setrepinfo -fileset $id -maxage 2h30m -failage 1d2h10m \
+       -reclaimwait 20h19m18s -minrepdelay 8m -defaultsiteage 40m \
+       -cell $dns_cell_name $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E25 rc
+       
+
+echo ""; echo Checking fileset $base_name.4
+# Expect $base_name.4 to be scheduled replication, maxage 2h30m, failage
+# 1d2h10m, reclaimwait 20h19m18s, minrepdelay 8m, defaultsiteage 40m
+   id=`fts lsfldb $base_name.4 $av_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   ty=`fts lsfldb $id | sed -n 's/^ *\([^ ]*\) repl:.*/\1/p'`
+   if test "$ty" != "Sched"; then echo "- type is $ty, not Sched"; fi
+   ma=`fts lsfldb $id | sed -n 's/.*maxAge=\([^;]*\).*/\1/p'`
+   if test "$ma" != "2:30:00"; then echo "- maxAge is $ma, not 2:30:00"; fi
+   fa=`fts lsfldb $id | sed -n 's/.*failAge=\([^;]*\).*/\1/p'`
+   if test "$fa" != "1d2:10:00"
+      then echo "- failAge is $fa, not 1d2:10:00"
+      fi
+   rw=`fts lsfldb $id | sed -n 's/.*reclaimWait=\([^;]*\).*/\1/p'`
+   if test "$rw" != "20:19:18"
+      then echo "- reclaimWait is $rw, not 20:19:18"
+      fi
+   mr=`fts lsfldb $id | sed -n 's/.*minRepDelay=\([^;]*\).*/\1/p'`
+   if test "$mr" != "0:08:00"
+      then echo "- minRepDelay is $mr, not 0:08:00"
+      fi
+   ds=`fts lsfldb $id | sed -n 's/.*defaultSiteAge=\([^;]*\).*/\1/p'`
+   if test "$ds" != "0:40:00"
+      then echo "- defaultSiteAge is $ds, not 0:40:00"
+      fi
+
+   fts setrepinfo $id -clear $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E26 rc
+     
+
+echo ""; echo Checking fileset $base_name.4
+# Expect $base_name.4 to be scheduled replication, maxage 2h, failage 1d,
+# reclaimwait 18h, minrepdelay 5m, defaultsiteage 30m
+   id=`fts lsfldb $base_name.4 $av_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   ty=`fts lsfldb $id | sed -n 's/^ *\([^ ]*\) repl:.*/\1/p'`
+   if test "$ty" != "Sched"; then echo "- type is $ty, not Sched"; fi
+   ma=`fts lsfldb $id | sed -n 's/.*maxAge=\([^;]*\).*/\1/p'`
+   if test "$ma" != "2:00:00"; then echo "- maxAge is $ma, not 2:00:00"; fi
+   fa=`fts lsfldb $id | sed -n 's/.*failAge=\([^;]*\).*/\1/p'`
+   if test "$fa" != "1d0:00:00"
+      then echo "- failAge is $fa, not 1d0:00:00"
+      fi
+   rw=`fts lsfldb $id | sed -n 's/.*reclaimWait=\([^;]*\).*/\1/p'`
+   if test "$rw" != "18:00:00"
+      then echo "- reclaimWait is $rw, not 18:00:00"
+      fi
+
+   fts setrepinfo -fileset fubar_fileset -cell $dns_cell_name $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E27 rc
+     
+   fts setrepinfo -fileset $base_name.4 -cell fubar_cell $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E28 rc
+      
+   fts setrepinfo -fileset $base_name.4 -fubar_type -change $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E29 rc
+      
+
+echo ""; echo "Checking FLDB info, third time"
+   for n in 1 2 3 4 5
+       do
+       echo $base_name.$n fldb entry:
+       fts lsfldb $base_name.$n $av_arg
+          dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E0 rc
+       done
+
+echo ""; echo "Running fts addsite"
+   fts addsite $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E30 rc
+       
+   fts addsite fubar_argument $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E31 rc
+       
+   fts addsite $base_name.1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E32 rc
+       
+   fts addsite $base_name.1 $SERVER_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E33 rc
+      
+   fts addsite $base_name.1 $SERVER_2 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E34 rc
+       
+   fts addsite $base_name.5 $SERVER_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E35 rc
+       
+
+   fts addsite $base_name.1 $SERVER_1 $EPI_AGGRNAME_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E36 rc
+       
+
+   id=`fts lsfldb $base_name.2 $av_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   fts addsite $id $SERVER_1 $EPI_AGGRNAME_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E37 rc
+       
+
+   fts addsite $base_name.3 $SERVER_1 $EPI_AGGRNAME_1 66m $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E38 rc
+       
+
+   id=`fts lsfldb $base_name.4 $av_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   fts addsite -maxsiteage 77m -aggregate $EPI_AGGRNAME_2 -cell $dns_cell_name \
+       -fileset $id -server $SERVER_2 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E39 rc
+      
+
+   echo "" ; echo "Checking sites..."
+   rm -rf /tmp/sites.are
+   for n in 1 2 3 4
+       do
+       ft=$base_name.$n
+       for s in 1 2
+           do
+
+           if test $s -eq 1
+              then srvr=$SHORT_SERVER_1; aggr=$EPI_AGGRNAME_1; fsrvr=$SERVER_1
+              else srvr=$SHORT_SERVER_2; aggr=$EPI_AGGRNAME_2; fsrvr=$SERVER_2
+              fi
+           fts lsfldb $ft | grep RO | grep $srvr |
+               grep $aggr > /dev/null 2> /dev/null
+           if test $? -eq 0
+              then siteage=`fts lsfldb $ft | grep $srvr | grep RO | grep $aggr | awk '{print $4}'`
+              echo "fileset $n on $fsrvr $aggr, sa $siteage." >> /tmp/sites.are
+              fi
+
+           done
+       done
+
+   diff - /tmp/sites.are > /tmp/sites.diff 2> /tmp/sites.diff << ==END==
+fileset 1 on $SERVER_1 $EPI_AGGRNAME_1, sa 0:31:00.
+fileset 2 on $SERVER_1 $EPI_AGGRNAME_1, sa 0:10:00.
+fileset 3 on $SERVER_1 $EPI_AGGRNAME_1, sa 1:06:00.
+fileset 4 on $SERVER_2 $EPI_AGGRNAME_2, sa 1:17:00.
+==END==
+
+   rf=$?
+   if test $rf -ne 0
+      then echo "- sites are wrong ($rf):"; cat /tmp/sites.diff
+      dfs_checkResult 1 $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E123 rc
+      fi
+
+   rm -f /tmp/sites.are /tmp/sites.diff
+
+   fts addsite -fileset fubar_fileset -server $SERVER_2 \
+       -aggregate $EPI_AGGRNAME_2 -maxsiteage 77m $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E40 rc
+       
+   fts addsite -fileset $base_name.1 -server fubar_server \
+       -aggregate $EPI_AGGRNAME_2 -maxsiteage 77m $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E41 rc
+    
+   fts addsite -fileset $base_name.1 -server $SERVER_2 \
+       -aggregate fubar_aggregate -maxsiteage 77m $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E42 rc
+      
+   fts addsite -fileset $base_name.1 -server $SERVER_2 \
+       -aggregate $EPI_AGGRNAME_2 -maxsiteage fubar_maxsiteage $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E43 rc
+      
+   fts addsite -fileset $base_name.1 -server $SERVER_2 \
+       -aggregate $EPI_AGGRNAME_2 -maxsiteage 77m -cell fubar_cell $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E44 rc
+      
+
+echo ""; echo "Checking FLDB info, fourth time"
+   for n in 1 2 3 4 5
+       do
+       echo $base_name.$n fldb entry:
+       fts lsfldb $base_name.$n $av_arg
+          dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E0 rc
+       done
+
+echo ""; echo "Running fts rmsite"
+   fts rmsite $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E45 rc
+       
+   fts rmsite fubar_argument $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E46 rc
+       
+   fts rmsite $base_name.1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E47 rc
+       
+   fts rmsite $base_name.1 $SERVER_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E48 rc
+       
+   fts rmsite $base_name.1 $SERVER_1 $EPI_AGGRNAME_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E49 rc
+
+
+   id=`fts lsfldb $base_name.2 $av_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   fts rmsite $id $SERVER_1 $EPI_AGGRNAME_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E50 rc
+
+   fts rmsite -aggregate $EPI_AGGRNAME_2 -fileset $base_name.4 \
+       -cell $dns_cell_name -server $SERVER_2 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E51 rc
+ 
+
+   echo "" ; echo "Checking sites..."
+   rm -rf /tmp/sites.are
+   for n in 1 2 3 4
+       do
+       ft=$base_name.$n
+       for s in 1 2
+           do
+
+           if test $s -eq 1
+              then srvr=$SHORT_SERVER_1; aggr=$EPI_AGGRNAME_1; fsrvr=$SERVER_1
+              else srvr=$SHORT_SERVER_2; aggr=$EPI_AGGRNAME_2; fsrvr=$SERVER_2
+              fi
+           fts lsfldb $ft | grep RO | grep $srvr |
+               grep $aggr > /dev/null 2> /dev/null
+           if test $? -eq 0
+              then siteage=`fts lsfldb $ft | grep $srvr | grep RO | grep $aggr | awk '{print $4}'`
+              echo "fileset $n on $fsrvr $aggr, sa $siteage." >> /tmp/sites.are
+              fi
+
+           done
+       done
+
+   diff - /tmp/sites.are > /tmp/sites.diff 2> /tmp/sites.diff << ==END==
+fileset 3 on $SERVER_1 $EPI_AGGRNAME_1, sa 1:06:00.
+==END==
+
+   rf=$?
+   if test $rf -ne 0
+      then echo "- sites are wrong ($rf):"; cat /tmp/sites.diff
+      dfs_checkResult 1 $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E124 rc
+      fi
+
+   rm -f /tmp/sites.are /tmp/sites.diff
+
+   fts rmsite -fileset fubar_fileset -server $SERVER_1 -aggregate $EPI_AGGRNAME_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E52 rc
+       
+   fts rmsite -fileset $base_name.3 -server fubar_server -aggregate $EPI_AGGRNAME_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E53 rc
+       
+   fts rmsite -fileset $base_name.3 -server $SERVER_1 -aggregate fubar_aggregate $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E54 rc
+       
+   fts rmsite -fileset $base_name.3 -server $SERVER_1 -aggregate $EPI_AGGRNAME_1 -cell fubar_cell $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E55 rc
+       
+
+echo ""; echo "Checking FLDB info, fifth time"
+   for n in 1 2 3 4 5
+       do
+       echo $base_name.$n fldb entry:
+       fts lsfldb $base_name.$n $av_arg
+          dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E0 rc
+       done
+
+echo ""; echo "Running fts addsite"
+   fts addsite $base_name.1 $SERVER_1 $EPI_AGGRNAME_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E56 rc
+      
+   fts addsite $base_name.1 $SERVER_2 $EPI_AGGRNAME_2 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E57 rc
+       
+   fts addsite $base_name.2 $SERVER_1 $EPI_AGGRNAME_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E58 rc
+       
+   fts addsite $base_name.2 $SERVER_2 $EPI_AGGRNAME_2 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E59 rc
+       
+   fts addsite $base_name.3 $SERVER_2 $EPI_AGGRNAME_2 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E60 rc
+       
+   fts addsite $base_name.4 $SERVER_1 $EPI_AGGRNAME_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E61 rc
+       
+   fts addsite $base_name.4 $SERVER_2 $EPI_AGGRNAME_2 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E62 rc
+     
+
+   echo "" ; echo "Checking sites..."
+   rm -rf /tmp/sites.are
+   for n in 1 2 3 4
+       do
+       ft=$base_name.$n
+       for s in 1 2
+           do
+
+           if test $s -eq 1
+              then srvr=$SHORT_SERVER_1; aggr=$EPI_AGGRNAME_1; fsrvr=$SERVER_1
+              else srvr=$SHORT_SERVER_2; aggr=$EPI_AGGRNAME_2; fsrvr=$SERVER_2
+              fi
+           fts lsfldb $ft | grep RO | grep $srvr |
+               grep $aggr > /dev/null 2> /dev/null
+           if test $? -eq 0
+              then siteage=`fts lsfldb $ft | grep $srvr | grep RO | grep $aggr | awk '{print $4}'`
+              echo "fileset $n on $fsrvr $aggr, sa $siteage." >> /tmp/sites.are
+              fi
+
+           done
+       done
+
+   diff - /tmp/sites.are > /tmp/sites.diff 2> /tmp/sites.diff << ==END==
+fileset 1 on $SERVER_1 $EPI_AGGRNAME_1, sa 0:31:00.
+fileset 1 on $SERVER_2 $EPI_AGGRNAME_2, sa 0:31:00.
+fileset 2 on $SERVER_1 $EPI_AGGRNAME_1, sa 0:10:00.
+fileset 2 on $SERVER_2 $EPI_AGGRNAME_2, sa 0:10:00.
+fileset 3 on $SERVER_1 $EPI_AGGRNAME_1, sa 1:06:00.
+fileset 3 on $SERVER_2 $EPI_AGGRNAME_2, sa 0:31:00.
+fileset 4 on $SERVER_1 $EPI_AGGRNAME_1, sa 0:30:00.
+fileset 4 on $SERVER_2 $EPI_AGGRNAME_2, sa 0:30:00.
+==END==
+
+   rf=$?
+   if test $rf -ne 0
+      then echo "- sites are wrong ($rf):"; cat /tmp/sites.diff
+      dfs_checkResult 1 $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E125 rc
+      fi
+
+   rm -f /tmp/sites.are /tmp/sites.diff
+
+echo ""; echo "Checking FLDB info, sixth time"
+   for n in 1 2 3 4 5
+       do
+       echo $base_name.$n fldb entry:
+       fts lsfldb $base_name.$n $av_arg
+          dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E0 rc
+       done
+
+echo ""; echo "Running fts lsreplicas"
+   fts lsreplicas $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E63 rc
+       
+   fts lsreplicas fubar_argument $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E64 rc
+       
+   fts lsreplicas $base_name.3 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E65 rc
+       
+   fts lsreplicas $base_name.3 -all $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E66 rc
+       
+   id=`fts lsfldb $base_name.3 $av_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   fts lsreplicas $id $SERVER_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E67 rc
+       
+   fts lsreplicas $id $SERVER_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E68 rc
+       
+   fts lsreplicas -fileset $base_name.3 -server $SERVER_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E69 rc
+       
+   fts lsreplicas -fileset fubar_fileset -server $SERVER_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E70 rc
+       
+   fts lsreplicas -fileset $base_name.4 -server fubar_server $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E71 rc
+       
+
+echo ""; echo "Checking FLDB info, seventh time"
+   for n in 1 2 3 4 5
+       do
+       echo $base_name.$n fldb entry:
+       fts lsfldb $base_name.$n $av_arg
+          dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E0 rc
+       done
+
+echo ""; echo "Running fts statrepserver"
+   fts statrepserver $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E73 rc
+       
+   fts statrepserver fubar_argument $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E74 rc
+       
+   fts statrepserver $SERVER_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E75 rc
+       if test $? -ne 0; then echo "- failed ($p: E75)"; rc=`expr $rc + 1`; fi
+   fts statrepserver $SERVER_1 -long $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E76 rc
+       
+   fts statrepserver $SERVER_1 -long -cell $dns_cell_name $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E77 rc
+       
+   fts statrepserver -cell $dns_cell_name -long -server $SERVER_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E78 rc
+       
+   fts statrepserver -server fubar_server -long -cell $dns_cell_name $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E79 rc
+       
+   fts statrepserver -server $SERVER_1 -long -cell fubar_cell $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E80 rc
+       
+
+echo ""; echo "Checking FLDB info, eighth time"
+   for n in 1 2 3 4 5
+       do
+       echo $base_name.$n fldb entry:
+       fts lsfldb $base_name.$n $av_arg
+          dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E0 rc
+       done
+
+echo ""; echo "Running fts release"
+   fts release $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E81 rc
+       
+   fts release fubar_argument $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E82 rc
+       
+
+   fts release $base_name.3 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E84 rc
+       
+
+   id=`fts lsfldb $base_name.2 $av_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   fts release $id $dns_cell_name $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E85 rc
+
+   fts release $base_name.1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E83 rc
+
+# The following is to ensure that the previous fts release on this 
+# fileset has completed and the R/O replicas are back On-Line
+# before attempting another release.  It's possible to get an 
+# fts failure with a somewhat obscure error message otherwise.
+# This will be documented.
+
+for tries in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30
+do
+        sleep 30
+        xxx=`fts lsheader $SERVER_2 $EPI_AGGRNAME_2 | grep $base_name.2 | grep On-line`
+        if test "$xxx" != ""
+            then break
+        fi
+        echo "...still sleeping at `date` for $base_name.2 on $SERVER_2"
+done
+if test $SERVER_1 != $SERVER_2
+    then
+    for tries in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30
+    do
+        sleep 30
+        xxx=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 | grep $base_name.2 | grep On-line`
+        if test "$xxx" != ""
+            then break
+        fi
+        echo "...still sleeping at `date` for $base_name.2 on $SERVER_1"
+    done
+fi
+date
+
+  
+   fts release -cell $dns_cell_name -fileset $base_name.2 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E86 rc
+       
+   fts release -fileset fubar_fileset -cell $dns_cell_name $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E87 rc
+       
+   fts release -fileset $base_name.2 -cell fubar_cell $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E88 rc
+      
+
+echo ""; echo "Checking FLDB info, ninth time"
+   for n in 1 2 3 4 5
+       do
+       echo $base_name.$n fldb entry:
+       fts lsfldb $base_name.$n $av_arg
+          dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E0 rc
+       done
+
+echo ""; echo "Running fts update"
+   fts update $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E89 rc
+       
+   fts update fubar_argument $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E90 rc
+
+   fts update $base_name.1 -all $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E91 rc
+
+   fts update $base_name.3 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E92 rc
+       
+   fts update $base_name.3 -all $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E93 rc
+       
+   id=`fts lsfldb $base_name.3 $av_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   fts update $id $SERVER_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E94 rc
+       
+   fts update -fileset $base_name.3 -server $SERVER_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E96 rc
+       
+   fts update -fileset $base_name.3 -server $SERVER_1 -cell $dns_cell_name $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E97 rc
+
+   fts update -fileset fubar_fileset -server $SERVER_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E98 rc
+       
+   fts update -fileset $base_name.4 -server fubar_server $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E99 rc
+       
+
+   fts update -fileset $base_name.4 -server $SERVER_1 -cell fubar_cell $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E101 rc
+       
+
+echo ""; echo "Checking FLDB info, tenth time"
+   for n in 1 2 3 4 5
+       do
+       echo $base_name.$n fldb entry:
+       fts lsfldb $base_name.$n $av_arg
+          dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E0 rc
+       done
+
+echo ""; echo "Running fts syncfldb"
+   fts syncfldb $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E102 rc
+       
+   fts syncfldb fubar_argument $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E103 rc
+
+   fts syncfldb $SERVER_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E104 rc
+       if test $? -ne 0; then echo "- failed ($p: E104)"; rc=`expr $rc + 1`; fi
+
+   fts syncfldb $SERVER_1 $EPI_AGGRNAME_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E105 rc
+       
+   fts syncfldb $SERVER_1 $EPI_AGGRNAME_1 $dns_cell_name $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E106 rc
+       
+   fts syncfldb -aggregate $EPI_AGGRNAME_1 -cell $dns_cell_name -server $SERVER_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E107 rc
+
+   fts syncfldb -server fubar_server -aggregate $EPI_AGGRNAME_1 -cell $dns_cell_name $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E108 rc
+
+   fts syncfldb -server $SERVER_1 -aggregate fubar_aggregate -cell $dns_cell_name $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E109 rc
+       
+   fts syncfldb -server $SERVER_1 -aggregate $EPI_AGGRNAME_1 -cell fubar_cell $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E110 rc
+       
+
+echo ""; echo "Checking FLDB info, eleventh time"
+   for n in 1 2 3 4 5
+       do
+       echo $base_name.$n fldb entry:
+       fts lsfldb $base_name.$n $av_arg
+          dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E0 rc
+       done
+
+echo ""; echo "Running fts syncserv"
+   fts syncserv $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E111 rc
+       
+   fts syncserv fubar_argument $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E112 rc
+
+   fts syncserv $SERVER_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E113 rc
+       
+   fts syncserv $SERVER_1 $EPI_AGGRNAME_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E114 rc
+       
+   fts syncserv $SERVER_1 $EPI_AGGRNAME_1 $dns_cell_name $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E115 rc
+       
+   fts syncserv -aggregate $EPI_AGGRNAME_1 -cell $dns_cell_name -server $SERVER_1 $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E116 rc
+
+   fts syncserv -server fubar_server -aggregate $EPI_AGGRNAME_1 -cell $dns_cell_name $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E117 rc
+       
+   fts syncserv -server $SERVER_1 -aggregate fubar_aggregate -cell $dns_cell_name $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E118 rc
+       
+   fts syncserv -server $SERVER_1 -aggregate $EPI_AGGRNAME_1 -cell fubar_cell $av_arg
+       dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E119 rc
+    
+#Cleaning up
+
+echo ""; echo "Removing replication sites and cleaning up."
+for n in 1 2 3 4
+do
+ft=$base_name.$n
+for s in 2 1
+   do
+    if test $s -eq 1
+       then 
+	   fts rmsite $ft $SERVER_1 $EPI_AGGRNAME_1 $av_arg
+	   dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E120 rc
+	else 
+	   fts rmsite $ft $SERVER_2 $EPI_AGGRNAME_2 $av_arg
+	   dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E121 rc
+     fi
+   done
+done
+
+for n in 1 2 3 4 5
+  do
+    fts delete $base_name.$n $SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_checkResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E122 rc
+  done
+
+echo ""; echo "Checking FLDB info, twelfth time"
+   for n in 1 2 3 4 5
+       do
+       echo $base_name.$n fldb entry:
+       fts lsfldb $base_name.$n $av_arg
+          dfs_checkResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E0 rc
+       done
+
+###############################################################################
+
+sync; sync; sleep 2
+
+echo ""; echo "Done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################

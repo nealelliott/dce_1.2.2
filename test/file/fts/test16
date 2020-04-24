@@ -1,0 +1,353 @@
+#!/bin/sh
+
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+# Copyright (C) 1995, 1992 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS exporting Episode (not exported UFS, and
+# not local Episode). The script tests many common fts functions (create,
+# delete, lsft, mount commands, quota commands, clone commands, move, rename,
+# dump, restore) by simply issuing the commands. No data checking of any sort
+# is done.
+
+# This is a basic DFS fts correctness test.
+
+###############################################################################
+
+# Usage:                test16
+
+# Typically run via:    test16 >& test16.out or via runtests
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode. DFS server $SERVER_1
+# must export Episode aggregate $EPI_AGGRNAME_1, and $SERVER_2 must export
+# $EPI_AGGRNAME_2. $SERVER_1 and $SERVER_2 can be the same machine.
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1 and $SERVER_2, in
+# order to run the fts commands contained in this script. You must also be
+# able to create mount points in $export_root.
+
+# Highest error number is: 18.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${EPI_AGGRNAME_1=epi1}
+: ${EPI_AGGRNAME_2=epi2}
+: ${EPI_AGGRNAME_3=epi1}
+: ${SERVER_1=$hn}
+: ${SERVER_2=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name="/.../$CELL_NAME"}
+: ${dns_server_prefix="/.:/hosts/"}
+: ${export_root=/.../$CELL_NAME/fs}
+
+cav_arg="$CELL_ARG $AUTH_ARG $VERB_ARG"
+dumpfile=/tmp/dumpfile.$$
+ft=fileset.$$
+mp=$export_root/test/dir.$$
+
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+if [ "$dfs_FileSysType" = "$DFS_WORKS_ON_LFS" ]
+then
+   nr_iter=1
+   iter_flag=FALSE
+   add_stuff=TRUE
+   do_clone=TRUE
+   do_move=TRUE
+   do_rename=TRUE
+   do_dump=TRUE
+   do_restore=TRUE
+   do_quota=TRUE
+else
+   nr_iter=1
+   iter_flag=FALSE
+   add_stuff=TRUE
+   do_clone=FALSE
+   do_move=FALSE
+   do_rename=TRUE
+   do_dump=TRUE
+   do_restore=FALSE
+   do_quota=FALSE
+fi
+
+if [ "$dfs_FileSysType" = "$DFS_WORKS_ON_UFS" ]
+then
+  echo ""; echo "$p not applicable to DFS exporting UFS"; echo ""
+  echo ""; echo "All done at `date`."; echo ""
+  if test $rc -eq 0
+     then echo "$p PASSED"
+     else echo "$p FAILED ($rc errors)"
+     fi
+  exit $rc
+fi
+
+###############################################################################
+
+for a
+    do
+    if test $iter_flag = TRUE; then nr_iter=$a; iter_flag=FALSE
+    elif test $a = -nt; then iter_flag=TRUE
+    elif test $a = -noclone; then do_clone=FALSE
+    elif test $a = -nomove; then do_move=FALSE
+    elif test $a = -norename; then do_rename=FALSE
+    elif test $a = -nodump; then do_dump=FALSE
+    elif test $a = -norestore; then do_restore=FALSE
+    elif test $a = -noquota; then do_quota=FALSE
+    elif test $a = -nostuff; then add_stuff=FALSE
+    elif test $a = -cloneonly
+       then do_quota=FALSE; do_move=FALSE; do_rename=FALSE; do_dump=FALSE; do_restore=FALSE; do_clone=TRUE
+    elif test $a = -moveonly
+       then do_quota=FALSE; do_clone=FALSE; do_rename=FALSE; do_dump=FALSE; do_restore=FALSE; do_move=TRUE
+    elif test $a = -renameonly
+       then do_quota=FALSE; do_clone=FALSE; do_move=FALSE; do_dump=FALSE; do_restore=FALSE; do_rename=TRUE
+    elif test $a = -dumponly -o $a = -restoreonly
+       then do_quota=FALSE; do_clone=FALSE; do_move=FALSE; do_rename=FALSE; do_dump=TRUE; do_restore=TRUE
+    elif test $a = -quotaonly
+       then do_quota=TRUE; do_clone=FALSE; do_move=FALSE; do_rename=FALSE; do_dump=FALSE; do_restore=FALSE
+    else echo "Argument '$a' is unknown"; exit 2
+    fi
+    done
+
+###############################################################################
+
+echo ""
+echo "$ty/$p starting as PID $$ at `date` on $hn"
+echo "   in cell $CELL_NAME."
+echo "Using aggregates $EPI_AGGRNAME_1 on $SERVER_1 and $EPI_AGGRNAME_3 on $SERVER_2."
+
+if test "$CELL_NAME" = ""
+   then echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting."
+        exit 2
+   fi
+
+###############################################################################
+# check if EPI_AGGRNAME_1 and EPI_AGGRNAME_2 are exported and known to ftserver
+
+echo ""; echo Checking $EPI_AGGRNAME_1 and $EPI_AGGRNAME_2
+
+fts lsaggr $SERVER_1 | grep $EPI_AGGRNAME_1; rf=$?
+if test $rf -ne 0
+	then echo "- aggregate $EPI_AGGRNAME_1 not exported by $SERVER_1; $p ABORTING"
+	     rc=`expr $rc + 1`; cleanup
+        fi
+fts lsaggr $SERVER_2 | grep $EPI_AGGRNAME_2; rf=$?
+if test $rf -ne 0
+   then
+	do_within_server=FALSE
+        aggr_2=""
+   else
+	do_within_server=TRUE
+        fi
+if [ "$EPI_AGGRNAME_3" = "" ]
+then
+  do_across_server=FALSE
+else
+  fts lsaggr $SERVER_2 | grep $EPI_AGGRNAME_3; rf=$?
+  if test $rf -ne 0
+     then
+ 	do_across_server=FALSE
+        aggr_3=""
+     else
+	do_across_server=TRUE
+        fi
+fi
+###############################################################################
+
+echo ""; echo "Running fts create..."; sync; sync; sleep 5
+$bin_dir/fts create $ft $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+   rf=$?
+echo "fts create exit status was $rf"
+if test $rf -ne 0
+   then echo "- command failed; $p ABORTING ($p: E1)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+echo ""; echo "Running fts aggrinfo..."; sync; sync; sleep 5
+$bin_dir/fts aggrinfo $dns_server_prefix$SERVER_1 $cav_arg; rf=$?
+echo "fts aggrinfo exit status was $rf"
+if test $rf -ne 0; then echo "- command failed ($p: E2)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running fts lsaggr..."; sync; sync; sleep 5
+$bin_dir/fts lsaggr $dns_server_prefix$SERVER_1 $cav_arg; rf=$?
+echo "fts lsaggr exit status was $rf"
+if test $rf -ne 0; then echo "- command failed ($p: E3)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running fts lsfldb..."; sync; sync; sleep 5
+$bin_dir/fts lsfldb -fileset $ft $cav_arg; rf=$?
+echo "fts lsfldb exit status was $rf"
+if test $rf -ne 0; then echo "- command failed ($p: E4)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running fts lsft..."; sync; sync; sleep 5
+$bin_dir/fts lsft -fileset $ft $cav_arg; rf=$?
+echo "fts lsft exit status was $rf"
+if test $rf -ne 0; then echo "- command failed ($p: E5)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running fts lsheader..."; sync; sync; sleep 5
+$bin_dir/fts lsheader $dns_server_prefix$SERVER_1 $cav_arg; rf=$?
+echo "fts lsheader exit status was $rf"
+if test $rf -ne 0; then echo "- command failed ($p: E6)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running fts crmount..."; sync; sync; sleep 5
+$bin_dir/fts crmount $mp $ft; rf=$?
+echo "fts crmount exit status was $rf"
+if test $rf -ne 0; then echo "- command failed ($p: E7)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running fts lsmount..."; sync; sync; sleep 5
+$bin_dir/fts lsmount $mp; rf=$?
+echo "fts lsmount exit status was $rf"
+if test $rf -ne 0; then echo "- command failed ($p: E8)"; rc=`expr $rc + 1`; fi
+
+if test $do_clone = TRUE
+then
+echo ""; echo "Running fts clone..."; sync; sync; sleep 5
+$bin_dir/fts clone $ft $cav_arg; rf=$?
+echo "fts clone exit status was $rf"
+if test $rf -ne 0; then echo "- command failed ($p: E9)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running fts clonesys..."; sync; sync; sleep 5
+$bin_dir/fts clonesys $ft $cav_arg; rf=$?
+echo "fts clonesys exit status was $rf"
+if test $rf -ne 0; then echo "- command failed ($p: E10)"; rc=`expr $rc + 1`;fi
+fi
+  
+if test $do_move = TRUE
+then
+echo ""; echo "Running fts move..."; sync; sync; sleep 5
+if [ $do_across_server = TRUE ]
+then
+$bin_dir/fts move $ft $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+                      $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_3 $cav_arg
+elif [ $do_within_server = TRUE ]
+then       
+$bin_dir/fts move $ft $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+                      $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_2 $cav_arg
+fi
+   rf=$?
+echo "fts move exit status was $rf"
+if test $rf -ne 0;then echo "- command failed ($p: E11.1)";rc=`expr $rc + 1`;fi
+echo ""; echo "Running fts move..."; sync; sync; sleep 5
+if [ $do_across_server = TRUE ]
+then
+$bin_dir/fts move $ft $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_3 \
+                      $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+elif [ $do_within_server = TRUE ]
+then
+$bin_dir/fts move $ft $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_2 \
+                      $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+fi
+   rf=$?
+echo "fts move exit status was $rf"
+if test $rf -ne 0;then echo "- command failed ($p: E11.2)";rc=`expr $rc + 1`;fi
+fi
+
+if test $do_rename = TRUE
+then
+echo ""; echo "Running fts rename..."; sync; sync; sleep 5
+$bin_dir/fts rename $ft $ft.renamed $cav_arg; rf=$?
+echo "fts rename exit status was $rf"
+if test $rf -ne 0;then echo "- command failed ($p: E12.1)";rc=`expr $rc + 1`;fi
+echo ""; echo "Running fts rename..."; sync; sync; sleep 5
+$bin_dir/fts rename $ft.renamed $ft $cav_arg; rf=$?
+echo "fts rename exit status was $rf"
+if test $rf -ne 0;then echo "- command failed ($p: E12.2)";rc=`expr $rc + 1`;fi
+fi
+
+if test $do_dump = TRUE
+then
+echo ""; echo "Running fts dump..."; sync; sync; sleep 5
+$bin_dir/fts dump -fileset $ft -time 0 -file $dumpfile $cav_arg; rf=$?
+echo "fts dump exit status was $rf"
+if test $rf -ne 0;then echo "- command failed ($p: E13)"; rc=`expr $rc + 1`; fi
+
+if test $rf -eq 0
+   then
+
+   if test $do_restore = TRUE
+   then
+   echo ""; echo "Running fts restore..."; sync; sync; sleep 5
+   $bin_dir/fts restore $ft.restored $dns_server_prefix$SERVER_1 \
+                        $EPI_AGGRNAME_1 $dumpfile $cav_arg
+      rf=$?
+   echo "fts restore exit status was $rf"
+   if test $rf -ne 0
+      then echo "- command failed ($p: E14)"; rc=`expr $rc + 1`
+      fi
+   fi
+   else echo ">>> Skipping fts restore, since fts dump failed <<<"
+
+   fi
+fi
+
+if test $do_quota = TRUE
+then
+echo ""; echo "Running fts setquota..."; sync; sync; sleep 5
+$bin_dir/fts setquota -fileset $ft -size 10000 $cav_arg; rf=$?
+echo "fts setquota exit status was $rf"
+if test $rf -ne 0; then echo "- command failed ($p: E15)";rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running fts lsquota..."; sync; sync; sleep 5
+$bin_dir/fts lsquota -fileset $ft $cav_arg; rf=$?
+echo "fts lsquota exit status was $rf"
+if test $rf -ne 0; then echo "- command failed ($p: E16)";rc=`expr $rc + 1`; fi
+fi
+
+echo ""; echo "Running fts delmount..."; sync; sync; sleep 5
+$bin_dir/fts delmount $mp; rf=$?
+echo "fts delmount exit status was $rf"
+if test $rf -ne 0; then echo "- command failed ($p: E17)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running fts delete..."; sync; sync; sleep 5
+$bin_dir/fts delete $ft $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+                    $cav_arg
+   rf=$?
+echo "fts delete exit status was $rf"
+if test $rf -ne 0; then echo "- command failed ($p: E18)";rc=`expr $rc + 1`; fi
+
+if test $do_restore = TRUE
+then
+ $bin_dir/fts delete $ft.restored $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+                    $cav_arg
+   rf=$?
+echo "fts delete exit status was $rf"
+if test $rf -ne 0; then echo "- command failed ($p: E19)";rc=`expr $rc + 1`; fi
+fi
+
+###############################################################################
+
+rm -f $dumpfile
+
+echo ""; echo "All done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################

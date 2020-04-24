@@ -1,0 +1,262 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: runtests,v $
+# Revision 1.1.114.1  1996/10/17  18:19:56  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:50:36  damon]
+#
+# Revision 1.1.109.1  1994/02/04  20:40:37  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:22:30  devsrc]
+# 
+# Revision 1.1.107.1  1993/12/07  17:41:52  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  18:54:47  jaffe]
+# 
+# Revision 1.1.9.2  1993/07/19  19:40:33  zeliff
+# 	HP port of DFS
+# 	[1993/07/19  18:31:01  zeliff]
+# 
+# Revision 1.1.7.3  1993/07/16  21:40:49  kissel
+# 	*** empty log message ***
+# 	[1993/06/21  14:53:00  kissel]
+# 
+# 	Conditionalize HPUX changes as part of merging to GAMERA.
+# 	[1993/04/14  17:46:24  kissel]
+# 
+# Revision 1.1.5.2  1993/06/04  20:17:18  kissel
+# 	Initial HPUX RP version.
+# 	[1993/06/03  22:40:52  kissel]
+# 
+# 	hpux changes
+# 	[1993/02/05  21:03:18  maunsell_c]
+# 
+# Revision 1.1.2.2  1993/02/05  17:09:54  maunsell_c
+# 	01/29/93	maunsell_c	take out pstat - what is HPUX equiv for PAGE SPACE USED PAGES FREE PAGES info?
+# 
+# Revision 1.1.2.4  1993/01/11  18:26:38  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  16:59:49  htf]
+# 
+# Revision 1.1.2.3  1992/11/10  18:40:13  jaffe
+# 	Put /bin/sh as the first line
+# 	[1992/11/10  16:44:47  jaffe]
+# 
+# Revision 1.1.2.2  1992/08/28  18:11:31  jaffe
+# 	Transarc delta: fred-add-std-err-to-runtests 1.1
+# 	  Selected comments:
+# 	    Changed the existing runtests scripts to also re-direct the standard
+# 	    error output from the tests into the output file.
+# 	    Changed execution of tests to re-direct standard error to the output file.
+# 	Transarc delta: fred-ot3850-add-runtests 1.4
+# 	  Selected comments:
+# 	    Not done yet.
+# 	    This delta adds simple runtests scripts to the fs and low directories.
+# 	    These scripts will be enhanced in the future to permit greater control of
+# 	    the underlying tests.
+# 	    Simple script to run the fs tests.
+# 	    Install the runtests scripts from fs and low
+# 	    Typo (2&1 --> 2>&1)
+# 	[1992/08/28  12:13:29  jaffe]
+# 
+# $EndLog$
+###  Copyright (C) 1992 Transarc Corporation - All rights reserved  ###
+#
+#  runtests -
+#	This script begins to implement a single script to execute all
+#	the fs tests. 
+#
+#  Usage:
+#	runtests [-count #] [-cont] [-help]  [<output_file>]
+#
+#  Defaults:
+#	-count - (number of times to cycle through test scripts) = 1
+#	-cont - (continue on error) = false
+#	-help - print a help (usage) message
+#	<output_file> - overrides default for output,  runtests_OUT.$$
+#
+###############################################################################
+
+#
+#  Define script variables and their default values.
+#
+programName=`basename $0`
+outputFile="runtests_OUT.$$"
+onError="false"
+testTitle="fs Tests"
+totalCount=1
+
+successExit=0
+scriptErrExit=1
+testErrExit=2
+
+fsScriptLists="test1 test2 test3 test4 test5 test6 test7 test8 test9 test10"
+
+if [ -f /etc/pstat ]
+then
+    swapSpaceCmd="/etc/pstat -s"
+elif [ -f /etc/swap ]
+then
+    swapSpaceCmd="/etc/swap -s"
+elif [ -x /etc/swapinfo ]
+then
+    swapSpaceCmd="/etc/swapinfo"
+else
+    swapSpaceCmd="echo"
+fi
+
+#
+# PrintUsage() -
+#	Prints the usage message for this script.
+#
+PrintUsage()
+{
+    echo "Usage: $programName [-count #] [-cont] [-help] [<output_file>]"
+    echo "\t-count        - number of iterations through the tests (default = 1)"
+    echo "\t-cont         - continue if an error occurs (default = false)"
+    echo "\t-help         - print this usage message."
+    echo "\t<output_file> - where to store output (default is runtests_OUT.\$\$)"
+}
+
+#
+# RunTestScript()
+#	Runs a single test script.
+#
+#  Arguments:
+#	$1 - test script to execute.
+#
+RunTestScript()
+{
+    date >> $outputFile
+    echo >> $outputFile
+    $swapSpaceCmd >> $outputFile
+    echo >> $outputFile
+    $1 >> $outputFile 2>&1
+    if [ $? -ne 0 ]
+    then
+	echo "${programName}: test $1, FAILED" >> $outputFile
+	#
+	#  Check to see if we continue on error.
+	#
+	if [ "$onError" = "false" ]
+	then
+	    echo >> $outputFile
+	    date >> $outputFile
+	    echo >> $outputFile
+	    echo "$testTitle - Completed UNSUCCESSFULLY." >> $outputFile
+	    exit $testErrExit
+	fi
+    fi		
+}
+
+#
+#  Parse the command line.
+#
+while [ "$1" != "" ] 
+do
+    case $1 in
+      -count)    shift;
+	         if [ "$1" != "" ]
+	         then
+	             totalCount=$1;
+	         else
+		     echo "${programName}: -count requires numeric parameter.";
+		     PrintUsage;
+		     exit $scriptErrExit
+	         fi
+                 ;;
+      -cont)     onError="true"
+                 ;;
+      -help)     PrintUsage;
+                 exit $successExit
+                 ;;
+       -*)       echo "${programName}: Invalid option, $1." | tee -a $outputFile;
+	         PrintUsage;
+                 exit $scriptErrExit
+                 ;;
+      *)         outputFile=$1
+                 ;;
+      esac
+      shift
+done
+
+
+#
+#  If an output file already exist remove it.
+#
+if [ -f $outputFile ]
+then
+    /bin/rm -f $outputFile
+    if [ $? -ne 0 ]
+    then
+	echo "$programName: Could not remove existing file, $outputFile" | tee -a $outputFile
+	exit $scripErrExit
+    fi
+fi
+
+#
+#  Now run the tests.
+#
+#
+runTests="true"
+loopCount=0
+
+echo "$testTitle - Starting" >> $outputFile
+echo >> $outputFile
+echo "Machine: `hostname`" >> $outputFile
+echo "UNIX User: $USER" >> $outputFile
+
+#
+#  If running under DFS print our principal id.
+#
+pwd | fgrep "/..." > /dev/null 2>&1
+if [ $? -eq 0 ]
+then
+    echo "DCE User: `klist | grep '	Principal' | cut -f3 -d' '" >> $outputFile
+fi
+
+echo >> $outputFile
+date >> $outputFile
+echo >> $outputFile
+
+while [ "$runTests" = "true" ]
+do
+    #
+    #  Now run the tests
+    #
+    echo "" >> $outputFile
+    for curTest in $fsScriptLists
+    do
+	    RunTestScript ./${curTest}
+    done
+
+    loopCount=`expr $loopCount + 1`
+    #
+    #  If totalCount is 0 (user passed in 0 as argument to -count) then
+    #  the script runs forever.
+    #
+    if [ $totalCount -ne 0 ]
+    then
+	if [ $loopCount -eq $totalCount ]
+	then
+	    runTests="false"
+	fi
+    fi
+done
+
+echo "Number of loops: $loopCount" >> $outputFile
+echo >> $outputFile
+$swapSpaceCmd >> $outputFile
+echo >> $outputFile
+date >> $outputFile
+echo >> $outputFile
+echo "$testTitle - Completed Successfuly." >> $outputFile
+exit $successExit
+

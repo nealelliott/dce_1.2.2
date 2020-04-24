@@ -1,0 +1,63 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ * 
+ */
+/*
+ * HISTORY
+ * $Log$
+ * $EndLog$
+ */
+
+This package provides a sample implementation for licensees that wish to
+let their customers start migrating to the standards threads API.  The
+package maps the standard API into DCE pthreads calls, changing the syntax
+for the most popular user-visible routines.  The semantics are not changed
+-- for example, signal behavior is not changed; licensees should encourage
+their customers to isolate the signal-handling code and write their code
+so that a dedicated thread catches all signals.  Licensees may wish to
+provide a convenience API that helps do this.
+
+The package mostly works like this: a standard API, pthread_foo, is declared
+in stdpthread.h; if the name also conflicts with a name in the DCE threads
+library, then a #define renaming it to xpthread_foo is created.  In misc.c,
+is a brief implementation of the final name (i.e., the #define if it exists
+is expanded) of the function: its almost-always one-line implementation
+of calling the DCE threads function and translating the return result.
+
+Licensees should probably support both the standard API and the DCE API.
+One way to do this is to have a "pthreads.h" that is the following:
+	#ifdef STANDARD_THREADS
+	#include <stdpthread.h>
+	#else
+	#include <dcepthread.h>
+	#endif
+and tell their users to add -DSTANDARD_THREADS when desired.  (This
+technique is better because it doesn't require source changes to user code
+when DCE eventually supports the threads standard.)  Doing this requires
+that the currently-installed DCE-provided pthread.h is renamed as shown
+above.  The implementation file, misc.c (which must be built into libdce)
+assumes the name shown above for the DCE threads interface.
+
+Only the most common APIs are supported; licensees may wish to fill in some
+of the gaps detailed here.  First, the following APIs are not provided:
+	pthread_atfork
+	pthread_key_delete
+	pthread_kill
+Also, the following general capabilities (mapping to more than one API)
+are not provided:
+	The re-entrant C library functions (e.g., readdir_r)
+	The changed signal semantics (see note above)
+	Process-shared mutexes and condition variables
+	Static initializers for mutexes and condition variables
+	Scheduling, priorities, and contention scopes
+	Stack addresses
+	Detachability-state (all threads are joinable)
+The DCE "pthread_xxx_np" functions are also not available, purely for
+esthetic reasons.
+
+We wish to thank Bill Hannon at IBM and Dave Butenhof at Digital for
+helping us understand the threads standard.

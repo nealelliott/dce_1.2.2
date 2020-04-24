@@ -1,0 +1,113 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: common_functions,v $
+# Revision 1.1.4.2  1996/03/11  02:37:54  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:05:09  marty]
+#
+# Revision 1.1.4.1  1995/12/11  21:54:59  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:55:10  root]
+# 
+# Revision 1.1.2.4  1994/07/21  21:26:53  fadden
+# 	Modified messages in wait_for_done
+# 	[1994/07/21  21:00:56  fadden]
+# 
+# Revision 1.1.2.3  1994/06/24  19:44:00  fadden
+# 	Merged with changes from 1.1.2.2
+# 	[1994/06/24  19:43:54  fadden]
+# 
+# 	fix last line
+# 	[1994/06/24  19:42:40  fadden]
+# 
+# 	add simple version of infofile()
+# 	[1994/06/24  18:24:17  fadden]
+# 
+# Revision 1.1.2.2  1994/06/17  18:46:05  devsrc
+# 	cr10872 - fix copyright
+# 	[1994/06/17  18:36:37  devsrc]
+# 
+# Revision 1.1.2.1  1994/05/26  22:44:13  fadden
+# 	Initial version, copied from src/test/systest/rpc/
+# 	[1994/05/26  20:10:21  fadden]
+# 
+# $EndLog$
+
+
+del_test_purp ()
+{
+	for test_purp in $* ; do
+		tet_delete $test_purp "FAILURE: Startup...$test_purp() deleted."
+	done
+}	# end del_test_purp ()
+
+
+
+ping_hosts()
+{	
+       . ${STDEXC}/expmachinfo
+
+        case ${OSTYPE} in
+
+	        "AIX"|"SVR4")  PINGCOMMAND='eval ping ${RHOST} 1 1 > /dev/null';;
+
+              	"OSF1") PINGCOMMAND='eval ping -c 1 -s 1 ${RHOST} > /dev/null';;
+
+		"HP-UX") PINGCOMMAND='eval ping ${RHOST} 8 1 > /dev/null';;
+
+                 *)      tet_infoline "OSTYPE = ${OSTYPE} unknown...";;
+                esac
+	CELL_NAME=` /opt/dcelocal/bin/getcellname | awk -F/ '{ print $3 }'`
+        for RHOST in ${CLIENT_MACHINES}
+        do
+                ${PINGCOMMAND} > /dev/null
+                if [ "$?" != 0 ] ; then
+                        tet_infoline "${RHOST} not responding"
+                else
+                        HOSTLIST=${HOSTLIST}"${RHOST} "
+                        tet_infoline "${RHOST} is responding"
+                fi
+        done
+
+        if [ -z "${HOSTLIST}" ] ; then
+                tet_infoline "No hosts responded"
+                del_test_purp ${testlist}
+                return
+        else
+                export HOSTLIST
+        fi
+
+}
+
+#
+# Wait for the client processes to complete.
+#
+
+wait_for_done()
+{
+	tet_infoline "Waiting for processes ${PIDS} to complete."
+	for PID in ${PIDS} ; do
+		tet_infoline "Waiting for process ${PID} ..."
+		wait ${PID}
+		tet_infoline "Process ${PID} done."
+	done
+	tet_infoline "Specified processes completed."
+}
+
+infofile() # write file to journal using tet_infoline
+{
+    # $1 is file name, $2 is prefix for tet_infoline
+
+    prefix=$2
+    while read line
+    do
+        tet_infoline "${prefix}${line}"
+    done < $1
+}

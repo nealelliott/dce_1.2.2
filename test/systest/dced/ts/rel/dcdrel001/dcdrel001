@@ -1,0 +1,224 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: dcdrel001,v $
+# Revision 1.1.4.2  1996/03/11  02:38:12  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:05:16  marty]
+#
+# Revision 1.1.4.1  1995/12/11  21:55:15  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/jrr_1.2_mothra/1  1995/11/30  20:10 UTC  bell_d
+# 	Debugged, added looping
+# 	[1995/12/11  20:55:21  root]
+# 
+# Revision 1.1.2.2  1994/07/26  21:55:40  fadden
+# 	Change call to results checking routine to match change in
+# 	  routine
+# 	[1994/07/26  21:51:11  fadden]
+# 
+# Revision 1.1.2.1  1994/07/21  21:26:59  fadden
+# 	Initial version after renaming
+# 	[1994/07/21  20:37:30  fadden]
+# 
+# $EndLog$
+#
+#   TEST_NAME: dcdrel001
+#
+#   COMPONENT_NAME: dce.systest
+#
+#   FUNCTIONS: See ./dcdrel.functions
+#
+#   FILES: dcdrel001a_server
+#	   dcdrel001b_server
+#          dcdrel001_client
+#          dcdrel_srv_shut
+#          dcdrel_smgr
+#
+#   REQUIREMENTS:
+#      Threads, rpc, cds, security 
+#
+#   RESTRICTIONS:
+#      None
+#
+#   DESCRIPTION:
+#	This is the shell script for the dcdrel001 test case.  It does the
+#	following:
+#           1) TBD
+################################################################################
+
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="dcdrel001"
+testlist="$ic1"
+
+startup ()
+{
+	# INITIALIZE VARIABLES
+	CLIENT_MACHINES=${CLIENT_MACHINES:-$(dcecp -c "directory list -dir -simple /.:/hosts")}
+#CLIENT_MACHINES="pignoses"
+	(( $? )) && { del_test_purp $testlist; return; }
+	tet_infoline "CLIENT_MACHINES $CLIENT_MACHINES"
+	export CLIENT_MACHINES
+
+	EXEC_DIR="/tmp/dced/dcdrel001"
+	CURRDIR=$(/bin/pwd)
+	export EXEC_DIR CURRDIR
+
+	tet_infoline "startup ... STTMPDIR: ${STTMPDIR}"
+	echo "startup ... STTMPDIR: ${STTMPDIR}"
+
+        export TCDIR=$TET_ROOT/dced/ts/dcdrel001
+        tet_infoline "test case dir is ${TCDIR}"
+
+	export LOCAL_HOST=`hostname`
+
+	tet_infoline "TEST MACHINES: ${CLIENT_MACHINES}"
+	echo "TEST MACHINES: ${CLIENT_MACHINES}"
+
+        # calculate expected number of target bindings that will be
+        # imported
+        #
+        NODE_COUNT=`echo ${CLIENT_MACHINES} | wc -w`
+        tet_infoline "NODE_COUNT: ${NODE_COUNT}"
+
+        PROT_SEQ_COUNT=2
+        tet_infoline "PROT_SEQ_COUNT: ${PROT_SEQ_COUNT}"
+
+        # this must match the value defined in dcdrel001_client.c
+        DCDREL001_PASS_COUNT=5
+        tet_infoline "DCDREL001_PASS_COUNT: ${DCDREL001_PASS_COUNT}"
+
+        (( TARGET_BINDING_COUNT = PROT_SEQ_COUNT * NODE_COUNT 
+                                  * DCDREL001_PASS_COUNT ))
+        tet_infoline "TARGET_BINDING_COUNT: ${TARGET_BINDING_COUNT}"
+        export TARGET_BINDING_COUNT PROT_SEQ_COUNT NODE_COUNT
+
+	HOSTLIST=""
+	ping_hosts
+
+        if [ -n "${HOSTLIST}" ];then
+	    for RHOST in ${HOSTLIST}; do
+		if [ "${RHOST}" != `uname -n` ]; then
+		    ${RSH_COMM} ${RHOST} "cd ${TCDIR}; \
+		        if [ ! -d ${EXEC_DIR} ];then mkdir -p ${EXEC_DIR};fi ; \
+		        cp dcdrel001_client dcdrel001a_server dcdrel001b_server dcdrel001_secval \
+		            dcdrel001_srv_shut ${EXEC_DIR}"
+		else
+		    if [ ! -d ${EXEC_DIR} ];then mkdir -p ${EXEC_DIR};fi 
+		    cp dcdrel001_client dcdrel001a_server dcdrel001b_server dcdrel001_secval \
+			dcdrel001_srv_shut ${EXEC_DIR}
+		fi
+	    done
+	fi
+	RC=0
+        setup
+        tet_infoline "Executed setup procedure"
+
+}
+
+dcdrel001 ()
+{
+    LOOP=1
+    CURRENT_LOOP=1
+    if [ -n "$RUN_TIME" ]
+    then
+        SECONDS_TO_EXECUTE=`awk "BEGIN { printf (\"%d\", 3600 * $RUN_TIME); exit; }"`
+    fi
+    SECONDS=0
+    while [ $LOOP -eq 1 ]
+    do
+        tet_infoline "Starting iteration $CURRENT_LOOP"
+
+        if [ $CURRENT_LOOP -eq 1 ]; then
+            test_fail=0
+        fi
+ 
+	start_servers
+        tet_infoline "Attempted to start dcdrel001a and 1b servers on each node"
+
+        sleep 45    # could include a check on each node to verify 
+                    # that the server is running
+
+        tet_infoline "Completed delay for servers to register."
+
+	start_clients 
+        tet_infoline "Attempted to start a dcdrel001 client on each node"
+
+	start_secval_test 
+        tet_infoline "Attempted to start a dcdrel001_secval test on each node"
+	echo "Completed starting servers and clients on all nodes"
+
+	wait_for_done
+        tet_infoline "Clients and secval tests done on all nodes"
+
+	stop_servers 
+        tet_infoline "Attempted to stop the dcdrel001 servers on all nodes"
+
+        sleep 10  # give servers time to close files 
+	tet_infoline "Completed delay to allow servers to close output files"
+
+	check_results_001 ${STTMPDIR}/dcdrel001.results
+        tet_infoline "Completed processing log files"
+	echo "Completed processing log files"
+
+  	if [[ -s ${STTMPDIR}/dcdrel001.results ]] 
+  	then
+      		test_fail=1
+      		tet_infoline "Summary results were as follows:"
+      		infofile "${STTMPDIR}/dcdrel001.results" "results: "
+  	fi
+
+        CURRENT_LOOP=`expr $CURRENT_LOOP + 1`
+
+        if [ -n "$LOOPS_TO_EXECUTE" ]; then
+            if [ $CURRENT_LOOP -gt $LOOPS_TO_EXECUTE ]; then
+                LOOP=0
+            fi
+        elif [ -n "$RUN_TIME" ]; then
+            if [ "$SECONDS" -ge "$SECONDS_TO_EXECUTE" ]; then
+                LOOP=0
+            fi
+        else
+            LOOP=0
+        fi
+
+    done
+    if [ $test_fail -eq 0 ]; then
+        tet_result PASS
+	echo "DCDREL001 passed"
+    else
+        tet_result DCE_ERROR
+	echo "DCDREL001 failed"
+    fi
+}
+
+cleanup()
+{
+	tet_infoline "Removing test specific CDS obj's and dir's"
+	dce_login cell_admin -dce- -e ./cleanup.ksh
+	for RHOST in ${HOSTLIST}; do
+	    if [ "${RHOST}" = $(uname -n) ]; then
+		rm ${STTMPDIR}/dcdrel*
+	    else
+		${RSH_COMM} ${RHOST} "rm ${STTMPDIR}/dcdrel*"
+	    fi
+	done
+	return
+}
+
+# tcc will fail if these files don't exist and get sourced
+# so there is no need to check that this happens
+
+. $TET_ROOT/profile.dcest
+. $TET_ROOT/dced/ts/common_functions
+. $TET_ROOT/dced/ts/dcdrel.functions
+. $TCM

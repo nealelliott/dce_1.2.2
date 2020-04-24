@@ -1,0 +1,314 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for 
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: dts.dcp,v $
+# Revision 1.1.6.1  1996/08/09  11:52:07  arvind
+# 	Merge changes.
+# 	[1996/07/01  14:42 UTC  truitt  /main/DCE_1.2.2/truitt_dcecp_pk/1]
+#
+# 	Merge with latest HP changes and enhancements.
+# 	[1996/03/07  16:53 UTC  truitt  /main/HPDCE02/2]
+#
+# 	Merge dts changes.
+# 	[1996/03/07  16:52 UTC  truitt  /main/HPDCE02/truitt_dcecp_chf66/1]
+#
+# 	CHFts16674: Have 'dts catalog' locate dts servers in other lan profiles.
+# 	CHFts17033: Update the verbose help message to reflect new functionality.
+# 	CHFts17732: Add support to distinguish between local and global dts servers
+# 	during a 'dts catalog' command.
+#
+# 	Initial DCE_1.2.2 branch.
+# 	[1996/07/01  14:27 UTC  truitt  /main/DCE_1.2.2/1]
+#
+# Revision 1.1.4.2  1996/03/09  23:06:33  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:25:23  marty]
+# 
+# Revision 1.1.4.1  1995/12/08  21:24:04  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/1  1995/10/17  14:57 UTC  kevins
+# 	First change to dts.dcp in a while
+# 
+# 	HP revision /main/kevins_chfts15887/1  1995/10/17  14:42 UTC  kevins
+# 	Need to modify the method for setting script debuging variable.
+# 	[1995/12/08  17:57:47  root]
+# 
+# Revision 1.1.2.1  1994/07/19  18:09:58  rousseau
+# 	Added 'dts catalog' and 'clock compare' (CR 11249 11251).
+# 	[1994/07/19  18:08:59  rousseau]
+# 
+# 	Initial version.
+# 
+# $EndLog$
+
+# Globals
+if {[info globals DTS_DEBUG] == ""} {
+    set DTS_DEBUG 0
+}
+
+#
+# _dcp_dts_catalog --
+#     Return a list of all of the DTS servers in the specified cell
+#
+proc _dcp_dts_catalog {args} {
+    set arg_table {
+        {-global boolean global_flag
+            "Return global DTS servers registered in the cell profile."}
+        {-simplename boolean simple_flag
+            "List all DTS entry names in cell relative format."}
+    }
+
+    set local_args [lrange $args 1 end]
+    set global_flag 0
+    set simple_flag 0
+
+    #
+    # Parse the argument list and check if the user just wants help
+    #
+    set help_list [parseargs $arg_table local_args -no_leftovers]
+    if {[llength $help_list ] > 0} {
+        return $help_list
+    }
+
+    #
+    # Check for extra arguments.
+    #
+    if {[llength $local_args] > 1} {
+        error "Unrecognized argument [lindex $local_args 1]."  
+    } elseif {[llength $local_args] == 0} { 
+        set cell_name "/.:"
+    } else { 
+        set cell_name $local_args 
+    }
+
+    _dcp_dts_debug "cell_name is $cell_name"
+    set result ""
+
+    if {$global_flag == 1} {
+        #
+        # Return only those dts servers registered in the
+        # cell profile (/.:/cell-profile).
+        #
+        _dcp_dts_debug "Get list of dts entities in cell-profile"
+        foreach cp [rpcprofile show $cell_name/cell-profile \
+                    -interface {17579714-82c9-11c9-8a59-08002b0dc035 1.0}] {
+            _dcp_dts_debug "Adding entry '$cp'"
+            if {$simple_flag == 1} {
+                if {[string length $result] == 0} {
+                    set result "[lindex [name parse [lindex $cp 1]] 1]"
+                } else {
+                    set result "$result\n[lindex [name parse [lindex $cp 1]] 1]"
+                }
+            } else {
+                if {[string length $result] == 0} {
+                    set result "[lindex $cp 1]"
+                } else {
+                    set result "${result} [lindex $cp 1]"
+                }
+            }
+        }
+    } else {
+        #
+        # Return all dts servers in known lan profiles.
+        #
+        _dcp_dts_debug "Get list of lan-profiles in cell-profile"
+        set known_lan_profs [rpcprofile show $cell_name/cell-profile \
+                             -interface {6f264242-b9f8-11c9-ad31-08002b0dc035 1.0}]
+
+        _dcp_dts_debug "lan-profiles from cell-profile is $known_lan_profs"
+
+        set already_found ""
+        foreach lp $known_lan_profs {
+            _dcp_dts_debug "Working on lan $lp..."
+            foreach line [rpcprofile show [lindex $lp 1] \
+                          -interface {019ee420-682d-11c9-a607-08002b0dea7a 1.0}] {
+                _dcp_dts_debug "Adding line '$line'"
+                if {$simple_flag == 1} {
+                    if {[string length $result] == 0} {
+                        set result "[lindex [name parse [lindex $line 1]] 1]"
+                    } else {
+                        set result "$result\n[lindex [name parse [lindex $line 1]] 1]"
+                    }
+                } else {
+                    if {[string length $result] == 0} {
+                        set result "[lindex $line 1]"
+                    } else {
+                        set result "${result} [lindex $line 1]"
+                    }
+                }
+                lappend already_found [lindex $line 1]
+            }
+        }
+
+        #
+        # Look through the cell root directory for any other profile
+        # objects that may contain dts servers.  When configuring a
+        # client, additional lan's, if any, are created in the root
+        # directory.
+        #
+        _dcp_dts_debug "Looking through the root directory for more profiles"
+        set object_list [directory list $cell_name -objects]
+        _dcp_dts_debug "Objects to look through are $object_list"
+        set new_lan_profs ""
+        foreach element $object_list {
+            _dcp_dts_debug "Working on object $element..."
+            set pr_val [attrlist getvalues [object show $element] -type CDS_Class]
+            set pr_name [lindex [name parse $element] 1]
+            if {$pr_val == "RPC_Profile"} {
+                if {$pr_name != "cell-profile" && $pr_name != "lan-profile"} {
+                    _dcp_dts_debug "Found another RPC profile $element"
+                    lappend new_lan_profs $element
+                }
+            }
+        }
+
+        _dcp_dts_debug "Final list of new lan profiles is $new_lan_profs"
+
+        foreach lp $new_lan_profs {
+            _dcp_dts_debug "Working on lan $lp..."
+            if {[catch {set lan_entries [rpcprofile show $lp \
+                        -interface {019ee420-682d-11c9-a607-08002b0dea7a 1.0}]} msg] != 0} {
+                set lan_entries ""
+            }
+            foreach line $lan_entries {
+                set found_entry 0
+                set tmpres "[lindex $line 1]"
+                _dcp_dts_debug "Checking new entry $tmpres..."
+                foreach tmp $already_found {
+                    _dcp_dts_debug "Checking against existing entry $tmp"
+                    if {$tmp == $tmpres} {
+                        set found_entry 1
+                    }
+                }
+                if {$found_entry == 0} {
+                    _dcp_dts_debug "Adding line '$line'"
+                    if {$simple_flag == 1} {
+                        if {[string length $result] == 0} {
+                            set result "[lindex [name parse [lindex $line 1]] 1]"
+                        } else {
+                            set result "$result\n[lindex [name parse [lindex $line 1]] 1]"
+                        }
+                    } else {
+                        if {[string length $result] == 0} {
+                            set result "[lindex $line 1]"
+                        } else {
+                            set result "${result} [lindex $line 1]"
+                        }
+                    }
+                    lappend already_found $tmpres
+                }
+            }
+        }
+    }
+
+    _dcp_dts_debug "Unsorted result is:\n$result"
+    regsub -all { } [lsort $result] \n sorted
+    return $sorted
+}
+
+
+#
+# _dcp_clock_compare --
+#     Compare the time on the optionally specified machine with a known
+#     good source (a server or a provider, if available).
+#
+proc _dcp_clock_compare {args} {
+    set arg_table {
+        {-server string server
+            "The name of a server to contact as the time reference."}
+    }
+
+    set local_args [lrange $args 1 end]
+
+    _dcp_dts_debug "Called with args of $local_args"
+
+    #
+    # Parse the argmuent list and check if the user just wants help.
+    #
+    set help_list [parseargs $arg_table local_args -no_leftovers]
+    if {[llength $help_list ] > 0} {
+        return $help_list
+    }
+
+    #
+    # Check for extra arguments.
+    #
+    if {[llength $local_args] > 1} {
+        error "Unrecognized argument [lindex $local_args 1]."  
+    } elseif {[llength $local_args] == 0} { 
+        set host_name ""
+    } else { 
+        set host_name $local_args 
+    }
+
+    _dcp_dts_debug "host_name is $host_name"
+
+    if {[info local server] == ""} {
+        #
+        # No server was specified, so pick any dts server
+        #
+        set dts_cat_out [_dcp_dts_catalog]
+        if {[llength $dts_cat_out] == 0} {
+            error "Unable to find any DTS servers."
+        }
+        foreach s $dts_cat_out {
+            _dcp_dts_debug "s is $s"
+            if {[catch {dts show $s} dts_sh_out] != 0} {
+                continue
+            }
+            set server $s
+            set p [attrlist getval $dts_sh_out -type provider]
+            _dcp_dts_debug "p is $p"
+            if {[string match $p "yes"] == 1} {
+                set provider "yes"
+                set server $s
+                break
+            }
+            set provider "no"
+        }
+    } else {
+        #
+        # Contact the specified server.
+        #
+        if {[catch {dts show $server} dts_sh_out] != 0} {
+            error "Can not contact '$server'."
+        }
+        set p [attrlist getval $dts_sh_out -type provider]
+        _dcp_dts_debug "p is $p"
+        if {[string match $p "yes"] == 1} {
+            set provider "yes"
+        } else {
+            set provider "no"
+        }
+    }
+
+    _dcp_dts_debug "Comparing '$server' against '$host_name'."
+    if {[string length $host_name] > 0} {
+        set skew [utc subtract [clock show $server] [clock show $host_name]]
+    } else {
+        set skew [utc subtract [clock show $server] [clock show]]
+    }
+
+    set result "{server $server}\n{provider $provider}\n{skew $skew}"
+    return $result
+}
+
+
+#
+# _dcp_dts_debug
+#     Output text passed as an argument to stderr if DTS_DEBUG is
+#     turned on.
+#
+proc _dcp_dts_debug {args} {
+    global DTS_DEBUG
+    if {$DTS_DEBUG != 0} {
+        puts stderr "DEBUG: [lindex [info level [expr [info level] - 1]] 0]:\
+                            [string range $args 1 [expr [string length $args] -2]]"
+    }
+}

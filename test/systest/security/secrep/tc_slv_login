@@ -1,0 +1,135 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: tc_slv_login,v $
+# Revision 1.1.2.2  1996/03/09  20:52:29  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:30:03  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:48:05  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:33 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  20:25 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:54 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  19:40 UTC  gordon_l
+# 	Fixes for change_master/becom
+# 	e_master
+# 	[1995/12/11  22:22:46  root]
+# 
+# Revision 1.1.2.2  1993/08/02  17:42:03  sekhar
+# 	Replication system test. Initial version
+# 	[1993/08/02  17:32:52  sekhar]
+# 
+# $EndLog$
+# 
+
+if [ -z "${TC_LOGIN_DEFINED}" ] ; then
+
+TC_LOGIN_DEFINED=1
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  DESCRIPTION: 
+#      This test case is part of the security replication system test
+#      and tests the following:
+#
+#      This tests that principals can still login even if the master
+#      security server is not running in the cell as long as there
+#      is a slave security server running in the cell.
+#
+#      This is done by first running the update security functional
+#      test to add principals to the registry. These principals
+#      will be used later on to test the login.
+#
+#      Next the master is stopped using the function sec_stop_master .
+#
+#      Then rgylogin security functional test is run on the slave. 
+#      rgylogin attempts to login into the cell using the principals
+#      created by running the update functional test above. rgylogin
+#      should pass because logins should still work even though the
+#      master is not running.
+# 
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+tet_startup="tc_slv_login_init"
+tet_cleanup="tc_slv_login_cleanup"
+tet_testlist="tc_slv_login"
+
+iclist="ic1"
+ic1="tc_slv_login"
+
+tc_slv_login_init()
+{
+    typeset st
+    tet_infoline "............... Test: tc_slv_login"
+    tc_common_init ; st=$?
+    if [ $st -ne 0 ] ; then
+        tet_delete $ic1 "tc_slv_login_init(): Initialization failed"
+        return 
+    fi
+    if [ $SLV_CNT -eq 0 ] ; then
+        tet_delete $ic1 "tc_slv_login_init() : Test requires at least one slave in the cell"
+        return 
+    fi
+    #   Run the update test to add princ, groups etc
+    #   to the registry.
+    tc_common_upd "${SLV_HOSTNAMES[*]}" $RGYLOGIN_NPRINC ; st=$?
+    if [ $st -ne 0 ] ; then
+        tet_delete $ic1 "tc_slv_login_init() : Test requires at least one slave in the cell"        
+        return
+    fi
+}
+
+tc_slv_login_cleanup()
+{
+    sft_cleanup
+}
+
+tc_slv_login()
+{
+    typeset st
+
+    #   stop the master ; startup rgylogin test on every
+    #   slave and verify that all the tests pass.
+
+    testdesc="Logins with master stopped"  ; replog_testhdr "$testdesc"
+
+    secd_stop $MASTER_HOSTNAME $MASTER_NAME ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    sft_x_rgylogin_hosts "${SLV_HOSTNAMES[*]}" $RGYLOGIN_NPRINC
+    tc_wait_bgjobs "rgylogin test"
+
+    sft_v_rgylogin_hosts "${SLV_HOSTNAMES[*]}" ; st=$?
+    replog_testresult "$testdesc" $st
+    secd_start $MASTER_HOSTNAME $MASTER_NAME ; st=$?   #  Cleanup
+} 
+
+. $TET_ROOT/profile.dcest
+. ./profile
+. $PHOME/replog
+. $PHOME/tc_common
+. $PHOME/slv
+. $PHOME/sft
+. $TCM
+#. $TET_ROOT/lib/xpg3sh/tcm.sh
+
+fi

@@ -1,0 +1,247 @@
+
+-------------------------------------------------------------------------
+                   README
+-------------------------------------------------------------------------
+
+This subdirectory contains the distributed system call tests implemented
+by ITL (Interface Testing Language). Check with Mike Kazar's syscall
+check-list for explanatory details if necessary.
+
+These tests have complicated setup procedures.  This README should help
+you get the tests setup.
+
+The initial desire for this test suite was for DFS use only, but some of
+them could be used for any other UNIX file system testing.  Currently, we
+should run the syscall tests under DFS/UFS and DFS/LFS.
+
+Each of these tests has two control files.  <test>.dist.scr and
+<test>.dist.scr.setup.  The .scr file is the ITL script that implements
+the test.  The .setup file is the associated SAMPLE setup file for
+auto_spoke.  You will need to either edit these to match your particular
+installation, or alter your DFS file system to match the default .setup if
+you wish to use auto_spoke test configuration.  The latter is usually
+easier to do since all you need is a symlink in /:/wd to point to your
+test directory.
+
+
+SETUP THE FILES NEEDED 
+----------------------
+1. Make a test directory in DFS space to hold both the scripts and a work dir.
+2. Copy this directory (stress) and the test/file/util directory to the 
+   test directory to the same level. eg: /:/SCRATCH/os_calls/{util,stress}
+3. Copy the 'file_test' executable into your stress subdirectory.
+4. For each test you will run, check and edit each script's setup file 
+   (see above) for particular requirments of your installation.
+5. Make the binary "file_test" available to each machine (/tmp or link to @sys)
+
+CREATE A CDS OBJECT
+-------------------
+
+6. First you have to create a virtual directory, for example /.:/dfs-test, by 
+   command:
+    
+    % cdscp create dir /.:/dfs-test 
+
+You must either use the name "dfs-test" as the directory, or edit the runall
+script.
+
+Use a command like the following to remove unwanted or left-over cds objects
+after test failures:
+
+    % cds delete obj /.:/dfs-test/bar
+
+
+FIX PERMISSIONS (ACLs) OF THE WORKING DIRECTORY
+-----------------------------------------------
+
+We have to have "any_other" user have "rwxid" right on the working 
+directory (stress).
+
+In UFS symply use "chmod 777" on the working dir. In LFS we have to use
+"acl_edit" to set any_other user's rwxid right for each components in the
+path of the working directory.  It will also be necessary to ensure that
+the user running the HUB of the tests have rwxid permissions on the
+workdir.  So if you plan to run as cell_admin, or other authenticated
+user, you must also add other_obj:rwxid to the acl on the working dir.
+
+7.	acl_edit stress -m any_other:rwxid
+8.	acl_edit stress -m other_obj:rwxid
+
+
+SETUP RSH FILES
+---------------
+Make rsh work.  On a Sparc, you'll need to have a valid entry for
+your userid in /etc/shadow.  Also, you need to set up files:
+
+9.  /.rhosts  
+	+
+
+10. /etc/hosts.equiv
+	+
+        dewitt.transarc.com
+        coven.transarc.com
+
+These should exist on both machines.  Check to see that rsh works before
+proceeding.
+
+Make sure that the full path to the install directory is open to
+any_other:rl.  This is because the remote jobs (spokes) will need to read
+the setup file before they authenticate.
+
+
+ENVIRONMENT VARIABLES
+---------------------
+The following variables are used by parts of the itl scripts.
+
+DISPLAY <hostname>:0.0 			 ; May not work with some X11s
+LOCAL_PATH  /mnt/os_calls/scripts/stress ; Set this to the UFS mount path 
+DFS_TESTINSTALL /:/fileset/os_calls/scripts/stress ; Set this to the DFS path.
+RPC_SUPPORTED_PROTSEQS ncadg_udp_ip	 ; If you want to specify protocol.
+DEBUG 1					 ; sets more ITL debugging output.
+
+RUN ITL SCRIPTS MANUALLY
+------------------------
+To run a script simply type following command line (include the path
+to the binary file_test).
+  
+Initiate a Hub: 
+
+   % file_test -l cds-obj  ; as created above. 
+
+Initiate Spokes:
+   (you may need to open new windows and telnet to the spoke machine):
+
+   % file_test -c cds-obj  ; as created above. 
+
+After you have all Hub and spokes set up you simply type ITL command
+"include <script-file>" from Hub prompt "Do==>".
+
+See below for auto_spoke. (Preferred)
+
+
+RUN ITL SCRIPTS AUTOMATICALLY
+-----------------------------
+
+Remember the .setup files?  Here is where they are used.  Create a "setup"
+file which contains all the information about the spoke machines that you
+want to invoke in your test.  One line in the file describes one spoke.  A
+HUB will initiate spokes according to the data in the file.
+
+The line format in setup file is:
+
+<machine-name><binary-path><work-dir><princ-name passwd or "" ""><logfile or "">
+
+For example if you want a spoke on machine "moe" with a window open:
+
+   moe /tmp/file_test /:/test/os_calls/scripts cell_admin -dce- ""
+
+If the machine-name field is "" then you have to make sure the environment
+variable AUTO_SPOKE_MACHINES is set.  For example, you can set it as
+setenv AUTO_SPOKE_MACHINES 'moe curly'.  The auto_spoke will use these
+machines in Round-Robin fashion with data taken from their lines in the
+setup file.
+
+If the logfile field is set then there will be no xterm invoked and
+auto_spoke will simply redirect the spoke output into the log-file,
+otherwise windows will be opened to monitor the spoke.
+
+A blank line is allowed and also comment lines begining with # are a tradition.
+
+It is non-sense if you want to have a window _and_ a logfile.  That is why
+we use the "" (empty) logfile name to stand for an xterm window.
+
+It is convenient to use "" for machine names since machine names are the
+most volatile part of the test setup.  Instead, the AUTO_SPOKE_MACHINES
+environment variable specifies a list of machine names.
+
+Before you create the setup file check the script and sample .setup file
+for the number of spokes required or other important details.
+
+
+NOTE (before running auto-spoke)
+-------------------------------- 
+
+Be sure you copy the binary "file_test" into DFS-space or /tmp on each
+machine.  Otherwise it will not be found on the spoke machines.  You may
+have to change all setup file for the binary path.  A viable alternative
+for multiple machine types is to simply copy the binary to
+"/tmp/file_test" and change/check the setup files.
+
+Be sure you have env variable DISPLAY set (if you want windows open, i.e, 
+if the setup file contains "" for logfile name). 
+
+Be sure you have env variable AUTO_SPOKE_MACHINES set if the setup file
+contains "" for machine name.
+
+Be sure you are not root locally. (can interfere with rsh functions)
+
+Be sure you are dce logined. (cell_admin or other user with CDS permissions)
+
+Be sure you did extended the token life time for more than 12 hours
+if executing all scripts automatically.
+
+Be sure you have an env var LOCAL_PATH set if UFS is tested.
+ 
+
+RUN ALL SCRIPTS AUTOMATICALLY
+-----------------------------
+
+If there are some local paths that need to be tested in your setup file
+then you have to make sure you have write permissions for a log file that
+needs to be created in the local path.  We have this problem because the
+root is not allowed to issue rsh but someone else can not create file in
+most local file systems which are exported by DFS.  Just be sure to give
+the user permissions to write into the working dir and log area specified
+in the "setup" files.
+
+There is no guarantee that the first line in a setup file is the first
+spoke. It will be a race between the rsh invocations instead.
+
+After you set up the setup file you can run your test by
+ 
+   % /tmp/file_test -l /.:/cds-obj/ -C <setup-file>  ; include <script> to "Do==>"
+or
+   % /tmp/file_test -l /.:/cds-obj/ -C <setup-file> -I <script>
+
+or (run all scripts)
+  
+   % ./runall
+
+The the machine will automatically run the distributed test for you.  If
+"-D" is in the command line for HUB then it will turn on all spokes it
+initiated with "displayLine mode" for debugging.
+
+The DEBUG environment variable also increases the debugging output from
+ITL.
+
+It is painful to create a setup file for different configurations which my
+have different working directory, different binary path, different log
+file names ... . If a set of setup file provided with source files then
+the suggested way to make use of those files is to symlink the binary
+path, and the working directory path to those specified in the sample
+setup files.  This requires less work than to edit all the setup files.
+
+There is a script called "rexit.scr can be used to rexit spoke machine 
+'rsh' manually.
+
+"file_test" is the interpretor of ITL which could be found under the "obj"
+tree of your local tree.  Have the binary "file_test" copied locally (may
+need to use @sys set up so that it will be convenient to run it over
+multi-platforms.
+
+PROBLEM CHECKS (for auto-spoke)
+--------------------------------
+
+1. check two system files
+    /etc/hosts.equiv for proper setup (a plus '+' is good enough).
+    /.rhosts for your user ID.  Test rsh with an "ls" of <working dir>
+
+2. AUTO_SPOKE allows only 32 spokes to be involved at most
+   It is limited in itl_spoke.c by the handle hash table size in the macro 
+   CHT_GENERATE_ROUTINES.
+
+3. check permissions; if using lfs check acls.
+
+-------------------------------------------------------------------------
+
+     

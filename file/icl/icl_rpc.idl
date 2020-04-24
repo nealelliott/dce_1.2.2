@@ -1,0 +1,125 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: icl_rpc.idl,v $
+ * Revision 1.1.9.1  1996/10/02  17:52:21  damon
+ * 	Newest DFS from Transarc
+ * 	[1996/10/01  18:41:00  damon]
+ *
+ * Revision 1.1.4.1  1994/06/09  14:11:35  annie
+ * 	fixed copyright in src/file
+ * 	[1994/06/09  13:25:18  annie]
+ * 
+ * Revision 1.1.2.2  1993/05/11  14:16:26  jaffe
+ * 	Transarc delta: comer-db3378-add-rpc-interface-to-user-level-icl 1.2
+ * 	  Selected comments:
+ * 	    This delta implements an RPC interface to the user-level ICL tracing
+ * 	    package.  The idea is that each server will export this interface to
+ * 	    CDS under a meaningful entry.  For example, the flserver would export
+ * 	    it under /.:/hosts/<hostname>/flserver by making the call:
+ * 	    code = icl_ExportIF("flserver");
+ * 	    Each command in the dfstrace suite now has a -cdsentry that, if
+ * 	    specified, will cause dfstrace to connect to the specified server
+ * 	    instead of the kernel.
+ * 	    IDL file for RPC interface.
+ * 	    The dump file is now restricted to be in /opt/dcelocal/var/dfs/adm.
+ * 	[1993/05/10  18:11:46  jaffe]
+ * 
+ * $EndLog$
+ */
+/*
+ * icl_rpc.idl -- RPC interface to ICL tracing admin functions
+ *
+ *	Copyright (C) 1993 Transarc Corporation
+ *	All rights reserved.
+ */
+
+[uuid(003fd39c-7feb-1bbc-bebe-02608c2ef4d2),version(1.0)]
+
+interface DFSTRACE
+{
+    import "dce/rpctypes.idl";
+
+    const unsigned32 		ICL_RPC_MAX_SETS = 64;
+    const unsigned32		ICL_RPC_MAX_LOGS = 64;
+    const unsigned32		ICL_RPC_MAX_FILE_NAME = 256;
+
+    typedef struct icl_setinfo {
+	[string] unsigned char 	setName[32];
+	unsigned32		states;
+    } icl_setinfo_t;
+
+    typedef struct icl_loginfo {
+	[string] unsigned char 	logName[32];
+	unsigned32		logSize;
+	unsigned32		logElements;
+	unsigned32		states;
+    } icl_loginfo_t;
+
+    typedef struct icl_bulkSetinfo {
+	unsigned32		count;
+	[size_is(count)] icl_setinfo_t setinfo[];
+    } icl_bulkSetinfo_t;
+
+    typedef struct icl_bulkLoginfo {
+	unsigned32		count;
+	[size_is(count)] icl_loginfo_t loginfo[];
+    } icl_bulkLoginfo_t;
+
+    error_status_t DFSTRACE_GetSetInfo
+	(
+	 [in] 	handle_t	h,
+	 [in]	unsigned32	all,	/* get stats for all sets */
+	 [in, out]  icl_bulkSetinfo_t	*info
+	);
+
+    error_status_t DFSTRACE_SetSetInfo
+	(
+	 [in] 	handle_t	h,
+	 [in]	unsigned32	all,	/* set stats for all sets */
+	 [in, out] icl_bulkSetinfo_t	*info
+	);
+
+    error_status_t DFSTRACE_GetLogInfo
+	(
+	 [in] 	handle_t	h,
+	 [in, string] char 	setname[32],
+	 [in]	unsigned32	all,	/* get stats for all logs */
+	 [in, out]  icl_bulkLoginfo_t	*info
+	);
+
+    error_status_t DFSTRACE_SetLogInfo
+	(
+	 [in] 	handle_t	h,
+	 [in]	unsigned32	all,	/* set stats for all logs */
+	 [in, out] icl_bulkLoginfo_t	*info
+	);
+
+    error_status_t DFSTRACE_ClearSet
+	(
+	 [in] 	handle_t	h,
+	 [in]	unsigned32	all,	/* clear all sets */
+	 [in, out] icl_bulkSetinfo_t	*info
+	);
+
+    error_status_t DFSTRACE_ClearLog
+	(
+	 [in] 	handle_t	h,
+	 [in]	unsigned32	all,	/* clear all logs */
+	 [in, out] icl_bulkLoginfo_t	*info
+	);
+
+    error_status_t DFSTRACE_DumpSet
+	(
+	 [in] 	handle_t	h,
+	 [in, string] char	filename[ICL_RPC_MAX_FILE_NAME],
+	 [in]	unsigned32	all,	/* dump all sets */
+	 [in, out] icl_bulkSetinfo_t	*info
+	);
+}

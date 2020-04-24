@@ -1,0 +1,1215 @@
+	.IDENT	/V1.0/
+;++
+; @OSF_COPYRIGHT@
+; COPYRIGHT NOTICE
+; Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+; ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+; the full copyright text.
+; 
+; HISTORY
+; $Log: cma_assem.mar,v $
+; Revision 1.1.6.2  1996/03/09  23:30:57  marty
+; 	Update OSF copyright year
+; 	[1996/03/09  22:46:12  marty]
+;
+; Revision 1.1.6.1  1995/12/07  21:58:22  root
+; 	Submit OSF/DCE 1.2.1
+; 	[1995/12/07  21:04:09  root]
+; 
+; Revision 1.1.4.1  1994/06/09  13:37:04  devsrc
+; 	 CR10892 - fix copyright in file
+; 	[1994/06/09  13:27:08  devsrc]
+; 
+; Revision 1.1.2.2  1992/12/15  23:16:18  alan
+; 	Insert copyright notices
+; 	[1992/12/07  19:03:49  alan]
+; 
+; $EndLog$
+;--
+;++
+;  Copyright (c) 1989, 1991
+;  by DIGITAL Equipment Corporation, Maynard, Mass.
+;
+;  This software is furnished under a license and may be used and  copied
+;  only  in  accordance  with  the  terms  of  such  license and with the
+;  inclusion of the above copyright notice.  This software or  any  other
+;  copies  thereof may not be provided or otherwise made available to any
+;  other person.  No title to and ownership of  the  software  is  hereby
+;  transferred.
+;
+;  The information in this software is subject to change  without  notice
+;  and  should  not  be  construed  as  a commitment by DIGITAL Equipment
+;  Corporation.
+;
+;  DIGITAL assumes no responsibility for the use or  reliability  of  its
+;  software on equipment which is not supplied by DIGITAL.
+;
+
+;
+;  FACILITY:
+;
+;	CMA services
+;
+;  ABSTRACT:
+;
+;	These are non-portable subroutines for thread service routines.  They
+;	cannot be written in C because they manipulate specific registers, etc.
+;
+;  AUTHORS:
+;
+;	Webb Scales
+;
+;  CREATION DATE:
+;
+;	25 August 1989
+;
+;  MODIFICATION HISTORY:
+;
+;	001	Dave Butenhof	11 September 1989
+;		Add .external for callouts, and add G^ to each call.
+;	002	Hans Oser	15 September 1989
+;		Call cma__ready_thread changed to cma__start_thread
+;	003	Webb Scales	21 September 1989
+;		Added cma__transfer_async_ctx
+;		Reworked cma___do_save/restore_ctx
+;		Replaced RET with HALT in routines that should not return
+;	004	Webb Scales	26 September 1989
+;		Added cma___catchall_handler
+;		Fixed the module ident
+;	005	Dave Butenhof	27 September 1989
+;		Fix a few typos (missing # and ^G)
+;	006	Webb Scales and Dave Butenhof	27 September 1989
+;		Define global symbol for default PSL value
+;	007	Webb Scales	29 September 1989
+;		Reworked context switching, particularly for async switches
+;		"In-lined" the JSB routines
+;	008	Webb Scales	 3 October 1989
+;		Fixed context restoration to handle either sync or async context
+;		Removed general register initialization from cma__create_thread
+;		Preserve R0 & R1 across call to cma__get_async_info in
+;			cma__do_call_dispatch
+;	009	Webb Scales	 6 October 1989
+;		Changed cma_bugcheck(code) to cma__bugcheck()
+;		Modified cma___catchall_handler to resignal cma_s_bugcheck
+;	010	Webb Scales	25 October 1989
+;		Modified routines to put context on the stack and to leave
+;		the kernel before restoring the new thread's registers
+;	011	Webb Scales	30 October 1989
+;		Moved call to cma__start_thread back inside kernel region
+;	012	Webb Scales and Dave Butenhof	Halloween 1989
+;		Fix some stack indexing errors in cma__force_dispatch
+;	013	Dave Butenhof and Webb Scales	All Saints Day 1989
+;		· Remove calls to enter/exit kernel.
+;		· Store valid SP in context buffer (to close window where AST
+;		  could be delivered on null stack).
+;	014	CMA Team	3 November 1989
+;		Call undefer inside kernel region.
+;	015	Webb Scales & Bob Conti		6 November 1989
+;		Reworked asynch context switching out of existence.
+;	016	Webb Scales	8 November 1989
+;		Added cma__init_assem and cma___g_base_frame.
+;	017	Webb Scales	10 November 1989
+;		Fixed psect attributes for cma___g_base_frame.
+;	018	Webb Scales	18 November 1989
+;		Removed unused p_ctx parameter from cma__create_thread routine.
+;		Changed interface to routine, cma__get_async_info
+;	019	Dave Butenhof	12 December 1989
+;		Move most of cma__execute_thread startup code into a C routine
+;		to use portable exception handling around client's start
+;		routine.
+;	020	Webb Scales	13 December 1989
+;		Fixed cma__init_assem to account for cma__shr_init.
+;	021	Dave Butenhof	16 August 1990
+;		Implement "springboard" routine for asynchronous alert
+;		delivery.
+;	022	Bob Conti	14 Nov 1990
+;		Use LIB$INITIALIZE to init CMA automagically
+;		Fix persistant frame algorithm
+;	023	Dave Butenhof	01 May 1991
+;		Add arguments to cma__bugcheck() calls.
+;	024	DECthreads team		22 July 1991
+;		Added cma__save_exc_context, cma__restore_exc_context
+;	025	Webb Scales & Paul Curtin	25 July 1991
+;		Added initialized FAB & RAB declarations
+;	026	Dave Butenhof	09 October 1991
+;		Correct a slightly misleading comment.
+;--
+
+
+; 
+;	A thread context consists of the saved register set necessary for
+;	rescheduling the thread on another processor.
+;
+;	The thread context is saved in a stack frame created by a CALLS
+;	instruction.  By setting all the register bits in the entry mask, the
+;	CALLS instruction saves R2-R11 automatically, along with the return PC,
+;	FP, AP and PSW, in short, the whole context.  The FP pointing to the
+;	frame containing the context is stored in the static context buffer in
+;	the TCB, along with the SP.  When we restore this context, we simply
+;	restore the FP & SP from the static context buffer and execute a RET
+;	instruction.  This causes the SP, FP, PC, PSW, and AP to be correctly
+;	restored from the information in the call frame, along with all the
+;	general registers, and the thread resumes at the instruction after the
+;	call to save the context.
+;
+;	In the case of an asynchronous context switch, the return PC and PSL at
+;	the point of interruption are fetched from the AST argument list and
+;	stored in the TCB.  Then the return PC in the argument list is
+;	overwritten with the address of the first instruction in
+;	cma__do_call_dispatch, so that, when the AST completes, execution will
+;	resume in cma__do_call_dispatch instead of at the point of interruption.
+;	Here, the PC & PSL for the point of interruption are retrieved from the
+;	TCB (via a C subroutine) and are stored on the stack.  Next R0 & R1,
+;	which would be destroyed by subsequent subroutine calls are pushed on
+;	the stack.  Finally, the normal dispatching routines are called to run
+;	the next thread.  When the interrupted thread is rescheduled, control
+;	returns from the dispatching subroutine call.  R0 & R1 are restored, and
+;	we execute an REI instruction to resume execution at the point where the
+;	original timeslice AST interrupted.
+;
+;	The static context buffer (in the TCB) only contains the FP and the
+;	SP for the suspended thread.  All other context is saved on the
+;	thread's stack.  
+
+;
+;	STATIC CONTEXT BUFFER:
+;
+;	+----------------+  <---- Address of base of static context block 
+;	|       FP       | :0	Address of current frame
+;	+----------------+
+;	|       SP       | :4	Current SP
+;	+----------------+
+;
+;
+;	ASYNCHRONOUS CONTEXT BUFFER:
+;
+;	+----------------+  <---- Address of base of asynchronous context block 
+;	|       PC       | :0	PC at point of interruption
+;	+----------------+
+;	|       PSL      | :4	PSL at point of interruption
+;	+----------------+
+;
+;
+;	STACK DURING SYNCHRONOUS SUSPENSION (Standard VAX stack frame):
+;	
+;	+----------------+  
+;	|     new_ctx    |	address of static context block of new thread
+;	+----------------+
+;	|     old_ctx    |	address of static context block of old thread
+;	+----------------+  
+;	|            | 2 | :AP	argument count in call to context-save
+;	+----------------+  
+;	|       R11      |
+;	+----------------+
+;	|       R10      |	|
+;	+----------------+	|
+;	       ...		| Decreasing Addresses
+;	+----------------+	|
+;	|       R3       |	V
+;	+----------------+
+;	|       R2       |	(R0 & R1 are not saved)
+;	+----------------+
+;	|       PC       |	Return PC 
+;	+----------------+
+;	|       FP       |	FP of calling frame
+;	+----------------+
+;	|       AP       |	AP of calling routine
+;	+----------------+
+;	|SPS0|EM|  PSW   |	Stack alignment bits, bit indicating CALLS,
+;	+----------------+	   register-save portion of entry mask, PSW
+;	|        0	 | :FP	Condition Handler address (none)
+;	+----------------+ :SP	
+;
+;
+;	ADDITIONAL STACK DURING ASYNCHRONOUS SUSPENSION:
+;	
+;	+----------------+  
+;	|       PSL      |	PSL at point of interruption
+;	+----------------+
+;	|       PC       |	PC at point of interruption
+;	+----------------+
+;	|       R0       |	|
+;	+----------------+	|
+;	|	R1	 |	| Decreasing Addresses
+;	+----------------+	|
+;		...		V
+;	  call frames for
+;	 dispatch routines
+;	
+
+	.SUBTITLE DECLARATIONS
+
+	.DISABLE  GLOBAL 
+
+;
+; EXTERNALS:
+;
+	.EXTERNAL	CMA$INIT
+	.EXTERNAL	CMA__ASYNC_DELIVERY
+	.EXTERNAL	CMA__BUGCHECK
+	.EXTERNAL	CMA__GET_ASYNC_INFO
+	.EXTERNAL	CMA__START_THREAD
+	.EXTERNAL	CMA__TERMINATE_THREAD
+	.EXTERNAL	CMA__THREAD_BASE
+	.EXTERNAL	CMA__UNDEFER
+	.EXTERNAL	CMA__YIELD_PROCESSOR
+	.EXTERNAL	LIB$INITIALIZE
+	.EXTERNAL	SYS$UNWIND
+
+;
+; MACROS:
+;
+	$CHFDEF			; Condition Handling Facility def's
+	$SFDEF			; Stack Frame def's
+	$SSDEF			; System Status def's
+	$STSDEF			; Status Code def's
+
+
+; EQUATED SYMBOLS:
+; Local symbols:
+;    argument offsets:
+
+	.psect	$ABS$, abs
+
+	; cma__restore_thread_ctx
+	ctx_buf	  = 4
+	; cma__transfer_thread_ctx
+	cur_ctx   = 4
+	new_ctx   = 8
+	; cma__create_thread
+	c_ctx	  = 4
+	c_stack	  = 8
+	c_tcb	  = 12
+	start_rtn = 16
+	start_arg = 20
+	; "cma___execute_thread" & cma__do_call_on_stack
+	tcb	  = 4
+	stack	  = 4
+	routine	  = 8
+	arg	  = 12
+	; "cma___execute_thread" & cma___catchall_handler
+	exit_status = -4
+
+;    other constants:
+	bytes_per_long	= 4
+	bytes_per_quad	= 8
+	sync_arg_cnt	= 2
+
+	cma__c_default_ps	== ^X03C00000
+
+;
+; OWN STORAGE:
+;
+
+	; Set up shared access to a C extern variable
+	.PSECT	CMA__G_KERNEL_CRITICAL	PIC,USR,OVR,REL,GBL,SHR, -
+					NOEXE,RD,WRT,NOVEC,LONG
+CMA__G_KERNEL_CRITICAL:	.BLKL
+
+	.PSECT	CMA__G_FAB		PIC,USR,OVR,REL,GBL,SHR, -
+					NOEXE,RD,WRT,NOVEC,LONG
+CMA__G_FAB: $FAB	FAC=UPD
+
+	.PSECT	CMA__G_RAB		PIC,USR,OVR,REL,GBL,SHR, -
+					NOEXE,RD,WRT,NOVEC,LONG
+CMA__G_RAB: $RAB
+
+	.PSECT	$DATA	PIC,USR,CON,REL,LCL,NOSHR,NOEXE,RD,WRT,NOVEC,LONG
+CMA___G_BASE_FRAME:	.BLKL
+
+	; Set psect to put our init routine in the lib$initialize Psect
+	;
+	.PSECT	LIB$INITIALIZE,NOEXE,NOPIC,RD,NOWRT,GBL,CON,NOSHR
+	.ADDRESS	CMA$$INITIALIZE
+
+	; Set psect for the code we are about to generate
+	;
+	.PSECT	$CODE	PIC,USR,CON,REL,LCL,SHR,EXE,RD,NOWRT,NOVEC 
+
+	.SUBTITLE cma__create_thread
+ 
+;
+; FUNCTIONAL DESCRIPTION:
+; 
+;	 This routine initializes a thread (ie, its stack and context) and
+;	 prepares it for the scheduler.
+;
+;	 This routine also contains the code which executes in the frame at the
+;	 base of a thread's stack.  It calls the user's "start routine", it
+;	 holds the catch-all handler (set up in cma__create_thread), and it
+;	 calls the thread cleanup routines after the "start routine" returns.
+;
+;	 In the event of an exception during a child thread's execution (ie,
+;	 this does not apply to the caller of this routine, but rather to the
+;	 subsequently created thread), the catch-all handler may unwind back to
+;	 this base frame, write the reason for termination in -4(FP) [the exit
+;	 status], and resume this routine to run down the thread.
+;
+; FORMAL PARAMETERS:
+; 
+;	 c_ctx(AP)     - the address of the child context buffer
+;	 c_stack(AP)   - the address of the base of the child thread stack
+;	 c_tcb(AP)     - the address of the child TCB
+;	 start_rtn(AP) - the address of the start routine entry mask
+;	 start_arg(AP) - the value of parameter to be passed to the routine
+; 
+; IMPLICIT INPUTS:
+; 
+;	 None
+; 
+; IMPLICIT OUTPUTS:
+; 
+;	 The child thread stack is initialized with two call frames:  one for
+;	 the call to "cma___execute_thread" and one for a "call" to
+;	 cma__transfer_thread_ctx which contains the saved context which will
+;	 be restored when the child thread is first scheduled.
+;
+; FUNCTION VALUE:
+; 
+;	 None 
+; 
+; SIDE EFFECTS:
+; 
+;	 None
+;
+;	 NOTE:  This routine assumes that any interruptions which occur while
+;		we are on the child's stack instead of this thread's own stack
+;		won't be concerned about it.
+;
+
+ct1:	.ASCIZ	"create_thread:1"
+
+	.ENTRY	cma__create_thread,^M<>
+
+	; I am about to do something during which I don't want to be rescheduled
+10$:	BBSSI	#0,G^cma__g_kernel_critical,10$
+
+	; "Remember" our current frame pointer and where the child static
+	; context buffer is
+	MOVL	c_ctx(AP),R0		; Instead of passing it on the stack
+	MOVL	FP,R1			; Save FP so we can switch back
+
+	; Switch to child stack
+	MOVL	c_stack(AP),SP		; Switch to child stack
+	BICL2	#^B11,SP		; Align the stack before we start
+
+	; Build the parameter list for "cma___execute_thread"
+	PUSHL	start_arg(AP)		; Push on start routine parameter
+	PUSHL	start_rtn(AP)		; Push on start routine address
+	PUSHL	c_tcb(AP)		; Push on childs TCB address
+
+	;+
+	; Call "cma___execute_thread" on behalf of the child thread.
+	;
+	; NOTE: The call to 30$ never returns to here.  In the parent thread,
+	;	control (eventually) returns directly to the caller of
+	;	cma__create_thread.  In the child thread, the thread is
+	;	terminated before it can return to here, and it is never
+	;	rescheduled.
+	;-
+
+	CALLS	#3,30$			; Call "cma___execute_thread"
+
+	; This point should never be reached during execution, as the call to
+	; "cma___execute_thread" never returns.
+	PUSHAB	ct1
+	CALLS	#1,G^cma__bugcheck	; Handle the error
+	HALT				;  and quit!
+
+	;+
+	; "cma___execute_thread"
+	; 
+	; FORMAL PARAMETERS:
+	; 
+	;	R0	  - the address of the child thread static context block
+	;	R1	  - the saved value of the parent thread frame pointer
+	;	tcb(AP)	  - the address of the child thread tcb
+	;	routine(AP) - the address of the start routine entry mask
+	;	arg(AP)	  - the value of parameter to be passed to the routine
+	; 
+	;-
+
+30$:	.WORD ^M<>			; Entry mask for "cma___execute_thread"
+
+	; Break the back-pointers to the caller
+	CLRW	SF$W_SAVE_PSW(FP)	; Zero the PSW
+	CLRW	SF$W_SAVE_MASK(FP)	; Zero the saved register mask
+	CLRL	SF$L_SAVE_AP(FP)	; No saved AP
+	CLRL	SF$L_SAVE_PC(FP)	; No saved PC
+
+	; Link the child stack to a particular frame (determined in the call to
+	; cma__init_assem) in the parent's stack to appease the VMS Debugger.
+	MOVL	G^cma___g_base_frame,SF$L_SAVE_FP(FP)
+
+	;+
+	; Now build another frame on the stack, as though we had just called
+	; cma__transfer_thread_ctx.  This frame holds the context required to
+	; schedule the thread.
+	;
+	; NOTE: In the parent thread, the call to 70$ returns directly to the
+	;	caller of cma__create_thread.  The child thread, when it is
+	;	first scheduled, will resume execution by returning from this
+	;	call.
+	;-
+
+	PUSHL	tcb(AP)			; We'll need this
+	CALLS	#1,70$			; Create frame for cma__transfer_thread_ctx
+
+	;+
+	; The child thread begins execution here, when it is scheduled for the
+	; first time.
+	;-
+	
+	PUSHL	arg(AP)			; Push thread argument
+	PUSHL	routine(AP)		; Push thread routine
+	PUSHL	tcb(AP)			; Push thread's TCB address
+	CALLS	#3,G^cma__thread_base	; Start up the thread
+
+	HALT				;  We should never get here!
+
+	;+
+	; "cma___save_thread_ctx"
+	; 
+	; FORMAL PARAMETERS:
+	;
+	;	R0	- the address of the child thread static context block
+	;	R1	- the saved value of the parent thread frame pointer
+	;	tcb(AP)	   - the address of the child thread tcb
+	;-
+
+	; Save all the registers
+70$:	.WORD	^M<R2,R3,R4,R5,R6,R7,R8,R9,R10,R11>
+
+	; Save the FP & SP in the static context block
+	MOVQ	FP,(R0)			; Save the current FP & SP
+
+	; Switch back to parent thread's stack
+	MOVL	R1,FP			; Restore parent's FP
+	MOVL	FP,SP			; Restore parent's SP
+
+	; The child thread is all ready to run, so inform the scheduler
+	; Note:  The parent may or may not be preempted by the child here
+	PUSHL	tcb(AP)			; The child TCB
+	CALLS	#1,G^cma__start_thread	; Brace for colision, Capt'n
+
+	; The new thread is completely initialized and I am back on my own
+	; stack, so now I am free to be rescheduled
+	CALLS	#0,G^cma__undefer
+	BBCCI	#0,G^cma__g_kernel_critical,90$
+90$:
+
+	RET
+		
+
+	.SUBTITLE cma__do_call_on_stack
+ 
+;
+; FUNCTIONAL DESCRIPTION:
+; 
+;	 This routine calls the specified routine on the specified stack,
+;	 passing the specified parameter.
+;	 
+; FORMAL PARAMETERS:
+; 
+;	 stack(AP)    -  address of base of target stack
+;	 routine(AP)  -  address of a routine entry mask
+;	 arg(AP)      -  value of parameter to be passed to the routine
+; 
+; IMPLICIT INPUTS:
+; 
+;	 None
+; 
+; IMPLICIT OUTPUTS:
+; 
+;	 None
+;
+; FUNCTION VALUE:
+; 
+;	 Value returned by the supplied routine, if any
+; 
+; SIDE EFFECTS:
+; 
+;	 None
+;
+
+	.ENTRY	cma__do_call_on_stack,^M<>
+
+	MOVL	stack(AP),SP		; Switch to new stack
+
+	PUSHL	arg(AP)			; Put the routine param on the new stack
+	CALLS	#1,@routine(AP)		; Call the user's routine
+
+	RET				; The routine value is already in R0
+
+
+	.SUBTITLE cma__init_assem
+ 
+;
+; FUNCTIONAL DESCRIPTION:
+; 
+;	 This routine performs all one-time run-time initialization required for
+;	 this module.
+;
+;	 Currently, no inits are needed, but this may change in the future.
+;
+;	 
+; FORMAL PARAMETERS:
+; 
+;	 None
+; 
+; IMPLICIT INPUTS:
+; 
+;	 None
+; 
+; IMPLICIT OUTPUTS:
+; 
+;	 None
+;
+; FUNCTION VALUE:
+; 
+;	 None
+; 
+; SIDE EFFECTS:
+; 
+;	 None
+
+	.ENTRY	cma__init_assem,^M<>
+
+	; A noop.  Currently no inits are needed for this module
+	; We keep this entry point in case some are needed in the 
+	; future.
+
+	RET
+
+
+
+
+	.SBTTL	CMA$$FIND_PERSISTANT_FRAME - Find frame that persists
+
+;++
+; FUNCTIONAL DESCRIPTION:
+;
+;	Find a frame that persists for the life of the program and
+;	that is after the DEBUG boot handler is established.
+;
+;	This is needed to make ^Y DEBUG work.
+;
+; FORMAL PARAMETERS:
+;
+;	NONE
+;
+; IMPLICIT INPUTS:
+;
+;	NONE
+;
+; IMPLICIT OUTPUTS:
+;
+;	Global is set to remember the frame
+;
+; ROUTINE VALUE:
+;
+;	NONE
+;
+; SIDE EFFECTS:
+;
+;	NONE
+;
+;--
+	.ENTRY	CMA$$FIND_PERSISTANT_FRAME,^M<R2>
+
+	; Reset the registers that will old the frame pointers
+	;
+	CLRL	R1
+	CLRL	R2
+
+	; Scan backwards up the stack following FP until will find
+	; one that is zero.  As we scan, remember the last N
+	; frame pointers we encountered.
+	;
+	MOVL	SF$L_SAVE_FP(FP),R0
+NEXT_FRAME:
+	; Shift over the previous frame pointers
+	MOVL	R1,R2
+	MOVL	R0,R1
+
+	;Get next frame pointer, exiting when it is 0
+	MOVL	SF$L_SAVE_FP(R0),R0
+	BEQL	DONE
+	BRB	NEXT_FRAME
+DONE:
+
+	; Now we have a bunch of frame pointers that point to the
+	; base of the P0 stack.  Figure out which one is the 
+	; persistant one.
+	; 
+	; It turns out that for all cases of LINK/DEBUG/TRACE
+	; and RUN/DEBUG/NODEBUG, we want to use frame #2 which is
+	; either the debug boot handler, or the debugger's handler.
+	; The only case this does not work for is LINK/NOTRACE/NODEBUG
+	; and then we want to use frame 1.  We really need a way
+	; to detect if this is the way it was linked and then use
+	; frame 1... but, currently I don't know how to do that.
+	;
+	; For now, use frame #2 if it has a handler and the 
+	; handler has a leadin sequence that matches either the 
+	; debug boot handler or the debugger's handler.
+	; Otherwise use frame #1.
+	;
+	; Debug handler leadin:    
+	;   0AC7D0FFC
+	;   0A2D15204
+	; DEBUG boot leadin
+	;   0AC7D0FFC
+	;   20C35004
+
+	TSTL	(R2)
+	BEQL	10$
+	MOVL	(R2),R1
+	CMPL	(R1),#^XAC7D0FFC	; Leadin in to either handler
+	BEQL	5$
+	BRB	10$
+5$:	MOVL	R2,G^cma___g_base_frame	; Persistant frame
+	RET
+
+10$:	; No handler in frame 2, use frame 1
+	; We also get here if the handler is not one we expect.
+	; The magic offset accounts for 6 args + argcount + 5 longword frame
+	; or 12 * 4 bytes = 48 longwords.  The 6 args are those that 
+	; are passed to SYSIMGSTA.
+	SUBL2	#48,R1			; Add magic offset to SYS$IMGSTA frame
+	MOVL	R1,G^cma___g_base_frame	; Persistant frame
+	RET
+
+
+
+	.SBTTL	CMA$$INITIALIZE - CMA init routine for LIB$INITIALIZE
+;++
+; FUNCTIONAL DESCRIPTION:
+;
+;	Initialize the CMA run-time system.
+;
+; FORMAL PARAMETERS:
+;
+;	AP		: in value
+;			;
+;			; Arguments passed by LIB$INITIALIZE
+;
+; IMPLICIT INPUTS:
+;
+;	NONE
+;
+; IMPLICIT OUTPUTS:
+;
+;	NONE
+;
+; ROUTINE VALUE:
+;
+;	NONE
+;
+; SIDE EFFECTS:
+;
+;	NONE
+;
+;--
+
+	.ENTRY	CMA$$INITIALIZE,^M<>
+
+	; Scan the stack to find a persistant frame to backlink thread 
+	; frames to
+	CALLS	#0,CMA$$FIND_PERSISTANT_FRAME
+
+	; Auto-initialize CMA
+	CALLS	#0,G^CMA$INIT	
+
+	RET
+
+
+
+	.SUBTITLE cma__restore_exc_context
+
+ 
+;
+; FUNCTIONAL DESCRIPTION:
+; 
+;	Restore routine context after the $UNWIND during exception delivery.
+;	This routine is never actually CALLED, nor does it ever actually
+;	RETURN.  If runs in the frame of the routine where the TRY block
+;	is.
+;	 
+; FORMAL PARAMETERS:
+; 
+;	None
+; 
+; IMPLICIT INPUTS:
+; 
+;	Address of the context (r0)
+; 
+; IMPLICIT OUTPUTS:
+; 
+;	None
+;
+; FUNCTION VALUE:
+; 
+;	 None  (This routine does not return to the caller.)
+; 
+; SIDE EFFECTS:
+; 
+;	Restores all registers and context to the point saved by
+;	cma__save_exc_context.
+;
+
+cma__restore_exc_context::
+
+	movq	(r0)+, r2	;restore registers
+	movq	(r0)+, r4	;restore registers
+	movq	(r0)+, r6	;restore registers
+	movq	(r0)+, r8	;restore registers
+	movq	(r0)+, r10	;restore registers
+	movq	(r0)+, ap	;restore AP and FP
+	movl	(r0)+, sp	;restore SP
+	jmp	@(r0)+		;jump back to user
+
+
+
+	.SUBTITLE cma__restore_thread_ctx
+ 
+;
+; FUNCTIONAL DESCRIPTION:
+; 
+;	 This routine restores all context associated with a thread necessary
+;	 for scheduling it on the current processor.
+;
+;	 This routine causes execution to resume in the target thread.
+;	 
+; FORMAL PARAMETERS:
+; 
+;	 ctx_buf(AP)  -  address of the buffer which holds the static context
+; 
+; IMPLICIT INPUTS:
+; 
+;	 The contents of the new stack and frame
+; 
+; IMPLICIT OUTPUTS:
+; 
+;	 The sixteen VAX registers (R0-R11, AP, FP, SP, & PC), and the PSL.
+;
+; FUNCTION VALUE:
+; 
+;	 None  (This routine does not return to the caller.)
+; 
+; SIDE EFFECTS:
+; 
+;	 NOTE:  This routine DOES NOT RETURN in the typical sense.  When it
+;		returns, it returns to a different thread.  This routine does
+;		not return to its caller.
+;
+;
+
+	.ENTRY	cma__restore_thread_ctx,-
+		^M<R2,R3,R4,R5,R6,R7,R8,R9,R10,R11>
+
+	;+
+	; The thread context is saved on the stack in the call frame in the
+	; call to cma__transfer_thread_ctx (all bits are set in its entry
+	; mask).
+	;
+	; Thus restoring a thread's context comes down to restoring its frame
+	; pointer.
+	;-
+
+	; Restore the newly-scheduled thread's context
+	MOVQ	@ctx_buf(AP),FP		; Restore the new thread's FP & SP
+
+	; Returning loads all of the general registers, the SP, PSW, PC, & AP,
+	; based on the information in the FP and the stack frame.
+	RET
+
+
+
+	.SUBTITLE cma__save_exc_context
+
+;
+; FUNCTIONAL DESCRIPTION:
+; 
+;	Save registers so that they may be restored during exception delivery.
+;	This routine returns zero if the context is saved, and non-zero if
+;	the context has been restored.  Sets up a buffer used by
+;	cma__restore_exc_context routine, when that function runs it 
+;	appears to the caller as if this routine has returned again
+;	with a non-zero value.
+;	 
+; FORMAL PARAMETERS:
+; 
+;	exc_buffer	buffer to receive r2-r11, ap, fp, sp, pc
+; 
+; IMPLICIT INPUTS:
+; 
+;	None
+; 
+; IMPLICIT OUTPUTS:
+; 
+;	None
+;
+; FUNCTION VALUE:
+; 
+;	Returns 0 if saved the context, non-zero if the context had been
+;	restored.
+; 
+; SIDE EFFECTS:
+; 
+;	None
+;
+
+	.ENTRY cma__save_exc_context, ^M<>
+
+	movl	4(ap), r0		;buffer address
+	movq	r2, (r0)+		;save registers
+	movq	r4, (r0)+		;save registers
+	movq	r6, (r0)+		;save registers
+	movq	r8, (r0)+		;save registers
+	movq	r10, (r0)+		;save registers
+	movq	sf$l_save_ap(fp), (r0)+	;save AP and FP
+
+	movab	sf$l_save_regs(fp), ap	;get address of saved regs
+	bbc	#sf$v_calls, sf$w_save_mask(fp), 10$  ; check for calls
+	movzbl	(ap), r1		;get number of arguments
+	incl	r1			;include argument count
+	ashl	#2, r1, r1		;convert to correct number bytes	
+	addl2	r1, ap			;previous stack pointer (aligned)
+
+	;extract stack alignment bits
+10$:	extzv	#sf$v_stackoffs, #sf$s_stackoffs, sf$w_save_mask(fp), r1	
+	bisl2	r1, ap			;previous sp with correct alignment	
+
+	movl	ap, (r0)+		;save SP
+	movl	sf$l_save_pc(fp), (r0)+	;save PC
+	clrq	r0			;return value first time
+	ret
+
+
+	.SUBTITLE cma__transfer_thread_ctx
+ 
+;
+; FUNCTIONAL DESCRIPTION:
+; 
+;	 This routine stores the context of one thread and restores the
+;	 context of another, thus performing an actual context switch.
+;
+;	 The context is saved, automatically, in the frame of this routine by
+;	 the call.  All that's left to do is store the address of this frame
+;	 (ie, the current FP) in the static context buffer.
+;
+;	 The newly restored thread resumes processing with the instruction
+;	 following it's last call to cma__transfer_thread_ctx or the
+;	 instruction it was at when it was interrupted.  That is, this
+;	 routine returns directly to that instruction.
+;
+; FORMAL PARAMETERS:
+; 
+;	 cur_ctx(AP)  -  address of current thread's context buffer
+;	 new_ctx(AP)  -  address of new thread's context buffer
+; 
+; IMPLICIT INPUTS:
+; 
+;	 The current FP.
+; 
+; IMPLICIT OUTPUTS:
+; 
+;	 The sixteen VAX registers (R0-R11, AP, FP, SP, & PC), and the PSL.
+;
+; FUNCTION VALUE:
+; 
+;	 None
+; 
+; SIDE EFFECTS:
+; 
+;	 "During" the call to this routine, another thread runs.
+;
+;
+	.ENTRY	cma__transfer_thread_ctx,-
+		^M<R2,R3,R4,R5,R6,R7,R8,R9,R10,R11>
+
+	;+
+	; The thread context is saved on the stack in the call frame for this
+	; routine (all bits are set in the entry mask).
+	;
+	; Thus saving and restoring a thread's context comes down to saving and
+	; restoring it's frame pointer.
+	;-
+
+	; Save the current thread's context
+	MOVQ	FP,@cur_ctx(AP)		; Save the current FP & SP
+
+	; Restore the newly-scheduled thread's context
+	MOVQ	@new_ctx(AP),FP		; Restore the new thread's FP & SP
+
+	; Returning loads all of the general registers, the SP, PSW, PC, & AP,
+	; based on the information in the FP and the stack frame.
+	RET
+
+
+	.SUBTITLE cma___catchall_handler
+ 
+;
+; FUNCTIONAL DESCRIPTION:
+; 
+;	 This is the catchall condition handler for a CMA thread.  It is
+;	 enabled in the base frame on the stack ("cma___execute_thread").
+;
+;	 FIX-ME:  Not all of the details are clear regarding the action of this
+;	 handler.  
+;
+; FORMAL PARAMETERS:
+; 
+;	 CHF$L_SIGARGLST(AP)  - The signal argument array
+;	 CHF$L_MCHARGLST(AP)  - The mechanism argument array
+; 
+; IMPLICIT INPUTS:
+; 
+;	 None
+; 
+; IMPLICIT OUTPUTS:
+; 
+;	 None
+;
+; FUNCTION VALUE:
+; 
+;	 SS$_RESIGNAL - For any "good" condition, warning, or cma_s_bugcheck
+;
+;	 Unwinds stack for any "bad" condition
+; 
+; SIDE EFFECTS:
+; 
+;	 None, for any "good" condition.
+;
+;	 For any "bad" condition, the stack is unwound to the base frame, and
+;	 execution resumes with the instruction following the call to the
+;	 user's thread-start routine.
+;
+
+	.ENTRY	cma___catchall_handler,^M<R2>
+
+	; Check to see if this is a "good" condition or a "bad" condition
+	MOVL	CHF$L_SIGARGLST(AP),R1	; Get the signal arguments array base
+	BLBC	CHF$L_SIG_NAME(R1),20$	; Test condition for "goodness"
+
+10$:	; A "good" status: let the system catch-all handler handle it
+	MOVL	#SS$_RESIGNAL,R0
+	RET
+
+	; A "bad" status:  figure out if it is one to be handled specially
+
+20$:	; See if we're unwinding
+	CMPL	CHF$L_SIG_NAME(R1),#SS$_UNWIND
+	BNEQ	30$
+
+	; FIX-ME:  Should we signal (something else) or print some error here?
+	HALT				; This frame should never be unwound!
+	
+30$:	; See if there's a vector instruction disable fault
+	;CMPL	CHF$L_SIG_NAME(R1),#SS$_VECDIS	; [*for future use*]
+	BNEQ	40$
+
+	; FIX-ME:  Check which disable, which thread, save/restore V-state, etc.
+	; and resume [TBD]
+
+	MOVL	#SS$_CONTINUE,R0
+	RET
+
+40$:	; See if it is our own bugcheck message
+	CMPL	CHF$L_SIG_NAME(R1),#^O00020100134
+	BNEQ	50$
+
+	BRB	10$			; Let the system handle this
+
+50$:	; Spare
+
+60$:	; See if it is just a warning
+	CMPZV	#STS$V_SEVERITY,#STS$S_SEVERITY, -
+		CHF$L_SIG_NAME(R1),#STS$K_WARNING
+	BEQLU	10$			; Let the system handle warnings, too.
+			
+70$:	; Unrecoverable or user error:  unwind the stack back to the base frame
+	; to start thread cleanup.
+	MOVL	CHF$L_MCHARGLST(AP),R0	; Get the mechanism arguments array base
+	MOVL	CHF$L_MCH_FRAME(R0),R2	; Get the base frame FP
+
+	; Store the condition value in the base frame
+	MOVL	CHF$L_SIG_NAME(R1),EXIT_STATUS(R2)
+
+	; Perform a quick sanity check:  error should NOT be in our base frame
+	TSTL	CHF$L_MCH_DEPTH(R0)	; Depth at which the condition occurred
+	BLEQ	10$			; Give it to the system catchall handler
+
+	; Unwind user's routine(s) off of the stack
+	PUSHL	#0
+	PUSHAL	CHF$L_MCH_DEPTH(R0)	; Depth to unwind
+	CALLS	#2,G^SYS$UNWIND
+	RET
+
+
+	.SUBTITLE cma___do_async_alert
+ 
+;
+; FUNCTIONAL DESCRIPTION:
+; 
+;	This routine is responsible for initiating asynchronous alert
+;	delivery.  It calls a routine (written in C) to actually raise the
+;	alert exception, to ensure that the raise is always consistent with
+;	the CMA exception package implementation on the platform (the extra
+;	call is probably not a serious performance issue in the context of an
+;	alert which will usually terminate the thread anyway).
+;
+;	This routine is never actually CALLed, rather it is "jumped" into by
+;	placing the entry point PC, "cma__do_async_alert", into the
+;	resume PC in an AST argument list.
+;
+;	NOTE:  Therefore, this routine runs in the same frame as the routine
+;		which was interrupted by the AST, but not at AST level.
+;
+; FORMAL PARAMETERS:
+; 
+;	None:  this routine is never actually called
+; 
+; IMPLICIT INPUTS:
+; 
+;	None
+; 
+; IMPLICIT OUTPUTS:
+; 
+;	None
+;
+; FUNCTION VALUE:
+; 
+;	None
+; 
+; SIDE EFFECTS:
+; 
+;	None
+;
+
+aa1:	.ASCIZ	"do_async_alert:1"
+
+cma__do_async_alert::			; Entry point AST routine to returns to
+
+	CALLS	#0,G^cma__undefer	; exit kernel now
+	BBCCI	#0,G^cma__g_kernel_critical,90$
+90$:
+	CALLS	#0,G^cma__async_delivery ; Deliver the alert
+;
+; This point should never be reached, since the CMA exception package doesn't
+; support continuable exceptions.
+;
+	PUSHAB	aa1
+	CALLS	#1,G^cma__bugcheck	; Handle the error
+	HALT				;  and quit!
+
+	.SUBTITLE cma___do_call_dispatch
+ 
+;
+; FUNCTIONAL DESCRIPTION:
+; 
+;	This routine is responsible for initiating an asynchronous context
+;	switch.  It calls a routine (writen in C) to retrieve the address of
+;	the current thread's context buffer and the restart PC & PSL.  It then
+;	saves the PSL, PC, R1, and R0.  It calls cma__dispatch to run a new
+;	thread.  When the call to cma__dispatch returns (ie when this thread
+;	has been rescheduled), R0 & R1 are restored and this routine returns
+;	directly to the instruction which was interrupted by the AST.
+;
+;	This routine is never actually CALLed, rather it is "jumped" into by
+;	placing the entry point PC, "cma__call_forced_dispatch", into the
+;	resume PC in an AST argument list.
+;
+;	NOTE:  Therefore, this routine runs in the same frame as the routine
+;		which was interrupted by the AST, but not at AST level.
+;
+; FORMAL PARAMETERS:
+; 
+;	None:  this routine is never actually called
+; 
+; IMPLICIT INPUTS:
+; 
+;	The current values of R0 & R1.
+; 
+; IMPLICIT OUTPUTS:
+; 
+;	The current values of R0 & R1.
+;
+; FUNCTION VALUE:
+; 
+;	None  (This routine returns by an REI to the point of interruption.)
+; 
+; SIDE EFFECTS:
+; 
+;	Another thread is run "during" the call to cma__dispatch.
+;
+
+	.ENTRY	cma___do_call_dispatch,^M<>
+
+cma__force_dispatch::			; Entry point AST routine to returns to
+
+	; Make room on the stack for the PC and PSL
+	SUBL2	#8,SP
+
+	; Save R0 & R1 since the subroutine calls may (will) destroy them
+	MOVQ	R0,-(SP)
+
+	; Call cma__get_async_info to get the address of async context block	
+	CALLS	#0,G^cma__get_async_info	; R0 gets the address
+
+	; Move the PC and PSL on to the stack above R0 & R1
+	MOVQ	(R0),8(SP)
+
+	; Run a different thread for a while
+	CALLS	#0,G^cma__yield_processor	; Perform the dispatch
+
+	CALLS	#0,G^cma__undefer
+	BBCCI	#0,G^cma__g_kernel_critical,90$
+90$:
+	; Restore the rest of our context (ie, prepare to run again)
+	; Don't make any CALLs after restoring R0 & R1, they might get trashed
+	MOVQ	(SP)+,R0		; Restore R0 & R1 
+
+	; And run this thread again
+	REI				; Restore PC & PSL (from the stack)
+
+	.END
+
+;   DEC/CMS REPLACEMENT HISTORY, Element CMA_ASSEM_VMS.MAR 
+;   *29   20-NOV-1990 09:11:09 CONTI "Fix saved fp at base of thread stacks" 
+;   *28   16-AUG-1990 12:55:52 BUTENHOF "touchup last edits..." 
+;   *27   16-AUG-1990 09:47:05 BUTENHOF "Implement asynchronous alerts" 
+;   *26    3-JUL-1990 07:30:27 BUTENHOF "Change copyright header" 
+;   *25   18-MAY-1990 07:09:23 BUTENHOF "Optimize mutex and cv" 
+;   *24    9-FEB-1990 11:06:56 BUTENHOF "Convert to stream format" 
+;   *23   23-JAN-1990 14:04:57 BUTENHOF "Make function prototypes conditional" 
+;   *22    9-JAN-1990 14:02:10 SCALES "dir" 
+;   *21   13-DEC-1989 19:19:20 SCALES "Fix initialization." 
+;   *20   12-DEC-1989 14:08:22 BUTENHOF "Add new base thread routine for TRY/ENDTRY" 
+;   *19   19-NOV-1989 17:50:47 SCALES "Changing the cma__get_async_info interface" 
+;   *18   10-NOV-1989 16:47:45 SCALES "Psect fixup for cma___g_base_frame" 
+;   *17    8-NOV-1989 17:02:34 SCALES "Add a cma__init_assem routine" 
+;   *16    7-NOV-1989 12:25:09 SCALES "Rework asynch context switch code" 
+;   *15    3-NOV-1989 09:42:56 BUTENHOF "Call undefer inside of kernel lock" 
+;   *14    1-NOV-1989 22:55:17 BUTENHOF "Avoid calling exit/enter kernel code (which no longer exists)" 
+;   *13   31-OCT-1989 13:24:10 BUTENHOF "Fix SP indexing error in force_dispatch" 
+;   *12   30-OCT-1989 17:03:44 SCALES "Fix possible timeslice bug" 
+;   *11   26-OCT-1989 17:27:21 SCALES "Leave kernel sooner" 
+;   *10   24-OCT-1989 11:16:31 BUTENHOF "Fix reference to cma__c_default_psl" 
+;   *9    23-OCT-1989 18:14:07 SCALES "Changing cma__c_default_PSL to _ps" 
+;   *8     6-OCT-1989 13:26:25 SCALES "Fix condition handler to handle bugchecks" 
+;   *7     6-OCT-1989 10:42:26 SCALES "Corrected references to cma__bugcheck" 
+;   *6     4-OCT-1989 11:14:10 SCALES "Fixed context restoring" 
+;   *5     3-OCT-1989 13:12:28 SCALES "Reworked context switch routines" 
+;   *4    28-SEP-1989 00:14:19 BUTENHOF "Add default PSL definition" 
+;   *3    27-SEP-1989 13:21:45 BUTENHOF "Fix some typos" 
+;   *2    26-SEP-1989 18:47:52 SCALES "Added cma___catchall_handler, etc." 
+;   *1    26-SEP-1989 13:43:34 SCALES "VMS-specific assembler routines" 
+;   DEC/CMS REPLACEMENT HISTORY, Element CMA_ASSEM_VMS.MAR 
+;;  DEC/CMS REPLACEMENT HISTORY, Element CMA_ASSEM.MAR
+;;  *4     9-OCT-1991 14:34:20 BUTENHOF "Correct misleading comment"
+;;  *3    26-JUL-1991 15:47:42 CURTIN "Added *_exc_context routines, and fab, rab"
+;;  *2     2-MAY-1991 13:54:44 BUTENHOF "Add arg to bugchecks"
+;;  *1     5-DEC-1990 19:26:13 BUTENHOF "VAX/VMS assembly code"
+;;  DEC/CMS REPLACEMENT HISTORY, Element CMA_ASSEM.MAR

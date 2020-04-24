@@ -1,0 +1,913 @@
+#!/bin/sh
+
+###############################################################################
+#    Copyright (C) 1996, 1995 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# Two server replication tests.
+
+# Implements the following tests:
+#	TEST_TS_B_007
+#	TEST_TS_B_009
+#	TEST_TS_E_001
+#	TEST_TS_E_002
+# from replication checklist.
+
+#
+# optional argument: -verbose
+#
+
+#
+# specify servers by running this from runtest script
+#
+
+argcount=$#
+verbose=0
+
+# check for verbose flag
+
+if test $argcount -gt 0
+then
+	verbose=1
+	echo OK, telling all!
+fi
+
+curdir=`pwd`
+prognam=`basename $0`
+p=$prognam
+dirnam=`dirname $0`
+pid=$$
+errcount=0
+cleanup_errcount=0
+
+FS_RELEASE=fs-release.$pid
+FS_SCHED=fs-sched.$pid
+
+# get rid of old cached fileset stuff
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo Execute cm checkfilesets to get rid of
+	echo old cached fileset info
+fi
+
+cm checkfilesets
+
+# load test context
+#
+# computes:
+# hostname in $hn
+# cellname in $CELL_NAME
+# aggregates $EPI_AGGRNAME_1 and $EPI_AGGRNAME_2
+# servers $SERVER_1 and $SERVER_2
+# DFS root/rtest $test_root
+#
+
+. $dirnam/statusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+# sanity check - make sure there are two servers
+
+if test "$SERVER_1" = "$SERVER_2"
+then
+	echo FATAL: only one server - exiting $prognam
+	exit 1
+fi
+
+# make sure we have aggregates
+
+if test "$EPI_AGGRNAME_1" = ""
+then
+	echo FATAL cannot find aggregate on $SERVER_1
+	echo exiting $prognam
+	exit 1
+fi
+
+if test "$EPI_AGGRNAME_2" = ""
+then
+	echo FATAL cannot find aggregate on $SERVER_2
+	echo exiting $prognam
+	exit 1
+fi
+
+host=$hn
+
+# wait until replica appears
+
+repwait()
+{
+	server=$1
+	aggregate=$2
+	fileset=$3
+
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo wait for replication
+		echo $server $aggregate $fileset
+	fi
+
+	# check for readonly
+
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo check for presence of readonly
+	fi
+
+	dally=10
+	while :
+	do
+		temp=`fts lsheader $server $aggregate \
+			|grep $fileset.readonly|grep On-line`
+	        if test "$temp" != ""
+	        then
+	                break
+	        fi
+
+		# not started yet
+
+		dally=`expr $dally - 1`
+		if test $dally -le 0
+		then
+			echo FATAL ERROR cannot update $fileset
+			return 1
+		fi
+		echo sleeping at `date` for $fileset
+	        sleep 30
+	done
+
+	# check for clone
+
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo wait for clone to go away
+	fi
+
+	dally=10
+	while :
+	do
+		temp=`fts lshead $server $aggregate \
+			|grep $fileset.clone|grep On-line`
+		if test "$temp" != ""
+		then
+			# still in progress
+
+			dally=`expr $dally - 1`
+			if test $dally -le 0
+			then
+				echo FATAL cannot update fileset
+				return 1
+			fi
+			echo sleep at `date` for $fileset
+			sleep 60
+		else
+			# done
+
+			break
+		fi
+	done
+
+	return 0
+}
+
+# cleanup routine
+
+abnormal=0
+
+cleanup()
+{
+	if test $1 -eq 0
+	then
+		echo Cleaning up
+	else
+		echo Abnormal exit: cleaning up
+		abnormal=1
+
+		# no need for verbose
+
+		verbose=0
+	fi
+
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo delete mount
+		echo at $test_root/fs.release.$pid.ro
+	fi
+	
+	fts delmount $test_root/fs.release.$pid.ro
+	err=$?
+	if test $err -ne 0
+	then
+		cleanup_errcount=`expr $cleanup_errcount + 1`
+	fi
+	
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo delete mount
+		echo at $test_root/fs.release.$pid.rw
+	fi
+	
+	rm -rf $test_root/fs.release.$pid.rw/*
+	fts delmount $test_root/fs.release.$pid.rw
+	err=$?
+	if test $err -ne 0
+	then
+		cleanup_errcount=`expr $cleanup_errcount + 1`
+	fi
+	
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo rem site for $FS_RELEASE
+		echo at host $SERVER_1 aggr $EPI_AGGRNAME_1
+	fi
+	
+	fts rmsite $FS_RELEASE $SERVER_1 $EPI_AGGRNAME_1
+	err=$?
+	if test $err -ne 0
+	then
+		cleanup_errcount=`expr $cleanup_errcount + 1`
+	fi
+	
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo delete $FS_RELEASE
+	fi
+	
+	fts delete $FS_RELEASE $SERVER_1 $EPI_AGGRNAME_1
+	err=$?
+	if test $err -ne 0
+	then
+		cleanup_errcount=`expr $cleanup_errcount + 1`
+	fi
+	
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo delete mount
+		echo $test_root/fs.sched.$pid.ro
+	fi
+	
+	fts delmount $test_root/fs.sched.$pid.ro
+	err=$?
+	if test $err -ne 0
+	then
+		cleanup_errcount=`expr $cleanup_errcount + 1`
+	fi
+	
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo delete mount
+		echo $test_root/fs.sched.$pid.rw
+	fi
+	
+	rm -rf $test_root/fs.sched.$pid.rw/*
+	fts delmount $test_root/fs.sched.$pid.rw
+	err=$?
+	if test $err -ne 0
+	then
+		cleanup_errcount=`expr $cleanup_errcount + 1`
+	fi
+	
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo rem site for $FS_SCHED
+		echo at host $SERVER_2 aggr $EPI_AGGRNAME_2
+	fi
+	
+	fts rmsite $FS_SCHED $SERVER_2 $EPI_AGGRNAME_2
+	err=$?
+	if test $err -ne 0
+	then
+		cleanup_errcount=`expr $cleanup_errcount + 1`
+	fi
+	
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo delete $FS_SCHED
+	fi
+	
+	fts delete $FS_SCHED $SERVER_1 $EPI_AGGRNAME_1
+	err=$?
+	if test $err -ne 0
+	then
+		cleanup_errcount=`expr $cleanup_errcount + 1`
+	fi
+	
+	# if abnormal exit, skip report of results
+	
+	if test $abnormal -eq 1
+	then
+		echo Abnormal exit: cleanup done
+		exit 1
+	fi
+	
+	# report result
+	
+	echo ""
+	echo test complete at `date`
+	echo ""
+	if test $errcount -eq 0
+	then
+		echo $prognam passed
+	else
+		echo $prognam failed with $errcount errors
+	fi
+	
+	if test $cleanup_errcount -ne 0
+	then
+		echo ""
+		echo $cleanup_errcount cleanup errors
+		echo check $test_root for detritus
+	fi
+	
+	if test $verbose -eq 1
+	then
+		echo ""
+		echo Wordy, what?
+	fi
+	
+	echo Done `date`
+
+	exit $errcount
+}
+
+# trap handler
+
+trap_handler()
+{
+	cleanup 1
+}
+
+trap trap_handler 2 3 15
+
+# main code path
+
+echo ""
+echo $prognam starting as $pid at `date` on $host
+echo in cell $CELL_NAME
+echo using aggregate $EPI_AGGRNAME_1 on host $SERVER_1
+echo using aggregate $EPI_AGGRNAME_2 on host $SERVER_2
+echo ""
+
+# set up for release rep tests
+# put distinguished replica on same aggregate as RW, so is clone
+
+# in this cell
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo creating $FS_RELEASE on host $SERVER_1
+	echo aggregate $EPI_AGGRNAME_1
+fi
+
+fts create $FS_RELEASE $SERVER_1 $EPI_AGGRNAME_1
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR: cannot create $FS_RELEASE
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+fi
+
+# get fileset id
+
+fs_release_id=`fts lsfldb $FS_RELEASE \
+	| awk '/readWrite/{print $3}' \
+	| awk -F, '{print $3}'`
+
+# mount point
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo mounting $FS_RELEASE
+	echo at $test_root/fs.release.$pid.rw
+fi
+
+fts crmount $test_root/fs.release.$pid.rw $FS_RELEASE
+err=$?
+if test $err -ne 0
+then
+        echo FATAL ERROR: cannot mount $FS_RELEASE
+        echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+fi
+
+setFsetRootProt $test_root/fs.release.$pid.rw $testuid "FATAL ERROR $FS_RELEASE"
+err=$?
+if test $err -ne 0
+   then 
+	cleanup 1
+   fi
+
+# a few good files
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo copy files from $dirnam to $test_root/fs.release.$pid.rw
+fi
+
+cp -r $dirnam/* $test_root/fs.release.$pid.rw
+err=$?
+if test $err -ne 0
+then
+        echo FATAL ERROR: cannot access fs.release.$pid.rw
+        echo errno $err in $prognam
+
+        # goto cleanup
+
+        cleanup 1
+fi
+
+# finally, some replication
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo setrepinfo for $FS_RELEASE
+fi
+
+fts setrepinfo $FS_RELEASE -release
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR: cannot set rep info for release rep
+	echo errno $err in $prognam
+
+	# goto cleanup
+
+	cleanup 1
+fi
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo add site for $FS_RELEASE
+	echo on host $SERVER_1 aggr $EPI_AGGRNAME_1
+fi
+
+fts addsite $FS_RELEASE $SERVER_1 $EPI_AGGRNAME_1
+err=$?
+if test $err -ne 0
+then
+        echo FATAL ERROR: cannot add site $FS_RELEASE
+        echo errno $err in $prognam
+
+        # goto cleanup
+
+        cleanup 1
+fi
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo create mount for $FS_RELEASE.readonly
+	echo at $test_root/fs.release.$pid.ro
+fi
+
+fts crmount $test_root/fs.release.$pid.ro $FS_RELEASE.readonly
+err=$?
+if test $err -ne 0
+then
+        echo FATAL ERROR: cannot mount $FS_RELEASE.readonly
+        echo errno $err in $prognam
+
+        # goto cleanup
+
+        cleanup 1
+fi
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo releasing $FS_RELEASE
+fi
+
+fts release $FS_RELEASE
+err=$?
+if test $err -ne 0
+then
+        echo FATAL ERROR: cannot release $FS_RELEASE
+        echo errno $err in $prognam
+
+        # goto cleanup
+
+        cleanup 1
+fi
+
+
+
+
+# set up for sched rep tests
+# put first RO on different server from RW
+
+# in this cell
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo creating $FS_SCHED at host $SERVER_1
+	echo aggregate $EPI_AGGRNAME_1
+fi
+
+fts create $FS_SCHED $SERVER_1 $EPI_AGGRNAME_1
+err=$?
+if test $err -ne 0
+then
+        echo FATAL ERROR: cannot create $FS_SCHED
+        echo errno $err in $prognam
+
+        # goto cleanup
+
+        cleanup 1
+fi
+
+# get fileset id
+
+fs_sched_id=`fts lsfldb $FS_SCHED \
+	| awk '/readWrite/{print $3}' \
+	| awk -F, '{print $3}'`
+
+# mount point
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo mounting $FS_SCHED
+	echo at $test_root/fs.sched.$pid.rw
+fi
+
+fts crmount $test_root/fs.sched.$pid.rw $FS_SCHED
+err=$?
+if test $err -ne 0
+then
+        echo FATAL ERROR: cannot mount $FS_SCHED
+        echo errno $err in $prognam
+
+        # goto cleanup
+
+        cleanup 1
+fi
+
+setFsetRootProt $test_root/fs.sched.$pid.rw $testuid "FATAL ERROR $FS_SCHED"
+err=$?
+if test $err -ne 0
+   then 
+	cleanup 1
+   fi
+
+
+# a few good files
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo copying files from $dirnam to
+	echo $test_root/fs.sched.$pid.rw
+fi
+
+cp -r $dirnam/* $test_root/fs.sched.$pid.rw
+err=$?
+if test $err -ne 0
+then
+        echo FATAL ERROR: cannot access fs.sched.$pid.rw
+        echo errno $err in $prognam
+
+        # goto cleanup
+
+        cleanup 1
+fi
+
+# finally, some replication
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo setting rep info for $FS_SCHED
+fi
+
+fts setrepinfo $FS_SCHED -scheduled
+err=$?
+if test $err -ne 0
+then
+        echo FATAL ERROR: cannot set rep info for sched rep
+        echo errno $err in $prognam
+
+        # goto cleanup
+
+        cleanup 1
+fi
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo adding site for $FS_SCHED
+	echo at host $SERVER_2 aggr $EPI_AGGRNAME_2
+fi
+
+fts addsite $FS_SCHED $SERVER_2 $EPI_AGGRNAME_2
+err=$?
+if test $err -ne 0
+then
+        echo FATAL ERROR: cannot add site $FS_SCHED
+        echo errno $err in $prognam
+
+        # goto cleanup
+
+        cleanup 1
+fi
+
+if test $verbose -eq 1
+then
+	echo ""
+	echo mounting $FS_SCHED.readonly
+	echo at $test_root/fs.sched.$pid.ro
+fi
+
+fts crmount $test_root/fs.sched.$pid.ro $FS_SCHED.readonly
+err=$?
+if test $err -ne 0
+then
+        echo FATAL ERROR: cannot mount $FS_SCHED.readonly
+        echo errno $err in $prognam
+
+        # goto cleanup
+
+        cleanup 1
+fi
+
+fts update $FS_SCHED -all
+err=$?
+if test $err -ne 0
+then
+	echo FATAL ERROR: cannot update $FS_SCHED
+	echo errno $err in $prognam
+
+	cleanup 1
+fi
+
+# verify replicas present
+
+echo ""
+echo verify replicas present
+
+repwait $SERVER_1 $EPI_AGGRNAME_1 $FS_RELEASE
+if test $? -ne 0
+then
+	echo update failed bailing out
+	cleanup 1
+fi
+
+echo $FS_RELEASE.readonly OK
+
+repwait $SERVER_2 $EPI_AGGRNAME_2 $FS_SCHED
+if test $? -ne 0
+then
+	echo update failed bailing out
+	cleanup 1
+fi
+
+echo $FS_SCHED.readonly OK
+
+# do the tests
+# TEST_TS_B_007
+# verify that cm whereis RO returns both servers
+
+echo ""
+echo TEST_TS_B_007
+echo verify that cm whereis RO returns both servers
+
+# add remote replicas
+
+fts addsite $FS_RELEASE $SERVER_2 $EPI_AGGRNAME_2
+err=$?
+if test $err -ne 0
+then
+	echo cannot addsite $FS_RELEASE
+	echo $SERVER_2 $EPI_AGGRNAME_2
+	echo errno $err
+fi
+fts update $FS_RELEASE -all
+err=$?
+if test $err -ne 0
+then
+	echo cannot release $FS_RELEASE
+	echo $SERVER_2 $EPI_AGGRNAME_2
+	echo errno $err
+fi
+
+# cm whereis varies the line formating at random
+
+server1=`cm whereis $test_root/fs.release.$pid.ro \
+	|awk '{printf("%s",$0)}' \
+	|awk '{print $14}' \
+	|awk -F. '{print $1}'`
+server2=`cm whereis $test_root/fs.release.$pid.ro \
+	|awk '{printf("%s",$0)}' \
+	|awk '{print $15}' \
+	|awk -F. '{print $1}'`
+
+echo servers $server1 $server2
+
+# leave this replica for future test
+
+state=0
+
+if test "$server1" = ""
+then
+	echo bad server
+	state=1
+fi
+if test "$server2" = ""
+then
+	echo bad server
+	state=1
+fi
+if test "$server1" = "$server2"
+then
+	echo bad servers
+	state=1
+fi
+
+fts addsite $FS_SCHED $SERVER_1 $EPI_AGGRNAME_1
+err=$?
+if test $err -ne 0
+then
+	echo cannot addsite $FS_SCHED
+	echo $SERVER_1 $EPI_AGGRNAME_1
+	echo errno $err
+fi
+fts update $FS_SCHED -all
+err=$?
+if test $err -ne 0
+then
+	echo cannot release $FS_SCHED
+	echo $SERVER_1 $EPI_AGGRNAME_1
+	echo errno $err
+fi
+
+server1=`cm whereis $test_root/fs.sched.$pid.ro \
+	|awk '{printf("%s",$0)}' \
+	|awk '{print $14}' \
+	|awk -F. '{print $1}'`
+server2=`cm whereis $test_root/fs.sched.$pid.ro \
+	|awk '{printf("%s",$0)}' \
+	|awk '{print $15}' \
+	|awk -F. '{print $1}'`
+
+echo servers $server1 $server2
+
+fts rmsite $FS_SCHED $SERVER_1 $EPI_AGGRNAME_1
+
+if test "$server1" = ""
+then
+	echo bad server
+	state=1
+fi
+if test "$server2" = ""
+then
+	echo bad server
+	state=1
+fi
+if test "$server1" = "$server2"
+then
+	echo bad servers
+	state=1
+fi
+
+if test $state -eq 1
+then
+	echo ERROR TEST_TS_B_007 verify cm whereis FAILED
+	echo error in $prognam testpoint E1
+	errcount=`expr $errcount + 1`
+else
+	echo TEST_TS_B_007 PASSED
+fi
+
+# TEST_TS_B_009
+# move the source RW to another server and verify that
+# the repserver tracks the move
+
+echo ""
+echo TEST_TS_B_009
+echo move the source RW to another server and verify that
+echo the repserver tracks the move
+
+# only makes sense for scheduled replication
+
+#fts move $FS_SCHED $SERVER_1 $EPI_AGGRNAME_1 $SERVER_2 $EPI_AGGRNAME_2
+#err=$?
+#if test $err -ne 0
+#then
+#	echo cannot move $FS_SCHED from $SERVER_1 $EPI_AGGRNAME_1
+#	echo to $SERVER_2 $EPI_AGGRNAME_2
+#	echo errno $err
+#fi
+#
+#touch $test_root/fs.sched.$pid.rw/*
+#
+#fts update $FS_SCHED -all
+#err=$?
+#if test $err -ne 0
+#then
+#	echo cannot update $FS_SCHED
+#	echo errno $err in $prognam
+#fi
+#
+#repwait $SERVER_2 $EPI_AGGRNAME_2 $FS_SCHED
+#if test $? -ne 0
+#then
+#	echo update failed
+#	echo TEST_TS_B_009 FAILED
+#	echo testpoint E2
+#	errcount=`expr $errcount + 1`
+#fi
+
+## move it back
+#
+#fts move $FS_SCHED $SERVER_2 $EPI_AGGRNAME_2 $SERVER_1 $EPI_AGGRNAME_1
+#err=$?
+#if test $err -ne 0
+#then
+#	echo cannot move $FS_SCHED from $SERVER_2 $EPI_AGGRNAME_2
+#	echo to $SERVER_1 $EPI_AGGRNAME_1
+#	echo errno $err
+#fi
+
+echo THIS TEST DISABLED
+echo defect 5012
+
+# TEST_TS_E_001
+# ensure can't remove distinguished replica in release
+# rep until all other reps removed
+
+echo ""
+echo TEST_TS_E_001
+echo ensure cant remove distinguished replica in release
+echo rep until all other reps removed
+
+# we have $FS_RELEASE replicated in SERVER_1 and SERVER_2
+
+fts rmsite $FS_RELEASE $SERVER_1 $EPI_AGGRNAME_1
+err=$?
+if test $err -ne 0
+then
+	echo TEST_TS_E_001 PASSED
+else
+	echo TEST_TS_E_001 FAILED
+	echo allowed removal of distinguished replica
+	echo testpoint E3
+	errcount=`expr $errcount + 1`
+fi
+
+fts rmsite $FS_RELEASE $SERVER_2 $EPI_AGGRNAME_2
+
+# TEST_TS_E_002
+# try changing from sched rep to release rep when no rep
+# on RW machine, so no distinguished rep - should fail gracefully
+
+echo ""
+echo TEST_TS_E_002
+echo change from sched rep to rel rep when no rep on RW machine,
+echo so no distinguished rep, should fail gracefully
+
+fts setrepinfo $FS_SCHED -release -change
+if test $? -ne 0
+then
+	echo TEST_TS_E_002 PASSED
+else
+	echo TEST_TS_E_002 FAILED
+	echo allowed change from scheduled replication
+	echo to release replication when there is no
+	echo distinguished replica
+	echo testpoint E4
+	errcount=`expr $errcount + 1`
+fi
+
+# tests done, cleanup
+
+echo ""
+echo Tests done
+
+cleanup 0

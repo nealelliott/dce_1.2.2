@@ -1,0 +1,98 @@
+#!/bin/sh
+echo acl test running
+date
+echo expect about 2.5 megabytes of log info
+echo the acl test takes about 2 hours
+
+echo remove old logs
+\rm -f results/*LOG
+
+echo verify running in LFS
+here=`pwd`
+type=`fts lsq $here | grep LFS | awk -F"(" '{print $2}' | grep Non`
+if test $type
+then
+	echo this test only runs in LFS
+	echo please put the tests in LFS
+	echo and mount them here
+	echo then retry
+	exit 1
+else
+	echo running in LFS
+fi
+
+echo verify users present
+users="aclgou acloou aclgu acloou acluu"
+for i in $users
+do
+	string=`rgy_edit -v | grep $i | awk '{print $1}'`
+	
+	if test $string
+	then
+		echo user $i present
+	else
+		echo users missing
+		echo install users and groups
+		# clear out all users and groups
+		./testacl -cleanuponly > /dev/null 2>&1
+		# put them back again
+		./testacl -setuponly > /dev/null 2>&1
+		break
+	fi
+done
+
+TESTACL_SEC_SETUP=skip
+export TESTACL_SEC_SETUP
+TESTACL_SEC_CLEANUP=skip
+export TESTACL_SEC_CLEANUP
+
+echo run tests - should be about two hours
+err=0
+./testacl getset > /dev/null 2>&1
+if test $? -ne 0
+then
+	echo getset fail
+	err=1
+fi
+./testacl inherit > /dev/null 2>&1
+if test $? -ne 0
+then
+        echo inherit fail
+	err=1
+fi
+./testacl chmodtest > /dev/null 2>&1
+if test $? -ne 0
+then
+        echo chmodtest fail
+	err=1
+fi
+./testacl sizetest > /dev/null 2>&1
+if test $? -ne 0
+then
+        echo sizetest fail
+	err=1
+fi
+./testacl syscalls > /dev/null 2>&1
+if test $? -ne 0
+then
+        echo syscalls fail
+	err=1
+fi
+./testacl accheck > /dev/null 2>&1
+if test $? -ne 0
+then
+        echo accheck fail
+	err=1
+fi
+if test $err -eq 0
+then
+	echo "acl SUCCEEDED"
+else
+	echo "acl FAILED"
+fi
+
+echo move the logs
+cp results/*LOG ../logs
+echo acl test done
+date
+exit $err

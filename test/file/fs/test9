@@ -1,0 +1,459 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: test9,v $
+# Revision 1.1.10.1  1996/10/17  18:20:31  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:50:52  damon]
+#
+# Revision 1.1.4.4  1993/01/11  18:27:13  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:01:24  htf]
+# 
+# Revision 1.1.4.3  1992/10/28  16:22:50  jaffe
+# 	Transarc delta: fred-ot5472-use-testhome-variable 1.1
+# 	  Selected comments:
+# 	    Fixed the fs and low tests to correctly use TESTTOP.  We were setting a
+# 	    variable, testhome, as the location for the test scripts and executables,
+# 	    but we did not use it to execute C programs.
+# 	    (I checked out some scripts which did not need this change.)
+# 	    No changes made.
+# 	Transarc delta: jess-add-dumpkernel-in-fs-tests 1.3
+# 	  Selected comments:
+# 	    The icldump command and debug option for the tests have been added in the
+# 	    fs test scripts. You can run fs/tests with -debug to dump kernel in case
+# 	    of error. The delta also adds the icl_DumpKernel function in the C programm.
+# 	    See above.
+# 	    Put the debug option in test1.
+# 	    When the debug is set the dumpfile is always created eventhough
+# 	    there is no error.
+# 	Transarc delta: jess-fs-path-for-icldump 1.1
+# 	  Selected comments:
+# 	    This delta adds the path for icldump command. The command has been
+# 	    installed at "util" dir in test tree by Fred's delta.
+# 	    See above.
+# 	Transarc delta: jess-ot5320-fix-fs-low-testhome 1.1
+# 	  Selected comments:
+# 	    The fs and low test shell scripts have the following if statement
+# 	    if [ "$TESTTOP" = "`pwd`" ]
+# 	    then
+# 	    UTIL_DIR=../util
+# 	    testhome=$TESTTOP
+# 	    else
+# 	    UTIL_DIR=$TESTTOP/util
+# 	    testhome=$TESTTOP/$testSuiteType
+# 	    fi
+# 	    The problem is that variable testSuiteType is not defined at this time.
+# 	    See above.
+# 	[1992/10/27  18:32:22  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/28  18:13:21  jaffe
+# 	Transarc delta: rajesh-clean-fs-tests 1.6
+# 	  Selected comments:
+# 	    To remove make, clean options from fs tests
+# 	    Really no change
+# 	    Make the scripts modular, structured.
+# 	    The variable names are changed to follow coding standards.
+# 	    See above.
+# 	    Apply modification mentioned in revision 1.2 to 2 missed test file
+# 	    err1 and err2.
+# 	    Some bug fixes, and revision of tests err1 and err2. Introduction of
+# 	    a common functions ProcessResult to analyse the result.
+# 	    See above.
+# 	    Further changes to some utility functions.
+# 	    Added error test err2 to the Makefile
+# 	[1992/08/28  12:21:41  jaffe]
+# 
+# Revision 1.1.2.3  1992/05/29  22:59:26  mason
+# 	Transarc delta: fred-3754-change-script-name 1.1
+# 	  Selected comments:
+# 	    To clean up a number of defects with the tests.  In addition to defect
+# 	    3754, the changes also fix defects 3750 and 3748.
+# 	    Fixed setting of TESTTOP variable.
+# 	[1992/05/29  12:49:14  mason]
+# 
+# Revision 1.1.2.2  1992/05/21  12:41:44  jaffe
+# 	Transarc delta: fred-2980-and-2981-fix-sys 1.1
+# 	  Selected comments:
+# 	    To fix reported defects indicating files could not be found.  Added two
+# 	    shell scripts, one to issue the correct command to get the system type
+# 	    (either AFS or DFS), and a second to generate a file from a string.
+# 	    Change variable sys to dfs_fsSysName and use fsSetSysName shell script.
+# 	Transarc delta: fred-merge-tests 1.1
+# 	  Selected comments:
+# 	    Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	    the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	    should be looking at the same test code.
+# 	    Changes to facilitate merge of local DFS test code with the OSF's.
+# 	Transarc delta: fred-remove-sys 1.1
+# 	  Selected comments:
+# 	    To remove dependency on the AFS sys command in the test scripts.
+# 	    To remove dependency on AFS sys command.
+# 
+# 	$TALog: test9,v $
+# 	Revision 4.24  1994/11/01  22:23:34  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r4.23 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	[1992/05/20  19:34:05  jaffe]
+# 
+# $EndLog$
+#
+###############################################################################
+#       Copyright (C) 1991,1992 Transarc Corporation - All rights reserved    #
+###############################################################################
+
+# This script copies a large file back and forth between two directories. The
+# size of the file, names of the directories, number of times to copy it, and
+# number of processes all doing this can be set with command-line arguments.
+
+# Usage: test9 [-np #-processes] [-nt #-times] [-dir1 directory-name]
+#              [-dir2 directory-name] [-size filesize-in-megabytes] [-nocopy]
+#              [-debug]
+
+# Note:  default is test9 -np 1 -nt 1 -dir1 . -dir2 . -size 1
+
+# Highest error number is: 2.
+
+###############################################################################
+
+#
+# PrintUsage() -
+#   Prints the usage message for this script.
+
+PrintUsage()
+{
+    echo "$programName copies large files"
+    echo "Usage: $programName [-np #-procs] [-nt #-times] [-dir1 dirname] [-dir2 dirname]"
+}
+
+#
+# Initialise some variables. UTIL_DIR is the directory containing 
+# the script fs_FunctionsScript with common functions.
+#
+
+TESTTOP=${TESTTOP:="`pwd`"}
+
+if [ "$TESTTOP" = "`pwd`" ]
+then
+    UTIL_DIR=../util
+    testhome=$TESTTOP
+else
+    UTIL_DIR=$TESTTOP/util
+    testhome=$TESTTOP/fs
+fi
+
+. $UTIL_DIR/fs_FunctionsScript
+. $UTIL_DIR/fs_SetSysVar
+createFileCmd="$UTIL_DIR/fs_GenerateFile"
+
+trap '
+    cd $currentDir
+    rm -rf f0 f1 $file0 $dir1/$programName.$$.[0-9]*.1 $dir2/$programName.$$.[0-9]*.2
+    echo "$programName killed returning $scriptErrorExit" | tee -a $logFile
+    exit $scriptErrorExit
+     ' 2 3 15
+
+#
+# Initialise setup variables
+#
+
+fs_InitSetup fs
+
+#
+# Default option argument values
+#
+
+copyflag=TRUE
+dir1="."
+dir2="."
+processCount=1
+iterationCount=1
+size=1
+
+#
+# Parse the command line
+#
+
+while [ "$1" != "" ]
+do 
+    case $1 in 
+        help|-help) PrintUsage
+                    exit $successExit
+g1
+                    ;;
+
+        dir1|-dir1) CheckOptionValue "dir1" $testSuiteType $programName $*
+                    dir1=$2
+                    shift
+                    shift
+                    ;;
+
+        dir2|-dir2) CheckOptionValue "dir2" $testSuiteType $programName $*
+                    dir2=$2
+                    shift
+                    shift
+                    ;;
+
+        np|-np)     CheckOptionValue "np" $testSuiteType $programName $*
+                    processCount=$2
+                    shift
+                    shift
+                    ;;
+
+        nt|-nt)     CheckOptionValue "nt" $testSuiteType $programName $*
+                    iterationCount=$2
+                    shift
+                    shift
+                    ;;
+
+        nocopy|-nocopy)     
+                    copyflag=FALSE
+                    shift
+                    ;;
+
+        size|-size)     
+                    CheckOptionValue "size" $testSuiteType $programName $*
+                    size=$2
+                    shift
+                    shift
+                    ;;
+        debug|-debug)
+                    dumpkernel="true"
+                    shift
+                    ;;
+
+        *)          echo "ERROR $testSuiteType/$programName: invalid argument \"$1\"" | tee -a $logFile
+                    exit $scriptErrExit
+                    ;;
+    esac
+done
+
+#
+# Validate arguments
+#
+
+if [ ! -d $dir1 ]
+then 
+    echo "$programName: cannot find directory $dir1" | tee -a $logFile
+    exit $scriptErrorExit
+elif [ ! -d $dir2 ]
+then 
+    echo "$programName: cannot find directory $dir2" | tee -a $logFile
+    exit $scriptErrorExit
+elif [ $processCount -lt 1 ]
+then 
+    echo "$programName: number of processes must be >= 1" | tee -a $logFile
+    exit $scriptErrorExit
+elif [ $iterationCount -lt 0 ]
+then 
+    echo "$programName: number of times must be >= 0" | tee -a $logFile
+    exit $scriptErrorExit
+elif [ $size -lt 1 ]
+then 
+    echo "$programName: size must be >= 1" | tee -a $logFile
+    exit $scriptErrorExit
+elif [ $copyflag = FALSE ]
+then
+    if [ $processCount -gt 1 ]
+    then 
+        echo "$programName: cannot use -nocopy with -np" | tee -a $logFile
+        exit $scriptErrorExit
+    elif [ $iterationCount -gt 1 ]
+    then 
+        echo "$programName: cannot use -nocopy with -nt" | tee -a $logFile
+        exit $scriptErrorExit
+    elif [ $dir1 != "." ]
+    then 
+        echo "$programName: cannot use -nocopy with -dir1" | tee -a $logFile
+        exit $scriptErrorExit
+    elif [ $dir2 != "." ]
+    then 
+        echo "$programName: cannot use -nocopy with -dir2" | tee -a $logFile
+        exit $scriptErrorExit
+    fi
+fi
+
+#
+# Start test
+#
+
+(
+    echo "$programName (copy big) starting in $currentDir"
+    echo "Host `hostname` ($fs_sysName)"
+    date
+) | tee -a $logFile
+
+echo "$processCount processes $iterationCount times
+parent process number $$" | tee -a $logFile
+echo "Dir1 is <$dir1>
+dir2 is <$dir2>." | tee -a $logFile
+echo "Filesize is $size megabytes
+copy flag is $copyflag." | tee -a $logFile
+if [ $copyflag = TRUE ]
+then
+    sz=`expr $size \* 2`
+    sz=`expr $sz \* $processCount`
+    sz=`expr $sz + 1`
+    echo "You need about $sz MB free." | tee -a $logFile
+fi
+
+echo "" | tee -a $logFile
+cd $dir1
+(
+    echo "Details of directory #1 - $dir1"
+    echo "-------------------------------"
+) | tee -a $logFile
+fs_DetermineFSType
+
+cd $dir2
+(
+    echo "Details of directory #2 - $dir2"
+    echo "-------------------------------"
+) | tee -a $logFile
+fs_DetermineFSType
+
+cd $currentDir
+cat > f0 << ==END==
+123456789012345678901234567890123456789012345678901234567890123
+123456789012345678901234567890123456789012345678901234567890123
+123456789012345678901234567890123456789012345678901234567890123
+123456789012345678901234567890123456789012345678901234567890123
+123456789012345678901234567890123456789012345678901234567890123
+123456789012345678901234567890123456789012345678901234567890123
+123456789012345678901234567890123456789012345678901234567890123
+123456789012345678901234567890123456789012345678901234567890123
+==END==
+cat f0 f0 f0 f0 f0 f0 f0 f0 > f1 # 4K
+cat f1 f1 f1 f1 f1 f1 f1 f1 > f0 # 32K
+cat f0 f0 f0 f0 f0 f0 f0 f0 > f1 # 256K
+cat f1 f1 f1 f1 > f0 # 1MB
+rm -f f1 error.$$
+
+file0=$currentDir/file.$$
+cp /dev/null $file0
+if [ $size -eq 1 ]
+then 
+    mv f0 $file0
+else
+    t=1
+    while [ $t -le $size ]
+    do 
+        cat f0 >> $file0
+        t=`expr $t + 1`
+    done
+    rm -f f0
+fi
+
+if [ `cat $file0 | wc -c | sed 's/[  ]//g` != `expr 1048576 \* $size` ]
+then 
+    echo "$programName: $file0 is the wrong size"
+    exit $scriptErrorExit
+fi
+
+(
+    echo ""
+    echo "Created temp file."
+    ls -l $file0
+) | tee -a $logFile
+
+if [ $copyflag = TRUE ]
+then
+    processNum=1
+    while [ $processNum -le $processCount ]
+    do
+        (
+                echo ""
+            echo "$programName starting process number $processNum"
+        ) | tee -a $logFile
+    
+        (
+            dir1=$dir1/$programName.$$.$processNum.1
+            file1=$dir1/file
+            dir2=$dir2/$programName.$$.$processNum.2
+            file2=$dir2/file
+            mkdir $dir1 $dir2
+            cp $file0 $file1
+    
+            iterationNum=1
+            while [ \( $iterationNum -le $iterationCount -o $iterationCount -eq 0 \) -a $errorCount -eq 0 ]
+            do
+                echo "   $programName starting iteration $iterationNum, process number $processNum" | tee -a $logFile
+    
+                rm -f $file2
+                cp $file1 $dir2
+                cmp $file0 $file2 > /dev/null 2> /dev/null
+                if [ $? -ne 0 ]
+                then 
+                    echo "- $programName process $processNum iter $iterationNum copy dir1 to dir2 failed (E1)" | tee -a $logFile
+                    if [ $dumpkernel = "true" ]
+                    then
+                        $UTIL_DIR/icldump >> $logFile
+                    fi
+                    errorCount=`expr $errorCount + 1`
+                    touch $currentDir/error.$$
+                fi
+    
+                rm -f $file1
+                cp $file2 $dir1
+                cmp $file0 $file1 > /dev/null 2> /dev/null
+                if [ $? -ne 0 ]
+                then 
+                    echo "- $programName process $processNum iter $iterationNum copy dir2 to dir1 failed (E2)" | tee -a $logFile
+                    if [ $dumpkernel = "true" ]
+                    then
+                        $UTIL_DIR/icldump >> $logFile
+                    fi
+                    errorCount=`expr $errorCount + 1`
+                    touch $currentDir/error.$$
+                fi
+    
+                echo "   $programName iteration $iterationNum, process number $processNum, done" | tee -a $logFile
+                iterationNum=`expr $iterationNum + 1`
+            done
+    
+            (
+                echo "$programName process number $processNum done"
+                echo ""
+            ) | tee -a $logFile
+    
+        ) &
+        processNum=`expr $processNum + 1`
+    done
+    
+    wait
+    
+else 
+    echo "" | tee -a $logFile
+    
+fi
+    
+cd $currentDir
+if [ -f error.$$ ]
+then 
+    errorCount=`expr $errorCount + 1`
+    rm -rf error.$$
+fi
+
+###############################################################################
+
+cd $currentDir
+rm -rf f0 f1 $file0 $dir1/$programName.$$.[0-9]*.1 $dir2/$programName.$$.[0-9]*.2
+
+(
+    echo "$testSuiteType/$programName returning $errorCount in $currentDir"
+    date
+) | tee -a $logFile
+
+exit $errorCount
+
+###############################################################################
+
+

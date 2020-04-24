@@ -1,0 +1,585 @@
+*
+* @OSF_COPYRIGHT@
+* COPYRIGHT NOTICE
+* Copyright (c) 1993 Open Software Foundation, Inc.
+* ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+* src directory for the full copyright text.
+*
+*
+* (C) Copyright 1993 Transarc Corporation.
+* All Rights Reserved.
+*
+*
+* HISTORY
+* $Log: adverse_move1.itl,v $
+* $EndLog$
+
+*
+* adverse_move1.itl
+*
+* This is one of 10 test programs testing the CM under Adverse Fileset Moves
+* For more detailed information about the test, please refer to the document
+* [Test the CM Under Adverse Fileset Moves]
+*
+* When one of the clients, CM1, is reading a file from a particular fileset, 
+* fset1, the network is suddenly partitioned between CM1 and the file server 
+* that exports fset1. CM1's subsequent file operations to that fileset will 
+* encounter RPC communication failures. As a result, the HERE-token-revocation
+* request cannot be delivered to CM1 and the fileset is eventually moved with 
+* a success. 
+*
+* After the network partition gets repaired, CM1 starts the TSR-CRASH
+* procedure. It is during the TSR-CRASH procedure that the CM1 
+* detects the fileset, fset1, is actually moved to a new file server (M2). 
+* As part of the TSR-CRASH procedure, CM1 also performs the TSR-MOVE procedure
+* to recover/renew the tokens from the target file server. 
+*
+* The purpose of this test is to make sure that if new files are created and
+* modified by CM2 while CM1 is isolated due to a network partition, new files
+* and changes will be visible to CM1 after the TSR-CRASH recovery.
+* (Note that there is no conflicting token granted to either CM1 or CM2)
+* 
+*
+*  Requirements -
+*	2 machines used as CM1/FX1 and CM2/FX2.
+*
+*  Setup - (2 machine)
+*	The master(ie., Hub) and client #1 running MoveClient#1 are started on 
+*       Machine #1 and client #2 running MoveClient#2 started on Machine #2.
+*       The filset, fset1, is exported by FX1 and later moved to FX2.
+* 
+* HISTORY
+* $Log:$
+*
+* $EndLog$
+******************************************************************************
+
+
+
+
+
+******************************************************************************
+*                                                                            *
+*                        HUB CODE                                            *
+*                                                                            *
+******************************************************************************
+*
+*
+* Echo the following msg !
+!* Include adverse-move configuration.
+*
+include adverse_move.config
+*
+* 
+* Force to cross the chunk boundary
+*
+set WRITE_OFFSET0 int (0 * $chunkSize )
+set WRITE_OFFSET1 int ((1 * $chunkSize) - 10 )
+set WRITE_OFFSET2 int ((2 * $chunkSize) - 10 )
+set WRITE_OFFSET3 int ((3 * $chunkSize) - 10 )
+set WRITE_OFFSET4 int ((4 * $chunkSize) - 10 )
+set WRITE_OFFSET5 int ((5 * $chunkSize) - 10 )
+set newline vector "0x0a0d"
+*
+*
+*
+* Hub Code. 
+*
+* The Hub code does the following initialization:
+* 
+* 1) Create a fileset, $fset1
+* 2) Mount $fset1 to dir /:/$fset1
+* 3) Create two dirs,  /:/$fset1/tdir1 and /:/$fset1/tdir1
+
+*
+*
+!* Delete the existing fileset, $fset1 and mount point, $mt, if any
+*
+*
+*
+!* Clean up ....it may take a while ....
+*
+set ITL_IgnoreShellError 1
+set command string ("fts lsfldb " + $fset1 + " " +$dumpDev )
+shellExec command
+if ($CommandResult == 0) {
+    set command string ("fts delete " + $fset1 + " " +$HostName1+ " " + $aggrDev1 +$dumpDev )
+    shellExec command
+    if ($CommandResult != 0) {
+	* 
+	* Delete the fileset from another server.
+	set command string ("fts delete " + $fset1 +" "+$HostName2+ " " + $aggrDev2 +$dumpDev )
+	shellExec command    
+        if ($CommandResult != 0) {
+	    echo
+            echo "ERROR: cannot delete the fileset $fset1 !"
+            echo
+	    quit
+        }
+    }	
+}
+*
+!* Make sure the 'bomb' program exists
+*
+set ITL_IgnoreShellError 0
+verifyStatus false
+set bomb string " /opt/dcelocal/bin/bomb "
+access $bomb $F_EXIST
+if ($ITL_Status != $ENOENT) {
+   echo
+   echo ERROR: $bomb program does not exist !
+   echo
+   quit
+}
+verifyStatus true
+*
+set ITL_IgnoreShellError 0
+set command string ("cd /:")
+shellExec command
+set ITL_IgnoreShellError 1
+set command string ("fts delm " + " " + $mt + $dumpDev )
+shellExec command
+set ITL_IgnoreShellError 0
+set command string ("cm checkfileset" + $dumpDev )
+shellExec command
+*
+*
+!* Creating fileset, $fset1, on $aggrDev1 of $HostName1 ...
+*
+set command string ("fts create " + " " + $fset1 + " " + $HostName1 + " " + $aggrDev1 +  $dumpDev )
+shellExec command
+*
+!* Set quota size to $fsetQuota
+*
+set command string ("fts setquota -fileset " + $fset1 + " -size " +$fsetQuota )
+shellExec command
+*
+!* Mount the fileset, $fset1, on $mt
+*
+set command string ("fts crm " + " " + $mt + " " + $fset1 + $dumpDev )
+shellExec command
+*
+!* Create two dirs $testDir1 and $testDir2
+*
+set command string (" mkdir " + $testDir1)
+shellExec command
+set command string (" mkdir " + $testDir2)
+shellExec command
+*
+*
+  set fileDataA string "It is really a boring task, but someone got to do it"
+  set fileDataB string "I beg your pardon. I never promise you a rose gardon even though I may have left my heart in San Francisco ...."
+*
+*
+******************************************************************************
+*                                                                            *
+*                          Process 1 On Machine1                             *
+*                                                                            *
+******************************************************************************
+*
+*
+*
+!* Define procedure for process No#1 running on M1
+* 
+set MoveClient1 proc
+END_PROC
+  *
+  *
+  !* Start process MoveClient1 
+  *
+  *  Set up local variables
+  *  NOTE that until the notion of GLOBAL VARIABLE is implemented in ITL,
+  *       we have to duplicate these "Shared varaibles" in every procedure.
+  *       All these "Shared variables" are defined in ADVERSE_MOVE.CONFIG.
+  *
+  *
+  !* Get READ tokens for files under $mt and $testDir1
+  *
+  set dumpDev string " > /dev/null"
+  set fileDataA string "It is really a boring task, but someone got to do it"
+  set fileDataB string "I beg your pardon. I never promise you a rose gardon even though I may have left my heart in San Francisco ...."
+  *
+  *
+  set command string ("cm checkfileset" + @dumpDev )
+  shellExec command
+  set command string ("ls -l " + $mt + " " + @dumpDev )
+  shellExec command
+  *
+  set command string ("ls -l " + $testDir1  + @dumpDev )
+  shellExec command
+  set command string ("ls -l " + $testDir2  + @dumpDev )
+  shellExec command
+  *
+  !* Now create files $testFile1 and $testFile4
+  * 
+  open $testFile1 (@O_RDWR | @O_CREAT) 0644 fileId1
+  lseek @fileId1 @SEEK_SET $WRITE_OFFSET1
+  write @fileId1 @fileDataA
+  *
+  open $testFile4 (@O_RDWR | @O_CREAT) 0644 fileId4
+  lseek @fileId4 @SEEK_SET $WRITE_OFFSET4
+  write @fileId4 @fileDataA
+  lseek @fileId4 @SEEK_SET $WRITE_OFFSET5
+  write @fileId4 @fileDataB
+  *
+  * 
+  !* Wait for the event of a PARTITIONED NETWORK 
+  *  It is established by setting the bomb point off.
+  *
+  sync_join "WAIT_FOR_NETWORK_PARTITIONED" $syncPointTimeout
+  *
+  *
+  !* Test to make sure the network is partitioned.
+  *
+  verifyStatus false
+  open $testFile5 (@O_RDWR | @O_CREAT) 0644 fileId5
+  if (@ITL_Status != @ETIMEDOUT) {
+     echo
+     error "CM1 is NOT isolated from the DFS system code = @ITL_Status!"
+     echo
+  }
+  verifyStatus true 	
+  *
+  !* Wait for the fileset to be moved. 
+  * 
+  sync_join "MOVE_THE_FILESET" $syncPointTimeout
+  *
+  *
+  !* Wait for the Hub to "repair the netowrk" (by turning off the bomb point).
+  * Also wait for the files to be updated by CM2.
+  * 
+  sync_join "WAIT_FOR_NETWORK_REPAIRED" $syncPointTimeout
+  *
+  !* RUN cm stats to "bring back" the fx server!
+  * Note that it is the Ping-Down-Server function that detects the server is up
+  * 
+  set command string ("cm statserver " + @dumpDev )
+  shellExec command
+  *
+  !* Verify results after CM's performing TSR-CRASH and TSR-MOVE procedures
+  * 
+  !* 1) file2 created before partition/move is visible to CM1
+  *
+  open $testFile2 @O_RDWR 0 fileId2
+  lseek @fileId2 @SEEK_SET $WRITE_OFFSET2
+  read @fileId2 #@fileDataA readBuffer
+  if (@readBuffer != @fileDataA ) {
+      echo
+      echo ERROR on read file $testFile2:
+      echo Expected: @fileDataA
+      echo Actual: @readBuffer
+      set ITL_SpokeResult int -1
+      quit
+  } else {
+      echo
+      echo Result #1) OK: Correctly read $testFile2 !
+      echo
+  }
+  * 
+  !* 2) file5 created after partition is visible to CM1
+  *
+  open $testFile5 @O_RDWR 0 fileId5
+  lseek @fileId5 @SEEK_SET $WRITE_OFFSET5
+  read @fileId5 #@fileDataB readBuffer
+  if (@readBuffer != @fileDataB ) {
+      echo
+      echo ERROR on read file $testFile5:
+      echo Expected: @fileDataB
+      echo Actual: @readBuffer
+      set ITL_SpokeResult int -1
+      quit
+  } else {
+      echo
+      echo Result #2) OK: Correctly read $testFile5 !
+      echo
+  }
+  *
+  !* 3) Verify that testFile3 is indeed removed (mv) from $testDir1
+  *
+  verifyStatus false
+  access $testFile3 $F_EXIST
+  if (@ITL_Status != @ENOENT) {
+     echo
+     echo "$testFile3 is NOT removed from $testDir1"
+     echo
+  } else {
+     echo
+     echo Result #3) OK: $testFile3 is removed !
+     echo
+  }
+  verifyStatus true
+  *
+  !* 4) Verify file3 is moved from $testDir1 to $testDir2
+  *
+  set tmpFile3 string ($testDir2 + "/file3")
+  access @tmpFile3 $F_EXIST
+  echo
+  echo Result #4) OK: $testFile3 is moved to $testDir2
+  echo
+  *
+  !* 5) Make sure we have recover READ/WRITE tokens and dirty data
+  *
+  lseek @fileId1 @SEEK_SET $WRITE_OFFSET1
+  !* read $testFile1 at offset $WRITE_OFFSET1
+  read @fileId1 #@fileDataA readBuffer
+  if (@readBuffer != @fileDataA ) {
+      echo
+      echo ERROR on read file $testFile1:
+      echo Expected: @fileDataA
+      echo Actual: @readBuffer
+      set ITL_SpokeResult int -1
+      quit
+  } else {
+      echo Result #5) OK: read $testFile1
+  }
+  *
+  !* read $testFile4 at offset $WRITE_OFFSET5
+  *
+  lseek @fileId4 @SEEK_SET $WRITE_OFFSET5
+  read @fileId4 #@fileDataB readBuffer
+  if (@readBuffer != @fileDataB ) {
+      echo
+      echo ERROR on read file $testFile4:
+      echo Expected: @fileDataB
+      echo Actual: @readBuffer
+      set ITL_SpokeResult int -1
+      quit
+  } else {
+      echo Result #5) OK: read $testFile4
+  }
+  *
+  !* write $testFile4 
+  write @fileId4 @fileDataB
+  echo Result #5) OK: write to $testFile4
+  *
+  * 
+  !* 6) Finally, get READ Status tokens for all files
+  *
+  set command string ("ls -l " + $mt + "/* " + @dumpDev )
+  shellExec command
+  set command string ("ls -l " + $testDir1 + "/* " + @dumpDev )
+  shellExec command
+  set command string ("ls -l " + $testDir2 + "/* " + @dumpDev )
+  shellExec command
+  *
+  !* close all files, we are done!
+  *
+  close @fileId1
+  close @fileId2
+  close @fileId4
+  close @fileId5
+  echo 
+  quit
+END_PROC
+*
+*
+******************************************************************************
+*                                                                            *
+*                          Process 2 On Machine2                             *
+*                                                                            *
+******************************************************************************
+*
+*
+*
+*  Implmentation for MoveClient
+*
+*
+set MoveClient2 proc
+END_PROC
+  *
+  *
+  !* Start process MoveClient2
+  *
+  *  Set up local variables
+  *  NOTE that until the notion of GLOBAL VARIABLE is implemented in ITL,
+  *       we have to duplicate these "Shared varaibles" in every procedure.
+  *
+  *
+  !* Get READ tokens for files under $mt and $testDir1
+  *
+  set dumpDev string " > /dev/null "
+  set fileDataA string "It is really a boring task, but someone got to do it"
+  set fileDataB string "I beg your pardon. I never promise you a rose gardon even though I may have left my heart in San Francisco ...."
+  *
+  *
+  set command string ("cm checkfileset" + @dumpDev )
+  shellExec command
+  *
+  set command string ("ls -l " + $mt + " " + @dumpDev )
+  shellExec command
+  *
+  set command string ("ls -l " + $testDir1  + @dumpDev )
+  shellExec command
+  set command string ("ls -l " + $testDir2  + @dumpDev )
+  shellExec command
+  *
+  !* Create and write $testFile2 
+  *
+  open $testFile2 (@O_RDWR | @O_CREAT) 0644 fileId2
+  lseek @fileId2 @SEEK_SET $WRITE_OFFSET2
+  write @fileId2 @fileDataA
+  *
+  *
+  !* Create a new file $testFile3
+  *
+  open $testFile3 (@O_RDWR | @O_CREAT) 0644 fileId3
+  lseek @fileId3 @SEEK_SET $WRITE_OFFSET3
+  write @fileId3 @fileDataB
+  close @fileId3
+  
+  !* Wait for the event of a PARTITIONED NETWORK
+  *   It is established by setting the bomb point off.
+  *
+  sync_join "WAIT_FOR_NETWORK_PARTITIONED" $syncPointTimeout
+  *
+  *
+  !* Wait for the Fileset to be moved and then update files
+  *
+  sync_join "MOVE_THE_FILESET" $syncPointTimeout
+  *
+  !* After the fileset is moved, create $testFile5
+  * 
+  * 
+  !* Start creating a new file, $testFile5 and updating it
+  *
+  open $testFile5 (@O_RDWR | @O_CREAT) 0644 fileId5
+  lseek @fileId5 @SEEK_SET $WRITE_OFFSET5
+  write @fileId5 @fileDataB
+  *
+  *
+  !* Move (rename) file3 from $testDir1 to $testDir2
+  * 
+  set newFile3 string ($testDir2 + "/file3")
+  rename $testFile3  @newFile3
+  *
+  !* Wait for the network repaired then we close all files
+  *
+  sync_join "WAIT_FOR_NETWORK_REPAIRED" $syncPointTimeout
+  *
+  *
+  !* close all files, we are done!
+  *
+  close @fileId2
+  close @fileId5
+  echo 
+  echo Proc 2 completes !
+  quit
+
+END_PROC
+*
+*
+******************************************************************************
+*                                                                            *
+*                         Now Back to the Hub code                           *
+*                                                                            *
+******************************************************************************
+set clientErrors int 0
+
+*
+*
+*
+*
+!* Send test procedures to clients.
+*
+loop x  0 1 1 
+   set y int ($x + 1)
+   set procName string ("MoveClient" + $y)
+   rexec_async $ITL_spoke[$x] $procName clientResults[$x] asyncId[$x]
+endLoop
+*
+*
+*
+!* Create  "WAIT_FOR_NETWORK_PARTITIONED" sync point.
+*
+sync_create "WAIT_FOR_NETWORK_PARTITIONED" 2 $syncPointTimeout
+*
+*
+!* Set off the "Bomb Point" to establish a network partition !
+*
+*
+set command string ("bomb set 'COMM_FAILURE:error="+$RPC_TIMEDOUT+":count=1+1' -kernel")
+shellExec command
+set ITL_IgnoreShellError 1
+set command string ("cm statserver > /dev/null " )
+shellExec command
+set ITL_IgnoreShellError 0
+*
+* 
+*
+!* Release "WAIT_FOR_NETWORK_PARTITIONED" sync point
+*
+sync_release "WAIT_FOR_NETWORK_PARTITIONED"
+*
+*
+!* Create  "MOVE_THE_FILESET" sync point.
+*
+sync_create "MOVE_THE_FILESET" 2 $syncPointTimeout
+*
+*
+*
+*  Move the fileset 
+!* Moving fileset from, $HostName1 $aggrDev1, to, $HostName2 $aggrDev2
+*
+set command string ("fts move " + $fset1 + " " + $HostName1 + " " + $aggrDev1 + " " + $HostName2 + " " + $aggrDev2 + " -verbose")
+echo $command
+shellExec command
+*
+*
+!* Release sync point "MOVE_THE_FILESET"
+*
+sync_release "MOVE_THE_FILESET"
+*
+!*   Create  "WAIT_FOR_NETWORK_REPAIRED" sync point.
+*
+sync_create "WAIT_FOR_NETWORK_REPAIRED" 2 $syncPointTimeout
+*
+*
+! Unset the Bomb Point
+*
+!* Set off the "Bomb Point" to establish a network partition !
+*
+*
+set command string ("bomb unset -bpname 'COMM_FAILURE' -kernel")
+echo $command
+shellExec command
+set command string ("cm statserver > /dev/null " )
+echo $command
+shellExec command
+
+*
+*
+*
+*
+!* Release "WAIT_FOR_NETWORK_REPAIRED" sync point.
+*
+*
+sync_release "WAIT_FOR_NETWORK_REPAIRED"
+*
+*
+*
+*
+set syncClients int 2
+
+loop x  0 1 1
+   async_join $asyncId[$x] $syncPointTimeout
+*
+!*   Validating results after async join number $x
+*
+    if ($clientResults[$x] != 0) {
+      echo Client $x had a failure, status was $clientResults[$x]
+      set clientErrors ($clientErrors + 1)
+    }
+endLoop
+
+if ($clientErrors == 0) {
+  echo 
+  echo Adverse Move Test No.1 Completed Successfully!
+  echo 
+}
+else {
+  error Adverse Move Test No.1 FAILED - with $clientErrors client failures.
+}
+
+quit
+
+

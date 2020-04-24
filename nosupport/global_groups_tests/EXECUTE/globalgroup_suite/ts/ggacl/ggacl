@@ -1,0 +1,593 @@
+#!/bin/ksh
+# 
+#
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="check_ggacl"
+test_purp_list="check_ggacl"
+
+. $TET_ROOT/globalgroup_suite/ts/ggacl/ggacl.data
+. $TET_ROOT/globalgroup_suite/ts/gg_setup.rc
+. $TET_ROOT/globalgroup_suite/ts/gg.functions
+
+startup ()
+{
+        tet_infoline "Prepare for testing GGACL"
+
+	if [ ! -f /usr/bin/dce_login_noexec ]; then
+	        ln -s /usr/bin/dce_login /usr/bin/dce_login_noexec 2>/dev/null
+	fi
+
+        dce_auth $CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in startup"
+		del_test_purp
+		return
+        fi
+
+	setup_for_cdscache available
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	setup_for_registry_connect available /.../$cR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	setup_pgo_for_local_cell create
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	setup_acl_object_for_local_cell create
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        dce_unauth $CELL_ADMIN
+
+        dce_auth /.../$cR/$CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in startup"
+		del_test_purp
+		return
+        fi
+
+	setup_pgo_for_remote_cell create /.../$cR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        dce_unauth /.../$cR/$CELL_ADMIN
+
+}	# end startup ()
+
+# Ensure test accounts are not left in the registry
+cleanup ()
+{
+        dce_auth /.../$cR/$CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in cleanup"
+        fi
+
+	setup_pgo_for_remote_cell clean /.../$cR
+
+        dce_unauth /.../$cR/$CELL_ADMIN
+
+        dce_auth $CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in cleanup"
+        fi
+
+	setup_pgo_for_local_cell clean
+	setup_acl_object_for_local_cell clean
+	setup_for_registry_connect unavailable /.../$cR
+	setup_for_cdscache unavailable
+
+        dce_unauth $CELL_ADMIN
+
+        rm -f /usr/bin/dce_login_noexec
+
+        rm -f ${GG_INPUT} ${GG_OUTPUT}
+
+}	# end cleanup
+
+check_ggacl ()
+{
+#set -x
+        unset REGISTRY_SITE_NAME
+        tet_infoline "default registry site will be used..."
+
+	tet_infoline "(1) Login to local cell and verify the initial condition"
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        check_item_begin "GGACL-01-01"
+	verify_show_principal_as_acl_object_by_dcecp ${aclName}
+        check_item_done "$?"
+
+	tet_infoline "(2) Verifying the access as an any_other ACL entry"
+
+        check_item_begin "GGACL-02-01"
+	show_acl_entry_by_dcecp ${aclName} "{any_other r--------}"
+        check_item_done "$?"
+
+	dce_unauth $CELL_ADMIN
+
+	# Authenticate the cell
+	dce_auth /.../$cR/$pR $pR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        check_item_begin "GGACL-02-02"
+	check_acl_entry_by_dcecp ${aclName} "r--------"
+        check_item_done "$?"
+        check_item_begin "GGACL-02-03"
+	verify_show_principal_as_acl_object_by_dcecp ${aclName}
+        check_item_done "$?"
+
+	dce_unauth /.../$cR/$pR
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	remove_acl_entry_by_dcecp ${aclName} "{any_other r--------}"
+
+        check_item_begin "GGACL-02-04"
+	show_neg_acl_entry_by_dcecp ${aclName} "{any_other r--------}"
+        check_item_done "$?"
+
+	dce_unauth $CELL_ADMIN
+
+	# Authenticate the cell
+	dce_auth /.../$cR/$pR $pR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        check_item_begin "GGACL-02-05"
+	check_neg_acl_entry_by_dcecp ${aclName}
+        check_item_done "$?"
+        check_item_begin "GGACL-02-06"
+	verify_neg_show_principal_as_acl_object_by_dcecp ${aclName}
+        check_item_done "$?"
+
+	dce_unauth /.../$cR/$pR
+
+	tet_infoline "(3) Verifying the access as a group ACL entry"
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        check_item_begin "GGACL-03-01"
+	show_neg_acl_entry_by_dcecp ${aclName} "{group ${gG} rc-------}"
+        check_item_done "$?"
+
+	dce_unauth $CELL_ADMIN
+
+	# Authenticate the cell
+	dce_auth /.../$cR/$pR $pR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        check_item_begin "GGACL-03-02"
+	check_neg_acl_entry_by_dcecp ${aclName}
+        check_item_done "$?"
+        check_item_begin "GGACL-03-03"
+	verify_neg_show_principal_as_acl_object_by_dcecp ${aclName}
+        check_item_done "$?"
+
+	dce_unauth /.../$cR/$pR
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	add_to_group_by_dcecp $gG -m /.../$cR/$pR
+
+        check_item_begin "GGACL-03-04"
+	show_neg_acl_entry_by_dcecp ${aclName} "{group ${gG} rc-------}"
+        check_item_done "$?"
+
+	dce_unauth $CELL_ADMIN
+
+	# Authenticate the cell
+	dce_auth /.../$cR/$pR $pR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        check_item_begin "GGACL-03-05"
+	check_neg_acl_entry_by_dcecp ${aclName}
+        check_item_done "$?"
+        check_item_begin "GGACL-03-06"
+	verify_neg_show_principal_as_acl_object_by_dcecp ${aclName}
+        check_item_done "$?"
+
+	dce_unauth /.../$cR/$pR
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	add_acl_entry_by_dcecp ${aclName} "{group ${gG} rc-------}"
+
+        check_item_begin "GGACL-03-07"
+	show_acl_entry_by_dcecp ${aclName} "{group ${gG} rc-------}"
+        check_item_done "$?"
+
+	dce_unauth $CELL_ADMIN
+
+	# Authenticate the cell
+	dce_auth /.../$cR/$pR $pR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        check_item_begin "GGACL-03-08"
+	check_acl_entry_by_dcecp ${aclName} "rc-------"
+        check_item_done "$?"
+        check_item_begin "GGACL-03-09"
+	verify_show_principal_as_acl_object_by_dcecp ${aclName}
+        check_item_done "$?"
+
+	dce_unauth /.../$cR/$pR
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	remove_from_group_by_dcecp ${gG} -m /.../${cR}/${pR}
+
+        check_item_begin "GGACL-03-10"
+	show_acl_entry_by_dcecp ${aclName} "{group ${gG} rc-------}"
+        check_item_done "$?"
+
+	dce_unauth $CELL_ADMIN
+
+	# Authenticate the cell
+	dce_auth /.../$cR/$pR $pR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        check_item_begin "GGACL-03-11"
+	check_neg_acl_entry_by_dcecp ${aclName}
+        check_item_done "$?"
+        check_item_begin "GGACL-03-12"
+	verify_neg_show_principal_as_acl_object_by_dcecp ${aclName}
+        check_item_done "$?"
+
+	dce_unauth /.../$cR/$pR
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	add_to_group_by_dcecp $gG -m /.../$cR/$pR
+
+        check_item_begin "GGACL-03-13"
+	show_acl_entry_by_dcecp ${aclName} "{group ${gG} rc-------}"
+        check_item_done "$?"
+
+	dce_unauth $CELL_ADMIN
+
+	# Authenticate the cell
+	dce_auth /.../$cR/$pR $pR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        check_item_begin "GGACL-03-14"
+	check_acl_entry_by_dcecp ${aclName} "rc-------"
+        check_item_done "$?"
+        check_item_begin "GGACL-03-15"
+	verify_show_principal_as_acl_object_by_dcecp ${aclName}
+        check_item_done "$?"
+
+	dce_unauth /.../$cR/$pR
+
+	tet_infoline "(4) Verify to find the particular ACL entry to be applied"
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	add_acl_entry_by_dcecp ${aclName} "{foreign_user /.../${cR}/${pR} r-D------}"
+
+	dce_unauth $CELL_ADMIN
+
+	# Authenticate the cell
+	dce_auth /.../$cR/$pR $pR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        check_item_begin "GGACL-04-01"
+	check_acl_entry_by_dcecp ${aclName} "r-D------"
+        check_item_done "$?"
+
+	dce_unauth /.../$cR/$pR
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	remove_acl_entry_by_dcecp ${aclName} "{foreign_user /.../${cR}/${pR} r-D------}"
+
+	dce_unauth $CELL_ADMIN
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	add_acl_entry_by_dcecp ${aclName} "{foreign_group /.../${cR}/${gR} r--n-----}"
+
+	dce_unauth $CELL_ADMIN
+
+	# Authenticate the cell
+	dce_auth /.../$cR/$pR $pR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        check_item_begin "GGACL-04-02"
+	check_acl_entry_by_dcecp ${aclName} "r--n-----"
+        check_item_done "$?"
+
+	dce_unauth /.../$cR/$pR
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	remove_acl_entry_by_dcecp ${aclName} "{foreign_group /.../${cR}/${gR} r--n-----}"
+
+	dce_unauth $CELL_ADMIN
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	add_acl_entry_by_dcecp ${aclName} "{foreign_other /.../${cR} r---f----}"
+
+	dce_unauth $CELL_ADMIN
+
+	# Authenticate the cell
+	dce_auth /.../$cR/$pR $pR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        check_item_begin "GGACL-04-03"
+	check_acl_entry_by_dcecp ${aclName} "r---f----"
+        check_item_done "$?"
+
+	dce_unauth /.../$cR/$pR
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	remove_acl_entry_by_dcecp ${aclName} "{foreign_other /.../${cR} r---f----}"
+
+	dce_unauth $CELL_ADMIN
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	add_acl_entry_by_dcecp ${aclName} "{any_other r--------}"
+
+	dce_unauth $CELL_ADMIN
+
+	# Authenticate the cell
+	dce_auth /.../$cR/$pR $pR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        check_item_begin "GGACL-04-04"
+	check_acl_entry_by_dcecp ${aclName} "r--------"
+        check_item_done "$?"
+
+	dce_unauth /.../$cR/$pR
+
+	tet_infoline "(5) Verify the access from the principal using the alias name"
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	remove_acl_entry_by_dcecp ${aclName} "{any_other r--------}"
+
+        check_item_begin "GGACL-05-01"
+	show_acl_entry_by_dcecp ${aclName} "{group ${gG} rc-------}"
+        check_item_done "$?"
+
+	dce_unauth $CELL_ADMIN
+
+	# Authenticate the cell
+	dce_auth /.../$cR/$pRa $pRa
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        check_item_begin "GGACL-05-02"
+	check_neg_acl_entry_by_dcecp ${aclName}
+        check_item_done "$?"
+        check_item_begin "GGACL-05-03"
+	verify_neg_show_principal_as_acl_object_by_dcecp ${aclName}
+        check_item_done "$?"
+
+	dce_unauth /.../$cR/$pRa
+
+	tet_infoline "(6) Verify to apply the prohibit inclusion correctly"
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	remove_from_group_by_dcecp ${gG} -m /.../${cR}/${pR}
+	remove_acl_entry_by_dcecp ${aclName} "{group ${gG} rc-------}"
+
+	add_to_group_by_dcecp $gGnp -m /.../$cR/$pR
+	add_acl_entry_by_dcecp ${aclName} "{group ${gGnp} r----m---}"
+
+        check_item_begin "GGACL-06-01"
+	show_acl_entry_by_dcecp ${aclName} "{group ${gGnp} r----m---}"
+        check_item_done "$?"
+
+	dce_unauth $CELL_ADMIN
+
+	# Authenticate the cell
+	dce_auth /.../$cR/$pR $pR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        check_item_begin "GGACL-06-02"
+	check_neg_acl_entry_by_dcecp ${aclName}
+        check_item_done "$?"
+        check_item_begin "GGACL-06-03"
+	verify_neg_show_principal_as_acl_object_by_dcecp ${aclName}
+        check_item_done "$?"
+
+	dce_unauth /.../$cR/$pR
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	remove_from_group_by_dcecp ${gGnp} -m /.../${cR}/${pR}
+	remove_acl_entry_by_dcecp ${aclName} "{group ${gGnp} r----m---}"
+
+	dce_unauth $CELL_ADMIN
+
+	tet_infoline "(7) Verify to access the object which has an group ACL entry defined with an alias"
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	add_to_group_by_dcecp $gGa -m /.../$cR/$pR
+	add_acl_entry_by_dcecp ${aclName} "{group ${gGa} r-----a--}"
+
+        check_item_begin "GGACL-07-01"
+	show_acl_entry_by_dcecp ${aclName} "{group ${gGa} r-----a--}"
+        check_item_done "$?"
+
+	dce_unauth $CELL_ADMIN
+
+	# Authenticate the cell
+	dce_auth /.../$cR/$pR $pR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        check_item_begin "GGACL-07-02"
+	check_acl_entry_by_dcecp ${aclName} "r-----a--"
+        check_item_done "$?"
+        check_item_begin "GGACL-07-03"
+	verify_show_principal_as_acl_object_by_dcecp ${aclName}
+        check_item_done "$?"
+
+	dce_unauth /.../$cR/$pR
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	remove_from_group_by_dcecp ${gGa} -m /.../${cR}/${pR}
+	remove_acl_entry_by_dcecp ${aclName} "{group ${gGa} r-----a--}"
+
+	dce_unauth $CELL_ADMIN
+
+}	# end check_ggacl
+
+. $TET_ROOT/lib/ksh/tetapi.ksh
+. $TET_ROOT/lib/ksh/tcm.ksh

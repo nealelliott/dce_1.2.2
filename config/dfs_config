@@ -1,0 +1,2513 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dfs_config,v $
+# Revision 1.1.31.4  1996/03/09  23:10:16  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:28:14  marty]
+#
+# Revision 1.1.31.3  1996/02/07  17:47:57  parul
+# 	DCE 1.2.1 final drop from HP
+# 	[1996/02/07  16:13:44  parul]
+# 
+# 	DCE 1.2.1 final drop from HP
+# 
+# Revision 1.1.26.2  1994/10/17  20:57:54  rsarbo
+# 	A re-login has always been performed at the end
+# 	of dfs_rgy_init() in dfs_config to pick up fact that
+# 	cell-admin had become a member of dfs-admin group.
+# 	HP gateway changes to dfs_config dropped these lines.
+# 	This submit adds them back in.
+# 	[1994/10/17  20:57:18  rsarbo]
+# 
+# Revision 1.1.26.1  1994/10/13  19:20:13  maunsell_c
+# 	allow bosserver to (optionally) be installed/config'd
+# 	on a dfs client
+# 	only add needed entries to registry for gateway server config
+# 	allow config of gateway server regardless of whether dfs client
+# 	daemons already config'd and running
+# 	[1994/10/13  19:19:46  maunsell_c]
+# 
+# Revision 1.1.20.6  1994/08/26  18:36:44  tom
+# 	Add missing 'fi' to 10980 fix.
+# 	[1994/08/26  18:36:23  tom]
+# 
+# Revision 1.1.20.5  1994/08/25  21:21:27  tom
+# 	If episode is chosen as the filesystem type, don't prompt
+# 	user to make sure its mounted (OT 10980).
+# 	[1994/08/25  19:51:45  tom]
+# 
+# Revision 1.1.20.4  1994/08/10  20:46:57  mckeen
+# 	Added support for NFS gateway
+# 	[1994/08/10  20:07:13  mckeen]
+# 
+# Revision 1.1.20.3  1994/07/29  20:25:02  gmd
+# 	Removed unnecessary word "Error/error" from string
+# 	arguments to chk_* routines.
+# 	[1994/07/29  20:02:49  gmd]
+# 
+# Revision 1.1.20.2  1994/07/13  22:30:54  devsrc
+# 	merged with bl-10
+# 	[1994/06/29  12:14:15  devsrc]
+# 
+# 	Only load dcelfs.ext on AIX when we are configuring a server
+# 	Only run epiinit when configuring a server (OT 9903)
+# 	Use "diskcache" to select dfsd to uncomment in stead of
+# 	ambiguous "dfsd" (OT 9564)
+# 	[1994/04/28  18:16:31  mckeen]
+# 
+# 	Embed prompt about additonal aggregates w/in
+# 	if [ "$do_checks" = "y" ] clause so it doesn't
+# 	interrupt automated configs with cmd/env files.
+# 	[1994/04/05  19:50:08  gmd]
+# 
+# Revision 1.1.20.1  1994/02/04  20:03:33  devsrc
+# 	added copyright header
+# 	[1994/01/20  18:39:09  annie]
+# 
+# 	Added -update switch to rgy_edit commands
+# 	[1994/01/10  16:49:58  mckeen]
+# 
+# Revision 1.1.10.6  1993/11/09  22:37:40  rsarbo
+# 	In enable_in_dfs_rc(), uncomment only lines beginning in double #.
+# 	Otherwise, we may inadvertently uncomment some history lines
+# 	in rc.dfs.
+# 	[1993/11/09  22:36:44  rsarbo]
+# 
+# Revision 1.1.10.5  1993/10/25  19:44:07  rsarbo
+# 	add support for restarting dfsd with in-memory cache
+# 	[1993/10/25  19:35:51  rsarbo]
+# 
+# Revision 1.1.10.4  1993/10/15  16:52:33  rsarbo
+# 	Don't re-install rc.dfs if a modified copy exists.  This allows
+# 	the upgrade of DFS binaries without re-configuring.
+# 	[1993/10/15  16:42:39  rsarbo]
+# 
+# Revision 1.1.10.3  1993/10/13  14:21:45  rsarbo
+# 	execute kload out of ext (where it is installed), not bin
+# 	[1993/10/13  14:06:26  rsarbo]
+# 
+# Revision 1.1.10.2  1993/10/05  16:54:26  rsarbo
+# 	Create a CacheInfo file even if dfs cache is in-memory.
+# 	Dfsd ignores the cache directory field.
+# 	[1993/10/05  16:52:45  rsarbo]
+# 
+# Revision 1.1.10.1  1993/09/17  21:27:18  tom
+# 	Automation:
+# 	  Add new variable DFS_SERVER_INSTALL.
+# 	  Rename install to install_list.
+# 	  Use variables for answers in dfsfldb routines.
+# 	  Add DFS_SERVER_INSTALL variable to indicate which server to install.
+# 	DFS config:
+# 	  Cleanup message catalog install.
+# 	  Use RC_DFS provided by dce_com_env.
+# 	  Add /etc to path, don't invoke /etc/mknod.
+# 	  Fix /etc file installation so dfs is only done here.
+# 	  Whitespace cleanup of environment variables, use log_env_values.
+# 	  Don't ask about DFS client when configging a server.
+# 	[1993/09/17  21:26:33  tom]
+# 
+# Revision 1.1.6.6  1993/08/26  21:28:34  kissel
+# 	OT 8509 - Fixes for problems when configuring an Episode file system.
+# 	OT 8450 - Copy rc.dfs in enable_in_dfs_rc() instead of moving it.
+# 	OT 8464 - Remove -e from acl_edit at the end of dfs_rgyinit.
+# 	[1993/08/26  20:54:40  kissel]
+# 
+# Revision 1.1.6.4  1993/07/30  15:37:40  rsarbo
+# 	set value of BINDING before using in dfs_rgyinit
+# 	[1993/07/30  15:32:55  rsarbo]
+# 
+# Revision 1.1.6.3  1993/07/30  14:22:41  rsarbo
+# 	install both unwind.o and kload for both HPUX client and
+# 	server cases
+# 	[1993/07/30  13:54:25  rsarbo]
+# 
+# Revision 1.1.6.2  1993/07/19  19:27:25  zeliff
+# 	HP port of DFS
+# 	[1993/07/19  18:20:56  zeliff]
+# 
+# Revision 1.1.4.8  1993/07/16  18:59:16  kissel
+# 	Fixed silly bug
+# 	[1993/07/15  19:07:54  jake]
+# 
+# 	Fixes two bugs introduced earlier
+# 	[1993/07/14  23:53:26  jake]
+# 
+# 	merge-up to 102a
+# 	[1993/07/08  20:38:43  jake]
+# 
+# 	- Only ask for new login on config, not install.
+# 	- Fix some typo's (dfs.config, etc.).
+# 	[1993/06/23  21:24:39  kissel]
+# 
+# 	Fixed acl_edit -e in rgy_init
+# 	[1993/06/23  18:24:33  jake]
+# 
+# 	*** empty log message ***
+# 	[1993/06/21  14:18:28  kissel]
+# 
+# 	Changed PSCOMM, checked other stuff for merge to GAMERA dce_config
+# 	[1993/04/27  20:19:09  jake]
+# 
+# 	Clean up the handling of dce_login and setting up the registry.  Add some more summary messages.
+# 	[1993/04/14  17:43:37  kissel]
+# 
+# 	Creating GAMERA branch with latest Hp_dce1_0_1 code.
+# 	[1993/04/01  19:18:33  kissel]
+# 
+# Revision 1.1.2.2  1993/06/04  01:12:33  kissel
+# 	Initial HPUX RP version.  Removed kload and unwind.o, added more message catalogs.
+# 	[1993/06/03  20:25:34  kissel]
+# 
+# Revision 1.1.2.4  1993/03/29  19:11:07  kissel
+# 	- Fix up the log header comment.
+# 	- Add dynamic kernel loading for HPUX.
+# 	- Add log messages to the install functions (in preparation for submission to OSF).
+# 	- Add environment variables to provide answers to all questions (like dce_config).
+# 	[1993/03/29  18:18:38  kissel]
+# 
+# Revision 1.1.2.3  1993/02/05  20:49:41  kissel
+# 	- Add logging calls (using dce_config as a model).  There is no logging added to
+# 	  the install functions or AIX specific functions (e.g. load_dfsext) because
+# 	  installation is done by update on HPUX and future merges will be easier with
+# 	  fewer changes.
+# 	- Change cdscp, rgy_edit, and rpccp calls to use new error checking functions.
+# 	[1993/02/05  19:46:09  kissel]
+# 
+# Revision 1.1.2.2  1992/11/10  16:29:35  kissel
+# 	Split out from dce_config for easier maintenance of DFS config functions.
+# 	[1992/11/10  16:25:21  kissel]
+# 
+# $EndLog$
+#
+# This script contains all the DFS config functions that were originally in
+# dce_config.  At the points where the dce_config script currently calls a DFS
+# function, it now calls this script with the function name as the argument.
+# This allows DFS to be shipped separately from DCE by just replacing this
+# script as part of the DFS initial installation.
+#
+# This script assumes that dce_config provides the menus and sets any global
+# variables related to DCE or the utility functions.
+
+#------------------------------------------------------
+# Save our input argument for use below.
+#------------------------------------------------------
+function_to_call=$1
+
+#------------------------------------------------------
+# Source the common utility functions
+#------------------------------------------------------
+: ${ETC:=/etc}
+export ETC
+. $ETC/dce_config_utils
+
+#------------------------------------------------------
+# set_cell_name()
+#
+# Sets and exports cellname, shortcellname variables.  
+# Invoked at start of this script, and whenever dce_cf.db
+# is updated.
+# 
+#------------------------------------------------------
+set_cell_name()
+{
+	log_msg DEBUG "Executing: set_cell_name()"
+	if [ -f $DCELOCAL/dce_cf.db ]
+	then
+		cellname=`/opt/dcelocal/bin/getcellname`
+        	shortcellname=`echo $cellname | cut -c6-`
+		export cellname shortcellname
+	fi
+
+}
+
+if [ -z "${DFS_ENV_PRINTED}" ]
+then
+
+	log_msg VERBOSE "dfs_config V$Revision: 1.1.31.4 $ called on `date` with argument \"$function_to_call\"."
+
+
+	log_msg VERBOSE "Values of DFS preset configuration information:"
+
+	#
+	# Set DCE_VAR_LIST and DCE_PASS_LIST for log_env_values to use.
+	#
+	DCE_VAR_LIST="AGG_FS_TYPE 	AGG_DEV_NAME 		AGG_MOUNT_PATH 
+	AGG_NAME AGG_ID 	CACHE_SIZE_RAM 		CACHE_SIZE_DISK 
+	CACHE_DIR_DISK 		CLIENT_CACHE_LOC 	
+	DFS_SERVER_INSTALL
+	EPI_FORMAT_PART 	EPI_FORCE_INIT 		INIT_LFS
+	INSTALL_OPT_SERS 	INSTALL_OPT_CLIENT
+	LOAD_LFS_KEXT 		ROOT_FILESET_NM 	SCM_NAME" 
+
+	DCE_PASS_LIST=""
+	export DCE_VAR_LIST DCE_PASS_LIST
+
+	log_env_values
+	DFS_ENV_PRINTED=1
+	export DFS_ENV_PRINTED
+fi
+
+#------------------------------------------------------
+# Support configuration input via environment variables
+#
+# The following variables, if set in the environment, will be
+# used as default values.  If not set in the environment, the
+# user will be prompted to enter a value.
+#------------------------------------------------------
+
+# AGG_FS_TYPE: if set, is the type of the filesystem for the aggregate 
+# to be exported.  "native" means the native file system (e.g. UFS, JFS).  
+# "episode" means the Episode (LFS) file system.  This is also used as 
+# the file system type for filesets.
+
+# AGG_DEV_NAME: if set, is the device name for the aggregate to be 
+# exported (e.g. /dev/lvXX).  This is also used as the device name 
+# for filesets.
+
+# AGG_MOUNT_PATH: if set, is the mount path for the aggregate 
+# (e.g. /usr/users).
+
+# AGG_NAME: if set, is the name to be used for the aggregate to be 
+# exported (e.g. user.jlw).
+
+# AGG_ID: if set, is the unique numerical aggregate ID for the exported 
+# aggregate.
+
+# CACHE_SIZE_RAM: if set, is the number of bytes to use for an in 
+# memory cache (if one is used).
+
+# CACHE_SIZE_DISK: if set, is the number of bytes to use for a local 
+# disk cache (if one is used).
+
+# CACHE_DIR_DISK: if set, is the pathname of the directory to use for 
+# a local disk cache (if one is used).
+
+# CLIENT_CACHE_LOC: "mem" means cache is in memory.  "disk" means cache 
+# is on the local disk.
+
+# DFS_SERVER_INSTALL: One of four values: 
+#   "scm" 	- System Control Machine
+#   "privatefs" - Private File Server
+#   "fs"	- File Server
+#   "fldb"	- Fileset Location Database Server
+
+# EPI_FORMAT_PART: "y" if user wishes the format a partition as an 
+# Episode aggregate. "n" otherwise.
+
+# EPI_FORCE_INIT: "y" if user wishes to force the initialization of a 
+# partition as an Episode aggregate, possibly losing data.  "n" otherwise.
+
+# INIT_LFS: "y" if user wants to initialize the LFS (using epiinit).  
+# "n" otherwise.
+
+# INSTALL_OPT_SERS: "y" if user wants to install optional DFS servers 
+# (e.g. bak, butc, upclient).  "n" otherwise.
+
+# INSTALL_OPT_CLIENT: "y" if user wants to install the optional client 
+# binaries (cm, bos, and fts).  "n" otherwise.
+
+# LOAD_LFS_KEXT: "y" if user wants to load the LFS kernel extension.  
+# "n" otherwise.
+
+# ROOT_FILESET_NM: if set, is the root fileset name.
+
+# SCM_NAME: if set, is the name of the system control machine to be 
+# used during configuration.
+
+#------------------------------------------------------
+# Initialize global/default variables
+#------------------------------------------------------
+
+# Following are values for DFS/LFS
+LFS_AGGID=1
+LFS_AGGNAME=lfs_aggr
+LFS_FILESETNAME=lfs_set
+LFS_BLOCKSIZE=8192
+LFS_FRAGSIZE=1024
+ROOT_FILESET=root.dfs
+
+# Default values for JFS
+JFS_ROOTNAME=/export
+JFS_ID=1
+
+RAM_CACHE_SIZE=1000
+DISK_CACHE_DIR=$DCELOCAL/var/adm/dfs/cache
+DISK_CACHE_SIZE=10000
+DFS_THREADS=7
+DFS_SERVERS=hosts/$HOSTNAME/dfs-server
+DFS_ADMIN_GROUP=subsys/dce/dfs-admin
+DFSGW_ADMIN_GROUP=subsys/dce/dfsgw-admin
+BOSCONFIG=$DCELOCAL/var/dfs/BosConfig
+DFSDIR=dfs
+HELPER_DEVICE=/dev/krpch
+DEV_MAJ=71
+DEV_MIN=0
+MKNOD=mknod
+PATH=$PATH:/etc
+
+#---------------------------------------------------
+# install_dfs_common()
+#
+# Install stuff needed by DFS clients and servers.  That is, scripts in /etc and
+# the message catalogs.
+#---------------------------------------------------
+install_dfs_common()
+{
+	log_msg DEBUG "Executing: install_dfs_common()"
+	LISTetc1="dfs.clean dfs.rm dfs.unconfig dfs_config"
+	LISTetc2="rc.dfs"
+	LIST="$LISTetc1 $LISTetc2"
+	read_media etc 
+   	for i in $LIST
+   	do
+		log_msg DETAIL "Executing: cp $CPOPT $DCESHARED/etc/$i $DCELOCAL/etc/$i"
+		cp $CPOPT $DCESHARED/etc/$i $DCELOCAL/etc/$i
+		if [ $? != 0 ]; then
+                        err_exit "Can't create file $DCELOCAL/etc/$i"
+		fi
+	done
+
+	log_msg SUMMARY "Installing  $LIST..."
+
+	# On re-config, the start up file are first restored to the
+	# unconfigg'ed state using the template file.
+	# This is the only file that lives in /etc.
+	if [ -f $RC_DFS ];then 
+		# If there's a modified $RC_DFS, leave
+		# it.  This allows DFS binaries to be
+		# upgraded without blowing the configuration.
+		grep "^daemonrunning " $RC_DFS >/dev/null
+		if [ $? -eq 0 ]; then
+			log_msg VERBOSE \
+			"Modified $RC_DFS exists, not replacing"
+		else
+			log_msg VERBOSE \
+			"Executing: cp $CPOPT $DCELOCAL/etc/rc.dfs $RC_DFS"
+			cp $CPOPT $DCELOCAL/etc/rc.dfs $RC_DFS >/dev/null
+		fi
+	else
+		log_msg VERBOSE \
+			"Executing: cp $CPOPT $DCELOCAL/etc/rc.dfs $RC_DFS"
+		cp $CPOPT $DCELOCAL/etc/rc.dfs $RC_DFS >/dev/null
+	fi
+	log_msg VERBOSE \
+	    "Executing: mv $DCELOCAL/rc.dfs $DCELOCAL/rc.dfs.template"
+	mv $DCELOCAL/etc/rc.dfs $DCELOCAL/etc/rc.dfs.template >/dev/null
+
+	# link to other dfs files in to /etc
+	for i in $LISTetc1
+	do
+		rm -f /etc/$i
+		log_msg VERBOSE "Executing: ln -s $DCELOCAL/etc/$i /etc/$i "
+		ln -s $DCELOCAL/etc/$i /etc/$i 2>/dev/null
+		if [ $? != 0 ]
+		then
+			err_exit "Cannot install link from $DCELOCAL/etc/$i to /etc/$i"
+		fi
+	done
+
+	read_media ${NLSDIR}
+
+	log_msg SUMMARY "Installing DFS message catalogs..."
+	log_msg DETAIL "Executing: cp $CPOPT $DCESHARED/$NLSDIR/dfs* $DCELOCAL/$NLSDIR/."
+	cp $CPOPT $DCESHARED/$NLSDIR/dfs* $DCELOCAL/$NLSDIR/.
+	if [ $? != 0 ]; then
+		err_exit "Can't write message catalogs into $DCELOCAL/$NLSDIR"
+	fi
+	parse_nls
+}
+
+#---------------------------------------------------
+# install_dfs()
+#
+# Install script for DFS
+# 	Ensure the location of the binaries is known
+#	Create any directories needed for the DFS binaries
+# 	Install the necessary DFS binaries.
+#---------------------------------------------------
+install_dfs()
+{
+	log_msg DEBUG "Executing: install_dfs()"
+
+	DFS_DIRLIST="$DCELOCAL/var/dfs
+       		     $DCELOCAL/var/dfs/adm
+       		     $DCELOCAL/var/dfs/backup
+		     $DCELOCAL/var/adm
+                     $DCELOCAL/var/adm/dfs
+                     $DCELOCAL/ext"
+
+	for i in $DFS_DIRLIST
+	do
+		if [ ! -d $i ]; then
+			setdirperms ${i}
+			if [ $? != 0 ]; then
+				err_exit "can't create $i"
+			fi
+                elif [ ! -w $i ]; then
+			err_exit "$i doesn't have write permission"
+                fi
+	done
+
+	# Special permissions for var/dfs
+	log_msg DETAIL "Executing: chmod 711 $DCELOCAL/var/dfs"
+	chmod 711 $DCELOCAL/var/dfs
+
+	if [ -z "${DFS_SERVER_INSTALL}" ]
+	then
+		LIST="1 2 3 4"
+		clear
+
+		log_msg VERBOSE "User query: DFS Server Installation Menu"
+		echo "\tFour types of DFS Server installations are valid."
+		echo "\n"
+		echo "\t1.  System Control Machine"
+		echo "\t2.  Private File Server"
+		echo "\t3.  File Server"
+		echo "\t4.  Fileset Location Database Server"
+		echo "\n"
+		echon "\tselection: "
+		get_option
+
+		# Only allow one of these options.
+		one_option
+		log_msg VERBOSE "User entry: $opt"
+	else
+		case $DFS_SERVER_INSTALL in
+			scm)		opt=1;;
+			privatefs)	opt=2;;
+			fs)		opt=3;;
+			fldb)		opt=4;;
+			*)
+			  err_exit "Can't install DFS: $DFS_SERVER_INSTALL"
+			;;
+		esac
+	fi
+
+	# DFS configuration is very operating system specific.
+	# This DFS configuration is for AIX, but on non-AIX platforms
+	# where "umount" doesn't work as desired it may be desirable
+	# to install the "epiunmount" binary.
+	LIST1="fxd bosserver ftserver fts dfsexport dfsbind repserver efts bak"
+	if [ "$UNAME" = "AIX" ]
+	then
+		LIST2="salvage epimount epiunmount epidaemon bos growaggr"
+	else
+		LIST2="salvage epimount epiunmount epiinit bos"
+	fi
+
+	case $opt in
+		1)	LIST2="$LIST2 upserver butc";;
+		2)	LIST2="$LIST2 butc";;
+		3)	LIST2="$LIST2 newaggr upclient butc";;
+		4)	LIST2="$LIST2 newaggr upclient flserver udebug bakserver butc";;
+	esac
+
+        LIST="$LIST1 $LIST2"
+	log_msg SUMMARY "Installing $LIST1..."
+	log_msg SUMMARY "Installing $LIST2..."
+	install_list
+
+	if [ "$UNAME" = "AIX" ]; then
+	   	LISText="dfscore.ext dfscmfx.ext dcelfs.ext"
+		LISText2="export.ext cfgexport cfgdfs cfglfs dfsloadobj"
+		log_msg SUMMARY "Installing $LISText..."
+		log_msg SUMMARY "Installing $LISText2..."
+		LIST="$LISText $LISText2"
+		read_media ext
+	   	for i in $LIST
+	   	do
+			log_msg DETAIL "Executing: cp $CPOPT $DCESHARED/ext/$i $DCELOCAL/ext/$i"
+			cp $CPOPT $DCESHARED/ext/$i $DCELOCAL/ext/$i
+			if [ $? != 0 ]; then
+	                        err_exit "Can't create file $DCELOCAL/ext/$i"
+			fi
+	   	done
+	fi
+
+	if [ "$UNAME" = "HP-UX" ]; then
+	   	LIST="dce_krpc.ext dfs_core.ext dfs_server.ext dfs_episode.ext unwind.o kload"
+		log_msg SUMMARY "Installing $LIST..."
+		read_media ext
+	   	for i in $LIST
+	   	do
+			log_msg DETAIL "Executing: cp $CPOPT $DCESHARED/ext/$i $DCELOCAL/ext/$i"
+			cp $CPOPT $DCESHARED/ext/$i $DCELOCAL/ext/$i
+			if [ $? != 0 ]; then
+	                        err_exit "Can't create file $DCELOCAL/ext/$i"
+			fi
+	   	done
+	fi
+
+	optDFSa="cm fms udebug"
+	optDFSb="scout upclient upserver"
+	LIST="$optDFSa $optDFSb"
+
+	string=${INSTALL_OPT_SERS:-"NULL"}
+	while [ "${string:="NULL"}" = "NULL" ]; do
+	    log_msg VERBOSE "User query: Would you like to install the optional DFS servers? (y)"
+	    echo "\n"
+	    echo "\tOptional DFS servers are:"
+	    echo "\t   $optDFSa"
+	    echo "\t   $optDFSb"
+            echon "\tWould you like to install the optional DFS servers? (y)  "
+	    get_string
+	    string=${string:-"y"}
+	    log_msg VERBOSE "User entry: $string"
+	done
+	case $string in
+		y|yes)	log_msg SUMMARY "Installing $LIST..."
+			install_list;;
+		*)	;;
+	esac
+}
+
+#---------------------------------------------------
+# install_dfsclient()
+#
+# Install only the binaries needed on DFS
+# client machines
+#
+#---------------------------------------------------
+install_dfsclient()
+{
+	log_msg DEBUG "Executing: install_dfsclient()"
+
+	DFS_DIRLIST="$DCELOCAL/var/adm
+                     $DCELOCAL/var/adm/dfs
+                     $DCELOCAL/ext"
+
+	for i in $DFS_DIRLIST
+	do
+		if [ ! -d $i ]; then
+			setdirperms ${i}
+			if [ $? != 0 ]; then
+				 err_exit "can't create $i"
+			fi
+                elif [ ! -w $i ]; then
+			err_exit "$i doesn't have write permission"
+                fi
+	done
+
+	LIST="dfsd dfsbind dfstrace"
+	log_msg SUMMARY "Installing $LIST..."
+	install_list
+
+	answer=${INSTALL_OPT_CLIENT:-"NULL"}
+	if [ "$UNAME" = "HP-UX" ]
+	then
+  	  LIST="cm bos fts bak dfsgw dfsgwd bosserver"
+	else
+  	  LIST="cm bos fts bak"
+	fi
+	if [ "${answer}" = "NULL" ]
+	then
+	    log_msg VERBOSE "User query: Would you like to install: ${LIST}, \
+(all are optional) on this machine?"
+	    echo "\tWould you like to install: ${LIST},"
+	    echon "\t(all are optional) on this machine (y)?  "
+	    read answer
+	    answer=${answer:-"y"}
+	    log_msg VERBOSE "User entry: $answer"
+	fi
+	case $answer in
+		y|yes) 	log_msg SUMMARY "Installing ${LIST}...";
+			install_list   ;;
+		*) ;;
+	esac
+
+	if [ "$UNAME" = "AIX" ]
+	then
+	   	LIST="dfscore.ext dfscmfx.ext export.ext cfgexport cfgdfs dfsloadobj"
+		log_msg SUMMARY "Installing $LIST..."
+		read_media ext
+	   	for i in $LIST
+	   	do
+			log_msg DETAIL "Executing: cp $CPOPT $DCESHARED/ext/$i $DCELOCAL/ext/$i"
+			cp $CPOPT $DCESHARED/ext/$i $DCELOCAL/ext/$i
+			if [ $? != 0 ]; then
+	                        err_exit "Can't create file $DCELOCAL/ext/$i"
+			fi
+	   	done
+	fi
+	if [ "$UNAME" = "HP-UX" ]
+	then
+	   	LIST="dce_krpc.ext dfs_core.ext dfs_client.ext dfs_episode.ext unwind.o kload"
+		log_msg SUMMARY "Installing $LIST..."
+		read_media ext
+	   	for i in $LIST
+	   	do
+			log_msg DETAIL "Executing: cp $CPOPT $DCESHARED/ext/$i $DCELOCAL/ext/$i"
+			cp $CPOPT $DCESHARED/ext/$i $DCELOCAL/ext/$i
+			if [ $? != 0 ]; then
+	                        err_exit "Can't create file $DCELOCAL/ext/$i"
+			fi
+	   	done
+	fi
+	return 0
+}
+
+#------------------------------------------------------
+# enable_in_dfs_rc()
+#
+# modifies the $RC_DFS file so the correct daemons
+# will be started at boot time.
+# Note: $RC_DFS is NOT put into an /etc/rc.local or
+#    /etc/rc file.  Each vendor must handle that as
+#    deemed appropriate.
+# For HPUX, rc.dfs is called by rc.dce as part of startup.
+#------------------------------------------------------
+enable_in_dfs_rc()
+{
+	mdaemon=$1
+	log_msg DEBUG "Executing: enable_in_dfs_rc($mdaemon)"
+	grep "$mdaemon" $RC_DFS >/dev/null 2>&1
+	if [ $? -ne 0 ]
+	then
+ 		err_exit "$RC_DFS is not installed or is corrupted.  \
+Continuing is all right, but $RC_DFS will not be updated."
+	else
+		sed "/$mdaemon/s/^##//" $RC_DFS > /tmp/rc.dfs$$ && \
+		{ cp /tmp/rc.dfs$$ $RC_DFS;
+		  log_msg VERBOSE "Successfully modified rcfile $RC_DFS for \"$mdaemon\""; }
+	fi
+}
+
+#-----------------------------------------------------------
+#-----------------------------------------------------------
+# ALL DFS routines are provided as an example only.
+# No support is implied for these routines, and the
+# routines are not expected to work.  Each vendor should
+# determine which (if any) DFS configurations are valid
+# for their platforms and write the appropriate configuration
+# code.
+#-----------------------------------------------------------
+#-----------------------------------------------------------
+
+#-----------------------------------------------------------
+# load_dfsext()
+#
+# Load the DFS Kernel Extensions, (but not
+# the episode kernel extension).
+#-----------------------------------------------------------
+load_dfsext()
+{
+	loadtype=$1
+	log_msg DEBUG "Executing: load_dfsext(${loadtype})"
+
+	if [ "$UNAME" = "AIX" ]
+	then
+		log_msg SUMMARY "Loading kernel extensions..."
+		log_msg DETAIL "Executing: $DCELOCAL/ext/cfgexport -a $DCELOCAL/ext/export.ext"
+		$DCELOCAL/ext/cfgexport -a $DCELOCAL/ext/export.ext
+		log_msg DETAIL "Executing: $DCELOCAL/ext/cfgdfs -a $DCELOCAL/ext/dfscore.ext"
+		$DCELOCAL/ext/cfgdfs -a $DCELOCAL/ext/dfscore.ext
+		log_msg DETAIL "Executing: $DCELOCAL/ext/cfgdfs -a $DCELOCAL/ext/dfscmfx.ext"
+		$DCELOCAL/ext/cfgdfs -a $DCELOCAL/ext/dfscmfx.ext
+
+		enable_in_dfs_rc export.ext
+		enable_in_dfs_rc dfscore.ext
+		enable_in_dfs_rc dfscmfx.ext
+
+		# The LFS extension isn't strictly required, but it 
+		# doesn't hurt to load it anyway.
+		# Prompt user to load only if it has been installed.
+		if [ -f $DCELOCAL/ext/dcelfs.ext -a "${loadtype}" = "server" ]
+		then
+		    answer=${LOAD_LFS_KEXT:-"NULL"}
+		    while [ "${answer:="NULL"}" = "NULL" ]; do
+			log_msg VERBOSE "User query: Should the LFS Kernel Extension be loaded (n)?"
+			echon "\tShould the LFS Kernel Extension be loaded (n)?  "
+			read answer
+			answer=${answer:-"n"}
+			log_msg VERBOSE "User entry: $answer"
+		    done
+		    case $answer in
+			y|yes)
+			    log_msg DETAIL "Executing: $DCELOCAL/ext/cfglfs -a $DCELOCAL/ext/dcelfs.ext"
+			    $DCELOCAL/ext/cfglfs -a $DCELOCAL/ext/dcelfs.ext
+
+			    # Start episode/VM helper daemon
+			    log_msg SUMMARY  "Starting epidaemon"
+			    log_msg DETAIL "Executing: ps ${PSARGS} | grep -q epidaemo "
+			    ps ${PSARGS} | grep -q epidaemo
+			    if [ $? -eq 0 ]
+			    then
+				err_exit "epidaemon is already running."
+			    fi
+			    log_msg DETAIL "Executing: epidaemon 1"
+        		    epidaemon 1
+			    if [ $? != 0 ]; then
+				err_exit "epidaemon failed to start"
+			    fi
+
+			    enable_in_dfs_rc dcelfs.ext
+			    enable_in_dfs_rc epidaemon
+			    ;;
+			*)
+			    ;;
+		    esac
+		fi
+		dcelogin || exit 1
+	fi
+
+	if [ "$UNAME" = "HP-UX" ]
+	then
+		# The -N prevents building a new symbol table (which is expensive).  We build
+		# the symbol table when loading the "last" extension.
+		#
+		log_msg SUMMARY "Loading kernel extensions..."
+		log_msg DETAIL "Executing: $DCELOCAL/ext/kload -N dce_krpc"
+		$DCELOCAL/ext/kload -N dce_krpc
+		if [ $? -ne 0 ]; then
+		    err_exit "\"$DCELOCAL/ext/kload -N dce_krpc\" failed.  \
+Continuing will assume you have done the kload by hand."
+		fi
+
+		log_msg DETAIL "Executing: $DCELOCAL/ext/kload -N dfs_core"
+		$DCELOCAL/ext/kload -N dfs_core
+		if [ $? -ne 0 ]; then
+		    err_exit "\"$DCELOCAL/ext/kload -N dfs_core\" failed.  \
+Continuing will assume you have done the kload by hand."
+		fi
+
+		if [ "${loadtype}" = "client" ]; then
+		    log_msg DETAIL "Executing: $DCELOCAL/ext/kload dfs_client"
+		    $DCELOCAL/ext/kload  dfs_client
+		    if [ $? -ne 0 ]; then
+			err_exit "\"$DCELOCAL/ext/kload dfs_client\" failed.  \
+Continuing will assume you have done the kload by hand."
+		    fi
+		fi
+
+		if [ "${loadtype}" = "server" ]; then
+		    log_msg DETAIL "Executing: $DCELOCAL/ext/kload dfs_server"
+		    $DCELOCAL/ext/kload dfs_server
+		    if [ $? -ne 0 ]; then
+			err_exit "\"$DCELOCAL/ext/kload dfs_server\" failed.  \
+Continuing will assume you have done the kload by hand."
+		    fi
+		fi
+
+		enable_in_dfs_rc dce_krpc
+		enable_in_dfs_rc dfs_core
+		if [ "${loadtype}" = "client" ]; then
+		    enable_in_dfs_rc dfs_client
+		fi
+		if [ "${loadtype}" = "server" ]; then
+		    enable_in_dfs_rc dfs_server
+		fi
+
+		# The LFS extension isn't strictly required, but it 
+		# doesn't hurt to load it anyway.
+		# Prompt user to load only if it has been installed and we're a server.
+		if [ -f $DCELOCAL/ext/dfs_episode.ext -a "${loadtype}" = "server" ]; then
+		    answer=${LOAD_LFS_KEXT:-"NULL"}
+		    while [ "${answer:="NULL"}" = "NULL" ]; do
+			log_msg VERBOSE "User query: Should the LFS Kernel Extension be loaded (n)?"
+			echon "\tShould the LFS Kernel Extension be loaded (n)?  "
+			read answer
+			answer=${answer:-"n"}
+			log_msg VERBOSE "User entry: $answer"
+		    done
+		    case $answer in
+			y|yes)
+			    log_msg DETAIL "Executing: $DCELOCAL/ext/kload dfs_episode"
+			    $DCELOCAL/ext/kload dfs_episode
+			    if [ $? -ne 0 ]; then
+				err_exit "\"$DCELOCAL/ext/kload dfs_episode\" failed.  \
+Continuing will assume you have done the kload by hand."
+			    fi
+
+			    enable_in_dfs_rc dfs_episode
+			    ;;
+			*)
+			    ;;
+		    esac
+		fi
+	fi
+
+        # on other machines we may need to run epiiinit
+        # and enable it.
+
+        if [ -f $DCELOCAL/bin/epiinit -a "${loadtype}" = "server" ]
+        then
+	    answer=${INIT_LFS:-"NULL"}
+	    while [ "${answer:="NULL"}" = "NULL" ]; do
+		log_msg VERBOSE "User query: Should LFS be initialized (n)?"
+        	echon "\tShould LFS be initialized (n)?  "
+        	read answer
+        	answer=${answer:-"n"}
+		log_msg VERBOSE "User entry: $answer"
+	    done
+            case $answer in
+                y|yes)	log_msg DETAIL "Executing: $DCELOCAL/bin/epiinit"
+			$DCELOCAL/bin/epiinit
+			enable_in_dfs_rc epiinit
+                  ;;
+                *) ;;
+            esac
+        fi
+}
+
+#-----------------------------------------------------------
+# config_dfsgw()
+#
+# Create dfsgw rgy entries
+# Start Bosserver
+# Add entry to /etc/services file
+# Modify rc file
+#-----------------------------------------------------------
+config_dfsgw()
+{ 
+  log_msg DEBUG "Executing: config_dfsgw()"
+
+  # see if user wants to run bosserver
+  answer=${CONFIG_NFS_GATEWAY_USEBOS:-"NULL"}
+  if [ "${answer}" = "NULL" ]; then
+    log_msg VERBOSE "User query: Would you like to use BOS Server\
+    to monitor/administer the dfsgwd process (y/n)? (n) "
+    echo "\tWould you like to use BOS Server to monitor and administer"
+    echon "\tthe dfsgwd process (y/n)? (n) "
+    get_string
+    answer=${string:-"n"}
+    log_msg VERBOSE "User entry: $answer"
+  fi
+  case $answer in
+        y)  USEBOS=1;;
+        yes) USEBOS=1;;
+        *)  USEBOS=0;;
+      esac
+
+  if [ $USEBOS -eq 1 ]; then 
+    #set up group for bosserver 
+    dfs_rgyinit dfsgwd
+    
+    #see if admin group set up for bosserver start 
+    log_msg DETAIL "Executing: rgy_edit -g $SUBSYSDIR/dfs-admin -v | grep \"^$SUBSYSDIR/dfs-admin\" >/dev/null"
+    rgy_edit -g $SUBSYSDIR/dfs-admin -v | grep "^$SUBSYSDIR/dfs-admin" >/dev/null
+
+    if [ $? -ne 0 ]; then
+
+    # Get name of cell administrator.
+    CELLADMIN=`klist | grep "Principal" | \
+      grep -v "Global Principal" | awk '{print $3}'`
+
+    # Add the necessary principals to the registry database
+    log_msg DETAIL "Executing: rgy_edit> domain group"
+    log_msg DETAIL "Executing: rgy_edit> add $SUBSYSDIR/dfs-admin"
+    log_msg DETAIL "Executing: rgy_edit> quit"
+
+    rm -f /tmp/rgy_edit_out$$
+    rgy_edit -update >/tmp/rgy_edit_out$$ <<EOF
+domain group
+add $SUBSYSDIR/dfs-admin
+member $SUBSYSDIR/dfs-admin -a $CELLADMIN
+quit
+EOF
+    rgy_edit_status=$?
+    chk_rgy_edit "rgy_edit - adding DFS principals to the registry database"
+    fi
+
+    start_bosserver
+  fi
+ 
+  DFS_DIRLIST="$DCELOCAL/var/dfs"
+
+  for i in $DFS_DIRLIST
+  do
+    if [ ! -d $i ]; then
+      setdirperms ${i}
+      if [ $? != 0 ]; then
+	err_exit "can't create $i"
+      fi
+    elif [ ! -w $i ]; then
+      err_exit "$i doesn't have write permission"
+    fi
+  done
+
+  log_msg DETAIL "Executing: rgy_edit -g $SUBSYSDIR/dfsgw-admin -v | grep \"^$SUBSYSDIR/dfsgw-admin\" >/dev/null"
+  rgy_edit -g $SUBSYSDIR/dfsgw-admin -v | grep "^$SUBSYSDIR/dfsgw-admin" >/dev/null
+  if [ $? -ne 0 ]; then
+
+  # Get name of cell administrator.
+  CELLADMIN=`klist | grep "Principal" | \
+      grep -v "Global Principal" | awk '{print $3}'`
+
+  log_msg SUMMARY "Modifying the registry database for DFS Gateway operation..."
+  # Add the necessary principals to the registry database
+  log_msg DETAIL "Executing: rgy_edit> domain group"
+  log_msg DETAIL "Executing: rgy_edit> add $SUBSYSDIR/dfsgw-admin"
+  log_msg DETAIL "Executing: rgy_edit> member $SUBSYSDIR/dfsgw-admin -a $CELLADMIN"
+  log_msg DETAIL "Executing: rgy_edit> quit"
+
+  rm -f /tmp/rgy_edit_out$$
+  rgy_edit -update >/tmp/rgy_edit_out$$ <<EOF
+domain group
+add $SUBSYSDIR/dfsgw-admin
+member $SUBSYSDIR/dfsgw-admin -a $CELLADMIN
+quit
+EOF
+  rgy_edit_status=$?
+  chk_rgy_edit "rgy_edit - adding DFSGW principals to the registry database"
+  fi 
+
+  log_msg DETAIL "Executing: rgy_edit -a hosts/$HOSTNAME/dfsgw-server -v | grep \"^hosts/$HOSTNAME/dfsgw-server\" >/dev/null"
+  rgy_edit -a hosts/$HOSTNAME/dfsgw-server -v | grep "^hosts/$HOSTNAME/dfsgw-server" >/dev/null
+  if [ $? -ne 0 ]; then
+
+  # Get name of cell administrator.
+  CELLADMIN=`klist | grep "Principal" | \
+        grep -v "Global Principal" | awk '{print $3}'`
+
+  log_msg VERBOSE "Creating the dfsgw-server account for $HOSTNAME"
+  log_msg DETAIL "Executing: rgy_edit> domain principal"
+  log_msg DETAIL "Executing: rgy_edit> add hosts/$HOSTNAME/dfsgw-server"
+  log_msg DETAIL "Executing: rgy_edit> domain account"
+  log_msg DETAIL "Executing: rgy_edit> add hosts/$HOSTNAME/dfsgw-server -g $SUBSYSDIR/dfsgw-admin -o none -pw <not shown> -mp <not shown>"
+  log_msg DETAIL "Executing: rgy_edit> ktadd -p hosts/$HOSTNAME/dfsgw-server -pw <not shown>"
+  log_msg DETAIL "Executing: rgy_edit> ktadd -p hosts/$HOSTNAME/dfsgw-server -a -r"
+  log_msg DETAIL "Executing: rgy_edit> quit"
+  rm -f /tmp/rgy_edit_out$$
+  rgy_edit -update >/tmp/rgy_edit_out$$ <<EOF
+domain principal
+add hosts/$HOSTNAME/dfsgw-server
+domain account
+add hosts/$HOSTNAME/dfsgw-server -g $SUBSYSDIR/dfsgw-admin -o none -pw $cellpw -mp $cellpw
+ktadd -p hosts/$HOSTNAME/dfsgw-server -pw $cellpw
+ktadd -p hosts/$HOSTNAME/dfsgw-server -a -r
+quit
+EOF
+  rgy_edit_status=$?
+  chk_rgy_edit "rgy_edit - adding accounts to the registry database for DFSGW."
+  fi
+
+  if [ $USEBOS -eq 1 ]; then
+    log_msg DETAIL "Executing: $DCELOCAL/bin/bos addadmin -server /.:/hosts/$HOSTNAME -adminlist admin.gway -group $DFSGW_ADMIN_GROUP -createlist"
+  $DCELOCAL/bin/bos addadmin -server /.:/hosts/$HOSTNAME -adminlist\
+           admin.gway -group $DFSGW_ADMIN_GROUP -createlist
+  fi
+
+  # Add entry to /etc/services
+  log_msg VERBOSE "Adding dfsgw entry to /etc/services."
+  PORT=`grep "dfsgw[ |	]" /etc/services`
+  if [ $? -ne 0 ]
+  then
+    until [ -w /etc/services ]
+    do
+      err_exit "Can not write to /etc/services.  Continuing will retry."
+    done
+    log_msg DETAIL "Executing: echo \"dfsgw\t$DFSGW_PORT/udp\t\tdlog\" >> /etc/services"
+    echo "dfsgw\t$DFSGW_PORT/udp\t\tdlog" >> /etc/services
+  else
+    PORT=`echo $PORT | cut -f1 -d"/" | cut -f2 -d" "`
+    if [ "$PORT" != "$DFSGW_PORT" ]
+    then
+      log_msg VERBOSE "User query: A dfsgw entry already exists in /etc/services with a port number of $PORT.  Do you wish to update the port number to $DFSGW_PORT (y/n)? (y) "
+      echo "\t\tA dfsgw entry already exists in /etc/services"
+      echo "\t\twith a port number of $PORT.  Do you wish to"
+      echon "\t\tupdate the port number to $DFSGW_PORT (y/n)? (y) "
+      get_string
+      answer=${string:-"y"}
+      log_msg VERBOSE "User entry: $answer"
+      case $answer in
+        y)  doit=1;;
+        yes) doit=1;;
+        *)  doit=0;;
+      esac
+      if [ $doit -eq 1 ]
+      then
+        log_msg DETAIL "Executing: sed \"/dfsgw[ |	]/s/$PORT/$DFSGW_PORT/\"\ /etc/services > /etc/services.new"
+        sed "/dfsgw[ |	]/s/$PORT/$DFSGW_PORT/" /etc/services > /etc/services.new
+        mv /etc/services.new /etc/services
+        chmod 644 /etc/services
+      fi
+    fi
+  fi
+ 
+  if [ $USEBOS  -eq 1 ]; then
+    # Check to see if dfsgwd is not already running before adding it
+    # Shut it down first if it's already running, then restart it
+    $DCELOCAL/bin/bos status -server /.:/hosts/$HOSTNAME | grep dfsgwd >/dev/null
+    stat=$?
+    if [ $stat -eq 0 ]
+    then
+      $DCELOCAL/bin/bos restart -server /.:/hosts/$HOSTNAME -process dfsgwd 
+    fi
+    if [ $stat -ne 0 ]
+    then
+       $DCELOCAL/bin/bos create -server /.:/hosts/$HOSTNAME -process dfsgwd -type simple -cmd "$DCELOCAL/bin/dfsgwd"
+    fi
+  else
+     start_dfsgwd
+  fi
+}
+
+#-----------------------------------------------------------
+# config_dfs_client()
+#
+# Start dfsbind
+# Find out whether cache is local or in RAM
+# Create the CacheInfo file if cache is local
+# Start dfsd, with the appropriate flags for local or RAM cache
+#-----------------------------------------------------------
+config_dfs_client()
+{
+   log_msg DEBUG "Executing: config_dfs_client()"
+   # Must be a DCE client first
+   ps ${PSARGS} | grep -q cdsadv
+   if [ $? -ne 0 ]
+   then
+	err_exit "You must configure this machine as a DCE client before configuring as a DFS client. Continuing will return to the Configuration Menu"
+	return
+   fi
+
+   ps ${PSARGS} | grep -q dfsd
+   if [ $? -eq 0 ]
+   then
+       log_msg WARNING "The DFS client (dfsd) is already running"
+       config_dfs_gateway
+       return
+   fi
+
+   # Load the client kernel extensions.
+   load_dfsext client
+
+   #Create the mount point
+   log_msg DETAIL "Executing: ls /... >/dev/null 2>\&1"
+   ls /... >/dev/null 2>&1
+   if [ $? -ne 0 ]
+   then
+      log_msg DETAIL "Executing: mkdir -p /... >/dev/null 2>\&1"
+      mkdir -p /... >/dev/null 2>&1
+      if [ $? -ne 0 ]
+      then
+         err_exit "The directory \"/...\" must be created before configuring DFS.  \
+Continuing will try to use that directory."
+      fi
+   fi
+
+   opt=${CLIENT_CACHE_LOC:-"NULL"}
+   if   [ ${opt} = "mem" ]; then opt="1"
+   elif [ ${opt} = "disk" ]; then opt="2"
+   else opt="NULL"; fi
+
+   while [ "${opt:="NULL"}" = "NULL" ]; do
+	log_msg VERBOSE "User query: DFS client cache location menu"
+	echo "\tIs the cache :"
+	echo "\t1. in memory"
+	echo "\t2. on the local disk"
+	echon "selection:  "
+	LIST="1 2"
+	get_option
+
+	# Allow only one option from this menu
+	one_option
+	log_msg VERBOSE "User entry: $opt"
+   done
+
+   # Check to see if dfsbind is running. If not, start it
+   start_dfsbind
+
+   case $opt in
+	1)  SIZE=${CACHE_SIZE_RAM:-"NULL"}
+	    while [ "${SIZE:="NULL"}" = "NULL" ]; do
+		log_msg VERBOSE "User query: Enter the RAM size of the cache ($RAM_CACHE_SIZE):"
+		echon "\tEnter the RAM size of the cache ($RAM_CACHE_SIZE):  ";
+        	get_string;
+        	SIZE=${string:-$RAM_CACHE_SIZE};
+		log_msg VERBOSE "User entry: $SIZE"
+	    done
+
+            # Create a dummy CacheInfo file 
+	    # Dfsd will ignore the cache directory field
+            log_msg DETAIL "Executing: echo \"/...:$DISK_CACHE_DIR:$SIZE\" > $DCELOCAL/etc/CacheInfo"
+            echo "/...:$DISK_CACHE_DIR:$SIZE" > $DCELOCAL/etc/CacheInfo
+
+	    # Start DFSD;
+            log_msg SUMMARY "Starting dfsd..."
+	    log_msg DETAIL "Executing: dfsd -memcache -blocks $SIZE"
+            dfsd -memcache -blocks $SIZE
+	    enable_in_dfs_rc memcache
+            sed "/$mdaemon/s/SIZE/$SIZE/" $RC_DFS > /tmp/rc.dfs$$ && \
+            cp /tmp/rc.dfs$$ $RC_DFS
+	    ;;
+
+	2)  SIZE=${CACHE_SIZE_DISK:-"NULL"}
+	    while [ "${SIZE:="NULL"}" = "NULL" ]; do
+		log_msg VERBOSE "User query: Enter the size of the cache ($DISK_CACHE_SIZE):"
+		echon "\tEnter the size of the cache ($DISK_CACHE_SIZE):  ";
+        	get_string;
+        	SIZE=${string:-$DISK_CACHE_SIZE};
+		log_msg VERBOSE "User entry: $SIZE"
+	    done
+
+	    CACHE=${CACHE_DIR_DISK:-"NULL"}
+	    while [ "${CACHE:="NULL"}" = "NULL" ]; do
+		log_msg VERBOSE "User query: Enter the name of the cache directory ($DISK_CACHE_DIR):"
+		echon "\tEnter the name of the cache directory ($DISK_CACHE_DIR):  ";
+        	get_string;
+        	CACHE=${string:-$DISK_CACHE_DIR};
+		log_msg VERBOSE "User entry: $CACHE"
+	    done
+
+	    # Create the cache directory if necessary
+	    if [ ! -d $CACHE ]
+	    then
+		log_msg DETAIL "Executing: mkdir -p $CACHE"
+		mkdir -p $CACHE
+	    fi
+	    log_msg DETAIL "Executing: chmod 700 $CACHE"
+	    chmod 700 $CACHE
+	    log_msg DETAIL "Executing: echo \"/...:$CACHE:$SIZE\" > $DCELOCAL/etc/CacheInfo"
+	    echo "/...:$CACHE:$SIZE" > $DCELOCAL/etc/CacheInfo
+
+	    # Cleanup any existing cache, since we're assuming this machine was never
+	    # configured before.  If this directory already exists, 
+	    # we don't have any idea whether or not the information is valid.
+	    log_msg VERBOSE "Cleaning up previous cache entries."
+	    log_msg DETAIL "Executing: find $CACHE -type f -print | xargs rm -f"
+	    find $CACHE -type f -print | xargs rm -f
+
+	    # Start DFSD;
+            log_msg SUMMARY "Starting dfsd..."
+	    log_msg DETAIL "Executing: dfsd"
+            dfsd
+	    enable_in_dfs_rc diskcache
+	    ;;
+   esac
+
+   #
+   # HP-UX patch
+   #
+   #ls -ld /.: 2>/dev/null | grep $cellname >/dev/null 2>&1
+   log_msg DETAIL "Executing: ls /.: 2>/dev/null | grep $cellname >/dev/null 2>\&1"
+   ls /.: 2>/dev/null | grep $cellname >/dev/null 2>&1
+   if [ $? -ne 0 ]
+   then
+	log_msg DETAIL "Executing: rm -f /.: > /dev/null 2>\&1"
+	rm -f /.: > /dev/null 2>&1
+	log_msg DETAIL "Executing: ln -s $cellname /.: >/dev/null 2>\&1"
+	ln -s $cellname /.: >/dev/null 2>&1
+	if [ $? -ne 0 ]
+	then
+		err_exit "The command \"ln -s $cellname /.:\" failed.  This link is needed \
+to access the filesystem using the abbreviated directory form (/.:).  \
+Continuing will not create the link."
+	fi
+   fi
+
+   #
+   # HP-UX patch
+   #
+   #ls -ld /: 2>/dev/null | grep $cellname/fs 2>&1 >/dev/null
+   log_msg DETAIL "Executing: ls /: 2>/dev/null | grep $cellname >/dev/null 2>\&1"
+   ls /: 2>/dev/null | grep $cellname/fs 2>&1 >/dev/null
+   if [ $? -ne 0 ]
+   then
+	log_msg DETAIL "Executing: rm -f /: > /dev/null 2>\&1"
+	rm -f /: > /dev/null 2>&1
+	log_msg DETAIL "Executing: ln -s $cellname/fs /: >/dev/null 2>\&1"
+	ln -s $cellname/fs /: >/dev/null 2>&1
+	if [ $? -ne 0 ]
+	then
+		err_exit "The command \"ln -s $cellname/fs /:\" failed.  This link is needed \
+to access the filesystem using the abbreviated directory form (/:).  \
+Continuing will not create the link."
+	fi
+   fi
+   config_dfs_gateway
+}
+#-----------------------------------------------------------
+# config_dfs_gateway()
+#
+# configure dfs client as gateway server
+#-----------------------------------------------------------
+
+
+config_dfs_gateway()
+{
+   if [ "$UNAME" = "HP-UX" ]; then
+     answer=${CONFIG_NFS_GATEWAY:-"NULL"}
+     if [ "${answer}" = "NULL" ]; then
+       log_msg VERBOSE "User query: Would you like to configure this DFS client as a NFS gateway? "
+	    echo "\tWould you like to configure this DFS client"
+	    echon "\tas a NFS gateway (n)?  "
+	    read answer
+	    answer=${answer:-"n"}
+	    log_msg VERBOSE "User entry: $answer"
+	fi
+	case $answer in
+		y|yes)  ps ${PSARGS} | grep -q dfsgwd
+                        if [ $? -eq 0 ] 
+                        then
+                           log_msg WARNING "The NFS gateway server (dfsgwd) is already running"
+                           return
+                        fi	
+                        log_msg SUMMARY "Configuring NFS gateway...";
+			config_dfsgw ;;
+		*) ;;
+	esac
+
+
+   fi
+
+}
+
+#-----------------------------------------------------------
+# dfs_rgyinit()
+#
+# Create a security group for this workstation
+#-----------------------------------------------------------
+dfs_rgyinit()
+{
+	sname=$1
+	log_msg DEBUG "Executing: dfs_rgyinit($sname) (the argument is ignored)"
+
+	log_msg SUMMARY "Modifying the registry database for DFS server operation..."
+	# Check to see if it's already there - not checking all entries
+	log_msg DETAIL "Executing: rgy_edit -p hosts/$HOSTNAME/dfs-server -v | grep \"^hosts/$HOSTNAME/dfs-server\" >/dev/null"
+	rgy_edit -p hosts/$HOSTNAME/dfs-server -v | grep "^hosts/$HOSTNAME/dfs-server" >/dev/null
+	if [ $? -ne 0 ]
+	then
+		log_msg VERBOSE "Creating the dfs-server principal for $HOSTNAME"
+		log_msg DETAIL "Executing: rgy_edit> domain principal"
+		log_msg DETAIL "Executing: rgy_edit> add hosts/$HOSTNAME/dfs-server"
+		log_msg DETAIL "Executing: rgy_edit> quit"
+		rm -f /tmp/rgy_edit_out$$
+		rgy_edit -update >/tmp/rgy_edit_out$$ <<EOF
+domain principal
+add hosts/$HOSTNAME/dfs-server
+quit
+EOF
+		rgy_edit_status=$?
+		chk_rgy_edit "rgy_edit - adding principals to the registry database for DFS."
+	fi
+
+	log_msg DETAIL "Executing: rgy_edit -a hosts/$HOSTNAME/dfs-server -v | grep \"^hosts/$HOSTNAME/dfs-server\" >/dev/null"
+	rgy_edit -a hosts/$HOSTNAME/dfs-server -v | grep "^hosts/$HOSTNAME/dfs-server" >/dev/null
+	if [ $? -ne 0 ]
+	then
+		log_msg VERBOSE "Creating the dfs-server account for $HOSTNAME"
+		log_msg DETAIL "Executing: rgy_edit> domain account"
+		log_msg DETAIL "Executing: rgy_edit> add hosts/$HOSTNAME/dfs-server -g $SUBSYSDIR/dfs-admin -o none -pw <not shown> -mp <not shown>"
+		log_msg DETAIL "Executing: rgy_edit> ktadd -p hosts/$HOSTNAME/dfs-server -pw <not shown>"
+		log_msg DETAIL "Executing: rgy_edit> ktadd -p hosts/$HOSTNAME/dfs-server -a -r"
+		log_msg DETAIL "Executing: rgy_edit> quit"
+		rm -f /tmp/rgy_edit_out$$
+		rgy_edit -update >/tmp/rgy_edit_out$$ <<EOF
+domain account
+add hosts/$HOSTNAME/dfs-server -g $SUBSYSDIR/dfs-admin -o none -pw $cellpw -mp $cellpw
+ktadd -p hosts/$HOSTNAME/dfs-server -pw $cellpw
+ktadd -p hosts/$HOSTNAME/dfs-server -a -r
+quit
+EOF
+		rgy_edit_status=$?
+		chk_rgy_edit "rgy_edit - adding accounts to the registry database for DFS."
+	fi
+
+	log_msg VERBOSE "Modify ACL for /hosts/$HOSTNAME/dfs-server"
+	log_msg DETAIL "Executing: acl_edit /.:/sec/principal/hosts/$HOSTNAME/dfs-server -m group:$SUBSYSDIR/dfs-admin:rcDnfmag"
+	acl_edit /.:/sec/principal/hosts/$HOSTNAME/dfs-server \
+	-m group:$SUBSYSDIR/dfs-admin:rcDnfmag > /tmp/acl_edit_out$$ 2>&1
+	acl_edit_status=$?
+	chk_acl_edit "acl_edit - adding principal to dfs-admin group for DFS"
+}
+
+#-----------------------------------------------------------
+# dfs_nsinit()
+#
+# Create name space entries for DFS for  machines running an
+# flserver process.
+#-----------------------------------------------------------
+dfs_nsinit()
+{
+	sname=$1
+	log_msg DEBUG "Executing: dfs_nsinit($sname)"
+	# Add DFS member entry to /.:/fs for this machine if not there
+	if [ "$sname" = flserver ]
+	then
+		log_msg DETAIL "Executing: rpccp show entry /.:/fs | grep $cellname/hosts/$HOSTNAME/self >/dev/null"
+        	rpccp show entry /.:/fs | grep $cellname/hosts/$HOSTNAME/self >/dev/null
+        	if [ $? -ne 0 ]
+        	then
+			log_msg DETAIL "Executing: rpccp add member -m $cellname/hosts/$HOSTNAME/self $cellname/fs"
+			rpccp add member -m $cellname/hosts/$HOSTNAME/self $cellname/fs
+		fi
+	elif [ "$sname" = "bakserver" ]
+	then
+		rpccp show entry -u $cellname/$SUBSYSDIR/$DFSDIR/bak | \
+		grep $cellname/hosts/$HOSTNAME/self
+		if [ $? -ne 0 ]
+		then
+			rpccp add member -m $cellname/hosts/$HOSTNAME/self \
+			$cellname/$SUBSYSDIR/$DFSDIR/bak
+		fi
+	fi
+
+	enable_in_dfs_rc dfsexport
+}
+
+#-----------------------------------------------------------
+# start_bosserver()
+#       If the bosserver hasn't already been started, start it up in noauth
+#       mode.
+#
+# prerequisites:
+#       1) setup the dfs security groups, DFS_ADMIN_GROUP
+#       2) authenticate as a dfs administrator - i.e. someone in the
+#               DFS_ADMIN_GROUP
+#-----------------------------------------------------------
+
+start_bosserver()
+{
+	log_msg DEBUG "Executing: start_bosserver()"
+	log_msg SUMMARY "Starting bosserver..."
+        ps ${PSARGS} | grep -q bosserver
+        if [ $? -eq 0 ]
+        then
+                log_msg WARNING "bosserver is already running."
+		return
+        fi
+
+	log_msg DETAIL "Executing: rm -f $DCELOCAL/var/dfs/admin.*"
+	rm -f $DCELOCAL/var/dfs/admin.*
+	log_msg DETAIL "Executing: rm -f $BOSCONFIG"
+	rm -f $BOSCONFIG
+	log_msg DETAIL "Executing: $DCELOCAL/bin/bosserver -noauth &"
+        $DCELOCAL/bin/bosserver -noauth &
+	log_msg VERBOSE "Executing: sleep 60"
+	sleep 60
+        ps ${PSARGS} | grep -q bosserver
+        if [ $? -ne 0 ]
+        then
+                err_exit "bosserver failed to start.  Continuing will cause \
+subsequent failures."
+		return
+        fi
+
+        # now add the minimal set of information to the bos server's
+        # admin list
+
+	log_msg DETAIL "Executing: $DCELOCAL/bin/bos addadmin -server /.:/hosts/$HOSTNAME -adminlist admin.bos -group $DFS_ADMIN_GROUP"
+        $DCELOCAL/bin/bos addadmin -server /.:/hosts/$HOSTNAME -adminlist\
+		admin.bos -group $DFS_ADMIN_GROUP
+
+	# Add to /etc/rc.dfs if not there
+	enable_in_dfs_rc bosserver
+
+        # now turn on authorization checks.
+
+	log_msg DETAIL "Executing: $DCELOCAL/bin/bos setauth -server /.:/hosts/$HOSTNAME -authchecking on"
+	$DCELOCAL/bin/bos setauth -server /.:/hosts/$HOSTNAME -authchecking on
+}
+
+
+#-----------------------------------------------------------
+# start_fxd()
+#
+# Check if fxd is running, if not then start it
+# otherwise, return
+#-----------------------------------------------------------
+start_fxd()
+{
+   log_msg DEBUG "Executing: start_fxd()"
+
+   start_dfsbind
+
+   ps ${PSARGS} | grep -q fxd
+   if [ $? -ne 0 ]
+   then
+       log_msg SUMMARY "Starting fxd..."
+       log_msg DETAIL "Executing: fxd -mainprocs $DFS_THREADS -admingroup $DFS_ADMIN_GROUP"
+       fxd -mainprocs $DFS_THREADS -admingroup $DFS_ADMIN_GROUP
+       enable_in_dfs_rc fxd
+   fi
+}
+
+#-----------------------------------------------------------
+# start_dfsgwd()
+#
+# Check if dfsgwd is running, if not then start it
+# otherwise, return
+#-----------------------------------------------------------
+start_dfsgwd()
+{
+   log_msg DEBUG "Executing: start_dfsgwd()"
+
+   ps ${PSARGS} | grep -q dfsgwd
+   if [ $? -ne 0 ]
+   then
+       log_msg SUMMARY "Starting dfsgwd..."
+       log_msg DETAIL "Executing: dfsgwd"
+       dfsgwd &
+       enable_in_dfs_rc dfsgwd
+   fi
+}
+
+
+#-----------------------------------------------------------
+# config_dfsfs()
+#
+# Configure a DFS File Server
+# (Do the Private File Server Configuration)
+# 	Load non-LFS kernel extensions
+#       Start bosserver ==> 
+#              ftserver, repserver
+#	Start dfsbind; dfsd with appropriate cache flags/values
+# Load the Episode kernel extension
+# Start fxd
+#-----------------------------------------------------------
+config_dfsfs()
+{
+  input_arg=$1
+  log_msg DEBUG "Executing: config_dfsfs($input_arg)"
+  privateflg=0
+
+  if [ "$input_arg" = "private" ]
+  then
+      privateflg=1
+  fi
+
+  # Load the DFS kernel extensions 
+  load_dfsext server
+
+  # Place entries for server in security and CDS
+  dfs_rgyinit fs
+  dfs_nsinit fs
+
+  # Start the bosserver.  Configure it to run ftserver and repserver.
+  start_bosserver
+
+   # Remove the FLDB if one exists
+   log_msg DETAIL "Executing: rm -f $DCELOCAL/var/dfs/fldb.*"
+   rm -f $DCELOCAL/var/dfs/fldb.*
+
+   # Check to see ftserver is not already running before adding it
+   log_msg DETAIL "Executing: $DCELOCAL/bin/bos status -server /.:/hosts/$HOSTNAME | grep ftserver >/dev/null"
+   $DCELOCAL/bin/bos status -server /.:/hosts/$HOSTNAME | grep ftserver >/dev/null
+   if [ $? -ne 0 ]
+   then
+      log_msg DETAIL "Executing: $DCELOCAL/bin/bos addadmin -server /.:/hosts/$HOSTNAME -adminlist admin.ft -group $DFS_ADMIN_GROUP  -createlist"
+      $DCELOCAL/bin/bos addadmin -server /.:/hosts/$HOSTNAME -adminlist\
+		admin.ft -group $DFS_ADMIN_GROUP  -createlist
+      log_msg SUMMARY "Starting ftserver..."
+      log_msg DETAIL "Executing: $DCELOCAL/bin/bos create /.:/hosts/$HOSTNAME ftserver simple $DCELOCAL/bin/ftserver"
+      $DCELOCAL/bin/bos create /.:/hosts/$HOSTNAME ftserver simple $DCELOCAL/bin/ftserver
+   fi
+
+   if [ "$privateflg" -ne 1 ]
+   then
+      # Check to see repserver is not already running before adding it
+      log_msg DETAIL "Executing: $DCELOCAL/bin/bos status -server /.:/hosts/$HOSTNAME | grep repserver >/dev/null"
+      $DCELOCAL/bin/bos status -server /.:/hosts/$HOSTNAME | grep repserver >/dev/null
+      if [ $? -ne 0 ]
+      then
+	 log_msg SUMMARY "Starting repserver..."
+         log_msg DETAIL "Executing: $DCELOCAL/bin/bos create /.:/hosts/$HOSTNAME repserver simple $DCELOCAL/bin/repserver"
+         $DCELOCAL/bin/bos create /.:/hosts/$HOSTNAME repserver simple $DCELOCAL/bin/repserver
+      fi
+   fi
+
+   # Get System Control Machine's name
+   SCM=${SCM_NAME:-" "}
+   while [ "${SCM:= }" = " " ]; do
+      log_msg VERBOSE "User query: Enter the name of the system control machine:"
+      echon "\tEnter the name of the system control machine:  "
+      read SCM
+      log_msg VERBOSE "User entry: $SCM"
+   done
+
+   # Strip off any internet domain stuff before comparing with $HOSTNAME
+   SCM=`echo $SCM | cut -f1 -d.`
+
+   # Only start upclient if not on SCM since upserver runs there
+   if [ "$HOSTNAME" != "$SCM" ]
+   then
+      log_msg DETAIL "Executing: $DCELOCAL/bin/bos addadmin -server /.:/hosts/$HOSTNAME -adminlist admin.up -group $DFS_ADMIN_GROUP  -createlist"
+      $DCELOCAL/bin/bos addadmin -server /.:/hosts/$HOSTNAME -adminlist admin.up\
+         -group $DFS_ADMIN_GROUP  -createlist
+      log_msg SUMMARY "Starting upclient..."
+      log_msg DETAIL "Executing: $DCELOCAL/bin/bos create /.:/hosts/$HOSTNAME upclient simple \"$DCELOCAL/bin/upclient -server /.:/hosts/$SCM -path $DCELOCAL/var/dfs/admin.bos $DCELOCAL/var/dfs/admin.ft\""
+      $DCELOCAL/bin/bos create /.:/hosts/$HOSTNAME upclient simple\
+          "$DCELOCAL/bin/upclient -server /.:/hosts/$SCM\
+          -path $DCELOCAL/var/dfs/admin.bos $DCELOCAL/var/dfs/admin.ft"
+   fi
+    
+  # Create server entry in FLDB
+  log_msg DETAIL "Executing: fts crserverentry $HOSTNAME -principal hosts/$HOSTNAME -localauth"
+  fts crserverentry $HOSTNAME -principal hosts/$HOSTNAME -localauth
+
+  opt=${AGG_FS_TYPE:-"NULL"}
+  if   [ ${opt} = "native" ]; then opt="1"
+  elif [ ${opt} = "episode" ]; then opt="2"
+  else opt="NULL"; fi
+
+  while [ "${opt:="NULL"}" = "NULL" ]; do
+	log_msg VERBOSE "User query: DFSFS aggregate filesystem type menu"
+	echo "\tEnter the filesystem type for the aggregate to be exported:"
+	echo "\t1. Native File System (e.g. UFS, JFS)"
+	echo "\t2. Episode File System (LFS)"
+	echon "selection:  "
+	LIST="1 2"
+	get_option
+
+	one_option
+	log_msg VERBOSE "User entry: $opt"
+  done
+
+  DEVNAME=${AGG_DEV_NAME:-" "}
+  while [ "${DEVNAME:= }" = " " ]; do
+	log_msg VERBOSE "User query: Enter the device name for the aggregate to be exported (e.g. /dev/lvXX)"
+	echon "\tEnter the device name for the aggregate to be exported (e.g. /dev/lvXX) "
+	read DEVNAME
+	log_msg VERBOSE "User entry: \"$DEVNAME\""
+  done
+
+  # Create the dfstab file based on the filesystem type.
+  # Do the appropriate dfsexport command.
+  case $opt in
+        1)      clear
+                CONTINUE=1
+                err_exit "Ensure the aggregate is is a mounted, uncorrupted \
+native filesystem partition.  Continuing will assume you have verified this."
+
+		# Get the mount path
+		MNTPATH=${AGG_MOUNT_PATH:-" "}
+		while [ "${MNTPATH:= }" = " " ]; do
+		    log_msg VERBOSE "User query: Enter the mount path for the aggregate (e.g. /usr/users):"
+		    echon "\tEnter the mount path for the aggregate (e.g. /usr/users):  "
+		    read MNTPATH
+		    log_msg VERBOSE "User entry: \"$MNTPATH\""
+  		done
+
+		# Get the Aggregate name
+		AGGNAME=${AGG_NAME:-" "}
+		while [ "${AGGNAME:= }" = " " ]; do
+		    log_msg VERBOSE "User query: Enter a unique aggregate name (e.g. user.jlw):"
+		    echon "\tEnter a unique aggregate name (e.g. user.jlw):  "
+		    read AGGNAME
+		    log_msg VERBOSE "User entry: \"$AGGNAME\""
+  		done
+
+		# Get the Aggregate ID
+		AGGID=${AGG_ID:-" "}
+		while [ "${AGGID:= }" = " " ]; do
+		    log_msg VERBOSE "User query: Enter a unique numerical aggregate ID:"
+		    echon "\tEnter a unique numerical aggregate ID:  "
+		    read AGGID
+		    log_msg VERBOSE "User entry: \"$AGGID\""
+  		done
+
+		# Add an FLDB entry for the aggregate
+		log_msg DETAIL "Executing: FS_ID=\`fts crfldbentry $AGGNAME $HOSTNAME $AGGID -localauth | sed -n \'/readWr/s/[^,]*,,\\([^ ]*\\) .*/\\1/p\'\`"
+		FS_ID=`fts crfldbentry $AGGNAME $HOSTNAME $AGGID -localauth | sed -n '/readWr/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+
+		#Create dfstab
+		log_msg DETAIL "Executing: echo \"# blkdev aggname aggtype aggid (fsid-for-UFS)\" > $DCELOCAL/var/dfs/dfstab"
+		echo "# blkdev aggname aggtype aggid (fsid-for-UFS)" \
+			> $DCELOCAL/var/dfs/dfstab
+		log_msg DETAIL "Executing: echo \"$DEVNAME      $MNTPATH        ufs     $AGGID  0,,$FS_ID\" >> $DCELOCAL/var/dfs/dfstab"
+		echo "$DEVNAME      $MNTPATH        ufs     $AGGID  0,,$FS_ID" \
+			>> $DCELOCAL/var/dfs/dfstab
+
+		#Do the dfsexport
+		log_msg DETAIL "Executing: rm -f $DCELOCAL/var/dfs/dfsatab"
+		rm -f $DCELOCAL/var/dfs/dfsatab
+		log_msg SUMMARY "Exporting $DEVNAME through DFS..."
+		log_msg DETAIL "Executing: dfsexport $DEVNAME"
+		dfsexport $DEVNAME
+		if [ $? != 0 ]; then
+		    err_exit "dfsexport failed.  \
+Ensure the aggregate exists.  Continuing is all right (but may cause problems later)."
+		fi
+		;;
+
+        2)	config_episode_fileset $DEVNAME
+		;;
+  esac
+
+  if [ "$do_checks" = "y" ]; then
+	log_msg VERBOSE "\tIf you wish to export additional aggregates, do so after"
+	log_msg VERBOSE "\tcompleting this script by using the appropriate DFS"
+	log_msg VERBOSE "\tadministration commands described in the DFS Admin Guide."
+  	x_exit
+  fi
+
+  # Start fxd and dfsbind
+  start_fxd
+}
+
+#-----------------------------------------------------------
+# config_dfsfldb()
+#
+# Configure a DFS Fileset Location Database Server
+# Ensure the filesytem has been created and mounted
+# Get information about the filesystem type and the device name.
+#	Create the $DCELOCAL/var/dfs/dfstab file
+# 
+#-----------------------------------------------------------
+config_dfsfldb()
+{
+  log_msg DEBUG "Executing: config_dfsfldb()"
+
+  # Load the DFS kernel extensions
+  load_dfsext server
+
+  # Initialize entries for security and CDS  
+  dfs_rgyinit flserver
+  dfs_nsinit flserver
+
+  # bakserver is initialized as well
+  dfs_nsinit bakserver
+
+  log_msg DETAIL "Get the current contents of the dfs-fs-servers group so we know what to restart"
+
+  # Get the current contents of the dfs-fs-servers group so we know what
+  # to restart.
+  log_msg DETAIL "Executing: rgy_edit> domain g"
+  log_msg DETAIL "Executing: rgy_edit> view subsys/dce/dfs-fs-servers -m"
+  log_msg DETAIL "Executing: rgy_edit> quit"
+  cat > /tmp/RGYED.$$ << EOF
+domain g
+view subsys/dce/dfs-fs-servers -m
+quit
+EOF
+  xSNS=`rgy_edit -update < /tmp/RGYED.$$ | grep '^   ' | tr ', ' '\012' | grep '/dfs-server' | sed -e 's;/dfs-server;;'`
+  rm -f /tmp/RGYED.$$
+  MYSN=" "
+  SNS=""
+  for host in $xSNS
+      do
+	if test "$host" = "hosts/$HOSTNAME"
+	    then
+		MYSN="$host"
+	    else
+		SNS="$SNS $host"
+	fi
+  done
+  # We could possibly eliminate some of the checking if this machine's
+  # principal is already in dfs-fs-servers, which we determined by the
+  # non-null nature of $MYSN, but let's do all the checks anyway.
+
+  # Only the FLDB machines are added to the dfs-fs-servers group,
+  # Add this machine (as an FLDB machine) to the group unless it's there
+  # already.
+  if [ "$MYSN" = " " ]
+    then
+    rgy_edit -update <<EOF
+domain g
+member $SUBSYSDIR/dfs-fs-servers -a hosts/$HOSTNAME/dfs-server
+EOF
+    MYSN="hosts/$HOSTNAME"
+  fi
+
+  for host in $SNS
+      do
+	$DCELOCAL/bin/bos restart -server /.:/$host -process flserver 
+  done
+   # Get the current contents of the dfs-bak-servers group so we know what
+   # to restart.
+   cat > /tmp/RGYED.$$ << EOF
+domain g
+view subsys/dce/dfs-bak-servers -m
+quit
+EOF
+   xBSNS=`rgy_edit -update < /tmp/RGYED.$$ | grep '^   ' | tr ', ' '\012' \
+	| grep '/dfs-server' | sed -e 's;/dfs-server;;'` rm -f /tmp/RGYED.$$
+   MYBSN=" "
+   BSNS=""
+   for host in $xBSNS
+       do
+       if test "$host" = "hosts/$HOSTNAME"
+           then
+               MYBSN="$host"
+           else
+               BSNS="$BSNS $host"
+       fi
+   done
+  # We could possibly eliminate some of the checking if this machine's
+  # principal is already in dfs-bak-servers, which we determined by the
+  # non-null nature of $MYBSN, but let's do all the checks anyway.
+
+  # Add this machine (as an bakserver machine) to the group unless it's there
+  # already.
+  if [ "$MYBSN" = " " ]
+    then
+    rgy_edit -update <<EOF
+domain g
+member $SUBSYSDIR/dfs-bak-servers -a hosts/$HOSTNAME/dfs-server
+EOF
+    MYBSN="hosts/$HOSTNAME"
+  fi
+
+  for host in $BSNS
+      do
+      $DCELOCAL/bin/bos restart -server /.:/$host -process bakserver 
+  done
+ 
+
+  # Remove the FLDB if one exists
+  rm -f $DCELOCAL/var/dfs/fldb.*
+
+  # Start the bosserver (and flserver, ftserver, repserver )
+  start_bosserver
+
+  # Check to see flserver is not already running before adding it
+  # Shut it down first if it's already running, then restart it
+  $DCELOCAL/bin/bos status -server /.:/hosts/$HOSTNAME | grep flserver >/dev/null
+  stat=$?
+  if [ $stat -eq 0 ]
+  then
+     $DCELOCAL/bin/bos restart -server /.:/hosts/$HOSTNAME -process flserver
+  fi
+  if [ $stat -ne 0 ]
+  then
+     $DCELOCAL/bin/bos addadmin -server /.:/hosts/$HOSTNAME -adminlist\
+		admin.fl -group $DFS_ADMIN_GROUP  -createlist
+   $DCELOCAL/bin/bos create -server /.:/hosts/$HOSTNAME -process flserver -type simple -cmd "$DCELOCAL/bin/flserver" 
+  fi
+
+  # Await Ubik quorum
+  ALLSRVS="$SNS $MYSN"
+  syncsite=" "
+  while [ "$syncsite" = " " ]
+	do
+	sleep 10
+	echo "Checking for a Ubik sync site in $ALLSRVS"
+	for host in $ALLSRVS
+	    do
+		$DCELOCAL/bin/udebug /.:/fs /.:/$host -long > /tmp/xyz.$$
+		grep 'clock may be bad' /tmp/xyz.$$
+		if [ $? -eq 0 ]
+		then
+			echo "(Clock on $host may be unsynchronized)"
+		fi
+		grep 'I am sync site until ' /tmp/xyz.$$ >/dev/null
+		if [ $? -eq 0 ]
+		then
+			if [ "$syncsite" != "$host" ]
+			then
+				echo "Host /.:/$host is now the sync site"
+				syncsite="$host"
+			fi
+			break 2
+		fi
+	done
+  done
+  # Check to see bakserver is not already running before adding it
+  # Shut it down first if it's already running, then restart it
+  $DCELOCAL/bin/bos status -server /.:/hosts/$HOSTNAME | \
+	grep bakserver >/dev/null
+  if [ $? -eq 0 ]
+  then
+     $DCELOCAL/bin/bos restart -server /.:/hosts/$HOSTNAME -process bakserver
+  else
+     $DCELOCAL/bin/bos addadmin -server /.:/hosts/$HOSTNAME -adminlist\
+                admin.bak -group $DFS_ADMIN_GROUP  -createlist
+   $DCELOCAL/bin/bos create -server /.:/hosts/$HOSTNAME -process bakserver -type simple -cmd "$DCELOCAL/bin/bakserver"
+  fi
+
+   # Get System Control Machine's name
+   SCM=${SCM_NAME:-" "}
+   while [ "$SCM" = " " ]
+   do
+	log_msg VERBOSE "User query: Enter the name of the system control machine:"
+   	echon "\tEnter the name of the system control machine:  "
+   	read SCM
+	log_msg VERBOSE "User entry: $SCM"
+   	SCM=${SCM:-" "}
+   done
+
+   # Strip off any internet domain stuff before comparing with $HOSTNAME
+   SCM=`echo $SCM | cut -f1 -d.`
+
+   # Only start upclient if not on SCM since upserver runs there
+   if [ "$HOSTNAME" != "$SCM" ]
+   then
+   $DCELOCAL/bin/bos addadmin -server /.:/hosts/$HOSTNAME -adminlist\
+		admin.up -group $DFS_ADMIN_GROUP  -createlist
+   $DCELOCAL/bin/bos create /.:/hosts/$HOSTNAME upclient simple "$DCELOCAL/bin/upclient -server /.:/hosts/$SCM -path $DCELOCAL/var/dfs/admin.bos $DCELOCAL/var/dfs/admin.ft"
+   fi
+
+  # Check to see ftserver is not already running before adding it
+  $DCELOCAL/bin/bos status -server /.:/hosts/$HOSTNAME | grep ftserver >/dev/null
+  if [ $? -ne 0 ]
+  then
+   $DCELOCAL/bin/bos addadmin -server /.:/hosts/$HOSTNAME -adminlist\
+		admin.ft -group $DFS_ADMIN_GROUP  -createlist
+   $DCELOCAL/bin/bos create /.:/hosts/$HOSTNAME ftserver simple $DCELOCAL/bin/ftserver 
+  fi
+
+  # Check to see repserver is not already running before adding it
+  $DCELOCAL/bin/bos status -server /.:/hosts/$HOSTNAME | grep repserver >/dev/null
+  if [ $? -ne 0 ]
+  then
+   $DCELOCAL/bin/bos create /.:/hosts/$HOSTNAME repserver simple $DCELOCAL/bin/repserver 
+  else
+   $DCELOCAL/bin/bos restart /.:/hosts/$HOSTNAME repserver
+  fi
+
+  # This crserverentry is necessary for all flserver and ftserver sites.
+  fts crserverentry $HOSTNAME -principal hosts/$HOSTNAME -localauth
+
+  # It may not strictly be necessary to restart all the other repservers,
+  # but they are flserver clients and should know about the new flserver
+  # configuration.
+  cat > /tmp/RGYED.$$ << EOF
+domain g
+view subsys/dce/dfs-admin -m
+quit
+EOF
+  SNS=`rgy_edit -update < /tmp/RGYED.$$ | grep '^   ' | tr ', ' '\012' | grep '/dfs-server' | sed -e 's;/dfs-server;;'`
+  rm -f /tmp/RGYED.$$
+  for host in $SNS
+      do
+	if test "$host" != "hosts/$HOSTNAME"
+	    then
+		$DCELOCAL/bin/bos restart -server /.:/$host -process repserver
+	fi
+  done
+
+
+  # It isn't strictly necessary that the root.dfs be created on an FLDB
+  # server machine.  However, it's beyond the scope of this example configuration
+  # script to put it elsewhere.  It can be done from any File Server machine, but
+  # must be done after an flserver is started.  By putting it here, we're
+  # assured an flserver process has been started.  
+
+  FILESETNAME=${ROOT_FILESET_NM:-NULL}
+  if [ ${FILESETNAME} = "NULL" ]
+  then
+    # Get the fileset name
+    log_msg VERBOSE "User query:Enter the fileset name ($ROOT_FILESET): "
+    echon "\tEnter the fileset name ($ROOT_FILESET): "
+    get_string
+    FILESETNAME=${string:-$ROOT_FILESET}
+    log_msg VERBOSE "User entry: $FILESETNAME"
+  fi
+
+  opt=${AGG_FS_TYPE:-"NULL"}
+  if   [ ${opt} = "native" ]; then opt="1"
+  elif [ ${opt} = "episode" ]; then opt="2"
+  else opt="NULL"; fi
+
+  while [ "$opt" = "NULL" ]; do
+	log_msg VERBOSE "User query: DFSFLDB aggregate filesystem type menu"
+	# Determine the filesystem type (Episode or Native)
+	echo "\tEnter the filesystem type for $FILESETNAME:"
+	echo "\t1. Native File System (e.g. UFS, JFS)"
+	echo "\t2. Episode File System (LFS)"
+	echon "selection:  "
+	LIST="1 2"
+	get_option
+
+	# Allow only one option from this menu
+	one_option
+	log_msg VERBOSE "User entry: $opt"
+  done
+ 
+  # Get the device name
+  DEVNAME=${AGG_DEV_NAME:-" "}
+  if [ "${DEVNAME}" = " " ]
+  then
+	log_msg VERBOSE "User query: Enter the device name (e.g. /dev/lvXX)"
+	echon "\tEnter the device name (e.g. /dev/lvXX)"
+	read DEVNAME
+	log_msg VERBOSE "User entry: \"$DEVNAME\""
+	CONTINUE=1
+	if [ "$opt" -ne "2" ]; then
+		x_exit "\tEnsure this is a valid, mounted filesystem partition."
+	fi
+  fi
+
+  enable_in_dfs_rc dfsexport
+
+  # Create the dfstab file based on the filesystem type.
+  # Do the appropriate dfsexport command.
+  case $opt in
+ 	1)      
+	    clear
+	    # Get the AGGREGATE name
+	    AGGNAME=${AGG_NAME:-Null}
+	    if [ $AGGNAME = Null ]
+	    then
+		log_msg VERBOSE "User query: Enter the aggregate name ($JFS_ROOTNAME):  "
+	        echon "\tEnter the aggregate name ($JFS_ROOTNAME):  "
+	        get_string
+	        AGGNAME=${string:-$JFS_ROOTNAME}
+		log_msg VERBOSE "User entry: $AGGNAME"
+	    fi
+
+	    # Get the Aggregate ID
+	    AGGID=${AGG_ID:-Null}
+	    if [ $AGGID = Null ]
+	    then
+		log_msg VERBOSE "User query: Enter the aggregate ID ($JFS_ID):"
+            	echon "\tEnter the aggregate ID ($JFS_ID):  "
+	    	get_string
+	    	AGGID=${string:-$JFS_ID}
+		log_msg VERBOSE "User entry: $AGGID"
+	    fi
+
+	    # Ensure the filesystem is mounted, and get the root directory name"
+	    DIRNAME=`mount | awk '{print $1 " " $2}' | grep "$DEVNAME" | cut -f2 -d" "`
+            if [ $? -ne 0 ]
+            then
+                echo "\tDirectory could not be determined."
+                x_exit "\tEnsure the specified device is mounted"
+	    fi
+
+            FS_ID=" "
+	    fts crfldbentry $FILESETNAME $HOSTNAME $AGGID -localauth
+            FS_ID=`fts lsfldb $FILESETNAME | sed -n '/readWr/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+
+	    # Create the DFSTAB file
+  	    echo "# blkdev aggname aggtype aggid (fsid-for-UFS)" \
+                  > $DCELOCAL/var/dfs/dfstab
+	    echo "$DEVNAME	$AGGNAME	ufs	$AGGID	0,,$FS_ID" \
+                 >> $DCELOCAL/var/dfs/dfstab;
+  	    # Do the dfsexport
+	    rm -f $DCELOCAL/var/dfs/dfsatab
+            dfsexport $DEVNAME || { echo "dfsexport failed"; \
+                    x_exit "ensure aggregate exists";  };
+	    ;;
+
+	2)  config_episode_fileset $DEVNAME $FILESETNAME;;
+   esac
+   
+   # Start fxd and dfsbind
+   start_fxd
+
+   return
+}
+
+#------------------------------------------------------
+# config_dfsscm()
+#
+# Configure a DFS System Control Machine
+#------------------------------------------------------
+config_dfsscm()
+{
+	# Load kernel extensions
+	load_dfsext server
+	
+  	# Initialize entries for security and CDS  
+  	dfs_rgyinit scm
+ 	dfs_nsinit scm
+	log_msg VERBOSE "Executing: sleep 10"
+        sleep 10
+	# Start the bosserver
+	start_bosserver
+
+	# Create admin lists
+	log_msg SUMMARY "Creating BOS admin lists..."
+	log_msg DETAIL "Executing: $DCELOCAL/bin/bos lsadmin /.:/hosts/$HOSTNAME admin.fl -localauth 2>/dev/null | grep /.:/hosts/$HOSTNAME >/dev/null 2>\&1"
+	$DCELOCAL/bin/bos lsadmin /.:/hosts/$HOSTNAME admin.fl -localauth\
+		2>/dev/null | grep /.:/hosts/$HOSTNAME >/dev/null 2>&1
+	if [ $? -ne 0 ]
+	then
+		log_msg DETAIL "Executing: $DCELOCAL/bin/bos addadmin /.:/hosts/$HOSTNAME admin.fl hosts/$HOSTNAME/dfs-server -createlist -localauth"
+		$DCELOCAL/bin/bos addadmin /.:/hosts/$HOSTNAME admin.fl \
+			hosts/$HOSTNAME/dfs-server -createlist -localauth
+	fi
+
+	log_msg DETAIL "Executing: $DCELOCAL/bin/bos lsadmin /.:/hosts/$HOSTNAME admin.ft -localauth 2>/dev/null | grep /.:/hosts/$HOSTNAME >/dev/null 2>\&1"
+	$DCELOCAL/bin/bos lsadmin /.:/hosts/$HOSTNAME admin.ft -localauth\
+		2>/dev/null | grep /.:/hosts/$HOSTNAME >/dev/null 2>&1
+	if [ $? -ne 0 ]
+	then
+		log_msg DETAIL "Executing: $DCELOCAL/bin/bos addadmin /.:/hosts/$HOSTNAME admin.ft hosts/$HOSTNAME/dfs-server -createlist -localauth"
+		$DCELOCAL/bin/bos addadmin /.:/hosts/$HOSTNAME admin.ft \
+			hosts/$HOSTNAME/dfs-server -createlist -localauth
+	fi
+
+	log_msg DETAIL "Executing: $DCELOCAL/bin/bos lsadmin /.:/hosts/$HOSTNAME admin.up -localauth 2>/dev/null | grep /.:/hosts/$HOSTNAME >/dev/null 2>\&1"
+	$DCELOCAL/bin/bos lsadmin /.:/hosts/$HOSTNAME admin.up -localauth\
+		2>/dev/null | grep /.:/hosts/$HOSTNAME >/dev/null 2>&1
+	if [ $? -ne 0 ]
+	then
+		log_msg DETAIL "Executing: $DCELOCAL/bin/bos addadmin /.:/hosts/$HOSTNAME admin.up hosts/$HOSTNAME/dfs-server -createlist -localauth"
+		$DCELOCAL/bin/bos addadmin /.:/hosts/$HOSTNAME admin.up \
+			hosts/$HOSTNAME/dfs-server -createlist -localauth
+	fi
+
+	log_msg DETAIL "Executing: $DCELOCAL/bin/bos lsadmin /.:/hosts/$HOSTNAME admin.bak -localauth 2>/dev/null | grep /.:/hosts/$HOSTNAME >/dev/null 2>\&1"
+	$DCELOCAL/bin/bos lsadmin /.:/hosts/$HOSTNAME admin.bak -localauth\
+		2>/dev/null | grep /.:/hosts/$HOSTNAME >/dev/null 2>&1
+	if [ $? -ne 0 ]
+	then
+		log_msg DETAIL "Executing: $DCELOCAL/bin/bos addadmin /.:/hosts/$HOSTNAME admin.bak hosts/$HOSTNAME/dfs-server -createlist -localauth"
+		$DCELOCAL/bin/bos addadmin /.:/hosts/$HOSTNAME admin.bak \
+			hosts/$HOSTNAME/dfs-server -createlist -localauth
+	fi
+
+	# Start the upserver, exporting all admin lists
+	log_msg DETAIL "Executing: $DCELOCAL/bin/bos status -server /.:/hosts/$HOSTNAME -localauth | grep upserver >/dev/null 2>\&1"
+  	$DCELOCAL/bin/bos status -server /.:/hosts/$HOSTNAME -localauth |\
+		grep upserver >/dev/null 2>&1
+  	if [ $? -ne 0 ]
+  	then
+		log_msg DETAIL "Executing: $DCELOCAL/bin/bos addadmin -server /.:/hosts/$HOSTNAME -adminlist admin.up -group $DFS_ADMIN_GROUP  -createlist -localauth"
+	        $DCELOCAL/bin/bos addadmin -server /.:/hosts/$HOSTNAME -adminlist\
+			admin.up -group $DFS_ADMIN_GROUP  -createlist -localauth
+		log_msg SUMMARY "Starting upserver..."
+		log_msg DETAIL "Executing: $DCELOCAL/bin/bos create -server /.:/hosts/$HOSTNAME -process upserver -type simple -cmd \"$DCELOCAL/bin/upserver -path $DCELOCAL/var/dfs/admin.bos $DCELOCAL/var/dfs/admin.fl $DCELOCAL/var/dfs/admin.ft $DCELOCAL/var/dfs/admin.up $DCELOCAL/var/dfs/admin.bak\" -localauth"
+	        $DCELOCAL/bin/bos create -server /.:/hosts/$HOSTNAME -process upserver\
+			-type simple -cmd "$DCELOCAL/bin/upserver\
+			-path $DCELOCAL/var/dfs/admin.bos\
+			$DCELOCAL/var/dfs/admin.fl\
+			$DCELOCAL/var/dfs/admin.ft\
+			$DCELOCAL/var/dfs/admin.up\
+			$DCELOCAL/var/dfs/admin.bak" -localauth
+	fi
+}
+
+#-----------------------------------------------------------
+# config_episode_fileset()
+#
+# Handle configuration of an episode fileset.
+#
+#-----------------------------------------------------------
+config_episode_fileset()
+{
+    DEVNAME=$1
+
+    if [ "$#" -eq 2 ]
+    then
+	FILESETNAME=$2
+    else
+	FILESETNAME=${ROOT_FILESET_NM:=" "}
+	while [ "${FILESETNAME:= }" = " " ]; do
+	    log_msg VERBOSE "User query: Enter the LFS fileset name ($LFS_FILESETNAME):"
+	    echon "\tEnter the LFS fileset name ($LFS_FILESETNAME): "
+	    get_string
+	    FILESETNAME=${string:-$LFS_FILESETNAME}
+	    log_msg VERBOSE "User entry: $FILESETNAME"
+	done
+    fi
+    check_episode_aggregate $DEVNAME
+
+    AGGNAME=${AGG_NAME:=" "}
+    while [ "${AGGNAME:= }" = " " ]; do
+	log_msg VERBOSE "User query: Enter the LFS aggregate name ($LFS_AGGNAME):"
+	echon "\tEnter the LFS aggregate name ($LFS_AGGNAME):  "
+	get_string
+	AGGNAME=${string:-$LFS_AGGNAME}
+	log_msg VERBOSE "User entry: $AGGNAME"
+    done
+
+    AGGID=${AGG_ID:=" "}
+    while [ "${AGGID:= }" = " " ]; do
+	log_msg VERBOSE "User query: Enter the LFS aggregate id ($LFS_AGGID):"
+	echon "\tEnter the LFS aggregate id ($LFS_AGGID):  "
+	get_string;
+	AGGID=${string:-$LFS_AGGID};
+	log_msg VERBOSE "User entry: $AGGID"
+    done
+
+    log_msg DETAIL "Executing: echo \"# blkdev aggname aggtype aggid \" > $DCELOCAL/var/dfs/dfstab >> $DCELOCAL/var/dfs/dfstab"
+    echo "# blkdev aggname aggtype aggid " \
+	  > $DCELOCAL/var/dfs/dfstab >> $DCELOCAL/var/dfs/dfstab
+    log_msg DETAIL "Executing: echo \"$DEVNAME	$AGGNAME	lfs	$AGGID\" >> $DCELOCAL/var/dfs/dfstab"
+    echo "$DEVNAME	$AGGNAME	lfs	$AGGID"  \
+	 >> $DCELOCAL/var/dfs/dfstab
+
+    # Do the dfsexport
+    log_msg DETAIL "Executing: rm -f $DCELOCAL/var/dfs/dfsatab"
+    rm -f $DCELOCAL/var/dfs/dfsatab
+    log_msg DETAIL "Executing: dfsexport $DEVNAME"
+    dfsexport $DEVNAME
+    if [ $? -ne 0 ]; then
+	err_exit "dfsexport failed.  Ensure aggregate exists.  \
+Continuing will assume you have verified this."
+    fi
+
+#X# WORKAROUND FOR CR 11423 - dce_login as cell_admin so "-localauth" switch not necessary
+#X#    log_msg DETAIL "Executing: fts create $FILESETNAME $HOSTNAME $AGGNAME -localauth"
+#X#    fts create $FILESETNAME $HOSTNAME $AGGNAME -localauth
+
+    dcelogin || exit 1
+    log_msg DETAIL "Executing: fts create $FILESETNAME $HOSTNAME $AGGNAME"
+    fts create $FILESETNAME $HOSTNAME $AGGNAME
+}
+
+#-----------------------------------------------------------
+# check_episode_aggregate()
+#
+# Offer user the opportunity to automatically newaggr
+# an Episode aggregate.
+#
+#-----------------------------------------------------------
+check_episode_aggregate()
+{
+      partname=$1
+      log_msg DEBUG "Executing: check_episode_aggregate($partname)"
+
+      string=${EPI_FORMAT_PART:-"NULL"}
+      while [ "${string:="NULL"}" = "NULL" ]; do
+	log_msg VERBOSE "User query: Do you want to format partition $partname as an Episode aggregate [n]"
+	echo  ""
+	echo  "\tDo you want to format partition $partname "
+	echon "\tas an Episode aggregate [n]?  "
+	get_string
+	string=${string:-"n"}
+	log_msg VERBOSE "User entry: $string"
+      done
+
+      case $string in
+                y|yes) ;;
+                *)  err_exit "Partition $partname was NOT initialized.  \
+Continuing may cause subsequent failures."
+                    return
+                   ;;
+      esac
+      # otherwise ...
+ 
+      log_msg DETAIL "Executing: $DCELOCAL/bin/newaggr $partname $LFS_BLOCKSIZE $LFS_FRAGSIZE"
+      $DCELOCAL/bin/newaggr $partname $LFS_BLOCKSIZE $LFS_FRAGSIZE
+      if [ $? -eq 0 ]
+      then
+              log_msg SUMMARY "$partname successfully initialized."
+              return;
+      fi
+      # otherwise ...
+
+      string=${EPI_FORCE_INIT:-"NULL"}
+      while [ "${string:="NULL"}" = "NULL" ]; do
+	log_msg VERBOSE "User query: There was a problem initializing $partname.  \
+It may have already had an Episode or UFS filesystem on it.  \
+Would you like to force initialization and possibly lose data [n]?"
+
+	echo  ""
+	echo  "\tThere was a problem initializing $partname."
+	echo  "\tIt may have already had an Episode or UFS filesystem on it."
+	echo  "\tWould you like to force initialization"
+	echon "\tand possibly lose data [n]?  "
+	get_string
+	string=${string:-"n"}
+	log_msg VERBOSE "User entry: $string"
+      done
+
+      case $string in
+              y|yes) ;;
+              *)  err_exit "Partition $partname was NOT initialized.  \
+Continuing may cause subsequent failures."
+                  return
+                 ;;
+      esac
+      # otherwise ...
+
+      echo ""
+      log_msg SUMMARY "Forcing $partname to be a fresh Episode aggregate..."
+      log_msg DETAIL "Executing: $DCELOCAL/bin/newaggr $partname $LFS_BLOCKSIZE $LFS_FRAGSIZE -overwrite"
+      $DCELOCAL/bin/newaggr $partname $LFS_BLOCKSIZE $LFS_FRAGSIZE -overwrite
+      if [ $? -eq 0 ]
+      then
+              log_msg SUMMARY "Partition $partname successfully initialized."
+              return;
+      fi
+      # otherwise ...
+
+      err_exit "Partition $partname was NOT successfully initialized.  \
+Continuing may cause subsequent failures."
+      return
+
+} # check_episode_aggregate
+
+#-----------------------------------------------------------
+# start_dfsbind()
+#
+# The dfsbind process now uses a device-driver interface
+# We must now check if this device already exists, and
+# if not, we create it.
+#-----------------------------------------------------------
+start_dfsbind()
+{
+    log_msg DEBUG "Executing: start_dfsbind()"
+    # Check to see if dfsbind is running. If not, start it
+    ps ${PSARGS} | grep -q dfsbind
+    if [ $? -ne 0 ]
+    then
+	if [ ! -c $HELPER_DEVICE ]
+	then
+	    log_msg DETAIL "Executing: $MKNOD $HELPER_DEVICE c $DEV_MAJ $DEV_MIN"
+	    $MKNOD $HELPER_DEVICE c $DEV_MAJ $DEV_MIN
+	    if [ $? -ne 0 ]; then
+		err_exit "\"$MKNOD $HELPER_DEVICE c $DEV_MAJ $DEV_MIN\" failed.  \
+Continuing will assume you have done the operation by hand."
+	    fi
+	fi
+
+	log_msg SUMMARY "Starting dfsbind..."
+	log_msg DETAIL "Executing: $DCELOCAL/bin/dfsbind &"
+	$DCELOCAL/bin/dfsbind &
+	enable_in_dfs_rc dfsbind
+    fi
+}
+
+#------------------------------------------------------
+# dfs_rgy_init()
+#
+# Configure the initial registry information for DFS.  This function is copied
+# from rgy_init in dce_config.
+#------------------------------------------------------
+dfs_rgy_init()
+{
+    log_msg DEBUG "Executing: dfs_rgy_init()"
+
+    # Check to see if we have already done what is needed.  It seems that
+    # rgy_edit turns "Entry not found" errors into a good (0) status for some
+    # reason (see src/security/client/admin/rgy_edit/eif_pgo.c), so we have to
+    # be more creative in our error checking.  Just check one of the groups...
+    log_msg DETAIL "Executing: rgy_edit -g $SUBSYSDIR/dfs-admin -v | grep \"^$SUBSYSDIR/dfs-admin\" >/dev/null"
+    rgy_edit -g $SUBSYSDIR/dfs-admin -v | grep "^$SUBSYSDIR/dfs-admin" >/dev/null
+    if [ $? -eq 0 ]; then
+	return
+    fi
+
+    # Get name of cell administrator.  
+    CELLADMIN=`klist | grep "Principal" | \
+	grep -v "Global Principal" | awk '{print $3}'`
+
+    log_msg SUMMARY "Modifying the registry database for DFS operation..."
+    # Add the necessary principals to the registry database
+    log_msg DETAIL "Executing: rgy_edit> domain group"
+    log_msg DETAIL "Executing: rgy_edit> add $SUBSYSDIR/dfs-admin"
+    log_msg DETAIL "Executing: rgy_edit> add $SUBSYSDIR/dfs-fs-servers"
+    log_msg DETAIL "Executing: rgy_edit> add $SUBSYSDIR/dfs-bak-servers"
+    log_msg DETAIL "Executing: rgy_edit> add $SUBSYSDIR/dfsgw-admin"
+    log_msg DETAIL "Executing: rgy_edit> member $SUBSYSDIR/dfs-admin -a $CELLADMIN"
+    log_msg DETAIL "Executing: rgy_edit> member $SUBSYSDIR/dfsgw-admin -a $CELLADMIN"
+    log_msg DETAIL "Executing: rgy_edit> quit"
+
+    rm -f /tmp/rgy_edit_out$$
+    rgy_edit -update >/tmp/rgy_edit_out$$ <<EOF
+domain group
+add $SUBSYSDIR/dfs-admin
+add $SUBSYSDIR/dfs-fs-servers
+add $SUBSYSDIR/dfs-bak-servers
+add $SUBSYSDIR/dfsgw-admin
+member $SUBSYSDIR/dfs-admin -a $CELLADMIN
+member $SUBSYSDIR/dfsgw-admin -a $CELLADMIN
+quit
+EOF
+    rgy_edit_status=$?
+    chk_rgy_edit "rgy_edit - adding DFS principals to the registry database"
+
+    # We need to dce_login here, even if we are already, to pick up 
+    # the fact that cell_admin is now a member of the 
+    # subsys/dce/dfs-admin group (which is used in ACL's that, e.g.
+    # bosserver, checks).
+    log_msg DEBUG "Log in again to pick up changes to the registry for DFS."
+    dcelogin || exit 1
+}
+
+#------------------------------------------------------
+# dfs_ns_init()
+#
+# Configure the initial name service information for DFS.  This function is
+# copied from ns_init in dce_config.
+#------------------------------------------------------
+dfs_ns_init()
+{
+    log_msg DEBUG "Executing: dfs_ns_init()"
+
+    # Check to see if we have already done what is needed.  It seems like "cdscp
+    # list dir ..." always succeeds, regardless of the name, so we use "cdscp
+    # show dir ...".  Just check one of them...
+    log_msg DETAIL "Executing: cdscp show directory /.:/$SUBSYSDIR/$DFSDIR >/dev/null 2>&1"
+    cdscp show directory /.:/$SUBSYSDIR/$DFSDIR >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+	return
+    fi
+
+    log_msg SUMMARY "Modifying the name space for DFS operation..."
+    # From ns_init, cdscp section.
+    log_msg DETAIL "Executing cdscp commands."
+    log_msg DETAIL "Executing: cdscp> create dir /.:/$SUBSYSDIR/$DFSDIR"
+    log_msg DETAIL "Executing: cdscp> add entry $cellname/$SUBSYSDIR/$DFSDIR/bak"
+    log_msg DETAIL "Executing: cdscp> export -o `uuidgen` $cellname/$SUNSYSDIR/$DFSDIR/bak"
+    log_msg DETAIL "Executing: cdscp> quit"
+
+    rm -f /tmp/cdscp_out$$
+    cdscp >/tmp/cdscp_out$$  <<EOF
+create dir /.:/$SUBSYSDIR/$DFSDIR
+add entry $cellname/$SUBSYSDIR/$DFSDIR/bak
+export -o `uuidgen` $cellname/$SUNSYSDIR/$DFSDIR/bak
+quit
+EOF
+    cdscp_status=$?
+    chk_cdscp "cdscp - initializing the name space for DFS."
+
+    # From ns_init, rpccp section.
+    log_msg DETAIL "Executing rpccp commands."
+    log_msg DETAIL "Executing: rpccp> add element -i eb814e2a-0099-11ca-8678-02608c2ea96e,4.0 -a bak -m /.:/subsys/dce/dfs/bak /.:/cell-profile"
+    log_msg DETAIL "Executing: rpccp> quit"
+
+    rm -f /tmp/rpccp_out$$
+    rpccp >/tmp/rpccp_out$$ <<EOF
+add element -i eb814e2a-0099-11ca-8678-02608c2ea96e,4.0 \
+            -a bak -m /.:/subsys/dce/dfs/bak /.:/cell-profile
+quit
+EOF
+    rpccp_status=$?
+    chk_rpccp "rpccp - initializing the name space for DFS."
+
+    log_msg SUMMARY "Setting ACLs on the new entries for DFS operation..."
+    # From ns_init, acl_edit section.
+    log_msg DETAIL "Executing: acl_edit /.:/$SUBSYSDIR/$DFSDIR -ic -m group:$SUBSYSDIR/dfs-admin:rwcidta"
+     acl_edit /.:/$SUBSYSDIR/$DFSDIR -ic \
+	-m group:$SUBSYSDIR/dfs-admin:rwcidta
+
+    log_msg DETAIL "Executing: acl_edit /.:/$SUBSYSDIR/$DFSDIR -io -m group:$SUBSYSDIR/dfs-admin:rwcdt"
+    acl_edit /.:/$SUBSYSDIR/$DFSDIR -io \
+	-m group:$SUBSYSDIR/dfs-admin:rwcdt
+
+    log_msg DETAIL "Executing: acl_edit /.:/$SUBSYSDIR/$DFSDIR -m group:$SUBSYSDIR/dfs-admin:rwcidta"
+    acl_edit /.:/$SUBSYSDIR/$DFSDIR \
+	-m group:$SUBSYSDIR/dfs-admin:rwcidta
+ 
+    log_msg DETAIL "Executing: acl_edit /.:/$SUBSYSDIR/$DFSDIR/bak -m group:$SUBSYSDIR/dfs-bak-servers:rwct"
+    acl_edit -e /.:/$SUBSYSDIR/$DFSDIR/bak \
+	-m group:$SUBSYSDIR/dfs-bak-servers:rwct 
+ 
+    log_msg DETAIL "Executing: acl_edit -e /.:/fs -m group:$SUBSYSDIR/dfs-admin:rwcdt -m group:$SUBSYSDIR/dfs-fs-servers:rwcdt"
+    acl_edit -e /.:/fs \
+	-m group:$SUBSYSDIR/dfs-admin:rwcdt \
+	-m group:$SUBSYSDIR/dfs-fs-servers:rwcdt
+
+    # Set the ACLs on security space items
+    dfs_set_security_acls
+}
+
+#------------------------------------------------------
+# dfs_set_security_acls()
+#
+# Configure the initial name service information for DFS.  This function is
+# copied from set_security_acls in dce_config.
+#------------------------------------------------------
+dfs_set_security_acls()
+{
+    log_msg DEBUG "Executing: dfs_set_security_acls()"
+    BINDING=`grep $cellname $DCELOCAL/etc/security/pe_site | \
+	     sed -e '1q'  | awk '{print substr($2,1,index($2,"[")-1)}'`
+
+    log_msg DETAIL "Executing: acl_edit -addr $BINDING group/$SUBSYSDIR/dfs-admin -m group:acct-admin:rctDnfmM"
+    acl_edit -addr $BINDING group/$SUBSYSDIR/dfs-admin \
+	-m group:acct-admin:rctDnfmM
+
+    log_msg DETAIL "Executing: acl_edit -addr $BINDING group/$SUBSYSDIR/dfs-fs-servers -m group:acct-admin:rctDnfmM -m group:$SUBSYSDIR/dfs-admin:rctDnfmM"
+    acl_edit -addr $BINDING group/$SUBSYSDIR/dfs-fs-servers \
+	-m group:acct-admin:rctDnfmM \
+	-m group:$SUBSYSDIR/dfs-admin:rctDnfmM
+
+    log_msg DETAIL "Executing: acl_edit -addr $BINDING group/$SUBSYSDIR/dfs-bak-servers -m group:acct-admin:rcDnfmM -m group:$SUBSYSDIR/dfs-admin:rcDnfmM"
+    acl_edit -addr $BINDING group/$SUBSYSDIR/dfs-bak-servers \
+	-m group:acct-admin:rcDnfmM \
+	-m group:$SUBSYSDIR/dfs-admin:rcDnfmM
+}
+
+#------------------------------------------------------
+# check_dce_login()
+#
+# Make sure we have celladmin and cellpw set because other parts of this script
+# use it.  The problem mostly arises if this script is executed standalone.
+# Normally, it is run from dce_config, which has set these variables.
+#------------------------------------------------------
+check_dce_login()
+{
+    # We need to be dce_login'ed as $CELL_ADMIN if we aren't already.  Just assume that if the
+    # environment vars are set that we are (i.e. we were called from dce_config like we are supposed
+    # to be).  If there is an error, we're done.
+    #
+    if [ ${celladmin:=${CELL_ADMIN:-"NULL"}} = "NULL" -o ${cellpw:=${CELL_ADMIN_PW:-"NULL"}} = "NULL" ]; then
+	log_msg DEBUG "Logging in because \$celladmin or \$cellpw are not set."
+	dcelogin || exit 1
+    fi
+
+    # We need to know our cellname if we don't already (it will stay NULL if set_cell_name fails).
+    #
+    if [ ${cellname:=${CELL_NAME:-"NULL"}} = "NULL" ]; then
+	set_cell_name
+	if [ ${cellname} = "NULL" ]; then
+	    err_exit "Unable to get the cell name ($DCELOCAL/dce_cf.db is not set up).  \
+    Continuing will cause subsequent failures."
+	fi
+    fi
+}
+
+#------------------------------------------------------
+# MAIN program
+# main()
+#
+# This is called from dce_config with an argument that specifies the function to
+# be called, so check the argument and call the right function.  The install
+# functions are only here for compatibility.  On HPUX, the install is done using
+# the update command, just like for DCE.
+#------------------------------------------------------
+
+case $function_to_call in
+
+    install_dfs)
+	# We might want to ask the user if DFS is in the same place as DCE.  If
+	# not, we would do the "get_binary_loc" and "verify" again, perhaps with
+	# "DCE" replaced by "DFS", to get the new location.  We might want to
+	# have our own "install" in that case, too.  We might also want to have
+	# a "dfs.rm" script and a question about removing all the old stuff like
+	# is in "menu1" when you pick "Security Server".
+	install_dfs
+	install_dfsclient
+	install_dfs_common
+	;;
+
+    install_dfsclient)
+	install_dfsclient || exit 0
+	install_dfs_common
+	;;
+
+    config_dfsscm)
+	check_dce_login
+	dfs_rgy_init
+	dfs_ns_init
+	config_dfsscm
+	;;
+
+    config_dfsprivatefs)
+	check_dce_login
+	dfs_rgy_init
+	dfs_ns_init
+	config_dfsfs private
+	;;
+
+    config_dfsfs)
+	check_dce_login
+	dfs_rgy_init
+	dfs_ns_init
+	config_dfsfs
+	;;
+
+    config_dfsfldb)
+	check_dce_login
+	dfs_rgy_init
+	dfs_ns_init
+	config_dfsfldb
+	;;
+
+    config_dfs_client)
+	check_dce_login
+	config_dfs_client
+	;;
+
+    *)
+	err_exit "dfs_config called with unknown argument \"$function_to_call\".  \
+This script is meant to be called from /etc/dce_config."
+	exit 1
+	;;
+esac

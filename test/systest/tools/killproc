@@ -1,0 +1,191 @@
+#!/bin/ksh
+# 
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: killproc,v $
+# Revision 1.1.14.2  1996/02/17  23:29:15  marty
+# 	Update OSF copyright year
+# 	[1996/02/17  22:46:01  marty]
+#
+# Revision 1.1.14.1  1995/12/11  22:50:55  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/1  1994/07/05  18:49 UTC  bissen
+# 	Merge hpdce02 (DCE 1.1 beta) and HPDCE01 into HPDCE02
+# 	[1995/12/11  22:23:38  root]
+# 
+# Revision 1.1.11.1  1993/09/27  14:06:02  qbarry
+# 	Made KILLPROC get GETPROC from KILLPROC's own directory.
+# 	[1993/09/26  19:45:58  qbarry]
+# 
+# Revision 1.1.9.5  1993/08/13  18:49:06  cmckeen
+# 	Removed hard coded path to getproc
+# 	[1993/08/13  18:23:58  cmckeen]
+# 
+# Revision 1.1.9.4  1993/08/11  17:44:12  pellis
+# 	Merged with final version of test from DCE 1.0.2.
+# 	[1993/08/11  17:40:47  pellis]
+# 
+# Revision 1.1.9.3  1993/08/02  17:30:32  cmckeen
+# 	 Changes made to reflect the new install tree
+# 	[1993/08/02  17:18:24  cmckeen]
+# 
+# Revision 1.1.9.2  1993/07/28  19:39:41  cmckeen
+# 	HP's TET'ized version of the system tests
+# 	[1993/07/27  13:55:20  cmckeen]
+# 
+# Revision 1.1.5.3  1993/05/27  19:01:20  eheller
+# 	*** empty log message ***
+# 
+# Revision 1.1.5.2  1993/05/27  14:17:57  eheller
+# 	*** empty log message ***
+# 	[1993/05/26  18:42:13  eheller]
+# 
+# Revision 1.1.5.3  1993/04/23  15:09:18  giza
+# 	added OS portability changes
+# 	[1993/04/23  15:08:13  giza]
+# 
+# Revision 1.1.5.2  1993/04/23  13:21:19  sekhar
+# 	Merged Hp_dce1_0_1 changes
+# 	[1993/04/16  14:59:55  sekhar]
+# 
+# Revision 1.1.1.7  1993/03/11  22:16:02  osfrcs
+# 	    Loading drop DCE1_0_2B18
+# 
+# Revision 1.1.3.2  1992/11/09  13:06:01  mgm
+# 	DCE 1.0.1 Release
+# 	[1992/11/06  19:59:23  mgm]
+# 
+# Revision 1.1.1.6  1992/09/21  18:42:29  osfrcs
+# 	    Loading drop Dce1_0_1fnl
+# 
+# Revision 1.1.3.2  1993/02/05  19:33:52  zeliff
+# 	Embedding copyrights
+# 	[1993/02/05  19:29:51  zeliff]
+# 
+# $EndLog$
+# 
+#
+#
+#   NAME: killproc
+#
+#   COMPONENT_NAME: dce.systest
+#
+#   ORIGINS: 27
+#
+#
+#   (C) COPYRIGHT International Business Machines Corp. 1991
+#   All Rights Reserved
+#
+#
+#  DESCRIPTION
+#
+#  Kill running processes.  Use getproc to determine all the processes that 
+#  match string_to_match.  Try to kill the processes with a 15 signal.  If they
+#  do not die, try signal 9.  If that fails return an error code of 1.
+#
+#  CHANGE ACTIVITY:
+#  DATE		AUTHOR		REASON
+#  06/11/90	Wayne Mock	Initial Draft
+#  06/19/90	Wayne Mock	Changes recommended by the committee
+#  07/29/92	Wayne Mock	Now take advantage of the getproc -v option
+#				when displaying processes that won't die.
+#  11/06/92     Mary MacGregor	Ported to HPUX - changed bin/sh to bin/ksh
+#******************************************************************************
+
+#******************************************************************************
+# usage()
+#
+# Prints the usage string for this command
+#******************************************************************************
+
+usage()
+{
+echo "
+usage: $PGM [-s host_to_run_on] [-l leave_out{|...}] string_to_match
+
+-s host_to_run_on  Specifies the machine on which the $PGM command will be
+                   executed.  Default is the local host.
+-l leave_out       Does not kill procs with these strings.       
+string_to_match    This string will be used to determine which PIDs will be
+                   killed.
+"
+exit 1
+
+} # end usage()
+
+
+#******************************************************************************
+# main 
+#******************************************************************************
+
+PGM=`basename $0`
+PGMDIR=`dirname $0`
+LEAVE_OUT="-l $$"
+unset ARGS HOST_TO_RUN_ON
+
+set -- `getopt l:s: $*`		# parse the command line arguments
+test $? -ne 0 && usage
+
+while :
+do
+	case "$1" in
+	-s)
+		HOST_TO_RUN_ON="-s $2"
+		RHOST=$2
+		shift
+		;;
+	-l)
+		LEAVE_OUT="$LEAVE_OUT|$2"
+		shift
+		;;
+	--)
+		shift
+		break 2
+		;;
+	esac
+	shift
+done
+
+test "$1" || usage		# need a string to match
+
+STRING="$*"
+
+# Need to have tools directory in your path
+PIDs=`$PGMDIR/getproc $HOST_TO_RUN_ON $LEAVE_OUT "$STRING"`
+
+for sig in -15 -9
+do
+	test "$PIDs" || exit 0		# exit if there is nothing to kill
+
+	if [ "$RHOST" ]; then
+		rshsp $RHOST "kill $sig $PIDs"
+	else
+		kill $sig $PIDs 		# try to kill these processes
+	fi
+
+	sleep 3					# give procs time to die
+
+	# Need to have tools directory in your path
+	PIDs=`$PGMDIR/getproc $HOST_TO_RUN_ON $LEAVE_OUT "$STRING"` 
+done
+
+if [ "$PIDs" ]; then
+	echo $PGM:  these PIDs will not die
+	
+	# Need to have tools directory in your path
+	$PGMDIR/getproc -v $HOST_TO_RUN_ON $LEAVE_OUT "$STRING"
+	exit 1
+else
+	exit 0
+fi
+
+#******************************************************************************
+# end of main
+#******************************************************************************
+

@@ -1,0 +1,208 @@
+#
+# ID: $Id: results.exp,v 1.3 1993/12/13 16:51:08 davecarr Exp $
+#
+# COMPONENT_NAME: bak tests
+#
+# The following functions list may not be complete.
+# Functions defined by/via macros may not be included.
+#
+# FUNCTIONS:
+#    The backup test results report generator
+#
+# ORIGINS: Transarc Corp.
+#
+# (C) COPYRIGHT Transarc Corp. 1993
+# All Rights Reserved
+# Licensed Materials - Property of Transarc
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+#
+# HISTORY
+# $TALog: results.exp,v $
+# Revision 1.3  1993/12/13  16:51:08  davecarr
+# Updated to expect version 5.1.3.  There were some interface changes to
+# expect from version 4 to version 5.  Hopefully there will be no more.
+#
+# Updated to expect version 5.1.3.
+# [from r1.2 by delta vijay-db3516-add-bak-test-driver, r1.7]
+#
+# Revision 1.2  1993/11/15  21:20:08  vijay
+# This revision checks in a working set of scripts to test the DFS backup
+# system. The files checked in for this delta are high level scripts to
+# configure and run the test suite. Separate deltas would export the scripts
+# to test individual bak commands.
+#
+# The README file provides a description on how to configure and run these tests.
+#
+# minor cosmetic changes to the result report utility
+# [from r1.1 by delta vijay-db3516-add-bak-test-driver, r1.2]
+#
+# Revision 1.1  1993/05/05  17:47:11  vijay
+# This delta is the first in a series of changes that add a new backup test
+# suite to the DFS test tree. This delta includes the backup test harness driver,
+# a report generator and a file containing utility procedures. The tests are
+# aimed at testing the functionality of the bak command suite. They are written
+# in Expect and Tcl. For more information on the test harness design and the
+# structure of the test suite, please refer to the document "Automated Testing
+# for the DFS Backup System" by Dave Carr, and the backup test checklist.
+#
+# The results report generator
+# [added by delta vijay-db3516-add-bak-test-driver, r1.1]
+#
+
+# Usage: expect <this_file> [-dir <root_of_test_dir>] [-cmds <list_of_cmds>]
+#                           [-summary | -detailed]
+#
+# Without -summary or -detailed options this gives the total of tests to be
+# run, passed, failed and not run for all commands.  i.e. There is no
+# breakdown by individual commands.
+#
+# With -summary option, also gives tests run, passed, failed and not run for
+# each individual command.
+# With -detailed option, also lists each test that failed.
+
+# First check to be sure the version of expect being used is acceptable.
+# If not, there is no need to do anything else.
+set min_expect_version 5.1.3
+if {[string compare [expect_version] $min_expect_version]<0} {
+    send_user "Invalid expect version.\n"
+    send_user "These tests need version  $min_expect_version or higher.\n"
+    send_user "The version being used is [expect_version].\n"
+    exit
+}
+
+set all_cmds [list adddump addftentry addftfamily addhost apropos deletedump\
+              dump dumpinfo ftinfo help jobs kill labeltape lsdumps\
+              lsftfamilies lshosts quit readlabel restoredb restoredisk\
+              restoreft rmdump rmftentry rmftfamily rmhost savedb scantape\
+              setexp status verifydb]
+
+set results_file "RESULTS"
+set cmd_total 0
+set cmd_pass 0
+set cmd_fail 0
+set cmd_not_run 0
+
+set root_dir [eval pwd]
+
+trap exit SIGINT
+
+while {[llength $argv]>0} {
+    set flag [lindex $argv 0]
+    case $flag in \
+        "-dir" {
+            set root_dir [lindex $argv 1]
+            set argv [lrange $argv 2 end]
+        } "-cmds" {
+            set cmd_list [lindex $argv 1]
+            set argv [lrange $argv 2 end]
+        } "-summary" {
+            set summary ""
+            set argv [lrange $argv 1 end]
+        } "-detailed" {
+            set detailed ""
+            set argv [lrange $argv 1 end]
+        } default {
+            puts "Unrecognized option: $flag"
+            puts "Ignoring it and continuing."
+	    puts ""
+            set argv [lrange $argv 1 end]
+        }
+}
+
+# Be sure root directory of test tree exists
+if {![file isdirectory $root_dir] || ![file readable $root_dir] ||
+    ![file writable $root_dir]} {
+        puts "Sorry, root of test tree, $root_dir, does not exist, is\
+ not a directory, is not readable or is not writable."
+        puts "Cannot proceed."
+        exit
+}
+
+# if cmd_list not given on command line, search for all cmds
+
+if {![info exists cmd_list]} {
+    set root_children [exec /bin/ls -1 $root_dir]
+    foreach file $root_children {
+        if {[file isdirectory $root_dir/$file] &&\
+            [expr [lsearch $all_cmds $file]>-1]} {
+            lappend cmd_list $file
+        }
+    }
+}
+
+if {![info exists cmd_list]} {
+    puts "No commands to report on in directory:"
+    puts "$root_dir"
+    puts "Are you where you thing you are?"
+    exit
+}
+
+foreach cmd_dir $cmd_list {
+    if {![file readable $root_dir/$cmd_dir/$results_file]} {
+        puts "File $root_dir/$cmd_dir/$results_file does not exist\
+ or is not readable."
+        puts "Cannot process results for $cmd_dir."
+        continue
+    }
+
+    # "open pops stack on failure" - from kibitz
+    # hence the need for the catch
+    if [catch {set fileId [open $root_dir/$cmd_dir/$results_file]} msg]!=0 {
+        puts $msg
+        continue
+    }
+    set contents [split [read -nonewline $fileId] "\n"]
+    close $fileId
+    set total 0
+    set pass 0
+    set fail 0
+    set not_run 0
+    if {[info exists summary] || [info exists detailed]} {
+        puts "Results for $cmd_dir:"
+    }
+    foreach line $contents {
+        if [string match "%%*" $line] {
+            set total [expr $total+1]
+            if [string match "*PASS" $line] {
+                set pass [expr $pass+1]
+            } elseif [string match "*FAIL" $line] {
+                set fail [expr $fail+1]
+                if [info exists detailed] {
+                    puts "Test [lindex [split $line " "] 2] failed."
+                }
+            } elseif [string match "*NOT RUN" $line] {
+                set not_run [expr $not_run+1]
+                if {[info exists detailed]} {
+                    puts "Test [lindex [split $line " "] 2] not run."
+                }
+            } else {
+                puts "Unknown result for test [lindex [split $line " "] 2]."
+            }
+        }
+    }
+    set cmd_total [expr $cmd_total+$total]
+    set cmd_pass [expr $cmd_pass+$pass]
+    set cmd_fail [expr $cmd_fail+$fail]
+    set cmd_not_run [expr $cmd_not_run+$not_run]
+    if {[info exists summary] || [info exists detailed]} {
+        puts [format "number of tests to be run = %3d" $total]
+        puts [format "number of tests passed    = %3d" $pass]
+        puts [format "number of tests failed    = %3d" $fail]
+        puts [format "number of tests not run   = %3d" $not_run]
+        puts ""
+    }
+
+}
+puts "Results of this run:"
+puts [format "total number of tests to be run = %3d" $cmd_total]
+puts [format "total number of tests passed    = %3d" $cmd_pass]
+puts [format "total number of tests failed    = %3d" $cmd_fail]
+puts [format "total number of tests not run   = %3d" $cmd_not_run]
+
+if {[expr $cmd_pass+$cmd_fail+$cmd_not_run]!=$cmd_total} {
+    puts ""
+    puts "Warning: number of tests recorded to be run doesn't equal"
+    puts "the sum of tests passed, tests failed and tests not run."
+}

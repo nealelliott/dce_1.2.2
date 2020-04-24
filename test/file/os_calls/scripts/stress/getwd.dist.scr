@@ -1,0 +1,176 @@
+*
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+* 
+* USAGE: ./file_test -l /.:/dfs_test/a    (for hub)
+*        ./file_test -c /.:/dfs_test/a    (for two spokes)
+*
+
+*
+* Note: 
+*   Run this test on same client to test some race conditions in cm_GetsCache.
+*
+
+*
+* getwd.dist.scr.
+*    This script implements the followings.
+*
+*> GetWD tests.
+*
+* Issue occasional getwd calls to ensure that working dir computation
+* doesn't fail after a while.
+*
+* Flush a *file* (not the dir) and then stat the file, from N
+* different test processes on the same client, at once.  Tests some race
+* conditions in cm_GetSCache.
+*
+* Flush the root of the cell (the DFS root, not the /... mount point),
+* and then do a getwd.  Do this many times.  Do this with several
+* concurrent processes.
+*
+
+!* Include config file.
+include config
+
+getwd currDir
+set loopTimes 10
+set dfsRoot string "/:"
+set rootFile iamHere
+
+* 
+* The procedure will check the result.
+*
+set test_Proc proc END_PROC
+
+  echo
+  echo Test process .
+
+  getwd workDir
+
+  chdir $testDir
+
+  sync_join "begin_sync" $timeout
+
+  stat $testFile var
+  if ( @var.st_size != ( $loopTimes * $CONST64K) ) {
+    echo FAILED: wrong file size stated.
+  }
+  if ( @var.st_mode & 0777 & ~(0666) ) {
+    echo FAILED: wrong mode bits stated.
+  }
+  getwd myDir
+  set tmp string ( @workDir + "/" + "$testDir" )
+echo @myDir
+  if ( @myDir != @tmp ) {
+    echo FAILED: Working Directory changed.
+  }
+    
+
+  sync_join "flush_dfs_root" $timeout
+
+  loop x 1 1 $loopTimes
+    chdir $dfsRoot
+    getwd myRootDir
+    flush_fileset $rootFile
+    getwd myDir
+    if ( @myDir != @myRootDir ) {
+      echo FAILED: Working Directory changed after flushing.
+    }
+  endloop
+
+  sync_join "finish_sync" $timeout
+
+  chdir @workDir
+
+  echo End test process.
+  echo
+
+END_PROC
+
+
+***********************************************************************
+echo
+* Check if there are enogh spokes.
+if ( $ITL_nspokes < 2 ) {
+  echo To run the test you have to have at least two spokes.
+  quit
+}
+
+*
+!* Test getwd.
+*
+chdir $dfsRoot
+open $rootFile ($O_CREAT|$O_RDWR) 0777 fileId
+write $fileId "create a file on the root"
+close $fileId
+chdir $currDir
+chdir $testDir
+
+open $testFile ($O_CREAT|$O_RDWR) 0777 fileId
+loop x 1 1 $loopTimes
+  write $fileId $NUMVEC64K
+  if ( $CommandResult != $CONST64K ) {
+    echo FAILED: write failed in write vector procedure.
+  }
+endloop
+close $fileId
+chmod $testFile 0666
+
+* This loop will do more stress test.
+loop loopVar 1 1 $loopTimes
+
+flush_file $testFile
+
+loop y 0 1 ($ITL_nspokes-1)
+  rexec_async $ITL_spoke[$y] test_Proc result[$y] fsyncId[$y]
+endloop
+
+sync_create "begin_sync" $ITL_nspokes  $timeout
+sync_release "begin_sync"
+
+sync_create "flush_dfs_root" $ITL_nspokes  $timeout
+sync_release "flush_dfs_root"
+ 
+
+sync_create "finish_sync" $ITL_nspokes  $timeout
+sync_release "finish_sync"
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $fsyncId[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+
+endloop
+
+chdir $dfsRoot
+remove $rootFile
+chdir $currentDir
+exec clearDir_Proc $testDir
+
+echo
+
+echo Hub done.

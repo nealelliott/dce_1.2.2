@@ -1,0 +1,555 @@
+*
+* ID: $Id:
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+*  dirops.scr --
+*      	This script implements a series of tests by using mkdir, rmdir,
+*       opendir, readdir, seekddir, telldir, and closedir. The major 
+*       test focuses on the readdir system call.
+*
+
+* Usage: file_test -I dirops.scr
+*        file_test -I dirops.scr -D
+*        or
+*        file_test <dirops.scr
+*        or
+*        See file_test -help
+
+* Note: You have to set all permissions for the owner of the working dir.
+
+*  Terminology:
+*  PASSED -- no problem for the testings.
+*  FAILED -- failed when doing basic checks.
+*  XXXXXX -- needs enhanced later.
+
+*  Errors: 20
+
+
+*
+* Common settings.
+*
+include common1.env
+echo
+echo Running dirops.scr
+echo
+set numDirs 100
+
+
+
+************************************************************************
+!*                  BASIC CHECKING
+************************************************************************
+
+
+*
+* Set three procedures.
+*
+
+* This procedure makes subdirs under the working dir.
+
+set make_Dir proc 2 numOfDir int baseDirName string  ENDP
+loop x 1 1 @numOfDir
+  set testDirName string ( @baseDirName + @x )
+  mkdir @testDirName 0777
+endloop
+ENDP
+
+* This procedure checks that if there are dirs expected under wdir.
+
+set check_Dir proc 2 numOfDir int baseDirName string  ENDP
+opendir . dirPtr
+readdir @dirPtr dirInfo
+readdir @dirPtr dirInfo
+loop x 1 1 @numOfDir 
+  set testDirName string ( @baseDirName + @x )
+  readdir @dirPtr dirInfo 
+  if ( @dirInfo.d_name != @testDirName ) {
+    set errorMessage "FAILED: The check dir proc failed, the num of dirs is @numOfDir. --E21"
+    exec err_Process
+  }
+endloop
+ENDP
+
+* This procedure removes the subdirs under wdir.
+set remove_Dir proc 2 numOfDir int baseDirName string ENDP
+loop x 1 1 @numOfDir
+  set testDirName string ( @baseDirName + @x )
+  rmdir @testDirName
+  if ( @ITL_Status != 0 ) {
+    set errorMessage "FAILED to remove the directories. --E22"
+    exec err_Process
+  }
+
+endloop
+ENDP
+
+umask 0
+*
+!*  1. Check for invalid "." and ".." by mkdir.
+*
+
+* Change to working dir.
+chdir $testDir
+
+verifyStatus false
+mkdir "." 0777
+if ( $ITL_Status == 0 ) {
+  set errorMessage "FAILED: This name dot is not a legal dir name. --E1"
+  exec err_Process
+}
+mkdir ".." 0777
+if ( $ITL_Status == 0 ) {
+  set errorMessage "FAILED: This name dot-dot is not a legal dir name. --E2"
+  exec err_Process
+}
+
+*
+!*  2. Check for proper behavior on . and .. by rmdir .
+* XXXXXX
+*
+rmdir "." 
+if ( $ITL_Status == 0 ) {
+  set errorMessage "FAILED: Removed the working dir dot. --E3"
+  exec err_Process
+}
+rmdir ".."
+if ( $ITL_Status == 0 ) {
+  set errorMessage "FAILED: Removed the working dir. dot-dot. --E4"
+  exec err_Process
+}
+
+*
+!* Check permission bits by access and stat calls.
+*
+
+* Change permissions of parent dir.
+chmod .  0555 
+
+access "." $accessFlagR
+if ( $ITL_Status != 0 ) {
+  set errorMessage "FAILED: dir . is not of read permission. --E5"
+  exec err_Process
+}
+mkdir junkdir 0777
+if ( $ITL_Status == 0 ) {
+  set errorMessage "FAILED: mkdir works when there is no write permission.  --E6"
+  exec err_Process
+}
+access "." $accessFlagX
+if ( $ITL_Status != 0 ) {
+  set errorMessage "FAILED: dir . is of execute permission. --E7"
+  exec err_Process
+}
+access ".." $accessFlagR
+if ( $ITL_Status != 0 ) {
+  set errorMessage "FAILED: dir .. is not of read permission. --E8"
+  exec err_Process
+}
+access ".." $accessFlagX
+if ( $ITL_Status != 0 ) {
+  set errorMessage "FAILED: dir .. is of execute permission. --E9"
+  exec err_Process
+}
+stat . var1
+if ( ($var1.st_mode & 0555 ) == 0 ) {
+  set errorMessage "FAILED: permission of dir . is of inconsistent permissions. --E10"
+  exec err_Process
+}
+stat .. var2
+if ( ($var2.st_mode & 0700 ) == 0 ) {
+  set errorMessage "FAILED: permission of dir .. is of inconsistent permissions. --E11"
+  exec err_Process
+}
+  
+
+chmod . 0777
+verifyStatus true
+
+*
+!*  3. Scancheck operations by readdir, seekdir, telldir.
+*
+
+* Create dirs to test and also remember the dir offsets by every 10 names.
+
+* Set a array for the offsets.
+loop x 1 1 ($numDirs/10)
+  set offsets[$x] int 0
+endloop
+
+!* Make subdirs under test dir when it is open.
+opendir . dirPtr
+readdir $dirPtr dirInfo
+readdir $dirPtr dirInfo
+
+set y int 1
+loop x 1 1 ($numDirs/10)
+  loop z 1 1 ($numDirs/10)
+    set dirName ($testDir + $y)
+    mkdir $dirName 0777
+    set y ($y+1)
+  endloop
+endloop
+closedir $dirPtr
+
+!* Via entire dir scan (readdir).
+* If the dirs are created under a brand new parent dir then they are
+* in order in case the names are not so long.
+*
+opendir . dirPtr
+readdir $dirPtr dirInfo
+readdir $dirPtr dirInfo
+
+set y int 1
+loop x 1 1 ($numDirs/10)
+  telldir $dirPtr
+* By set the offsets array we remenber all entries in the dir.
+  set offsets[$x] int $CommandResult
+  loop z 1 1 ($numDirs/10)
+    set dirName ($testDir + $y)
+    readdir $dirPtr dirInfo
+    if ( $dirInfo.d_name != $dirName ) {
+      set errorMessage "FAILED: Scan dir filed, different names. --E12"
+      exec err_Process
+    }
+    set y ($y+1)
+  endloop
+endloop
+
+* Check that if it is the last dirent.
+
+verifyStatus false
+
+readdir $dirPtr dirInfo
+if ( $CommandResult == 0 ) {
+  set errorMessage "FAILED: there some more dirent left. --E13"
+  exec err_Process
+}
+
+verifyStatus true
+
+closedir $dirPtr
+
+!* Via telldir operations by every 10 names (not from a random place).
+
+opendir . dirPtr
+readdir $dirPtr dirInfo
+readdir $dirPtr dirInfo
+set y int 1
+loop x 1 1 ($numDirs/10)
+  seekdir $dirPtr $offsets[$x]
+  loop z 1 1 ($numDirs/10)
+    set dirName ($testDir + $y)
+    readdir $dirPtr dirInfo
+    if ( $dirInfo.d_name != $dirName ) {
+      set errorMessage "FAILED: telldir filed, different name found. --E14"
+      exec err_Process
+    }
+    set y ( $y+1 )
+  endloop
+endloop
+
+!* Via telldir operations every 10 names (from a random place).
+
+set randomNum (1..10)
+seekdir $dirPtr $offsets[$randomNum]
+set start (1+($randomNum-1)*10)
+
+loop z $start 1 $numDirs
+  set dirName ($testDir + $z)
+  readdir $dirPtr dirInfo
+  if ( $dirInfo.d_name != $dirName ) {
+    telldir $dirPtr
+    echo The current offset is $CommandResult .
+    set errorMessage ("FAILED: telldir from a random position, the key is " + $randomNum + ", different name found. --E15")
+    exec err_Process
+  }
+endloop
+closedir $dirPtr
+
+* Remove the test dirs.
+set y int 1
+loop x 1 1 ($numDirs/10)
+  loop z 1 1 ($numDirs/10)
+    set dirName ($testDir + $y)
+    rmdir $dirName
+    set y ($y+1)
+  endloop
+endloop
+
+*
+!*  4. Check that readdir ops work properly with 1k, 10k, 100k and >256k
+*     of name space cleared out.
+*
+
+* Create a big dir. If average length of a name is 26 the 64k
+* Dir size needs to have 1200 dirents.
+
+set baseDirName string "tstdirname"
+set baseDirName ( $baseDirName * 20 )
+set smallDir 4
+set mediumDir 40
+set bigDir 400
+set largeDir 1200
+set holeSize1k 6
+set holeSize10k 60
+set holeSize100k 600
+
+
+
+!* Test small dir (1k) case.
+
+mkdir $testDir 0777
+chdir $testDir
+exec make_Dir $smallDir $baseDirName
+exec check_Dir $smallDir $baseDirName
+exec remove_Dir $smallDir $baseDirName
+chdir ..
+rmdir $testDir
+
+!* Test medium (10k) dir case.
+
+* Maybe we have to use another new dir name.
+
+mkdir $testDir 0777
+chdir $testDir
+exec make_Dir $mediumDir $baseDirName
+exec check_Dir $mediumDir $baseDirName
+exec remove_Dir $mediumDir $baseDirName
+chdir ..
+rmdir $testDir
+
+!* Test big (100k) dir case.
+
+mkdir $testDir 0777
+chdir $testDir
+exec make_Dir $bigDir $baseDirName
+exec check_Dir $bigDir $baseDirName
+exec remove_Dir $bigDir $baseDirName
+chdir ..
+rmdir $testDir
+  
+!* Test large (256k) dir case.
+!* Be patient (about 30 minutes).
+
+mkdir $testDir 0777
+chdir $testDir
+exec make_Dir $largeDir $baseDirName
+opendir . dirPtr
+readdir $dirPtr dirInfo
+readdir $dirPtr dirInfo
+set x 1
+loop z 1 1 ($largeDir/10) 
+  telldir $dirPtr
+  set offsets[$z] $CommandResult 
+  loop y 1 1 10
+    set testDirName ($baseDirName + $x)
+    readdir $dirPtr dirInfo 
+    if ( $dirInfo.d_name != $testDirName ) {
+      set errorMessage "FAILED: The check dir failed, the num of dirs is $largeDir. --E16"
+      exec err_Process
+    }
+    set x ( $x + 1)
+  endloop
+endloop
+
+!* Check when there are 1k hole, 10k hole, and 100k hole.
+!* Make a small hole (1k) randomly in the large dir. 
+*  Six entries is about 1k. 
+
+set randomKey (1 .. (($largeDir-$holeSize1k)/10) )
+seekdir $dirPtr $offsets[$randomKey]
+set start (1+($randomKey -1 )*10)
+loop z $start 1 ($start + $holeSize1k -1) 
+  set testDirName ($baseDirName + $z)
+  rmdir $testDirName
+endloop
+
+!* Check the 1k hole case by scandir (readdir call).
+
+seekdir $dirPtr $offsets[1] 
+readdir $dirPtr dirInfo
+set x 1
+do  
+  if ( $x == $start ) {  
+    set x  ( $x + $holeSize1k )
+  }
+  set testDirName ( $baseDirName + $x)
+  if ( $dirInfo.d_name != $testDirName ) {
+    set errorMessage "FAILED: when check dirs with 1k hole. --E17"
+    exec err_Process
+  } 
+  set x ( $x+1)
+  readdir $dirPtr dirInfo
+while ( $CommandResult != 1 ) 
+
+!* Make a medium hole hole (10k) randomly in the large dir. 
+*  60 entries is about 10k. 
+
+
+if ( ($start + $holeSize10k) < $largeDir ) {
+  set start1 $start
+}
+else {
+  set start1 ($start+$holeSize1k-$holeSize10k)
+}
+
+loop z $start1 1 ($start1 + $holeSize10k -1 )
+  if ( $z < $start || $z >= ($start + $holeSize1k)) {
+    set testDirName ($baseDirName + $z)
+    rmdir $testDirName
+  }
+endloop
+
+!* Check the 10k hole by scandir (readdir call).
+
+seekdir $dirPtr $offsets[1] 
+readdir $dirPtr dirInfo
+set x 1
+do  
+  if ( $x == $start1 ) {  
+    set x ($x + $holeSize10k )
+  }
+  set testDirName ( $baseDirName + $x)
+  if ( $dirInfo.d_name != $testDirName ) {
+    set errorMessage "FAILED: when check dirs with 10k hole. --E18"
+    exec err_Process
+  } 
+  set x ( $x+1)
+  readdir $dirPtr dirInfo
+while ( $CommandResult != 1 ) 
+
+!* Make a big hole hole (100k) randomly in the large dir.
+* 600 entries is about 100k. 
+
+if ( ($start1 + $holeSize100k) < $largeDir ) {
+  set start2 $start1
+}
+else {
+  set start2 ($start1+$holeSize10k-$holeSize100k)
+}
+
+loop z $start2 1 ($start2 + $holeSize100k-1) 
+  if ( $z < $start1 || $z >= ($start1 + $holeSize10k)) {
+    set testDirName ($baseDirName + $z)
+    rmdir $testDirName
+  }
+endloop
+
+!* Check the 100k hole by scandir (readdir call).
+
+seekdir $dirPtr $offsets[1] 
+readdir $dirPtr dirInfo
+set x 1
+do  
+  if ( $x == $start2 ) {  
+    set x ( $x + $holeSize100k )
+  }
+  set testDirName ( $baseDirName + $x)
+  if ( $dirInfo.d_name != $testDirName ) {
+    set errorMessage "FAILED: when check dirs with 100k hole. --E19"
+    exec err_Process
+  } 
+  set x ( $x+1)
+  readdir $dirPtr dirInfo
+while ( $CommandResult != 1 ) 
+
+closedir $dirPtr
+
+* It is in $testDir/$testDir. And the above case can be used for the next
+* check since we have the big dir and remove a lot of entries. Now we
+* just want flush it. 
+
+set commd "cm flush -path ."
+shellexec commd
+
+*
+!*  5. check that what happens if we do tellsir, remove a lot of entries, close
+*     the dir and flush the cache entry (data and status) for the dir. Can we 
+*     do a scancheck even after a dir flush.
+
+opendir . dirPtr
+readdir $dirPtr dirInfo
+readdir $dirPtr dirInfo
+
+* Can we still scandir (readdir call).
+
+seekdir $dirPtr $offsets[1] 
+readdir $dirPtr dirInfo
+set x 1
+do  
+  if ( $x == $start2 ) {
+    set x ( $x + $holeSize100k )
+  }
+  set testDirName ( $baseDirName + $x)
+  if ( $dirInfo.d_name != $testDirName ) {
+    set errorMessage "FAILED: scandir after flush. --E20"
+    exec err_Process
+  } 
+  set x ( $x+1)
+  readdir $dirPtr dirInfo
+while ( $CommandResult != 1 ) 
+
+closedir $dirPtr
+
+* Remove the large dir.
+opendir . dirPtr
+seekdir $dirPtr $offsets[1] 
+readdir $dirPtr dirInfo
+set x 1
+do  
+  if ( $x == $start2 ) {
+    set x ( $x + $holeSize100k )
+  }
+  set testDirName ( $baseDirName + $x)
+  rmdir $testDirName
+  set x ( $x+1)
+  readdir $dirPtr dirInfo
+while ( $CommandResult != 1 ) 
+closedir $dirPtr
+
+
+chdir ..
+rmdir $testDir
+
+* --XXXXXXX--
+
+*  6. Try same test but flushing the stat not the data cache.
+*  7. Try the scan test, only flush the data cache but not the stat.
+
+*  8. Check large getdents calls, verying size of the output buffer from
+*     512 bytes up to the entire dir size (at least 128k) by factor of 2.
+*
+*     Note: It seems that we can use open and read to perform the same
+*           system calls as indicated in this check point.
+
+
+
+************************************************************************
+!* Cleaning up and reporting.
+************************************************************************
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+*rmdir $testDir
+exec report_Proc "dirops.scr" $errorCounter
+echo
+quit

@@ -1,0 +1,624 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: dfsacltst,v $
+# Revision 1.1.2.2  1996/03/09  20:50:48  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:28:49  marty]
+#
+# 	Commented out tput clear command.
+# 	[1993/03/05  20:39:34  pellis]
+#
+# 	Revised version 2
+# 	[1993/02/26  23:51:11  ramb]
+#
+# Revision 1.1.2.1  1995/12/11  22:00:01  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:59:12  root]
+# 
+# 	Initial version
+# 	[1993/02/22  15:05:36  ramb]
+# 
+# Revision 1.1.5.2  1993/09/22  18:31:45  damon
+# 	Synched with ODE 2.3 based build
+# 	[1993/09/22  18:24:53  damon]
+# 
+# $EndLog$
+#
+#	This file is a wrapper for the DFS acl test.  This file will reside
+#	in the test/systest directory.
+#
+#>>> Update this function to add the options required by your testcases. <<<
+#===============================================================================
+# Function:  show_usage
+# Purpose:   Display a detailed syntax of the workstation's command line
+#            options.
+#===============================================================================
+show_usage() {
+cat <<-EOF
+
+Usage:  $WS [options] [case_nums]
+Where [options] are:
+ -c          Do not clean up the workstation log files (default: TRUE)
+ -d          Directory containing the test data
+ -h          Show detailed usage for the workstation (default: FALSE)
+ -H	     Validate input parameters only (default: FALSE)
+ -l<LOOPS>   Times to execute the workstation (default: 1)
+ -t<HOURS>   Hours to execute the workstation 
+
+EOF
+}
+
+
+#===============================================================================
+# Function:  check_RC
+# Purpose:   This function is sent a return code and a message.  If
+#            the return code is not equal to zero, then it prints out the
+#            message, shows the workstation usage, and exits the workstation.
+#===============================================================================
+check_RC() {
+	RC="$1"
+	ERROR_MESSAGE="$2"
+	if [ "$RC" != "0" ]; then
+		xx_severe "$ERROR_MESSAGE"
+		show_usage
+		WS_FINISH_TIME_DATE=`$TIME_DATE`
+		fail_workstation
+		exit 1
+	fi
+}
+
+#===============================================================================
+# Function:  check_RC2
+# Purpose:   This function is sent a return code and a message.  If
+#            the return code is not equal to zero, then it prints out the
+#            message and exits the workstation.
+#===============================================================================
+check_RC2() {
+	RC="$1"
+	ERROR_MESSAGE="$2"
+	if [ "$RC" != "0" ]; then
+		echo "$ERROR_MESSAGE"
+		echo "Aborting..."
+		exit 1
+	fi
+}
+
+
+#>>> Update this function to double-check that the environment you need is <<<
+#>>> already set up.  Leave the checks for the driver's tools in there.    <<<
+#>>> If you perform any commands, redirect stdout and stderr to the        <<<
+#>>> spoolfile (>>$SPOOLFILE 2>&1).                                        <<<
+#===============================================================================
+# Function:  check_dependencies
+# Purpose:   Check to make sure the tools that are needed are on the system.
+#===============================================================================
+check_dependencies() {
+# Examples
+#	[ "$MACHINE" ]
+#	check_RC "$?" "Machine environment variable is not set."
+#
+	whoiam=`whoami`
+	if [ "$whoiam" != "root" ]
+	then
+		check_RC2 "1" "User ID must be root."
+	fi
+
+	[ ! -z "$STDEXC" ]
+	check_RC2 "$?" "The System Test Driver variable [STDEXC] must be set."
+
+	[ ! -z "$CELL_LOCAL" ]
+	check_RC2 "$?" "The System Test Driver variable [CELL_LOCAL] must be set."
+
+	[ ! -z "$CELL_FOREIGN1" ]
+	check_RC2 "$?" "The System Test Driver variable [CELL_FOREIGN1] must be set."
+
+	[ ! -z "$CELL_FOREIGN2" ]
+	check_RC2 "$?" "The System Test Driver variable [CELL_FOREIGN2] must be set."
+
+	[ ! -z "$CELL_SYSTEMS_LOCAL" ]
+	check_RC2 "$?" "The System Test Driver variable [CELL_SYSTEMS_LOCAL] must be set."
+
+	[ ! -z "$CELL_SYSTEMS_FOREIGN1" ]
+	check_RC2 "$?" "The System Test Driver variable [CELL_SYSTEMS_FOREIGN1] must be set."
+
+	[ ! -z "$CELL_SYSTEMS_FOREIGN2" ]
+	check_RC2 "$?" "The System Test Driver variable [CELL_SYSTEMS_FOREIGN2] must be set."
+
+
+	for system in $CELL_SYSTEMS_LOCAL
+	do 
+		ping -c1 $system > /dev/null 2>&1
+		check_RC2 "$?" "System ($system) in the environment variable CELL_SYSTEMS_LOCAL ($CELL_SYSTEMS_LOCAL) \nis not up and running."
+	done
+
+	for system in $CELL_SYSTEMS_FOREIGN1
+	do 
+		ping -c1 $system > /dev/null 2>&1
+		check_RC2 "$?" "System ($system) in the environment variable CELL_SYSTEMS_FOREIGN1 ($CELL_SYSTEMS_FOREIGN1) \nis not up and running."
+	done
+
+	for system in $CELL_SYSTEMS_FOREIGN2
+	do 
+		ping -c1 $system > /dev/null 2>&1
+		check_RC2 "$?" "System ($system) in the environment variable CELL_SYSTEMS_FOREIGN2 ($CELL_SYSTEMS_FOREIGN2) \nis not up and running."
+	done
+
+}
+
+
+#===============================================================================
+# Function:  initialize_command_line_variables
+# Purpose:   Do the basic initialization for the workstation.
+#===============================================================================
+initialize_command_line_variables() {
+	CLEAN="TRUE"			#Clean up the JOURNALs
+	EXECUTE_BY_TIME="FALSE"		#Execute by loops by default
+	LOOPS_TO_EXECUTE="1"		#Execute one loop by default
+	HOURS_TO_EXECUTE="0"		#Hours to execute by default is 0
+	SECONDS_TO_EXECUTE="0"		#Seconds to execute by default is 0
+	DATA_DIRECTORY=$STROOT/file/dfsacltst/data
+	CHECK_OUT_PARAMS="FALSE"	#Check input parameters only
+	PRINT_USAGE="FALSE"		#Print usage
+	STARTDIR=`pwd`
+	PROCESS_ID=$$
+        export VERBOSE CLEAN DATA_DIRECTORY STARTDIR PROCESS_ID             #These may be used by underlying testcases
+}
+
+
+#===============================================================================
+# Function:  initialize_environment_variables
+# Purpose:   Initialize all the rest of the workstation variables.
+#===============================================================================
+initialize_environment_variables () {
+	#>>> Set TCSUBDIR to the name of the subdirectory (see above) in which
+	#>>> your testcase files will reside.
+	#-----------------------------------------------------------------------
+	# PID:    workstation's PID that we will use to distinguish files/dirs
+	# HOST:   name of the host that the workstation was executed from
+	# STLIB:  root directory of the entire test library
+	# STROOT: root directory of the system test testcases
+	# TCSUBDIR: subdirectory in which your test files will be located--
+	#         choose from threads,rpc,time,security,directory,file,diskless
+	# TCDIR:  location of this workstation's workstation and testcase files
+	# STDEXC: directory where system test tools are stored
+	#-----------------------------------------------------------------------
+	PID=$$
+	HOST=`hostname | cut -f1 -d.`	# Strip off TCP/IP domain
+	STLIB=${STLIB:-/u/stlib}
+	STROOT=${STROOT:-$STLIB/systest}
+	TCSUBDIR=file/dfsacltst
+	TCDIR=$STROOT/$TCSUBDIR
+	STDEXC=${STDEXC:-$STROOT/tools}
+	PATH=$TCDIR:$PATH
+	export TCDIR
+	
+	#-----------------------------------------------------------------------
+	# BASE_FAIL_DIR: directory contains directories of failed workstations
+	# BASE_PASS_DIR: directory contains directories of passed workstations
+	# PASS_FAIL_LOG: file containing workstation pass/fail information
+	#-----------------------------------------------------------------------
+	BASE_FAIL_DIR=${BASE_FAIL_DIR:-/tmp}
+	BASE_PASS_DIR=${BASE_PASS_DIR:-/tmp}
+	PASS_FAIL_LOG=${PASS_FAIL_LOG:-/tmp/pass_fail_log}
+	
+	#-----------------------------------------------------------------------
+	# TIMER: called like [T=`$TIMER`].  T equals seconds since beg. of year
+	# TIME_DATE: called like [T=`$TIME_DATE`].  T = 11:44:50-03/16
+	#-----------------------------------------------------------------------
+	TIMER='eval echo `awk "BEGIN { print \`date +"%j"\`*86400 + \`date +"%H"\`*3600 + \`date +"%M"\`*60 + \`date +"%S"\`; exit}"`'
+	TIME_DATE="date +%H:%M:%S-%m/%d"
+	
+	#-----------------------------------------------------------------------
+	# Export all the variables needed by the testcase files
+	#-----------------------------------------------------------------------
+	export PID HOST PATH TIME_DATE
+
+	#-----------------------------------------------------------------------
+	# Special variables used by "iteration 0" (the initial setup) of the
+	# workstation:
+	# WPHI:       combination/substition - $WS.$PID.$HOST.$ITERATION
+	# WSLOGDIR:   directory where our JOURNALs are kept during the run
+	# JOURNAL:    file containing output from the standard library commands
+	# SPOOLFILE:  file containing all information written to stdout
+	#-----------------------------------------------------------------------
+	WPHI="$WS.$PID.$HOST.0"
+	ITERATION=0
+
+	WSLOGDIR=${STLOGDIR:-/u/status}/$WPHI
+	mkdir $WSLOGDIR
+	export WSLOGDIR
+	
+	JOURNAL=$WSLOGDIR/JOURNAL
+	SPOOLFILE=$WSLOGDIR/spoolfile
+
+	export JOURNAL
+}
+
+
+
+#>>> If you added options that will be used by the driver (not passed <<<
+#>>> directly to the testcases), update this function.                <<<
+#===============================================================================
+# Function:  parse_command_line
+# Purpose:   Parse the command line parameters and set the proper flags
+#	     and variables accordingly.
+#===============================================================================
+parse_command_line() {
+	#-----------------------------------------------------------------------
+	# Use getopt to set the command line parameters that were passed.  If
+	# an invalid parameter is passed then give a help screen about the
+	# workstation by calling show_usage and then exit.
+	#-----------------------------------------------------------------------
+	set -- `getopt cd:hHl:t:n:m:s:p:v $COMMAND_LINE_PARAMETERS` \
+		>>$SPOOLFILE 2>&1
+	check_RC "$?" "Invalid command line parameters"
+	
+	#----------------------------------------------------------------------
+	# Set variables depending on the flag encountered and then shift that
+	# variable and/or flag out.
+	#----------------------------------------------------------------------
+	while :; do
+		case $1 in
+			-c)	CLEAN="FALSE"
+				shift;;
+			-d)	DATA_DIRECTORY="$2"
+				shift
+				shift;;
+			-h)	show_usage
+				PRINT_USAGE="TRUE"
+				shift;;
+			-H)	CHECK_OUT_PARAMS="TRUE"
+				shift;;
+			-l)	LOOPS_TO_EXECUTE="$2"
+				shift
+				shift;;
+			-t)	HOURS_TO_EXECUTE="$2"
+				EXECUTE_BY_TIME="TRUE"
+				SECONDS_TO_EXECUTE=`awk "BEGIN { print 3600 * $HOURS_TO_EXECUTE; exit; }"`
+				shift
+				shift;;
+			--)	shift
+				break;;
+		esac
+	done
+
+	export DATA_DIRECTORY
+}
+
+#>>> If there are things that fit into this category, put them  <<<
+#>>> in this function.  Redirect stdout and stderr of any       <<<
+#>>> commands you perform to the spoolfile (>>$SPOOLFILE 2>&1). <<<
+#===============================================================================
+# Function:  one_time_workstation_setup
+# Purpose:   Performs any setup procedures that need to be executed only
+#	     once no matter how many times the testcases are run.
+#===============================================================================
+one_time_workstation_setup() {
+	WPHI="$WS.$PID.$HOST.$ITERATION"
+}
+
+
+#>>> If there are things that fit into this category, add them <<<
+#>>> to this function.                                         <<<
+#===============================================================================
+# Function:  setup_workstation
+# Purpose:   Performs any setup procedures that need to be executed before
+#	     each run of the testcases.
+#===============================================================================
+setup_workstation() {
+	trap   'echo
+		echo "========================================"
+		echo "Trap signal received..."
+		echo "========================================"
+		echo
+		xx_severe "Signal received, exiting workstation..."
+		cleanup_workstation
+		exit 1' 1 2 3 15
+	
+	#-----------------------------------------------------------------------
+	# WPHI:       combination/substition - $WS.$PID.$HOST.$ITERATION
+	# WSLOGDIR:   directory where our JOURNALs are kept during the run
+	# JOURNAL:    file containing output from the standard library commands
+	# CMDFILE:    file containing all output from workstation commands
+	# STATUSFILE: file containing other log information from the workstation
+	# SPOOLFILE:  file containing all information written to stdout
+	#-----------------------------------------------------------------------
+	WPHI="$WS.$PID.$HOST.$ITERATION"
+
+	WSLOGDIR=${STLOGDIR:-/u/status}/$WPHI
+	mkdir $WSLOGDIR
+	cp $TCDIR/* $WSLOGDIR > /dev/null 2> /dev/null
+	chmod +x $WSLOGDIR/*
+	cd $WSLOGDIR
+	JOURNAL=$WSLOGDIR/JOURNAL
+	CMDFILE=$WSLOGDIR/cmdfile
+	STATUSFILE=$WSLOGDIR/statusfile
+	SPOOLFILE=$WSLOGDIR/spoolfile
+	export JOURNAL CMDFILE STATUSFILE SPOOLFILE
+
+	if [ "$ITERATION" = "1" ]
+	then
+		export WSLOGDIR
+		xx_log "SETUP for workstation"
+		xx_log "     - Making the workstation log directory"
+		xx_log "          * \$STLOGDIR/`basename $WSLOGDIR`"
+		xx_log "     - Setting the log file environmental variables"
+		xx_log "          * JOURNAL=\$WSLOGDIR/`basename $JOURNAL`"
+		xx_log "          * CMDFILE=\$WSLOGDIR/`basename $CMDFILE`"
+		xx_log "          * STATUSFILE=\$WSLOGDIR/`basename $STATUSFILE`"
+		xx_log "          * SPOOLFILE=\$WSLOGDIR/`basename $SPOOLFILE`"
+	fi
+}
+	
+	
+#>>> If you have added any options to this driver (whether they are <<<
+#>>> being used by the driver or the testcases), make sure they get <<<
+#>>> logged in this function.                                       <<<
+#===============================================================================
+# Function:  log_workstation_parameters
+# Purpose:   Display the parameters that the workstation to execute will run
+#            with.
+#===============================================================================
+log_workstation_parameters() {
+	#-----------------------------------------------------------------------
+	# This function logs the parameters that this workstation will be run
+	# with and the testcases that will be run with these
+	# parameters.  
+	#-----------------------------------------------------------------------
+	if [ "$ITERATION" = "1" ]
+	then
+		xx_log "PARAMETERS for workstation"
+
+		if [ "$EXECUTE_BY_TIME" = "TRUE" ]; then
+			xx_log "     - Executing by TIME"
+			xx_log "          * $HOURS_TO_EXECUTE total hours to execute for"
+			xx_log "          * $SECONDS_TO_EXECUTE total seconds to execute for"
+		else
+			xx_log "     - Executing by LOOPS"
+			xx_log "          * $LOOPS_TO_EXECUTE total loops to execute for"
+		fi
+		xx_log "     - Clean:         $CLEAN"
+		xx_log "     - Data directory: $DATA_DIRECTORY"
+	fi
+}
+
+
+#>>> Add cleanup procedures specific to your testcases here. <<<
+#===============================================================================
+# Function:  cleanup_workstation
+# Purpose:   Leave the camp site better than when we found it
+#===============================================================================
+cleanup_workstation() {
+	if [ "$CLEAN" = "TRUE" ]; then
+		rm -rf $WSLOGDIR
+	fi	
+}
+
+
+#===============================================================================
+# Function:  execute_testcases
+# Purpose:   Execute all the testcases requested.
+#===============================================================================
+execute_testcases() {
+	for acltest in $DATA_DIRECTORY/*.aclset
+	do
+		cp $acltest $WSLOGDIR
+		acltestname=`basename $acltest`
+		xx_begin "Beginning test for $acltestname at `$TIME_DATE`"
+		testname=${acltestname%.aclset}
+		acldrivername=$testname.acltest
+		x=${acltest%.aclset}
+		setupname=$x.setup
+		cp $setupname $WSLOGDIR
+		chmod +x $WSLOGDIR/$testname.setup
+		$TCDIR/acltestgen.ksh $testname.aclset $PROCESS_ID
+		if [ $? -eq 0 ]
+		then
+			$TCDIR/acldriver.ksh $acldrivername $PROCESS_ID
+			return_status=$?
+			cp /tmp/$PROCESS_ID/$testname/all.log $WSLOGDIR/all.log
+			cp /tmp/$PROCESS_ID/$testname/remotescript $WSLOGDIR/remotescript
+			rm -rf /tmp/$PROCESS_ID
+			failed_lines=`grep '^FAILED' $WSLOGDIR/all.log | wc -l`
+			if [ $return_status -eq 0 ]
+			then
+				if [ $failed_lines -eq 0 ]
+				then
+					xx_pass "Finished test for data file $acltestname.  It PASSED at `$TIME_DATE`."
+					continue
+				fi
+				xx_fail "Finished test for data file $acltestname.  It FAILED at `$TIME_DATE`."
+			fi
+		else
+			xx_fail "Finished acltestgen for $acltestname.  It FAILED at `$TIME_DATE`."
+		fi
+	done
+}
+
+
+
+#===============================================================================
+# Function:  pass_workstation
+# Purpose:   Mark the workstation as having passed and move its output files
+#            to the save directory for passed workstations.
+#===============================================================================
+pass_workstation() {
+	if [ "$1" != "NOLOG" ]
+	then
+		xx_pass "Finished workstation [$WS($ITERATION)($PID)] at $WS_FINISH_TIME_DATE.  It PASSED."
+		#banner "$WS" "iter. $ITERATION" "PASSED"
+	fi
+	if [ "$CLEAN" = "TRUE" ]
+	then
+		rm -rf $WSLOGDIR > /dev/null 2>&1
+	else
+		mv $WSLOGDIR $BASE_PASS_DIR
+		touch $BASE_PASS_DIR/$WPHI/`date +%H:%M`
+	fi
+	if [ "$1" != "NOLOG" ]
+	then
+		echo "$WPHI $WS_START_TIME_DATE $WS_FINISH_TIME_DATE PASS $BASE_PASS_DIR/$WPHI/JOURNAL" >> $PASS_FAIL_LOG
+	fi
+}
+
+
+#===============================================================================
+# Function:  fail_workstation
+# Purpose:   Mark the workstation as having failed and move its output files
+#            to the save directory for failed workstations.
+#===============================================================================
+fail_workstation() {
+	xx_fail "Finished workstation [$WS($ITERATION)($PID)] at $WS_FINISH_TIME_DATE.  It FAILED."
+	#banner "$WS" "iter. $ITERATION" "FAILED"
+	mv $WSLOGDIR $BASE_FAIL_DIR
+	touch $BASE_FAIL_DIR/$WPHI/`date +%H:%M`
+	echo "$WPHI $WS_START_TIME_DATE $WS_FINISH_TIME_DATE FAIL $BASE_FAIL_DIR/$WPHI/JOURNAL" >> $PASS_FAIL_LOG
+}
+
+
+#===============================================================================
+# Function:  execute_workstation
+# Purpose:   Perform the typical steps to execute the workstation.
+#            These include workstation setup, execution, pass/fail
+#            status reporting, and cleanup.
+#===============================================================================
+execute_workstation() {
+	#-----------------------------------------------------------------------
+	#  Put the banner of workstation beginning out
+	#-----------------------------------------------------------------------
+	#banner "$WS" "iter. $ITERATION" "beginning"
+	
+	#-----------------------------------------------------------------------
+	#  Perform the workstation setup steps.
+	#-----------------------------------------------------------------------
+	setup_workstation
+	
+	#-----------------------------------------------------------------------
+	#  Log the parameters used to start the workstation.
+	#-----------------------------------------------------------------------
+	log_workstation_parameters
+	
+	#-----------------------------------------------------------------------
+	#  Set the start time and date of the workstation.
+	#-----------------------------------------------------------------------
+	WS_START_TIME_DATE=`$TIME_DATE`
+	
+	#-----------------------------------------------------------------------
+	#  Log the beginning of the workstation, and iteration of the
+	#  workstation and start time and date of the workstation.
+	#-----------------------------------------------------------------------
+	xx_begin "Beginning workstation [$WS($ITERATION)($PID)] at $WS_START_TIME_DATE."
+	
+	#-----------------------------------------------------------------------
+	#  Call the function that executes all the testcases of the
+	#  workstation.
+	#-----------------------------------------------------------------------
+	execute_testcases 2>&1 | tee -a $SPOOLFILE
+	
+	#-----------------------------------------------------------------------
+	#  Set the finish time and date of the workstation.
+	#-----------------------------------------------------------------------
+	WS_FINISH_TIME_DATE=`$TIME_DATE`
+	
+	#-----------------------------------------------------------------------
+	#  Check to see if the workstation passed or failed.
+	#-----------------------------------------------------------------------
+	#>>> Change the method of determining whether the testcase(s) <<<
+	#>>> passed, if necessary.  If there are things you want to   <<<
+	#>>> save besides the log/journal files, do those also.       <<<
+	xx_examine -d
+	if [ "$?" = "0" ] ; then
+		#---------------------------------------------------------------
+		# The workstation passed
+		#---------------------------------------------------------------
+		pass_workstation
+	else            
+		#---------------------------------------------------------------
+		# The workstation failed
+		#---------------------------------------------------------------
+		fail_workstation
+	fi
+
+	#-----------------------------------------------------------------------
+	#  Do all necessary workstation cleanup
+	#-----------------------------------------------------------------------
+	cleanup_workstation
+}
+
+
+
+#==============================================================================
+# MAIN PROGRAM
+#==============================================================================
+#tput clear
+WS=`basename $0` ; export WS
+COMMAND_LINE_PARAMETERS="$@"
+. $STDEXC/systest.functions $WS
+
+check_dependencies
+initialize_command_line_variables
+initialize_environment_variables
+
+#------------------------------------------------------------------------------
+# Perform the overall workstation setup (iteration 0).
+#------------------------------------------------------------------------------
+WS_START_TIME_DATE=`$TIME_DATE`
+
+parse_command_line
+if [ "$CHECK_OUT_PARAMS" = "TRUE" ]
+then
+	pass_workstation NOLOG
+	exit 0
+fi
+if [ "$PRINT_USAGE" = "TRUE" ]
+then
+	pass_workstation NOLOG
+	exit 0
+fi
+one_time_workstation_setup
+
+WS_FINISH_TIME_DATE=`$TIME_DATE`
+pass_workstation	# If we made it this far, everything worked sufficiently
+if [ "$CLEAN" = "TRUE" ]; then
+	rm -rf $WSLOGDIR
+fi
+
+#-------------------------------------------------------------------------------
+# Run the tests (iterations 1 - n)
+#-------------------------------------------------------------------------------
+ITERATION=1
+START_TIME=`$TIMER`
+DONE="FALSE"
+while [ "$DONE" = "FALSE" ]; do
+	#-----------------------------------------------------------------------
+	# Execute the entire workstation 
+	#-----------------------------------------------------------------------
+	execute_workstation
+
+	#-----------------------------------------------------------------------
+	#  Increment the workstation iteration count
+	#-----------------------------------------------------------------------
+	ITERATION=`expr $ITERATION + 1`              
+
+	#-----------------------------------------------------------------------
+	#  Check to see if we should run the workstation again
+	#-----------------------------------------------------------------------
+	if [ "$EXECUTE_BY_TIME" = "TRUE" ]; then
+		CURRENT_TIME=`$TIMER`
+		SECONDS_EXECUTED=`expr $CURRENT_TIME - $START_TIME`
+		if [ "$SECONDS_EXECUTED" -gt "$SECONDS_TO_EXECUTE" ]; then
+			DONE="TRUE"
+		fi
+	else
+		if [ "$ITERATION" -gt "$LOOPS_TO_EXECUTE" ]; then
+			DONE="TRUE"
+		fi
+	fi
+done
+cd $STARTDIR

@@ -1,0 +1,145 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rsbase.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:28:52  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:44:16  marty]
+ *
+ * Revision 1.1.4.1  1995/12/08  17:36:17  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:55:47  root]
+ * 
+ * Revision 1.1.2.3  1992/12/29  13:53:27  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:49:28  zeliff]
+ * 
+ * Revision 1.1.2.2  1992/10/08  21:08:47  burati
+ * 	CR4730 pickle.idl is obsolete, don't include it anymore
+ * 	[1992/09/24  21:58:50  burati]
+ * 
+ * Revision 1.1  1992/01/19  14:55:26  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+
+/*  rsbase.idl V=12 10/23/91 //littl/prgy/src/idl
+**
+** Copyright (c) Hewlett-Packard Company 1991
+** Unpublished work. All Rights Reserved.
+**
+*/
+/*
+ *      Common types for rs_ interfaces.
+ */
+
+interface rsbase
+
+{
+    import "dce/rgynbase.idl";
+    import "dce/sec_base.idl";
+
+    typedef struct {
+        uuid_t              site_id;
+        sec_timeval_sec_t   person_dtm;
+        sec_timeval_sec_t   group_dtm;
+        sec_timeval_sec_t   org_dtm;
+    } rs_cache_data_t;
+
+    /*
+     * r s _ p o l i c y _ o v e r r i d e _ f l a g s _ t
+     *
+     */
+    typedef bitset  rs_policy_override_flags_t;
+        const unsigned32  rs_override_exclude_passwd  = 0x1;
+            /* 
+             * allow passwds of <> legal length 
+             */
+
+         const unsigned32  rs_override_root_passwd     = 0x2;
+            /*
+             * allow legal override passwd for root 
+             */
+
+        const unsigned32  rs_override_other_passwd     = 0x4;
+            /*
+             * allow legal override passwd for non-root accounts 
+             */
+
+        const unsigned32  rs_override_custom_data      = 0x8;
+            /*
+             * allow overrides for shell, homedir and gecos 
+             */
+
+        /*
+         *bits 5-32 unused
+         */
+        const unsigned32  rs_override_flags_none = 0;
+
+    /*
+     * r s _ a c c t _ p a r t s _ t 
+     *
+     * bitset to indicate which portions of an acct record should be updated. 
+     * This allows incremental update using a single update operation. 
+     */
+    typedef  bitset rs_acct_parts_t;
+        /*
+         * Update user part
+         */
+	const unsigned32  rs_acct_part_user       = 0x1;      
+        /*
+         * Update admin part
+         */
+        const unsigned32  rs_acct_part_admin      = 0x2;
+        /*
+         * Update the password 
+         */
+        const unsigned32  rs_acct_part_passwd     = 0x4;
+        /*
+         * place holder
+         */
+        const unsigned32  rs_acct_part_unused     = 0x8;    
+        /*
+         * Update the login name
+         */	
+        const unsigned32  rs_acct_part_login_name = 0x10;
+
+     typedef struct {
+         unsigned32          enc_pickle_len;
+        [ref, size_is(enc_pickle_len)]
+            byte             *enc_pickle;
+    } rs_encrypted_pickle_t;
+
+    /* 
+     * The key type that actually goes on the wire.  The "key" field is an
+     * encrypted sec_passwd_rec_t pickle. The checksum field is an 
+     * encrypted sec_chksum_t pickle (the checksum is computed
+     * over the unencrypted sec_passwd_rec_t pickle).  Both pickles are 
+     * encrypted using the caller's key.  The security server can 
+     * reconstruct the the encryption key by querying its database using the
+     * caller's identity returned from the authenticated RPC runtime.  
+     * "key_pickle_len" is the length of the key pickle.  This is needed
+     * because the encryption protocol may require a buffer larger than the
+     * pickle itself.  The key checksum is computed over key_pickle_len, not
+     * key->enc_pickle_len.
+     */
+
+    typedef struct {
+        sec_etype_t                 enc_type;      
+        sec_passwd_type_t           enc_keytype;
+        sec_passwd_version_t        enc_key_version;   
+        unsigned32                  key_pickle_len;
+        [ref] rs_encrypted_pickle_t *key;
+   	[ref] rs_encrypted_pickle_t *checksum;
+    } rs_acct_key_transmit_t;
+
+
+}
+

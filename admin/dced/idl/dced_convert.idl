@@ -1,0 +1,214 @@
+/*
+ * @OSF_COPYRIGHT@
+ * Copyright (c) 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: dced_convert.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:06:56  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:25:44  marty]
+ *
+ * Revision 1.1.4.1  1995/12/13  16:41:56  root
+ * 	Submit OSF/DCE 1.2.1
+ * 
+ * 	HP revision /main/HPDCE02/2  1995/09/08  14:44 UTC  tatsu_s
+ * 	Re-submitted the fix for OT13045.
+ * 
+ * 	HP revision /main/tatsu_s.psock_timeout.b0/2  1995/08/31  06:51 UTC  tatsu_s
+ * 	Bumped the version number.
+ * 
+ * 	HP revision /main/HPDCE02/1  1995/08/29  22:27 UTC  tatsu_s
+ * 	Submitted the fix for OT13045.
+ * 
+ * 	HP revision /main/tatsu_s.psock_timeout.b0/1  1995/08/23  20:59 UTC  tatsu_s
+ * 	Added the flags field in dced_entry_data_t.
+ * 	Added entry_c_data_imported.
+ * 	[1995/12/13  16:41:30  root]
+ * 
+ * Revision 1.1.2.9  1994/08/20  18:04:59  bowe
+ * 	Add dced_server_env_decode() function. [CR 11791]
+ * 	Add srvr_file to server_data_t structure.
+ * 	[1994/08/20  17:55:14  bowe]
+ * 
+ * Revision 1.1.2.8  1994/07/29  19:56:04  rsalz
+ * 	Rename data_rep_XXX to drep_XXX.
+ * 	[1994/07/29  19:36:34  rsalz]
+ * 
+ * Revision 1.1.2.7  1994/07/25  19:19:47  rsalz
+ * 	Change to new schema name (OT CR 11427).
+ * 	[1994/07/25  19:19:30  rsalz]
+ * 
+ * Revision 1.1.2.6  1994/06/16  19:35:05  rsalz
+ * 	Don't store conformant structures in dce_db (see OT CR 10971).
+ * 	[1994/06/16  19:31:38  rsalz]
+ * 
+ * Revision 1.1.2.5  1994/05/26  19:42:08  rsalz
+ * 	EP functionality.
+ * 	[1994/05/26  19:35:38  rsalz]
+ * 
+ * 	Checkpointing.
+ * 	[1994/05/18  19:32:54  rsalz]
+ * 
+ * Revision 1.1.2.4  1994/05/12  19:30:27  rsalz
+ * 	Add some dce_server functions.
+ * 	Add and use dced_authorized
+ * 	More srvr implementation; export their interfaces
+ * 	[1994/05/12  19:26:25  rsalz]
+ * 
+ * Revision 1.1.2.3  1994/05/05  20:07:30  rsalz
+ * 	Initial server functionality drop.
+ * 	[1994/05/05  20:00:55  rsalz]
+ * 
+ * Revision 1.1.2.2  1994/03/25  18:49:44  bowe
+ * 	Added attr_schema_data_t, dced_attr_schema_convert()
+ * 	[1994/03/25  18:36:37  bowe]
+ * 
+ * Revision 1.1.2.1  1994/03/09  14:25:45  bowe
+ * 	Initial checkin
+ * 	[1994/03/09  14:21:57  bowe]
+ * 
+ * Revision 1.1.2.1  1994/01/21  18:03:29  bowe
+ * 	Initial checkin
+ * 	[1994/01/21  18:00:24  bowe]
+ * 
+ * $EndLog$
+ */
+
+[
+    uuid(0007e181-8d32-1d35-bfae-0000c09ce054),
+#ifndef	HPDCE_DCED_FIX_OT13045
+    version(2.0)
+#else
+    version(1.0)
+#endif	/* HPDCE_DCED_FIX_OT13045 */
+]
+
+interface dced_convert
+{
+    import "dce/dced_base.idl";
+    import "dce/database.idl";
+    import "dce/ep.idl";
+
+    /*
+    **  Database names.
+    */
+    const char *HOSTDATA_DB_NAME	= "Hostdata.db";
+    const char *RKEYTAB_DB_NAME		= "Keytab.db";
+    const char *SRVRCONF_DB_NAME	= "Srvrconf.db";
+    const char *SRVREXEC_DB_NAME	= "Srvrexec.db";
+    const char *ATTR_SCHEMA_DB_NAME	= "Xattrschema.db";
+    const char *ACL_DB_NAME		= "Acl.db";
+    const char *EP_DB_NAME		= "Ep.db";
+    const char *LLB_DB_NAME		= "Llb.db";
+
+    /*
+    **  These are the data types written to disk - they contain what the
+    **  user sees, plus but with the database object header.
+    */
+    typedef struct dced_entry_data_s_t {
+	dce_db_header_t		h;
+#ifndef	HPDCE_DCED_FIX_OT13045
+	unsigned32		flags;
+#endif	/* HPDCE_DCED_FIX_OT13045 */
+	dced_entry_t		data;
+    } dced_entry_data_t;
+
+#ifndef	HPDCE_DCED_FIX_OT13045
+    const unsigned32 entry_c_data_imported		= 0x00000001;
+#endif	/* HPDCE_DCED_FIX_OT13045 */
+
+    typedef struct server_data_s_t {
+	dce_db_header_t		h;
+	boolean32		used;
+	unsigned32		flags;
+	server_t		data;
+	[ptr,string] char	*srvr_file;
+    } server_data_t;
+
+    typedef struct attr_schema_data_s_t {
+	dce_db_header_t		h;
+	sec_attr_schema_entry_t	data;
+    } attr_schema_data_t;
+
+    /*
+    **  An old EP entry.  The lists and addr fields are recreated when
+    **  the entry is read from disk.
+    */
+    typedef struct dblist_s_t {
+	[ptr] struct dblist_s_t	*fwd;
+	[ptr] struct dblist_s_t	*back;
+    } dblist_t;
+
+    typedef struct db_lists_s_t {
+	dblist_t		entries;
+	dblist_t		objects;
+	dblist_t		interfaces;
+    } db_lists_t;
+
+    typedef struct db_entry_s_t {
+	db_lists_t		lists;
+	signed32		readers;
+	uuid_t			dbid;
+	unsigned16		comm_failures;
+	unsigned16		flags;
+	uuid_t			object;
+	rpc_if_id_t		ifid;
+	uuid_t			drep_id;
+	unsigned32		drep_vers_major;
+	unsigned32		drep_vers_minor;
+	unsigned32		rpc_protocol;
+	unsigned32		rpc_protocol_vers_major;
+	unsigned32		rpc_protocol_vers_minor;
+	char			annotation[ept_max_annotation_size];
+	[ptr] twr_t		*tower;
+	    /* This will always be NULL when stored. */
+	db_rpc_addr_p_t		addr;
+	    /* These three fields are for LLB compatibility. */
+	uuid_t			type;		/* for LB compat */
+	unsigned32		llb_flags;	/* for LB compat */
+	unsigned32		saddr_len;	/* for LB compat */
+    } db_entry_t;
+
+
+    /*
+    **  Encode/decode routines.
+    */
+
+    void dced_entry_convert(
+	[in]		handle_t		h,
+	[in,out]	dced_entry_data_t	*data,
+	[in,out]	error_status_t		*st
+    );
+
+    void dced_server_convert(
+	[in]		handle_t		h,
+	[in,out]	server_data_t		*data,
+	[in,out]	error_status_t		*st
+    );
+
+    void dced_server_env_encode(
+	[in]		handle_t		h,
+	[in,out]	server_t		*data,
+	[in,out]	error_status_t		*st
+    );
+    void dced_server_env_decode(
+	[in]		handle_t		h,
+	[in,out]	server_t		*data,
+	[in,out]	error_status_t		*st
+    );
+
+    void dced_attr_schema_convert(
+	[in]		handle_t		h,
+	[in,out]	attr_schema_data_t	*data,
+	[in,out]	error_status_t		*st
+    );
+
+    void dced_ep_convert(
+	[in]		handle_t		h,
+	[in,out]	db_entry_t		*data,
+	[in,out]	error_status_t		*st
+    );
+}

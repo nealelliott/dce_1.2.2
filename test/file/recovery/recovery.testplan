@@ -1,0 +1,582 @@
+Revised Recovery Tests Plan - 10/1/92
+=====================================
+
+Summary of Time Estimates for items to be done
+----------------------------------------------
+Priority    Estimated Time  
+
+1           24      
+2            2
+3            9
+4            5
+5            4
+6           10
+7           13+
+8           NA
+Misc         4+
+            ----
+Total       71+
+            ---- 
+
+Tasks in Priority order
+-----------------------
+
+PRI     ET      Status  Task
+
+1        1      Done    Authorization Check Tests 
+
+1        2              RCX - Modify to use efts
+1        2              RCX - Vary transaction concurrency
+1        5              RCX - Extend system calls exercised. Develop
+                              input files
+1        5              Aggregate freezing/verification tool
+1       10              NBS Tests
+
+2        2              Fileset - low level consistency tests
+
+3        3              O_SYNC tests
+3        3              fsync tests
+3        3              PCTS packaging cum running.
+
+4        2              RCX - Enhance process staggering mechanism
+4        3              RCX - Enhance process activity uniqueness
+
+5        3              Mounted Filesets Error Tests
+5        1              Robustness Tests
+
+6       10              Special Regression Tests
+
+7        6              Fileset fsync tests
+7       NA (I=3)        Fileset - access tests
+7       NA (I=2)        Fileset - RCX tests coupling
+7       NA (I=2)        RCX - Enhance for multiple processes per fileset
+
+8       NA              Branch Coverage Analysis
+
+As needed 4+            Miscellaneous Packaging
+
+Defer   NA              Log on different aggregate
+
+Cancel   2              fs/low stress tests
+Cancel   4              Aggregate metadata modification tests 
+
+
+Testing Required
+----------------
+
+1 Common Tests: 
+
+ 1.1 Authorization Check Tests.
+
+  PRI     1
+  ET      1
+  AT      2
+
+  Only users with read access to the device file for the aggregate can
+  issue salvage verification requests. If the user does not have read
+  access to the device, the verification request should fail. Similarly
+  for actual salvage and recovery, the user needs write access to the
+  device file.
+ 
+  1.1.1 Basic Tests.
+
+   Run of the commands mentioned below in the scenario described
+   beneath it. In each case, we expect success. 
+
+   Command: 
+    salvage -help
+
+    - User is root.
+    - User is not root.
+
+   Command:
+    salvage -readonly 
+
+    - User is root. Aggregate owned by user. 
+    - User is root. Aggregate not owned by user. 
+    - User is not root. Aggregate readable by user. 
+
+   Commands:
+    salvage -verify    
+    salvage -nosalvage 
+    salvage -norecover 
+    salvage            
+  
+    - User is root. Aggregate owned by user. 
+    - User is root. Aggregate not owned by user. 
+    - User is not root. User has write permission to the device.
+
+  1.1.2 Error Tests.
+
+   Run of the commands mentioned below in the scenario described
+   beneath it. In each case, we expect FAILURE.
+
+   Command: 
+    salvage -readonly 
+
+    - User is not root. Aggregate not readable by user. 
+  
+   Commands:
+    salvage -verify    
+    salvage -nosalvage 
+    salvage -norecover 
+    salvage            
+  
+    - User is not root.  Aggregate not writeable by user. 
+
+
+ 1.2 Mounted Filesets Error Tests.
+
+  PRI     5
+  ET      3
+  AT      
+
+  Test interaction of fileset mounts and salvage/recovery.
+
+  1.2.1 Salvage/recovery on aggregates containing filesets that 
+   have been mounted by users, should fail.
+
+   Run each of the commands mentioned below on an aggregate containing
+   filesets, that have been mounted by users. Number of filesets
+   mounted from an aggregate should vary from one to all. The cases
+   mentioned below need to tested on both standalone Episode and
+   Episode under DFS. 
+
+   For the following case, the command should succeed but should also
+   issuing a warning.
+
+     salvage -readonly     
+
+   (Q: What is the format of the warning? )
+
+   For each of the cases mentioned below, we expect FAILURE.
+
+     salvage -verify    
+     salvage -nosalvage 
+     salvage -norecover 
+     salvage           
+   
+  1.2.2 Mounting filesets from aggregates on which salvage/recovery is
+   being run, should fail.
+
+   Mount a fileset from the aggregate at the same time as one of the
+   above command is being run. The cases mentioned below need to
+   tested on both standalone Episode and Episode under DFS. The
+   expected behavior of commands will be the same as mentioned in
+   section 1.2.1.
+  
+   We need to ensure that the salvage on the aggregate is in progress,
+   when fileset mounts are attempted. Two approaches are outlined
+   below.
+
+    - The salvager code can be instrumented to sleep after having done
+      the necessary locking in its path and to send a signal to a
+      process to a specified process and to wake up on receipt of a
+      specific signal.  
+
+    - The second approach would rely on the salvager printing a
+      specific message after having done the necessary locking. A
+      monitor process would detect this message and send the salvager
+      process a SIGSTOP signal. Then the monitor process can attempt
+      the fileset mounts. On completion of the fileset mounts, it
+      would issue a SIGCONT signal to the salvager. For detection of
+      the message, an expect script would be ideal. Additionally, the
+      priority of the salvager process could be reduced using the
+      "nice" command to provide a little more guarantee that the
+      salvager would be running when the mounts are attempted.  The
+      second approach seems to be preferable as it involves less
+      interference with the salvager code.
+
+   NOTE: Currently the code to implement features mentioned in 1.2.1
+   and 1.2.2 has not been implemented in Episode and DFS. It is
+   expected to be done in the future but time for it has not been
+   allocated to the development group yet.
+
+ 1.3 Log on a different aggregate.  
+
+  PRI     Defer
+  ET      Not Available
+  AT      
+
+  The design specifications mention that the log for an aggregate can
+  be created on another aggregate.  
+
+  NOTE: Currently the log for an aggregate cannot reside on another
+  aggregate. There is no definite schedule for the implementation of
+  this feature. Hence implementation of this test should be deferred.
+
+ 1.4 Robustness Tests.  
+
+  PRI     5 
+  ET      1
+  AT      
+
+  1.4.1 Verbose Option Tests 
+  
+   Issue commands that should succeed but with an additional verbose
+   option.
+
+  1.4.2 Error Tests 
+ 
+   For each of the following commands pass less/extra/incorrect
+   arguments and check for FAILURE.  
+
+   Commands: 
+    salvage -readonly
+    salvage -verify 
+    salvage -nosalvage 
+    salvage -norecover 
+    salvage
+    salvage -help 
+
+   Repeat each of the cases mentioned with an additional -verbose flag. 
+
+2 Recovery: 
+
+ 2.1 Stress Tests.
+
+  Operations involving metadata updates are carried out on the
+  aggregate. The aggregate is frozen at various points and after
+  recovery is done, the filesystem is checked for consistency. 
+
+  Types of operations are:
+
+  2.1.1 RCX tests 
+
+   RCX tests perform intensive updates of specific types of metadata. 
+   These tests exist and are implemented as perl scripts. However they
+   need enhancements as outline below
+
+    2.1.1.1 Modify RCX to use efts
+
+     PRI    1
+     ET     2
+     AT     
+ 
+     Currently, the RCX uses newvol to create filesets. Since newvol is
+     now obsolete and has been replaced by efts, the tests should be
+     changed to use efts.
+
+    2.1.1.2 Enhance RCX to use filesets with varying transaction
+            concurrency.
+    
+     PRI    1
+     ET     2
+     AT     
+    
+     Currently, RCX creates fileset with minimum log size, which
+     restricts max. concurrent transactions to 1. Enhance RCX to vary the
+     log size in a controlled manner by creating fileset with appropriate
+     sized log. This essentially means duplication of some code in the
+     logbuf layer that performs "logsize -> transaction concurrency"
+     mapping.
+
+    2.1.1.3 Extension of systems calls exercised.
+
+     PRI    1
+     ET     5
+     AT     
+
+     Currently, RCX tests only open(O_CREAT), unlink, mkdir, rmdir,
+     rename, chmod. Enhancement would include adding support for
+     chown, chgrp, truncate, open(O_APPEND), read, write, symlink,
+     link, mkfifo, mknod and utimes. 
+
+     Additional input files with .rs suffix, specifying the operations
+     to be performed by a run of rcx need to be written to use these
+     additional system calls.
+   
+    2.1.1.4 Enhancement of process staggering mechanism.
+    
+     PRI    4
+     ET     2
+     AT     
+
+     RCX runs multiple processes and attempts to stagger them.
+     Currently, staggering is achieved by stopping n-1 processes and
+     letting the nth process run for "t"  time units (t is a random
+     number). At the end of "t" time units, the sleeping n-1 processes are
+     woken up. Staggering each process by a different random time unit
+     would be better.
+    
+    2.1.1.5 Enhancement of process activity uniqueness.
+    
+     PRI    4
+     ET     3
+     AT     
+ 
+     Currently, each of the multiple processes started by RCX perform
+     the same sequence of operations. Uniqueness in type/sequence of
+     operations performed by each process would be better.
+
+    2.1.1.6 Enhancement to run multiple process per fileset.
+
+     PRI    7
+     ET     Not Available **
+     AT     
+
+    ** Need investigation of at least 2 days
+
+    Currently, each process runs on a different fileset leading to
+    one process per fileset. There should be an option to run multiple
+    processes per fileset. 
+
+    RCX relies on being able to deterministically sequence operations
+    done on a fileset. This is easy to achieve with one process per
+    fileset. Multiple processes per fileset does not immediately fit into
+    this scheme. Modus operandi to be used by RCX with multiple filesets
+    per process needs to be studied.
+
+
+  2.1.2 Metadata updates using the fs and low tests. 
+
+
+   PRI     Cancel
+        (These tests have been cancelled as better stress generators are
+         available such as AIM III tests.)
+   ET      2
+   AT      
+
+   The scripts should be be able to run the tests sequentially and in
+   parallel in different stress modes.
+
+   Interface: fslowtest -level { normal | moderate } 
+                        -suites { [ fs ] [ low ] }
+                        -mode { sequential | parallel }
+
+    level: normal - Runs each test with default arguments. 
+           moderate - Runs each test with moderate stress mode arguments. 
+    suites: fs - Runs fs test suite. 
+            low - Runs low test suite. 
+    mode: sequential - Runs each of the test in the suite one after the other
+          parallel - Runs tests in a test suite in parallel
+
+    DEFAULT: fslowtest -level normal -suite fs -mode sequential 
+
+   Description: After each of the tests are run, all mounted filesets
+   could be unmounted ensuring the metadata transactions are in the
+   disk log rendering. Then recovery is done on the aggregate followed
+   by salvage verification ( salvage -readonly) is done.
+
+  2.1.3 Metadata updates by simultaneous running of the POSIX
+
+   PRI     3
+   ET      3
+   AT
+
+   Conformance Test Suite (PCTS), compilation within the aggregate in
+   question and "du" in the background.
+
+   Currently these tests are run only on power7. Work needs to be done
+   to package these tests to be self-contained. 
+
+  2.1.4 Tool to freeze aggregate and verify it. 
+
+   PRI     1
+   ET      5
+   AT
+
+   Work needs to be done to implement a mechanism to run "asdb" to
+   freeze the aggregate at intervals, copy the aggregate, run
+   recovery/salvage as appropriate, to save the output, verify it and
+   unfreeze the aggregate. This mechanism should be general. Studying
+   existing RCX scripts can be useful here.
+
+ 2.2 Synchronous modifications. 
+ 
+  2.2.1 Write system call.  
+
+   PRI     3
+   ET      3
+   AT
+
+   In Episode, when a file is opened in synchronous mode (with
+   O_SYNC), the write() system call will return only after the file
+   userdata is flushed to disk and the metadata update log record for
+   the file status had been written to the disk log. For UFS, the
+   userdata and the metadata would be written out to disk. Freeze the
+   system after such operations. Copy the aggregate and run recovery
+   and check if the relevant metadata updates occurred. (using
+   scavenger). 
+
+   NOTE: This case can be subsumed by a write() followed by a fsync()
+   as mentioned below. Hence this is not to be implemented.
+
+  2.2.2 File metadata updates with fsync().
+
+   PRI     3
+   ET      3
+   AT
+
+   The fsync() system call causes any pending user-data to be flushed
+   to disk and also for any meta-data transactions in the incore log
+   to be flushed to disk. There is no guarantee provided about the
+   flushing of the metadata itself to disk. But after recovery, the
+   metadata should be updated on the disk.  
+
+   Run various metadata update system calls followed by fsync. Freeze
+   aggregate.  Copy the aggregate to another file, run recovery and
+   check if the relevant metadata updates occurred.  Various candidate
+   system calls: creat/open, read, write, [f]chgrp, [f]chmod,
+   [f]chown, ftruncate, utime and link.
+
+  2.2.3 File/Dir metadata updates with the "Fileset fsync" call.  
+ 
+   PRI     7 **
+   ET      4+2=6
+   AT
+
+   ** This needs more investigation as to its applicability/importance 
+      - at least 2 days.
+
+   There is a system call that will "fsync" all pending buffers for
+   the specified fileset. This system call will guarantee fsync
+   semantics for system calls like mkdir, rmdir, rename, mkfifo,
+   mknod, symlink for which fsync semantics cannot be ensured using
+   the fsync() call. Follow the test algorithm mentioned in 2.2.2.
+ 
+   The relevant system call is afs_syscall(VOLOP_FSYNC, VDESC) where
+   VOLOP_FSYNC specifies the "fileset fsync" operation and VDESC is
+   the fileset descriptor.  
+
+  2.2.4 Fileset/Aggregate level metadata updates.
+
+   PRI     Cancel
+        (Scenarios in which this case will be useful are not obvious.)
+   ET      4
+   AT
+
+   Using the ftu_FsetSetStatus call, fileset level metadata can be
+   explicitly modified. Similarly, the ftu_AggrFsetSetStatus call,
+   aggregate level metadata can be explicitly modified. These calls in
+   combination with the "fileset sync" calls can be used to test
+   recovery.
+
+ 2.3 New Block Security (NBS) Tests.
+  
+   PRI     1
+   ET      10
+   AT
+
+  To verify NBS, the possible approaches are
+
+    2.3.1 Write with RCX
+
+     Fill a disk with a pattern P1. Issue writes into a file with
+     another pattern P2 using RCX. At various points in this process
+     freeze the aggregate, run recovery and check for consistency of
+     file data. RCX may need to be modified for this. This approach could
+     be given up in favor of the following approach.
+
+    2.3.2 Sync/Async write with I/O stepping.
+
+     This would involve issuing writes both in synchronous and
+     asynchronous modes. For each of the modes, 2 approaches are
+     possible. First, the aggregate could be frozen after the write
+     returns. Secondly the aggregate can be frozen just before the
+     write is made, followed by disk activity on a single step basis
+     (using asdb) with NBS checks at each step. This may also involve
+     usage of sync() to ensure that the userdata is flushed to disk
+     within a convenient time interval specially in VM integrated
+     systems. Additionally, in VM integrated systems, to enforce
+     flushing of the memory pool pages, another process can be used
+     that continuously malloc's memory in a loop.
+  
+     To prevent the writing of a tool to fill the disk with a
+     particular pattern, the data that is written should be unique,
+     possibly a clock-based random sequence.
+
+ NOTE: Ted expects completion of NBS implementation by end of August. 
+ Hence the tests should be scheduled appropriately.
+
+ 2.4 Fileset level operations recovery testing
+  
+  File system consistency restoration on a crash while a fileset op
+  was in progress is important. The various candidate fileset ops 
+  members of the efts command suite - clone, reclone, createft,
+  deleteft, rename, destroy, clonesys (?).
+ 
+  2.4.1 Low level consistency test.
+
+   PRI  2
+   ET   2
+   AT   
+
+   Recovery is run when system comes back up. After recovery, the
+   aggregate should be consistent according to the salvager's
+   verification. 
+
+   These tests would be outside RCX and would use the aggregate
+   freezing tool.
+
+  2.4.2 Fileset access
+
+   PRI  7  
+   ET   Not Available  **
+   AT
+
+  ** Further investigation time of approx. 3 days is needed.
+
+  On a crash during efts operations like clone, reclone, destroy,
+  depending on the point of crash, files within the fileset should still
+  be accessible for read/write as appropriate. 
+
+  It seems that during a clone crash, some files would be accessible
+  for writes, and all files for read. During a reclone, all files should
+  be accessible for read and write. A destory of a RW fileset is
+  probably not a interesting here but a destroy of a RO fileset is. For
+  a RO fileset destory, if the crash occured during the unclone
+  operation, all files should still be accessible for read and write.
+  Further investigation is needed to confirm this.
+
+  2.4.3 Coupling with RCX tests
+
+   PRI 7
+   ET  Not Available **
+   AT   
+
+   ** Further investigation time of at least 2 days is needed.
+
+   The fileset ops combined with RCX tests is an interesting case.
+   There are 2 main cases. Fileset ops on filesets that are being
+   actively used by the RCX tests and on filesets that are not being used
+   by RCX tests but in the same aggregate as those filesets being used by
+   RCX tests. This needs further investigation. 
+
+ 2.5 Special Regression Tests.
+
+  PRI     6
+  ET      10
+  AT          
+
+  Aggregates on which recovery succeeds but salvage verification fails
+  are of interest here. The corresponding logs and the salvage output
+  should be stored. Recovery using these logs should be repeated and the 
+  output of salvage verification compared with outputs from previous runs. 
+  Use compaction schemes to the extent possible, to store the logs and
+  their resulting outputs. Usage of findlog, readlog and testbuf can be
+  used here.
+  
+  Note: This may be better done by the development group. Tony has
+  partially implemented this and probably will be looking into this in
+  the future.
+
+ 2.6 Branch Coverage Analysis.
+
+  PRI   8
+  ET    Not Available
+  AT
+    
+  Augmentation of tests with branch coverage analysis using btool.
+
+ 2.7 Miscellaneous Packaging. 
+
+  PRI     As needed
+  ET      4
+  AT
+
+   Work may need to be done to package the above tests e.g. to
+   verify that they are self-checking.
+    
+ 
+

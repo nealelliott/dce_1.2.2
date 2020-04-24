@@ -1,0 +1,694 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: functions,v $
+# Revision 1.1.10.2  1996/03/11  02:36:58  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:04:42  marty]
+#
+# Revision 1.1.10.1  1995/12/11  21:53:43  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:54:37  root]
+# 
+# Revision 1.1.6.2  1993/11/01  21:03:45  dassarma
+# 	Updated various functions in this file that check the
+# 	PLATFORM variable. It now accounts for OSF1/RIOS/HP-UX/
+# 	and other.
+# 	[1993/11/01  21:03:11  dassarma]
+# 
+# Revision 1.1.6.1  1993/10/22  14:25:50  bmw
+# 	CR 9195; changed LOGNAME to LOGFILE
+# 	[1993/10/19  19:23:51  bmw]
+# 
+# Revision 1.1.2.5  1993/03/30  19:50:59  pellis
+# 	Added some machine specific (i.e. OSF/1 vs. AIX) checks for ps commands.
+# 	[1993/03/30  19:49:37  pellis]
+# 
+# Revision 1.1.2.4  1993/02/05  16:01:29  pellis
+# 	Assorted fixes and updates.
+# 	[1993/02/05  15:52:04  pellis]
+# 
+# Revision 1.1.2.3  1993/02/05  15:16:38  cjd
+# 	Embedded copyright notice
+# 	[1993/02/05  14:35:25  cjd]
+# 
+# Revision 1.1.4.2  1993/02/04  21:43:54  cjd
+# 	Embedded copyright notice
+# 
+# Revision 1.1.2.2  1992/12/26  21:38:26  pellis
+# 	Initial version of test.
+# 	[1992/12/26  21:33:41  pellis]
+# 
+# $EndLog$
+#
+#   FILE_NAME: functions
+#
+#   COMPONENT_NAME: dce.admin_test
+#
+#   FUNCTIONS:
+#
+#	initlogs()		- Initialize log files
+#	create_login_exec()	- Create dce_login_exec link
+#	do_login()		- Login as cell_admin
+#	getdur()		- Get duration of test from command line
+#	stats()			- Gathers system statistics
+#	end_stats()		- Outputs test results
+#	exec_test()		- Executes test cases
+#	dcestatus()		- Check if DCE is up/down on given machine
+#	getcdsclients()		- Gets a list of the CDS clients
+#	getcdsserver()		- Gets the name of the CDS server(s)
+#	getsecserver()		- Gets the name of the SEC server(s)
+#	get_cell_name()		- Gets the cellname minus the /...
+#	backup_cds_ch()		- Backup the CDS Namespace
+#	delete_cds_ch()		- Delete the CDS Namespace
+#	restore_cds_ch()	- Restores the CDS Namespace
+#	stop_dce_local()	- Stops DCE on the local machine
+#	stop_dce_remote()	- Stops DCE on a remote machine
+#	start_dce_local()	- Starts DCE on the local machine
+#	start_dce_remote()	- Starts DCE on a remote machine
+#
+#   USAGE:
+#
+#	Source this file in your main test (i.e. ". ./functions")
+#
+#   DESCRIPTION:
+#
+#	This is a collection of functions which can be used in multiple
+#	tests.
+#
+#===============================================================================
+#
+if [ "`uname -s`" = "OSF1" ]; then
+	echo_msg()
+	{
+		/usr/ucb/echo $@
+	}
+else
+	echo_msg()
+	{
+		echo $@
+	}
+fi
+#
+# Initialize Log Files
+#
+initlogs()
+{
+if [ "$#" -ne 1 ]
+then
+        echo_msg "-log-----: No Log File Name Given, Defaulting to NONE (${0})"
+	LOGFILE=NONE
+else
+	LOGFILE=${1}
+fi
+#
+FULLLOG=${LOGDIR}/${LOGFILE}_${HOSTNAME}_${PID}_FULL
+SHRTLOG=${LOGDIR}/${LOGFILE}_${HOSTNAME}_${PID}_SHORT
+ERRORLOG=${LOGDIR}/${LOGFILE}_${HOSTNAME}_${PID}_ERRORS
+#
+if [ -f "${FULLLOG}" ]; then
+        mv ${FULLLOG} ${FULLLOG}.old
+fi
+#
+if [ -f "${SHRTLOG}" ]; then
+        mv ${SHRTLOG} ${SHRTLOG}.old
+fi
+#
+if [ -f "${ERRORLOG}" ]; then
+        mv ${ERRORLOG} ${ERRORLOG}.old
+fi
+#
+echo_msg "-log-----: Initializing Logfiles... (${0})"
+if [ ! -d ${LOGDIR} ]; then
+        echo_msg "-log-----: Creating ${LOGDIR}...\c)"
+        mkdir ${LOGDIR}
+        echo_msg "Done (${0})"
+fi
+echo_msg "-log-----: Full Log : ${FULLLOG}"
+echo_msg "-log-----: Short Log: ${SHRTLOG}"
+echo_msg "-log-----: Error Log: ${ERRORLOG}"
+echo_msg "# Invocation: $0 $*" | tee ${FULLLOG} | tee ${SHRTLOG} > ${ERRORLOG}
+echo_msg "# Date:       `date +'%m-%d-%y %T'`" | tee -a ${FULLLOG} \
+                                        | tee -a ${SHRTLOG} >> ${ERRORLOG}
+echo_msg "" | tee -a ${FULLLOG} | tee -a ${SHRTLOG} >> ${ERRORLOG}
+}
+#
+################################################################################
+#
+# Create dce_login_noexec symbolic link if there isn't one
+#
+create_login_exec()
+{
+if [ ! -f /usr/bin/dce_login_noexec ]; then
+        echo_msg "-log-----: Creating dce_login_noexec Symbolic Link (${0})"
+        ln -s /usr/bin/dce_login /usr/bin/dce_login_noexec
+fi
+}
+#
+################################################################################
+#
+# Login As cell_admin
+#
+do_login()
+{
+KRB5CCNAME=`dce_login_noexec ${PRINCIPAL} ${DCEPASSWORD}` ; export KRB5CCNAME
+}
+#
+################################################################################
+#
+# Use IBM timer information (for now)
+#
+#-----------------------------------------------------------------------
+# TIMER: called like [T=`$TIMER`].  T equals seconds since beg. of year
+# TIME_DATE: called like [T=`$TIME_DATE`].  T = 11:44:50-03/16
+#-----------------------------------------------------------------------
+#
+TIMER='eval echo `awk "BEGIN { print \`date +"%j"\`*86400 + \`date +"%H"\`*3600
++ \`date +"%M"\`*60 + \`date +"%S"\`; exit}"`'
+TIME_DATE="date +%H:%M:%S-%m/%d"
+export TIMER
+#
+################################################################################
+#
+# Initialize the duration information (IBM-style)
+#
+getdur()
+{
+HOURS_TO_EXECUTE="0"            #Hours to execute by default is 0
+SECONDS_TO_EXECUTE="0"          #Seconds to execute by default is 0
+if [ "$#" -ne 1 ] ; then
+        echo_msg "-log-----: USAGE: ${0} HOURS_TO_EXECUTE"
+        exit 1
+elif [ "${1}" = "once" ] ; then
+	ONETIME="TRUE"
+	SECONDS_TO_EXECUTE="86400"
+else
+        HOURS_TO_EXECUTE="${1}"
+        SECONDS_TO_EXECUTE=`awk "BEGIN { print 3600 * ${HOURS_TO_EXECUTE} ; exit; } "`
+        echo_msg ""
+        echo_msg "-log-----: EXECUTING ${0} for ${HOURS_TO_EXECUTE} HOURS (${0})"
+        echo_msg ""
+fi
+}
+#
+################################################################################
+#
+# Define Beginning Statistics Function
+#
+stats()
+{
+#
+# Capture some statistics
+#
+echo_msg "-log-----: Capturing Statistics...\c"
+echo_msg "#" >> ${FULLLOG}
+echo_msg "# `date +'%m-%d-%y %T'` - Statistics" >> ${FULLLOG}
+echo_msg "#" >> ${FULLLOG}
+echo_msg "" >> ${FULLLOG}
+#
+# Disk Information
+#
+if [ $PLATFORM = "OSF1" ]
+then
+	df -k >> ${FULLLOG}
+else
+	df
+fi
+echo_msg "" >> ${FULLLOG}
+#
+# Interprocess Information
+#
+ipcs >> ${FULLLOG}
+echo_msg "" >> ${FULLLOG}
+#
+# Process Information
+#
+if [ $PLATFORM = "OSF1" ]
+then
+	ps ax -o ucomm,vsize,rssize,cputime,usertime,systime | \
+	egrep '(COMMAND|cds|gdad|sec|dts|rpc)' | egrep -v "egrep" >> ${FULLLOG}
+else
+	ps -eF ucomm,pid,ppid,vsize,rssize,pagein,cputime,etime,pcpu,pmem | \
+	egrep '(COMMAND|cds|gdad|sec|dts|rpc)' | egrep -v "egrep" >> ${FULLLOG}
+fi
+echo_msg "" >> ${FULLLOG}
+#
+# Virtual Memory Information
+#
+vmstat -s >> ${FULLLOG}
+echo_msg "" >> ${FULLLOG}
+#
+# Who else is logged in?
+#
+w -s >> ${FULLLOG}
+echo_msg "" >> ${FULLLOG}
+who -s >> ${FULLLOG}
+echo_msg "" >> ${FULLLOG}
+echo_msg "Done (${0})"
+echo_msg "" >> ${FULLLOG}
+}
+#
+################################################################################
+#
+# Define Ending Statistics Function
+#
+end_stats()
+{
+#
+# Output Test Summary
+#
+echo_msg "===== End Of Testing ===========================================================" >> ${FULLLOG}
+echo_msg "-log-----:" | tee -a ${FULLLOG}
+echo_msg "-log-----: Final Test Results:" | tee -a ${FULLLOG}
+echo_msg "-log-----:" | tee -a ${FULLLOG}
+echo_msg "-log-----: 	Total Passed = $PASSED" | tee -a ${FULLLOG}
+echo_msg "-log-----: 	Total Failed = $FAILED" | tee -a ${FULLLOG}
+echo_msg "-log-----: 	Total Tests  = $COUNT" | tee -a ${FULLLOG}
+echo_msg "-log-----:" | tee -a ${FULLLOG}
+echo_msg "================================================================================" >> ${FULLLOG}
+echo_msg "-log-----:" >> ${FULLLOG}
+}
+#
+################################################################################
+#
+# Define Test Function
+#
+exec_test()
+{
+	COUNT=`expr ${COUNT} + 1`
+	echo_msg "--------------------------------------------------------------------------------" | tee -a ${FULLLOG} >> ${ERRORLOG}
+	echo_msg "" >> ${FULLLOG}
+	echo_msg "Test Case # ${COUNT}	\c" | tee -a ${FULLLOG} | tee -a ${SHRTLOG}
+	echo_msg "" >> ${FULLLOG}
+	STARTTIME=`date +"%m-%d-%y %T"`
+	${COMMAND} ${OPTIONS} 1>${STDOUT} 2>${STDERR}
+	STATUS=$?
+	ENDTIME=`date +"%m-%d-%y %T"`
+	ABBRMESS=`echo_msg "${MESSAGE}                                                         " | cut -c1-56`
+	if [ ${STATUS} -eq ${ESTATUS} ]
+	then
+		BUG=" "
+		echo_msg "${ABBRMESS} \c" | tee -a ${SHRTLOG}
+		echo_msg "Command: ${COMMAND} ${OPTIONS}" >> ${FULLLOG}
+		echo_msg "Result = \c" >> ${FULLLOG}
+		echo_msg "	${BUG}PASSED" | tee -a ${FULLLOG} | tee -a ${SHRTLOG}
+		PASSED=`expr ${PASSED} + 1`
+	else
+		if [ -z "${DEFECT}" ] ; then
+			BUG=" "
+		else
+			BUG="*"
+		fi
+		echo_msg "Test Case # $COUNT" >> ${ERRORLOG}
+		echo_msg "${ABBRMESS} \c" | tee -a ${SHRTLOG}
+		echo_msg "Command: ${COMMAND} ${OPTIONS}" | tee -a ${FULLLOG} >> ${ERRORLOG}
+		echo_msg "Result = \c" | tee -a ${FULLLOG} >> ${ERRORLOG}
+		echo_msg "	${BUG}FAILED" | tee -a ${FULLLOG} | tee -a ${SHRTLOG} | tee -a ${ERRORLOG}
+		echo_msg "Actual Status   = ${STATUS}" | tee -a ${FULLLOG} >> ${ERRORLOG}
+		echo_msg "Expected Status = ${ESTATUS}" | tee -a ${FULLLOG} >> ${ERRORLOG}
+		echo_msg "See logfile ${FULLLOG}" >> ${ERRORLOG}
+		echo_msg "" >> ${FULLLOG}
+		echo_msg "STDOUT:" >> ${FULLLOG}
+		if [ -s ${STDOUT} ] ; then
+			cat ${STDOUT} >> ${FULLLOG}
+		else
+			echo_msg "	EMPTY" >> ${FULLLOG}
+		fi
+		echo_msg "" >> ${FULLLOG}
+		echo_msg "STDERR:" >> ${FULLLOG}
+		if [ -s ${STDERR} ] ; then
+			cat ${STDERR} >> ${FULLLOG} ; echo_msg "" >> ${FULLLOG}
+		else
+			echo_msg "	EMPTY" >> ${FULLLOG}
+		fi
+		FAILED=`expr ${FAILED} + 1`
+	fi
+	echo_msg "" >> ${FULLLOG}
+	echo_msg "Start Time : \c" >> ${FULLLOG}
+	echo_msg "${STARTTIME}" >> ${FULLLOG}
+	echo_msg "End Time   : \c" >> ${FULLLOG}
+	echo_msg "$ENDTIME" >> ${FULLLOG}
+	echo_msg "" >> ${FULLLOG}
+	DEFECT=""
+}
+#
+################################################################################
+#
+# Define DCE Running Status Function
+#
+dcestatus()
+{
+#set -x
+if [ "$#" -ne 1 ] ; then
+	echo_msg "-error---: No Machine Name Given (${0})"
+	return 2
+fi
+#
+DCESTATUS=""
+if [ "`hostname`" != "${1}" ] ; then
+	ping -c 1 ${1} 1>/dev/null 2>&1
+	if [ $? -ne 0 ] ; then
+		echo_msg "-log-----: The Machine ${1} Is Not Accessible (${0})"
+		return 1
+	fi
+	RPLATFORM=`rsh ${1} uname -s`
+	if [ $RPLATFORM = "OSF1" ]
+	then
+		DCESTATUS="`rsh ${1} ps ax -o ucomm | \
+		egrep '(cdsd|cdsadv|cdsclerk|gdad|secd|sec_clientd|dtsd|rpcd)' \
+		| egrep -v "egrep"`"
+	else
+		DCESTATUS="`rsh ${1} ps -eF ucomm | \
+		egrep '(cdsd|cdsadv|cdsclerk|gdad|secd|sec_clientd|dtsd|rpcd)' \
+		| egrep -v "egrep"`"
+	fi
+else
+	if [ $PLATFORM = "OSF1" ]
+	then
+		DCESTATUS="`ps ax -o ucomm | \
+		egrep '(cdsd|cdsadv|cdsclerk|gdad|secd|sec_clientd|dtsd|rpcd)' \
+		| egrep -v "egrep"`"
+	else
+		DCESTATUS="`ps -eF ucomm | \
+		egrep '(cdsd|cdsadv|cdsclerk|gdad|secd|sec_clientd|dtsd|rpcd)' \
+		| egrep -v "egrep"`"
+	fi
+fi
+#
+if [ ! -z "${DCESTATUS}" ] ; then
+	echo_msg "-log-----: DCE Is Running On ${1} (${0})"
+	return 0
+else
+	echo_msg "-log-----: DCE Is Not Running On ${1} (${0})"
+	return 1
+fi
+}
+#
+################################################################################
+#
+# Define Get CDS Clients Function
+#
+#
+getcdsclients()
+{
+#set -x
+#
+CDSCLIENTS=""
+CDSCLIENTS="`cdscp list dir /.:/hosts/\* | egrep -v '(     LIST|     DIRECTORY|     AT)'`"
+#
+if [ ! -z "${CDSCLIENTS}" ] ; then
+	echo_msg "-log-----: CDS Clients Were Found (${0})"
+	return 0
+else
+	echo_msg "-log-----: No CDS Clients Were Found (${0})"
+	return 1
+fi
+}
+#
+################################################################################
+#
+# Define DCE Get CDS Server Function
+#
+getcdsserver()
+{
+#set -x
+if [ "$#" -ne 1 ] ; then
+        echo_msg "-error---: No Machine Name Given (${0})"
+        return 2
+fi
+#
+ping -c 1 ${1} 1>/dev/null 2>&1
+if [ $? -ne 0 ] ; then
+        echo_msg "-log-----: The Machine ${1} Is Not Accessible (${0})"
+        return 1
+fi
+#
+CDSROLE=""
+if [ "`hostname`" = "${1}" ] ; then
+	CDSROLE="`grep '#daemonrunning \$DCELOCAL/bin/cdsd' /etc/rc.dce`"
+else
+	CDSROLE="`rsh ${1} 'grep "#daemonrunning" /etc/rc.dce | grep "\$DCELOCAL/bin/cdsd"'`"
+fi
+#
+if [ "${CDSROLE}" = "" ] ; then
+        echo_msg "-log-----: ${1} Is Configured To Be A CDS Server (${0})"
+	CDSSERVER=${1}
+        return 0
+else
+        echo_msg "-log-----: ${1} Is Not Configured To Be A CDS Server (${0})"
+	CDSSERVER=""
+        return 1
+fi
+}
+#
+################################################################################
+#
+# Define DCE Get SEC Server Function
+#
+getsecserver()
+{
+#set -x
+if [ "$#" -ne 1 ] ; then
+        echo_msg "-error---: No Machine Name Given (${0})"
+        return 2
+fi
+#
+ping -c 1 ${1} 1>/dev/null 2>&1
+if [ $? -ne 0 ] ; then
+        echo_msg "-log-----: The Machine ${1} Is Not Accessible (${0})"
+        return 1
+fi
+#
+CDSROLE=""
+if [ "`hostname`" = "${1}" ] ; then
+	SECROLE="`grep '#daemonrunning \$DCELOCAL/bin/secd' /etc/rc.dce`"
+else
+	SECROLE="`rsh ${1} 'grep "#daemonrunning" /etc/rc.dce | grep "\$DCELOCAL/bin/secd"'`"
+fi
+#
+if [ "${SECROLE}" = "" ] ; then
+        echo_msg "-log-----: ${1} Is Configured To Be A Security Server (${0})"
+	SECSERVER=${1}
+        return 0
+else
+        echo_msg "-log-----: ${1} Is Not Configured To Be A Security Server (${0})"
+	SECSERVER=""
+        return 1
+fi
+}
+#
+################################################################################
+#
+# Define Get Cell Name Function
+#
+get_cell_name()
+{
+CELLNAME=""
+CELLNAME="`getcellname | awk -F/ '{print $NF}'`"
+if [ -z "${CELLNAME}" ] ; then
+	CELLNAME=`cdscp show cell /.: | grep "CELL" | awk -F/ '{print $NF}'`
+fi
+}
+#
+################################################################################
+#
+# Define CDS Namespace Backup Function
+#
+backup_cds_ch()
+{
+#set -x
+NAMESPACE=${1}
+FROM=${2}
+TO=${3}
+#
+if [ -d ${BACKUPDIR} ] ; then
+        if [ -d ${TO} ] ; then
+                echo_msg ""
+                echo_msg "-log-----: Test Backup Directory Exists, Moving It \c"
+                echo_msg "To: (${0})"
+                echo_msg "-log-----:        ${TO}.old"
+                mv ${TO} ${TO}.old
+        fi
+else
+        echo_msg ""
+        echo_msg "-log-----: Backup Directory (${BACKUPDIR}) Created (${0})"
+        mkdir ${BACKUPDIR}
+fi
+#
+mkdir ${TO}
+#
+MESSAGE="Backup cds_files"
+COMMAND="cp -p ${FROM}/var/directory/cds/cds_files ${TO}"
+OPTIONS=""
+ESTATUS=0
+exec_test
+#
+MESSAGE="Backup ${NAMESPACE}_ch.checkpoint*[0-9]"
+COMMAND="cp -p ${FROM}/var/directory/cds/${NAMESPACE}_ch.checkpoint*[0-9] ${TO}"
+OPTIONS=""
+ESTATUS=0
+exec_test
+#
+MESSAGE="Backup ${NAMESPACE}_ch.tlog*[0-9]"
+COMMAND="cp -p ${FROM}/var/directory/cds/${NAMESPACE}_ch.tlog*[0-9] ${TO}"
+OPTIONS=""
+ESTATUS=0
+exec_test
+#
+MESSAGE="Backup ${NAMESPACE}_ch.version"
+COMMAND="cp -p ${FROM}/var/directory/cds/${NAMESPACE}_ch.version ${TO}"
+OPTIONS=""
+ESTATUS=0
+exec_test
+}
+#
+################################################################################
+#
+# Define CDS Namespace Delete Function
+#
+delete_cds_ch()
+{
+#set -x
+NAMESPACE=${1}
+FROM=${2}
+#
+MESSAGE="Remove cds_files"
+COMMAND="rm ${FROM}/var/directory/cds/cds_files"
+OPTIONS=""
+ESTATUS=0
+exec_test
+#
+MESSAGE="Remove ${NAMESPACE}_ch.checkpoint*"
+COMMAND="rm ${FROM}/var/directory/cds/${NAMESPACE}_ch.checkpoint*"
+OPTIONS=""
+ESTATUS=0
+exec_test
+#
+MESSAGE="Remove ${NAMESPACE}_ch.tlog*"
+COMMAND="rm ${FROM}/var/directory/cds/${NAMESPACE}_ch.tlog*"
+OPTIONS=""
+ESTATUS=0
+exec_test
+#
+MESSAGE="Remove ${NAMESPACE}_ch.version"
+COMMAND="rm ${FROM}/var/directory/cds/${NAMESPACE}_ch.version"
+OPTIONS=""
+ESTATUS=0
+exec_test
+}
+#
+################################################################################
+#
+# Define CDS Namespace Restore Function
+#
+restore_cds_ch()
+{
+#set -x
+NAMESPACE=${1}
+FROM=${2}
+TO=${3}
+#
+MESSAGE="Restore cds_files"
+COMMAND="cp -p ${FROM}/cds_files ${TO}/var/directory/cds"
+OPTIONS=""
+ESTATUS=0
+exec_test
+#
+MESSAGE="Restore ${NAMESPACE}_ch.checkpoint*[0-9]"
+COMMAND="cp -p ${FROM}/${NAMESPACE}_ch.checkpoint*[0-9] ${TO}/var/directory/cds"
+OPTIONS=""
+ESTATUS=0
+exec_test
+#
+MESSAGE="Restore ${NAMESPACE}_ch.tlog*[0-9]"
+COMMAND="cp -p ${FROM}/${NAMESPACE}_ch.tlog*[0-9] ${TO}/var/directory/cds"
+OPTIONS=""
+ESTATUS=0
+exec_test
+#
+MESSAGE="Restore ${NAMESPACE}_ch.version"
+COMMAND="cp -p ${FROM}/${NAMESPACE}_ch.version ${TO}/var/directory/cds"
+OPTIONS=""
+ESTATUS=0
+exec_test
+}
+#
+################################################################################
+#
+# Define Local DCE Stop Function
+#
+stop_dce_local()
+{
+#set -x
+#
+sh /etc/dce.clean
+}
+#
+################################################################################
+#
+# Define Remote DCE Stop Function
+#
+stop_dce_remote()
+{
+#set -x
+#
+if [ "$#" -ne 2 ] ; then
+        echo_msg "-error---: No Machine Name And/Or Password Given (${0})"
+        return 2
+fi
+#
+if [ "`hostname`" != "${1}" ] ; then
+	ping -c 1 ${1} 1>/dev/null 2>&1
+	if [ $? -ne 0 ] ; then
+		echo_msg "-log-----: The Machine ${1} Is Not Accessible (${0})"
+		return 1
+	fi
+	expect ${WORKDIR}/bin/stop_dce ${1} ${2}
+else
+	sh /etc/dce.clean
+fi
+#
+}
+#
+################################################################################
+#
+# Define Local DCE Start Function
+#
+start_dce_local()
+{
+#set -x
+#
+sh /etc/rc.dce
+}
+#
+################################################################################
+#
+# Define Remote DCE Start Function
+#
+start_dce_remote()
+{
+#set -x
+#
+if [ "$#" -ne 2 ] ; then
+        echo_msg "-error---: No Machine Name And/Or Password Given (${0})"
+        return 2
+fi
+#
+if [ "`hostname`" != "${1}" ] ; then
+	ping -c 1 ${1} 1>/dev/null 2>&1
+	if [ $? -ne 0 ] ; then
+		echo_msg "-log-----: The Machine ${1} Is Not Accessible (${0})"
+		return 1
+	fi
+	expect ${WORKDIR}/bin/start_dce ${1} ${2}
+else
+	sh /etc/rc.dce
+fi
+#
+}

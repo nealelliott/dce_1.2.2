@@ -1,0 +1,121 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for 
+# the full copyright text.
+#
+#
+# HISTORY
+# $Log: test5,v $
+# Revision 1.1.6.1  1996/10/17  18:23:53  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:52:09  damon]
+#
+# Revision 1.1.2.1  1994/07/28  17:38:34  mckeen
+# 	Initial Revision
+# 	[1994/07/28  14:10:34  mckeen]
+# 
+# $EndLog$
+#
+###############################################################################
+# This test is applicable to DFS/NFS exporter.
+# The script tests the dfsgw list funtion
+###############################################################################
+#
+# if not run via the runtests script use
+#         test5 >test5.log 2>&1
+# to log test data
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+rc=0
+ty=dfsgw
+: ${addrtyp="inet"}
+: ${uid="0"}
+: ${dceid="cell_admin"}
+: ${dcepasswd="-dce-"}
+bogushn1="123"
+bogushn2="bogushn"
+bogusuid1="bogus"
+bogusuid2="1234356"
+bogusaddrtyp="bogusnet"
+bogusdcepasswd="boguspasswd"
+
+###############################################################################
+echo ""
+echo "RUNNING dfsgw list COMMAND on $hn."
+echo "========================================================================="
+date
+echo ""
+###############################################################################
+
+echo ""
+echo "dfsgw list extra"
+dfsgw list extra 
+rf=$?
+if test $rf -eq 0 
+then
+   echo "worked ($rf) ($p: E1)"
+   rc=`expr $rc + 1`
+fi
+
+echo ""
+echo "dfsgw list"
+dfsgw list
+rf=$?
+if test $rf -ne 0
+then
+   echo "failed ($rf) ($p: E2)"
+   rc=`expr $rc + 1`
+fi
+
+
+echo ""
+echo "dfsgw add $hn:$uid $dceid:$dcepasswd $addrtyp"
+dfsgw add $hn:$uid $dceid:$dcepasswd $addrtyp
+rf=$?
+if test $rf -ne 0
+then
+   echo "Unable to add entry to authentication table for dfsgw query testing ($rf) ($p: E3)"
+   echo "$p exiting..."
+   rc=`expr $rc + 1`
+   exit $rc 
+fi
+
+
+echo ""
+echo "dfsgw list"
+dfsgw list
+rf=$?
+if test $rf -ne 0
+then
+   echo "failed ($rf) ($p: E4)"
+   rc=`expr $rc + 1`
+fi
+
+echo ""
+echo "dfsgw del $hn:$uid"
+dfsgw del $hn:$uid
+rf=$?
+if test $rf -ne 0
+then 
+   echo "Unable to perform cleanup - dfsgw del $hn:$uid - ($rf) ($p: E5)"
+   echo "$p exiting..."
+   rc=`expr $rc + 1`
+   exit $rc 
+fi 
+
+########################################
+
+echo ""
+echo "Done at `date`."
+echo ""
+if [ $rc -eq 0 ]
+then
+   echo "$ty/$p PASSED"
+else
+   echo "$ty/$p FAILED $rc errors"
+fi
+exit $rc

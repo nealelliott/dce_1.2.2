@@ -1,0 +1,162 @@
+Details for sec_salvage_db testing
+
+    On DCE 1.2.2 `sec_salvage_db' can manipulate the registry database which
+    contains the foreign principal name as group member.
+    Verify its enhanced specification by just using -print and -reconstruct
+    options.  Details are in ATTACH 1.
+
+    The basic procedures are:
+    (1) modify Database by global principal operations
+    (2) shutdown secd
+    (3) do sec_salvage_db -print to dump Database to print files
+    (4) verify if global principal operation is reflected in print files
+    (5) do sec_salvage_db -reconstruct to restore previous Database's
+        contents
+    (6) re-run secd
+
+
+------------------------------ ATTACH 1 ------------------------------
+
+GLOBALGROUP TEST SCENARIO (sec_salvage_db testing)
+
+1. Prerequisites
+
+    We need two DCE cells in this test.
+
+	cL	local cell (cell on the local host)
+	cR	remote cell (cell on the remote host)
+
+
+2. Test Scenario
+2.1 Setting up test condition
+
+    Create a group and an account into the local cell like bellow;
+
+	dcecp> group create gG
+	dcecp> principal create pL
+	dcecp> account create pL -group none -organization none
+
+	- gG means a group object which will include foreign principals
+	- pL means a principal object which belongs to the local cell
+
+    Create some accounts into the remote cell like bellow;
+
+	dcecp> principal create pR
+	dcecp> principal create pRs
+	dcecp> principal create pRl
+	dcecp> account create pR -group none -organization none
+	dcecp> account create pRs -group none -organization none
+	dcecp> account create pRl -group none -organization none
+
+	- pR means a principal object which belongs to the remote cell
+	- pRs means a principal object which belongs to the remote cell, and
+	  has a short enough principal name (minimal length of principal name)
+	- pRl means a principal object which belongs to the remote cell, and
+	  has a long enough principal name (maximal length of principal name)
+
+    After this operation, enable the cells to show each name space using
+    "dcecp cdscache create", and connect to remote cell using
+    "dcecp registry connect".
+
+
+2.2 Details for testing
+
+    Modify Database by adding or removing global principals, then verify
+    if the group which has the global principals as member is re-constructed
+    correctly.
+
+(1) login to the cell cL as a cell_admin
+
+	dce_login cell_admin
+
+(2) add the principals as members of the group gG
+
+	dcecp -c group add gG -member /.../cR/pR /.../cR/pRl /.../cR/pRs pL
+
+(3) verify that group gG has members above
+
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cR/pRl
+	/.../cR/pRs
+	/.../cL/pL
+	dcecp>
+
+(4) stop the master replica server using `dcecp registry stop' command
+
+	dcecp> registry stop /.:/sec/master
+
+(5) cleanup the login context and associated credentials
+
+	kdestroy
+
+(6) dump the database to print files using `sec_salvage_db -print' command
+
+	sec_salvage_db -print
+
+(7) verify if the global group information is in the print files correctly
+
+	vi ./rgy_print/group.prt
+
+(8) re-construct the database from the print files using `sec_salvage_db -reconstruct' command
+
+	sec_salvage_db -reconstruct
+
+(9) reinitialize the registry database using `secd -restore_master' command
+
+	secd -restore_master
+
+(10) login to the cell cL as a cell_admin
+
+	dce_login cell_admin
+
+(11) verify that group gG has members seen in (3) above
+
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cR/pRl
+	/.../cR/pRs
+	/.../cL/pL
+	dcecp>
+
+(12) remove the principals from the membership list of the group gG
+
+	dcecp -c group remove gG -member /.../cR/pR /.../cR/pRl /.../cR/pRs pL
+
+(13) verify that group gG has no members
+
+	dcecp> group list gG
+	dcecp>
+
+(14) stop the master replica server by using `dcecp registry stop' command
+
+	dcecp> registry stop /.:/sec/master
+
+(15) cleanup the login context and associated credentials
+
+	kdestroy
+
+(16) dump the database to print files by using `sec_salvage_db -print' command
+
+	sec_salvage_db -print
+
+(17) verify if the global group information is in the print files correctly
+
+	vi ./rgy_print/group.prt
+
+(18) re-construct the database from the print files by using `sec_salvage_db -reconstruct' command
+
+	sec_salvage_db -reconstruct
+
+(19) reinitialize the registry database by using `secd -restore_master' command
+
+	secd -restore_master
+
+(20) login to the cell cL as a cell_admin
+
+	dce_login cell_admin
+
+(21) verify that group gG has no members seen in (13) above
+
+	dcecp> group list gG
+	dcecp>

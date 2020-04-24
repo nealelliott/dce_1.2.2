@@ -1,0 +1,406 @@
+
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+
+* All of these tests should be performed twice, once with the
+* directory modifications being made by a test process, and once with
+* the directory modifications being made by a stress process.
+*
+* Check what happens when an entire chunk of directory listing becomes
+* empty.  Create a directory with many names, say 3 chunks worth of
+* stuff.  Have a test process read midway through one of the chunks, and
+* then have a {test,stress} process delete enough names to remove all of
+* the names in the entire middle chunk of the listing (with a little
+* slop removing some names from the end of the first chunk and the start
+* of the third).  Then proceed with the readdir by the first test
+* process, checking that the names seen are exactly those that should be
+* left in the dir listing.
+*
+* Check what happens when dir entries are deleted during an
+* enumeration in careful lockstep by a {test,stress} process.  Create
+* lots of entries in a directory, remove some entries (randomly?) while
+* the main test process is reading.  The entry removal is driven
+* synchronously, so that at any time, the hub program knows whether a
+* particular name should have been found by the readdir program, since
+* it knows whether the name is still in the directory.  Of course, there
+* is some buffering done by readdir(3), and once a name is in a buffer,
+* it won't disappear due to an unlink.  The name should be gone by the
+* time a second scan is done, however.
+*
+
+*
+*
+* Note: Try this test on both single machin cell and multi-machine cell.
+*       Try this from both DFS and local path so that it will also test 
+*       xvnode layer. This test realy needs to be run from the combination
+*       of DFS and local path (rmdir via CM or rmdir form local path).
+*
+
+* 
+* USAGE: ./file_test -l {HUBNAME} -I {this_script} ; For HUB
+*        ./file_test -c {HUBNAME} : For other spokes
+*
+
+* Include config file.
+include config
+
+set baseDirName string "tstdirname"
+set baseDirName ( $baseDirName * 20 )
+* 16+200=216 is the dir entry size.
+* A huge dir has to have at least 3*65536/216=910 dir entry.
+
+* If you set the numEntry too large, which may cause time out in sync.
+* Large numEntry means large dir (several chunks).
+
+set numEntry 1000
+set startHole1 ( $numEntry/3 )
+set endHole1 ( $numEntry - ( $numEntry/3 ) )
+set startHole2 ( $numEntry/4 )
+set endHole2 ( $numEntry/3 -1 )
+
+* Aster presents a dir there.
+* ***------*------------------******
+
+* This procedure makes subdirs under the working dir.
+
+set make_Dir proc 2 numOfDir int baseDirName string  ENDP
+loop x 1 1 @numOfDir
+  set testDirName string ( @baseDirName + @x )
+  mkdir @testDirName 0777
+endloop
+ENDP
+ 
+set loopTimes 10
+
+
+*
+* This procedure does readdir calls.
+*
+set dirTest_Proc proc END_PROC
+  echo
+  echo readdir call through the chunks.
+
+  getwd workDir
+
+  sync_join "begin_sync" $timeout
+
+  opendir $testDir dirPtr
+  readdir @dirPtr dirInfo
+  readdir @dirPtr dirInfo
+  loop x 1 1 $numEntry
+    set testDirName string ( $baseDirName + @x )
+    readdir @dirPtr dirInfo
+    if ( @dirInfo.d_name != @testDirName ) {
+      echo "FAILED: The check dir failed, no such subdir there."
+    }
+  endloop
+  closedir @dirPtr
+
+  sync_join "make_hole" $timeout
+  sync_join "check_hole" ( 3 * $timeout )
+
+  opendir $testDir dirPtr
+  readdir @dirPtr dirInfo
+  readdir @dirPtr dirInfo
+  loop x 1 1 $numEntry
+    set testDirName ( $baseDirName + @x )
+    if ( @x < $startHole1 || @x > $endHole1 ) { 
+      if ( @x < $startHole2 || @x > $endHole2 ) { 
+        readdir @dirPtr dirInfo
+        if ( @dirInfo.d_name != @testDirName ) {
+          echo "FAILED: Check dir failed when some subdirs were deleted.
+        }
+      }
+    }
+  endloop
+  closedir @dirPtr
+
+  sync_join "check_hole_done" $timeout
+
+* Check what happend when the entire chunk of directory list become enpty.
+
+  sync_join "delete_dirs_done" $timeout
+
+  chdir $testDir
+
+  opendir . dirPtr
+  readdir @dirPtr dirInfo
+  readdir @dirPtr dirInfo
+  do 
+    readdir @dirPtr dirInfo
+    if ( @CommandResult != 1 ) {
+      echo FAILED: The directory is not empty.
+    }
+  while ( @CommandResult != 1 ) 
+  closedir @dirPtr
+
+  stat . statVar
+  if ( @statVar.st_nlink > 2 ) {
+    echo FAILED: The directory should be empty by now.
+  }
+
+  chdir @workDir
+
+  echo readdir process done.
+  echo 
+END_PROC
+
+
+*
+* This procedure does rmdir call.
+*
+set dirStress1_Proc proc END_PROC
+
+  echo
+  echo It makes first hole in the huge dir.
+
+  getwd workDir
+  chdir $testDir
+
+  sync_join "begin_sync" $timeout
+  sync_join "make_hole" $timeout
+
+echo $startHole1 $endHole1 in first
+  loop x $startHole1 1 $endHole1
+    set dirName ( $baseDirName + @x )
+    rmdir @dirName
+  endloop
+
+  sync_join "check_hole" $timeout
+  sync_join "check_hole_done" $timeout
+  sync_join "delete_dirs_done" $timeout
+
+  chdir @workDir
+
+  echo Make hole done.
+  echo
+END_PROC
+
+*
+* This procedure does rmdir call.
+*
+set dirStress2_Proc proc END_PROC
+
+  echo
+  echo It makes the second hole in the huge dir.
+
+  getwd workDir
+  chdir $testDir
+
+  sync_join "begin_sync" $timeout
+  sync_join "make_hole" $timeout
+
+echo $startHole2 $endHole2 in second
+  loop x $startHole2 1 $endHole2
+    set dirName ( $baseDirName + @x )
+    rmdir @dirName
+  endloop
+
+  sync_join "check_hole" $timeout
+  sync_join "check_hole_done" $timeout
+
+* Delete rest of dirents in the huge dir.
+
+  opendir . dirPtr
+  readdir @dirPtr dirInfo
+  readdir @dirPtr dirInfo
+  readdir @dirPtr dirInfo
+  do 
+    rmdir @dirInfo.d_name
+    readdir @dirPtr dirInfo
+  while ( @CommandResult != 1 ) 
+  closedir @dirPtr
+
+  sync_join "delete_dirs_done" $timeout
+  chdir @workDir
+
+  echo Make hole done.
+  echo
+END_PROC
+
+*
+* The current test dir will be deleted so that new created dir
+* will allow you read dirents in order.
+* We need parameter passed to the following procedure so that 
+* more acurate test could be done XXXXXX.
+
+set rmdirTest_Proc proc END_PROC
+  echo
+  echo check dirent by opendir.
+
+  getwd workDir
+  sync_join "random_rmdir" $timeout
+  chdir $testDir
+
+  sync_join "random_rmdir_check" ( 3 * $timeout )
+
+  echo Be patient ... 
+  opendir . dirPtr
+  readdir @dirPtr dirInfo
+  readdir @dirPtr dirInfo
+  loop x 1 1 $numEntry
+    set testDirName ( $baseDirName + @x )
+    set flag false
+    if ( @flag == false ) {
+      echo No such dirent      
+    }
+    else {
+      readdir @dirPtr dirInfo
+      if ( @dirInfo.d_name != @testDirName ) {
+        echo FAILED: The dirent should be here
+      }
+    }
+  endloop
+  closedir @dirPtr
+
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo testRmdir process done.
+  echo 
+END_PROC
+
+*
+* This procedure does rmdir call.
+*
+set rmdir_Proc proc END_PROC
+
+echo 
+echo This procedure rmdir randomly.
+
+  getwd workDir
+  chdir $testDir
+
+  sync_join "random_rmdir" $timeout
+
+* Here we are having problem to pass the random key to another process.
+* At most there will be half of dirs deleted.
+  echo Be patient ... 
+  loop x 1 1 ( $numEntry/2 )
+    set flag string "false"
+    if ( @flag == "false" ) {
+      set testDirName string ( $baseDirName + @x )
+      rmdir @testDirName
+      set flag true
+    }
+    else {
+      set flag false
+    }
+  endloop
+
+  sync_join "random_rmdir_check" ( 3 * $timeout )
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo rmdir done.
+  echo
+END_PROC
+
+
+****************************************************************************
+* Check spokes.
+if ( $ITL_nspokes < 3 ) {
+  echo FAILED: You need at least three spokes to run the test.
+  quit
+}
+
+loop loopVar 1 1 $loopTimes
+
+chdir $testDir
+exec make_Dir $numEntry $baseDirName
+
+!* Dispatch dirent stress tests among spokes.
+rexec_async $ITL_spoke[0] dirStress1_Proc result[0] asyncVar[0]
+rexec_async $ITL_spoke[1] dirStress2_Proc result[1] asyncVar[1]
+
+loop x 2 1 ($ITL_nspokes-1)
+  rexec_async $ITL_spoke[$x] dirTest_Proc result[$x] asyncVar[$x]
+endloop
+
+sync_create "begin_sync" $ITL_nspokes $timeout
+sync_release "begin_sync"
+
+sync_create "make_hole" $ITL_nspokes $timeout
+sync_release "make_hole"
+
+sync_create "check_hole" $ITL_nspokes $timeout
+sync_release "check_hole"
+
+sync_create "check_hole_done" $ITL_nspokes $timeout
+sync_release "check_hole_done"
+
+sync_create "delete_dirs_done" $ITL_nspokes $timeout
+sync_release "delete_dirs_done"
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+mkdir $testDir 0777
+chdir $testDir
+
+!* Make those dirs again for random dir deletion test.
+exec make_Dir $numEntry $baseDirName
+
+rexec_async $ITL_spoke[0] rmdir_Proc result[0] asyncVar[0]
+
+loop x 1 1 ($ITL_nspokes-1)
+  rexec_async $ITL_spoke[$x] rmdirTest_Proc result[$x] asyncVar[$x]
+endloop
+
+sync_create "random_rmdir" $ITL_nspokes $timeout
+sync_release "random_rmdir"
+
+sync_create "random_rmdir_check" $ITL_nspokes ( 3 * $timeout )
+sync_release "random_rmdir_check"
+
+sync_create "finish_sync" $ITL_nspokes $timeout
+sync_release "finish_sync"
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+mkdir $testDir 0777
+
+endloop
+
+quit
+

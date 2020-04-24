@@ -1,0 +1,184 @@
+*
+* @OSF_COPYRIGHT@
+* COPYRIGHT NOTICE
+* Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+* ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+* the full copyright text.
+*
+* HISTORY
+* $Log: clone_crash.itl,v $
+* Revision 1.1.116.1  1996/10/17  18:20:58  damon
+* 	Submitting on behalf of Transarc
+* 	[1996/10/17  16:51:05  damon]
+*
+* Revision 1.1.111.1  1994/02/04  20:41:14  devsrc
+* 	Merged from 1.0.3a to 1.1
+* 	[1994/02/04  15:22:44  devsrc]
+* 
+* Revision 1.1.109.2  1994/01/20  18:43:43  annie
+* 	added copyright header
+* 	[1994/01/20  18:39:57  annie]
+* 
+* Revision 1.1.109.1  1993/12/07  17:42:14  jaffe
+* 	New File from Transarc 1.0.3a
+* 	[1993/12/02  21:58:54  jaffe]
+* 
+* $EndLog$
+*
+
+!**********************************************************
+!*** Simulate crashes during a clone
+!**********************************************************
+
+include "defaults.itl"
+
+!*** Initialize variables
+
+set clone_func "ftu_FsetCloneWithKA"
+set clone_loop_func "ftutil_VolCloneAux"
+set exception 1993
+set fset_id_high	$ITL_ProcessId
+set fset_id_low		1
+set fset_id string	("" + $fset_id_high + ",," + $fset_id_low)
+set fset_name ("fzappa." + $ITL_ProcessId)
+set mp ("/tmp/fset." + $ITL_ProcessId)
+set num_clone_bps 15
+set num_clone_loop_bps 7
+set orig_fset_id $fset_id
+set orig_sum_file ("/tmp/fset_orig_sum." + $ITL_ProcessId)
+set sum_cmd ("find " + $mp + " -type f -print | xargs sum")
+set tmp_sum_file ("/tmp/fset_tmp_sum." + $ITL_ProcessId)
+
+set crank_fset_id proc END
+	set fset_id_low (@fset_id_low + 1)
+	set fset_id ("" + @fset_id_high + ",," + @fset_id_low)
+END
+
+*** Initialize the user-level clone bomb points, with one bomb point 
+*** description for each unique bomb point in the code
+loop i 1 1 $num_clone_bps
+	set clone_bp_desc[$i] ($clone_func + "." + $i + ":exception="
+			       + $exception + ":count=1+0")
+endLoop
+
+*** Initialize the clone loop bomb points, where each bomb point
+*** description has its 'count' value set to one greater than the previous
+*** description
+loop i 1 1 $num_clone_loop_bps
+	set clone_bp_desc[$i + $num_clone_bps]
+		 ($clone_loop_func + ".1:exception=" + $exception + ":count="
+		  + $i + "+0")
+endLoop
+
+set total_clone_bps ($num_clone_bps + $num_clone_loop_bps)
+
+!*** Verify and attach aggregate number $aggr_id ($device)
+verifyAggr $device
+attachAggr $device $aggr_type $aggr_name $aggr_id
+
+!*** Create and mount fileset $fset_name on $mp
+createFset $aggr_id $fset_id $fset_name
+mkdir $mp 0755
+mountFset $fset_name $mp
+
+!*** Create a temporary clone
+***  just to have an existing backing fileset.
+***  This allows us to hit all of the clone bomb points.
+exec crank_fset_id
+set tmp_clone_id $fset_id 
+set tmp_clone_name ($fset_name + ".tmp")
+cloneFset $aggr_id $orig_fset_id $tmp_clone_id $tmp_clone_name
+
+!*** Populate the fileset
+set create_file proc END
+	open ($mp + "/" + @file_name) ($O_CREAT|$O_RDWR) 0666 fd
+	write @fd @data
+	close @fd
+END
+
+set file_name "little"
+set data "Joe got a good job working at the Utility Muffin Research Kitchen, where he stands arrogantly twisting the sterile canvas snoot of a fully charged icing anointment utensil,"
+exec create_file
+
+set file_name "green"
+set data "and every time a nice little muffin comes by on the belt, he puts forth:"
+exec create_file
+
+set file_name "rosette"
+set data "a little green rosette!"
+exec create_file
+
+mkdir ($mp + "/junk") 0755
+set file_name "/junk/bag-o-bits"
+set data ("JDP" * ($block_size + 13))
+exec create_file
+
+*** Save and ID and name for the clone
+exec crank_fset_id
+set clone_id $fset_id
+set clone_name ($fset_name + ".clone")
+
+!*** Compute a checksum on the contents of $mp
+set orig_sum_cmd ($sum_cmd + " >" + $orig_sum_file)
+shellExec orig_sum_cmd
+
+*** This procedure will be used after each aborted operation to ensure that
+*** the checksum matches the one computed above.
+set tmp_sum_cmd ($sum_cmd + " >" + $tmp_sum_file)
+set cmp_sum_cmd ("cmp -s " + $orig_sum_file + " " + $tmp_sum_file)
+set cmp_sums proc END
+	!*** See if checksum of $mp matches the original
+	shellExec tmp_sum_cmd
+	shellExec cmp_sum_cmd
+END
+
+set do_clone proc END
+	!*** Execute the doomed clone operation
+	verifyStatus false
+	cloneFset $aggr_id @orig_fset_id @clone_id $clone_name
+	if (@ITL_Status != $exception) {
+		error Code (@ITL_Status) != expected exception ($exception)
+	}
+	verifyStatus true
+END
+
+loop i 1 1 $total_clone_bps
+	!*** Set $clone_bp_desc[$i]
+	setBomb $clone_bp_desc[$i]
+
+	exec do_clone
+
+	if ($i > 2) {
+		*** The first two bomb points occur so early that a
+		*** clone fileset isn't even created yet, so we only
+		*** do the destroy on higher numbered bomb points.
+		destroyFset $aggr_id $clone_id
+	}
+
+	*** Make sure that the fileset contents are the same
+	exec cmp_sums
+
+	if ($i <= $num_clone_bps) {
+		set clone_bp_name ($clone_func + "." + $i)
+	} else {
+		set clone_bp_name ($clone_loop_func + ".1")
+	}
+	!*** Unset $clone_bp_name
+	unsetBomb $clone_bp_name
+endLoop
+
+!*** Remove the checksum files
+set rm_sum_cmd ("rm -f " + $orig_sum_file + " " + $tmp_sum_file)
+shellExec rm_sum_cmd
+
+!*** Unmount and destroy the filesets
+unmountFset $mp
+unlink $mp
+destroyFset $aggr_id $tmp_clone_id
+destroyFset $aggr_id $orig_fset_id
+
+!*** Detach and verify the aggregate
+detachAggr $aggr_id
+verifyAggr $device
+
+echo !!! The test passed !!!

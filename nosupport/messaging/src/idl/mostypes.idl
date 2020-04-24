@@ -1,0 +1,361 @@
+/* ______________________________________________________________________
+ * Copyright (c) 1996 The Open Group, Inc., Cambridge, MA USA
+ * All rights reserved.
+ * ______________________________________________________________________
+ *
+ *	M O S T Y P E S . I D L
+ *
+ * Common types and constants to support the Message Oriented Service
+ * Application Programming Interface(MOS-API).  This is used by both
+ * API users and the queue manager.
+ * ______________________________________________________________________
+ *
+ * $Log: mostypes.idl,v $
+ * Revision 1.6  1996/11/20  11:39:08  salamone
+ * Provide support for callers to explicitly decode msgs
+ *
+ * Revision 1.5  96/09/23  16:50:13  16:50:13  salamone (Julie Salamone)
+ * Added status field to ACK
+ * 
+ * Revision 1.4  96/09/17  11:11:55  11:11:55  salamone (Julie Salamone)
+ * Remove boolean flags; use TRUE and FALSE
+ * 
+ * Revision 1.3  96/09/16  15:29:29  15:29:29  salamone (Julie Salamone)
+ * For reliability purposes, apps need both ACKs and NAKs; not just NAKs.
+ * 
+ * Revision 1.2  96/09/16  11:10:53  11:10:53  salamone (Julie Salamone)
+ * Chg mos_que_attr_name_t to mos_rsrc_name_t
+ * 
+ * Revision 1.1  96/09/12  15:42:58  15:42:58  bowe (John Bowe)
+ * Initial revision
+ * 
+ * $EndLog$
+ * ______________________________________________________________________
+ */
+
+[
+    uuid(e11dcf14-0753-11d0-b72b-0800092474cc),
+    pointer_default(ptr),
+    version(1.0)
+]
+
+interface mostypes
+{
+
+/* ______________________________________________________________________
+ *  Types for Conversation Management to support the Message
+ *  Oriented Service Application Programming Interface(MOS-API).
+ * ______________________________________________________________________
+ */
+
+    /*
+     * If mos_c_enqmode_async, the enqueue API will return
+     * immediately from the messaging system. The message delivery
+     * status is completely unknown when returning from the send
+     * operation. However, the sender can find out message
+     * delivery status through receipt of ACK messages
+     * requested via various notice options if specified.
+     */
+    const unsigned32 mos_c_enqmode_async      = 0x00000000;
+    /*
+     * If mos_c_enqmode_sync, the API will wait for a return
+     * result from the messaging system.
+     * Applies only to the message passing model.
+     */
+    const unsigned32 mos_c_enqmode_sync       = 0x00000001;
+    /*
+     * mos_c_enqmode_nowait_enq applies only in the message
+     * queuing model and synchronous communication mode.
+     * If mos_c_enqmode_nowait_enq, the enqueue API
+     * will return immediately with an error if the queue is full.
+     */
+    const unsigned32 mos_c_enqmode_nowait_enq = 0x00000002;
+    /*
+     * mos_c_enqmode_wait_enq applies only in the message
+     * queuing model and synchronous communication mode.
+     * If mos_c_enqmode_wait_enq, the enqueue API
+     * will wait until the specified queue is no longer full.
+     * At this point, the message has been enqueued, but
+     * the "dequeue" delivery status is unknown. However,
+     * the sender can find out message delivery status
+     * through receipt of ACK messages requested via various
+     * notice options if specified.
+     */
+    const unsigned32 mos_c_enqmode_wait_enq   = 0x00000004;
+    /*
+     * mos_c_enqmode_wait_deq applies only in the message
+     * queuing model and synchronous communication mode.
+     * If mos_c_enqmode_wait_deq, the enqueue API will wait
+     * until a message has been retrieved.
+     */
+    const unsigned32 mos_c_enqmode_wait_deq   = 0x00000008;
+
+    /*
+     * mos_c_deqmode_nowait_deq applies only in the message queuing model.
+     * If mos_c_deqmode_nowait, the dequeue/peek APIs will return
+     * immediately with an error if the queue is empty or
+     * if the queue does not have any messages that meet the
+     * selection criteria.
+     */
+    const unsigned32 mos_c_deqmode_nowait     = 0x00000000;
+
+    /*
+     * mos_c_deqmode_wait applies only in the message queuing model.
+     * If mos_c_deqmode_wait, the dequeue/peek APIs will wait
+     * until the specified queue is non-empty and the message meets
+     * the selection criteria.
+     */
+    const unsigned32 mos_c_deqmode_wait       = 0x00000001;
+
+    /*
+     * The default data type is an array of bytes. It has a NIL UUID as a
+     * data type value. An application designer uses the following structure
+     * to send and receive an array of bytes. Note that there is no
+     * encoding/decoding performed by the messaging system.
+     */
+    typedef struct mos_datatype_bytearray_s_t {
+       unsigned32          size;
+       [ptr,size_is(size)]
+       byte *              data;
+    } mos_datatype_bytearray_t;
+
+    /*
+     * The ACK/NAK data type is used by the Q-mgr to send ACK/NAK messages
+     * once a notice is requested. An application designer uses the following
+     * structure to retrieve the ACK/NAK message. Note that encoding/decoding
+     * is performed automatically by the messaging system.
+     */
+    typedef struct {
+       uuid_t              msg_id;        /* msg_id in question */
+       unsigned32          notice_option; /* notice option requested */
+       error_status_t      status;        /* status of notice */
+    } mos_datatype_ack_t;
+
+/* ______________________________________________________________________
+ *  Types for Message Attribute Utilities to support the
+ *  Message Oriented Service Application Programming Interface(MOS-API).
+ * ______________________________________________________________________
+ */
+
+    /*
+     *  msg_type:
+     *     Describes the message type for messaging system purposes.
+     *     The default message type is mos_c_msg_attr_msgtype_data.
+     *
+     *  A message type of "mos_c_msg_attr_msgtype_notice" is only
+     *  sent by a queue manager.
+     */
+    typedef enum {
+       mos_c_msg_attr_msgtype_data,     /* app-specific data */
+       mos_c_msg_attr_msgtype_notice    /* Q-mgr notice */
+    } mos_msg_attr_msgtype_t;
+
+    /*
+     *  message persistence:
+     *     Indicates whether a message is stored in memory or on disk.
+     *     The default message persistence is mos_c_msg_attr_volatile.
+     *
+     *  Note that there is a persistence attribute on queues
+     *  as well as messages.
+     */
+    typedef enum {
+       mos_c_msg_attr_volatile,         /* msg stored in memory */
+       mos_c_msg_attr_persistent        /* msg stored on disk */
+    } mos_msg_attr_persistence_t;
+
+    /*
+     * notice flags:
+     *    Inform the messaging system when to notify the sender
+     *    of message delivery activity.
+     *    The default is mos_c_msg_attr_notice_none.
+     *
+     * In the Message Passing(MP) model, the following options are allowed:
+     *                     mos_c_msg_attr_notice_none
+     *                     mos_c_msg_attr_notice_mp_ack
+     *
+     * In the Message Queuing(MQ) model, the following options are allowed:
+     *                     mos_c_msg_attr_notice_none
+     *                     mos_c_msg_attr_notice_enqueue
+     *                     mos_c_msg_attr_notice_dequeue
+     * A combination of several notice options is allowed within the MQ model.
+     */
+    const unsigned32 mos_c_msg_attr_notice_none     = 0x00000000;
+						      /* No notice */
+    const unsigned32 mos_c_msg_attr_notice_enqueue  = 0x00000001;
+						      /* Msg Enqueued */
+    const unsigned32 mos_c_msg_attr_notice_dequeue  = 0x00000002;
+						      /* Msg Dequeued */
+    const unsigned32 mos_c_msg_attr_notice_mp_ack   = 0x00000004;
+						      /* Msg ACK for MP only */
+
+    /*
+     * Default message priority
+     */
+    const unsigned32 mos_c_msg_attr_dflt_priority      = 100;
+
+    /*
+     * Default message expiration/time-to-live(ttl):
+     *    msg lives for 24 hours if not retrieved
+     */
+    const unsigned32 mos_c_msg_attr_dflt_ttl           = 24;
+
+    /*
+     * Default message time-to-receive(ttr):
+     *    msg allowed to be retrieved now
+     */
+    const unsigned32 mos_c_msg_attr_dflt_ttr           = 0;
+
+/* ______________________________________________________________________
+ *  Types for Message Selection Filter Utilities to support
+ *  the Message Oriented Service Application Programming Interface(MOS-API).
+ * ______________________________________________________________________
+ */
+
+    /*
+     *  Valid Mask Types
+     *
+     *  A mask type indicates the type of selection criteria for a
+     *  specified mask.
+     */
+    typedef enum {
+	mos_c_mask_type_msgid,
+	mos_c_mask_type_msgtype,
+	mos_c_mask_type_priority,
+	mos_c_mask_type_datatype,
+	mos_c_mask_type_protectlvl,  /* end-to-end protection */
+	mos_c_mask_type_sender_prin, /* sender's principal */
+	mos_c_mask_type_ttr          /* time-to-receive msgs */
+    } mos_msg_selmask_type_t;
+
+    /*
+     *  Valid Mask Operations
+     *
+     *  A mask operation defines a relational operator to be performed on
+     *  the "mask_type" using the "mask_value".
+     */
+    typedef enum {
+	mos_c_mask_op_none,                /* No operation performed */
+	mos_c_mask_op_equal,               /* =  */
+	mos_c_mask_op_not_equal,           /* != */
+	mos_c_mask_op_less_than,           /* <  */
+	mos_c_mask_op_eq_less_than,        /* <= */
+	mos_c_mask_op_greater_than,        /* >  */
+	mos_c_mask_op_eq_greater_than      /* >= */
+    } mos_msg_selmask_op_t;
+
+/* ______________________________________________________________________
+ *  Types for Queue Attribute Utilities to support the Message
+ *  Oriented Service Application Programming Interface(MOS-API).
+ * ______________________________________________________________________
+ */
+
+    const unsigned32 mos_rsrc_name_maxsize          = 1024; /* Incl NULL */
+    typedef [string] char     mos_rsrc_name_t[mos_rsrc_name_maxsize];
+
+    const unsigned32 mos_que_attr_annotation_maxsize    = 64; /* Incl NULL */
+    typedef [string] char     mos_que_attr_annotation_t[mos_que_attr_annotation_maxsize];
+
+    /*
+     *  que_maxsize:
+     *      Maximum queue size allowed.
+     *      A default queue size of zero indicates that the number
+     *      of queue elements is unlimited but subject to the
+     *      availability of system resources.
+     */
+    const unsigned32 mos_c_que_attr_dflt_quemaxsize     = 0;
+
+    /*
+     *  msg_maxsize:
+     *      Maximum message size allowed on a queue.
+     *      A default message size of zero indicates that a message
+     *      can be of any size but subject to the availability of
+     *      system resources.
+     */
+    const unsigned32 mos_c_que_attr_dflt_msgmaxsize     = 0;
+
+    /*
+     *  queue persistence:
+     *       Indicates whether the queue is in memory or on disk. The default
+     *       queue persistence is mos_c_que_attr_msgpersistence.
+     *
+     *  Note that there is a persistence attribute on messages
+     *  as well as queues. If the message persistence is "persistent"
+     *  and the queue persistence is "volatile", the queue manager stores
+     *  the message in memory only and returns a warning message to the
+     *  caller of the send operation. If the queue persistence is
+     *  "msgpersistence", then the queue manager stores the message
+     *  where the message persistence dicates. Note that if message
+     *  persistence dicates, then messages may be enqueued in memory as
+     *  well as on disk. The following table describes how a message is
+     *  stored based on the persistence attribute of both the queue and
+     *  the message itself.
+     *
+     *                | Use Msg     | Volatile   | Persistent
+     *                | Persistence | Queue      | Queue
+     *      --------------------------------------------------
+     *      Volatile  |             |            |
+     *      Message   | Volatile    | Volatile   | Persistent
+     *                |             |            |
+     *      --------------------------------------------------
+     *      Persisent |             |            |
+     *      Message   | Persistent  | Volatile   | Persistent
+     *                |             | w/warning  |
+     *
+     */
+    typedef enum {
+       mos_c_que_attr_msgpersistence,       /* msg persistence dicates */
+       mos_c_que_attr_volatile,             /* queue stored in memory */
+       mos_c_que_attr_persistent            /* queue stored on disk */
+    } mos_que_attr_persistence_t;
+
+    /*
+     * que_idle_timeout:
+     *     Indicates the maximum number of hours where no activity
+     *     occurs on an empty queue. Once this timeout is reached,
+     *     its queue manager is free to implicitly delete the empty
+     *     queue at any time thereafter. If this value is not equal
+     *     to zero, the queue manager starts the idle timer when a
+     *     queue is empty.
+     *
+     *     The default queue idle timeout is 24 hours. An empty
+     *     queue idle timeout of zero indicates that a queue
+     *     remains indefinitely until explicitly deleted via
+     *     mos_que_mgmt_delete().
+     */
+    const unsigned32 mos_c_que_attr_dflt_idletime       = 24;
+
+
+/* ______________________________________________________________________
+ *  Types for Queue Management Utilities to support the
+ *  Message Oriented Service Application Programming Interface(MOS-API).
+ * ______________________________________________________________________
+ */
+
+    /*
+     *  flags:  Indicates what to do with queues that are non-empty.
+     *          The default is mos_c_delop_preserve.
+     *
+     *  mos_c_delop_preserve:
+     *          Indicates to preserve queue if non-empty.
+     *  mos_c_delop_force:
+     *          Indicates to force deletion even if queue is non-empty.
+     */
+    typedef enum {
+       mos_c_delop_preserve,
+       mos_c_delop_force
+    } mos_que_delete_op_t;
+
+    /*
+     *  flags:  Indicates options allowed during a queue move.
+     *          The default is mos_c_que_mv_none.
+     *
+     *  mos_c_que_mv_none:
+     *          Indicates that there are no options.
+     *  mos_c_que_mv_referral:
+     *          Indicates that the source queue name and the destination
+     *          queue name is maintained by the source Q-mgr.
+     */
+    const unsigned32 mos_c_que_mv_none       = 0x00000000;
+    const unsigned32 mos_c_que_mv_referral   = 0x00000001;
+}
+

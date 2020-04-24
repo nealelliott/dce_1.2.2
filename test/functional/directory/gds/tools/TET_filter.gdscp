@@ -1,0 +1,110 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: TET_filter.gdscp,v $
+# Revision 1.1.4.2  1996/03/11  02:33:35  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  19:39:11  marty]
+#
+# Revision 1.1.4.1  1995/12/11  15:23:31  root
+# 	Submit
+# 	[1995/12/11  14:35:16  root]
+# 
+# Revision 1.1.2.4  1994/07/06  15:53:53  marrek
+# 	Add version string in July 1994 code drop.
+# 	[1994/07/06  15:41:55  marrek]
+# 
+# Revision 1.1.2.3  1994/06/21  14:29:09  marrek
+# 	June 1994 code submission.
+# 	[1994/06/20  08:07:22  marrek]
+# 
+# Revision 1.1.2.2  1994/06/17  18:45:38  devsrc
+# 	cr10872 - fix copyright
+# 	[1994/06/17  18:35:04  devsrc]
+# 
+# Revision 1.1.2.1  1994/05/24  15:11:34  zeliff
+# 	First version
+# 	[1994/05/24  15:01:18  zeliff]
+# 
+# $EndLog$
+#
+# $RCSfile: TET_filter.gdscp,v $ $Revision: 1.1.4.2 $ $Date: 1996/03/11 02:33:35 $
+#
+
+# (c) Copyright 1991,1992,1994 Siemens-Nixdorf Information Systems
+# Burlington, MA, USA
+# Munich, Germany
+# All Rights Reserved
+
+#simple report filter
+
+vv ()
+{
+
+   awk ' BEGIN { FS="|"; N_SUCCESS=0; N_FAIL=0 } 
+   {
+      if ($1 == 520) 
+      {
+         if ($3 ~ /failed/)  { print $3; N_FAIL++ }
+         if ($3 ~ /passed/)  { N_SUCCESS++ }
+      }
+      else
+      {
+         if ($1 == 0 || $1 == 10 || $1 == 70 || $1 == 400 || $1 == 900)
+         {
+            if ($1 != 400)
+            {
+               line=$3
+               for (i=4; i<=NF; i++)
+                  line = line "|" $i
+               if ($1 == 10)
+               {
+                  print "\n"line"\n"
+               }
+               else
+               {
+                  print line
+               }
+            }
+            flag = 0;
+         }  
+         else
+         {
+            if ($1 == 220) 
+            {
+               line=$3
+               if ($3 == "PASS" || $3 == "FAIL")
+               {
+                  for (i=4; i<=NF; i++)
+                     line = line "|" $i
+                  print "--> Test cases: " line"ED\n"
+               }
+               flag = 0;
+            } 
+         }
+      }
+   } END { print "\n------------------------------\n"; 
+           print "Total PASSED = ",N_SUCCESS;
+           print "Total FAILED = ",N_FAIL } ' $1 >> $1.log
+}   
+
+scriptname=`basename $0`
+
+if [ $# -lt 1 ]
+then
+  echo "\nUsage: $scriptname   <Name of TET journal file>  "
+  echo ""
+  exit
+fi
+
+echo "Results of GDS Admin Tests:  `date`" > $1.log
+echo "----------------------------------------------------\n" >> $1.log
+vv $1  | grep -v Restore | grep -v Save | grep -v NORESULT 
+
+echo "\n --> vi $1.log   to show the results\n"

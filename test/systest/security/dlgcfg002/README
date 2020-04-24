@@ -1,0 +1,95 @@
+@OSF_COPYRIGHT@
+Copyright (c) 1994, 1996 Open Software Foundation, Inc.
+ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+src directory for the full copyright text.
+
+
+This test has a dual purpose to test out the user_delegate ACL entry type.
+and to test out the delegation compatibility modes.
+In other words this single test comprises the two system
+tests dlgcfg002 and dlgcmp001
+
+dts_client is an initiator which calls dts_intermediary
+dts_intermediary is a delegate which calls sec_acl_test_access.
+
+dts_intermediary will do a sec_acl_test_access check
+on a DTS ACL (e.g.  /.:/hosts/stthomas/dts-entity)
+
+
+Setup (for user_delegate ACL entry type testing, a.ka. dglcfg002):
+
+1) build and install the program
+   or cd to install/at386/dcetest/dce1.1/test/tet/system/security/dlgcfg002
+
+2) dce_login as cell_admin and run dts_rgy_setup.sh script to add registry items
+
+3) dce_login as cell_admin and
+   start "dts_intermediary -h hostname -all -d"  
+   where hostname is the hostname where the ACL resides
+
+
+4) Adjust the acl on /.:/hosts/stthomas/dts-entity with commands like
+   the following (assuming there is a dts-entity on stthomas): 
+
+acl_edit /.:/hosts/stthomas/dts-entity -m user:dts_test: -m user_delegate:dts_svr:
+acl_edit /.:/hosts/stthomas/dts-entity -m user:dts_test:rwc -m user_delegate:dts_svr:rwc
+
+
+5) dce_login as cell_admin and run dts_client
+
+You should expect either: 
+
+PASSED: Delegation test
+
+
+or
+
+FAILED: Delegation test; Error from dts_test_access:
+
+
+Note: A major drawback of this test is it only test 1 delegation
+      ACL entry type.  The test can be improved by adding
+      more ACL entry types.
+
+      Also this test uses cached name service database bindings.
+      So, if you run the test from a certain node, you can not
+      then change the node you want to run the test from.
+      To fix this you need to use rpc_ns_mgmt_set_exp_age
+      in the client part of the test.
+
+Setup (for delegation compatibility testing, a.k.a dlgcmp001):
+
+1) build and install the program
+   or cd to install/at386/dcetest/dce1.1/test/tet/system/security/dlgcfg002
+
+2) dce_login as cell_admin and run dts_rgy_setup.sh script to add registry items
+
+3) dce_login as cell_admin and
+   start "dts_intermediary -h hostname -all -d"  on 1.1 machine
+   where hostname is the hostname where the ACL resides
+
+
+4) Adjust the acl on /.:/hosts/stthomas/dts-entity with commands like
+   the following (assuming the pre1.1 machine was stthomas): 
+
+acl_edit /.:/hosts/stthomas/dts-entity -m user:dts_test: -m user:dts_svr:
+acl_edit /.:/hosts/stthomas/dts-entity -m user:dts_test:rwc -m user:dts_svr:rwc
+
+
+5) dce_login as cell_admin and run dts_client
+
+You should expect either: 
+
+PASSED: Delegation test
+
+
+or
+
+FAILED: Delegation test; Error from dts_test_access: 
+
+
+Note: Also this test uses cached name service database bindings.
+      So, if you run the test from a certain node, you can not
+      then change the node you want to run the test from.
+      To fix this you need to use rpc_ns_mgmt_set_exp_age
+      in the client part of the test.

@@ -1,0 +1,447 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dfs.repfs_checklist,v $
+# Revision 1.1.87.2  1996/03/11  02:44:11  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:07:27  marty]
+#
+# Revision 1.1.87.1  1995/12/11  21:59:39  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:58:54  root]
+# 
+# Revision 1.1.85.1  1994/02/04  20:48:41  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:26:10  devsrc]
+# 
+# Revision 1.1.83.3  1994/01/20  18:44:25  annie
+# 	added copyright header
+# 	[1994/01/20  18:40:48  annie]
+# 
+# Revision 1.1.83.2  1994/01/19  17:19:19  gmd
+# 	Merged with changes from 1.1.83.1
+# 	[1994/01/19  17:19:12  gmd]
+# 
+# 	Corrected intro outline reference to dfs.lock to dfs.repfs
+# 	and comment leaders.
+# 	[1994/01/19  17:08:26  gmd]
+# 
+# 	Per 9522:
+# 	- correct lsreplicas output
+# 	- add crmount commands for clarity
+# 	- correct lsheader output
+# 	- correct comment on access to replicas
+# 	while repserver processes down
+# 	- correct step G. to reflect new
+# 	dfs.repfs test.
+# 	[1994/01/19  16:50:06  gmd]
+# 
+# Revision 1.1.5.3  1993/05/21  20:39:21  gmd
+# 	Improved with more generic names, statement of configuration, etc.
+# 	[1993/05/21  20:28:08  gmd]
+# 
+# Revision 1.1.5.2  1993/04/30  14:54:48  gmd
+# 	Added step to create an explicit read-write mount point
+# 	for root.dfs before replicating it.
+# 	[1993/04/29  22:00:43  gmd]
+# 
+# Revision 1.1.2.3  1993/04/09  20:30:47  gmd
+# 	Added more details.
+# 	[1993/04/09  20:29:57  gmd]
+# 
+# Revision 1.1.2.2  1993/02/12  21:38:43  gmd
+# 	Placeholder - incomplete - outline only.
+# 	[1993/02/12  20:55:51  gmd]
+# 
+# Revision 1.1.83.1  1993/12/28  20:15:38  sally
+# 	Changed comment leader from #<tab> to #<space>
+# 	[1993/12/28  20:11:13  sally]
+# 
+# Revision 1.1.5.3  1993/05/21  20:39:21  gmd
+# 	Improved with more generic names, statement of configuration, etc.
+# 	[1993/05/21  20:28:08  gmd]
+# 
+# Revision 1.1.5.2  1993/04/30  14:54:48  gmd
+# 	Added step to create an explicit read-write mount point
+# 	for root.dfs before replicating it.
+# 	[1993/04/29  22:00:43  gmd]
+# 
+# Revision 1.1.2.3  1993/04/09  20:30:47  gmd
+# 	Added more details.
+# 	[1993/04/09  20:29:57  gmd]
+# 
+# Revision 1.1.2.2  1993/02/12  21:38:43  gmd
+# 	Placeholder - incomplete - outline only.
+# 	[1993/02/12  20:55:51  gmd]
+# 
+# $EndLog$
+############################################################################
+# TITLE: dfs.repfs_checklist
+# SYNTAX:
+# Not Applicable - Read-only file.
+# OBJECTIVE:
+# Document procedures used to setup and verify replicated
+# filesets.
+# DESCRIPTION:
+# Examples of commands to be typed in are preceeded by "> ". 
+# Example output is preceeded by "< ".
+# Order of procedures s:
+# 	A. Setup
+# 	B. Verify
+# 	C. Test release replication
+# 	D. Test scheduled replication
+# 	E. Disable then re-enable a read-only fileset
+# 	F. Disable then re-enable the read-write fileset
+# 	G. Disable the read-write fileset, make one replica
+		   the read-write fileset
+# 	H. Run dfs.lock with scheduled replication for 48 hours
+############################################################################
+A. Setup
+To setup fileset replication, you must choose the type of replication and
+the location(s) for the replicas. In the following example, release
+replication is set up with a (required) local replica and a remote replica
+(optional).
+
+CONFIGURATION IS:	2 servers, 3 lfs aggregates*, 2 filesets, 3 replicas
+
+(* If there are no servers with 2 lfs aggregates, you can run the following
+checklist replacing references to lfs_aggr3 with lfs_aggr1)
+
+servers		aggregates	filesets
+-------		----------	--------
+server1		lfs_aggr1	epi.1 (release)
+		lfs_aggr3	epi.1.readonly
+		lfs_aggr3	epi.2.readonly
+
+server2		lfs_aggr2	epi.2 (scheduled)
+				epi.1.readonly
+
+> %fts setrepinfo -fileset epi.1 -release
+>fts setrepinfo: Using default value for maxage of 2:00:00
+>fts setrepinfo: Using default value for failage of 1d0:00:00
+>fts setrepinfo: Using default value for reclaimwait of 18:00:00
+
+> %fts addsite -fileset epi.1 -server /.:/hosts/server1 -aggregate lfs_aggr3
+>Added replication site /.:/hosts/server1 lfs_aggr3 for fileset epi.1
+> %fts addsite -fileset epi.1 -server /.:/hosts/server2 -aggregate lfs_aggr2
+>Added replication site /.:/hosts/server2 lfs_aggr2 for fileset epi.1
+
+In the following example, scheduled replication is set up with a remote
+replica.
+
+> %fts setrepinfo -fileset epi.2 -scheduled
+>fts setrepinfo: Using default value for maxage of 2:00:00
+>fts setrepinfo: Using derived value for failage of 1d0:00:00
+>fts setrepinfo: Using default value for reclaimwait of 18:00:00
+>fts setrepinfo: Using derived value for minrepdelay of 0:05:00
+>fts setrepinfo: Using derived value for defaultsiteage of 0:30:00
+
+> %fts addsite -fileset epi.2 -server /.:/hosts/server1 -aggregate lfs_aggr3
+>Added replication site /.:/hosts/server1 lfs_aggr3 for fileset epi.2
+
+B. Verify
+To verify fileset replication, you must first check that the read-only
+filesets exist in the fldb.
+
+> %fts lsfldb -fileset epi.1
+>        readWrite   ID 0,,7  valid
+>        readOnly    ID 0,,8  valid
+>        backup      ID 0,,9  invalid
+>number of sites: 3
+>  Release repl: maxAge=2:00:00; failAge=1d0:00:00; reclaimWait=18:00:00
+>   server           flags     aggr   siteAge principal      owner               
+>server1.osf.org   RW       lfs_aggr1 0:00:00 hosts/server1<nil>               
+>server1.osf.org   RO       lfs_aggr3 0:00:00 hosts/server1<nil>               
+>server2.osf.org        RO       lfs_aggr2 0:00:00 hosts/server2     <nil>               
+> %fts lsfldb -fileset epi.2
+>        readWrite   ID 0,,10  valid
+>        readOnly    ID 0,,11  valid
+>        backup      ID 0,,12  invalid
+>number of sites: 2
+>  Sched repl: maxAge=2:00:00; failAge=1d0:00:00; reclaimWait=18:00:00; minRepDelay=0:05:00; defaultSiteAge=0:30:00
+>   server           flags     aggr   siteAge principal      owner               
+>server2.osf.org        RW       lfs_aggr2 0:00:00 hosts/server2     <nil>               
+>server1.osf.org   	RO       lfs_aggr3 0:30:00 hosts/server1     <nil>             
+
+To see the current status of replicas, use the lsreplicas command. 
+
+> %fts lsreplicas -fileset epi.1 -all
+>On server2.osf.org:
+>epi.1, cell 134228756,,3012024882: src 0,,8 (lfs_aggr3) (on server1.osf.org) => server2.osf.org 0,,8 (lfs_aggr2)
+>   flags 0x60000, volstates 0.  NumKAs 0; lastKA sweep=Wed Dec 31 19:00:00 1969
+>   srcVV: 0,,0; curVV: 0,,0; WVT ID = 0,,0
+>   Lost token 179 ago; token expires 86019 hence; new version published 733099170 ago
+>   vvCurr 733098991.075795 (179 ago); vvPingCurr 733098991.075795 (179 ago)
+>   Last update attempt 733098789.233820 (381 ago); next scheduled attempt 733099665.075795 (495 hence)
+>   Status msg: LoseWVT: Lost WVT at 733098991: types 0 remain
+
+Note: Currently the Status msg of release replicas appears to be somewhat
+random and often "negative" sounding even though the replica is fine.
+
+> %fts lsreplicas -fileset epi.2 -all
+>On server1.osf.org:
+>epi.2, cell 134228756,,3012024882: src 0,,10 (lfs_aggr2) (on server2.osf.org) => server1.osf.org 0,,11 (lfs_aggr3)
+>   flags 0x20001, volstates 0x10423206.  NumKAs 0; lastKA sweep=Wed Dec 31 19:00:00 1969
+>   srcVV: 0,,1; curVV: 0,,1; WVT ID = 732903086,,3448
+>   Lost token 7776218 ago; token expires 14190 hence; new version published 733099937 ago
+>   vvCurr 725323719.165291 (7776218 ago); vvPingCurr 733099727.664969 (210 ago)
+>   Last update attempt 733099729.274369 (208 ago); next scheduled attempt 733099764.245775 (-173 hence)
+>   Status msg: CompleteNewVol: Volume now marked as complete
+
+NOTE: In the release replica case (epi.1), only the remote site is reported
+by lsreplicas. This is because only the remote site is managed by the
+repserver. Note also that unless a replica update/release is in progress,
+the srcVV and curVV values should be the same.
+
+C. Test Release Replication
+The release read-only replica filesets do not actually exist on the aggregates
+until replication occurs. Load the read-write fileset and try the
+release replication. Note the mount points for the read-write filesets
+are /:/epi_1 and /:/epi_2 - create these using the following commands:
+
+> %fts crmount -dir /:/epi_1 -fileset epi.1
+> %fts crmount -dir /:/epi_2 -fileset epi.2
+
+> %cp /etc/*dce* /:/epi_1
+> %fts release -fileset epi.1
+>Released fileset epi.1 successfully
+
+D. Test Scheduled Replication
+The default value for scheduled replication is 30 minutes. Load the read-write
+fileset and wait 30 minutes (or the amount of time you specified with the
+-maxsiteage switch on your fts addsite command). Alternatively, you can
+force an update to a scheduled replication site earlier with the update
+command. Here we use the update command, later in the script, we'll change
+the default from 30 minutes down to 10 minutes and wait.
+
+> %cp /opt/dcelocal/var/dfs/adm/* /:/epi_2
+> %fts update -fileset epi.2 -all
+>fts update: Repserver on server1.osf.org requested to update fileset 0,,11
+
+To verify successful replication, first check that the replicas now exist
+on the aggregates. Then, create mount points for the replicas and look at them. 
+Note that the update command differs from the release command in that it
+does NOT wait for the replication to complete. Use the lsreplicas command
+to determine that the replication has completed. The replication is complete
+when lsreplicas reports that srcVV and curVV have the same fileset id.
+
+EXAMPLE OF NOT YET COMPLETE:
+> %fts lsreplicas -fileset epi.2 -all
+>On server1.osf.org:
+>epi.2, cell 134228756,,3011985792: src 0,,7 (lfs_aggr2) (on server2.osf.org) => server1.osf.org 0,,8 (lfs_aggr3)
+>   flags 0x20081, volstates 0x10421206.  NumKAs 0; lastKA sweep=Wed Dec 31 19:00:00 1969
+>   srcVV: 0,,140; curVV: 0,,133; WVT ID = 734214728,,35
+>   Lost token 43 ago; token expires 14383 hence; new version published 8080 ago
+>   vvCurr 734224236.893255 (43 ago); vvPingCurr 734224262.924503 (17 ago)
+>   Last update attempt 734224264.748733 (15 ago); next scheduled attempt 0.916691 (-734224279 hence)
+>   Status msg: All OK with making the clone.
+
+EXAMPLE OF COMPLETE:
+> %fts lsreplicas -fileset epi.2 -all
+>On server1.osf.org:
+>epi.2, cell 134228756,,3011985792: src 0,,10 (lfs_aggr2) (on server2.osf.org) => server1.osf.org 0,,11 (lfs_aggr3)
+>   flags 0x20001, volstates 0x10423206.  NumKAs 0; lastKA sweep=Wed Dec 31 19:00:00 1969
+>   srcVV: 0,,140; curVV: 0,,140; WVT ID = 734214728,,35
+>   Lost token 80 ago; token expires 14346 hence; new version published 17 ago
+>   vvCurr 734224236.893255 (80 ago); vvPingCurr 734224262.924503 (54 ago)
+>   Last update attempt 734224264.748733 (52 ago); next scheduled attempt 734260299.623741 (35983 hence)
+>   Status msg: ReplicaWantsAdvance: all OK at 734224299
+
+> %fts lsheader -aggregate lfs_aggr3 -server server1
+>Total filesets on server server1 aggregate lfs_aggr3 (id 5): 2
+>epi.1.readonly           0,,8 RO  	32 K alloc  	32 K quota On-line
+>epi.2.readonly           0,,11 RO      208 K alloc     208 K quota On-line
+>Total filesets on-line 2; total off-line 0; total busy 0
+
+> %fts lsheader -aggregate lfs_aggr2 -server server2
+>Total filesets on server server2 aggregate lfs_aggr2 (id 2): 2
+>epi.1.readonly           0,,8 RO     32 K alloc     32 K quota On-line
+>epi.2                    0,,10 RW    208 K alloc    208 K quota On-line
+>Total filesets on-line 2; total off-line 0; total busy 0
+
+NOTE: The "On-line" status for the readonly replicas indicates
+that they are not currently being updated.
+
+Create mountpoints for the readonly filesets and compare the two.
+
+> %fts crmount -dir /:/epi_1_ro -fileset epi.1.readonly
+> %fts crmount -dir /:/epi_2_ro -fileset epi.2.readonly
+
+> %diff -r /:/epi_1 /:/epi_1_ro
+> %diff -r /:/epi_2 /:/epi_2_ro
+
+Overwrite some files and delete others from the read-write filesets 
+and force replication again. Compare the two again.
+
+> %date > /:/epi_1/rc.dce
+> %rm /:/epi_1/dce.rm
+> %date > /:/epi_2/FlLog
+> %rm /:/epi_2/FtLog
+> %diff -r /:/epi_1 /:/epi_1_ro
+(SHOULD DIFFER)
+> %diff -r /:/epi_2 /:/epi_2_ro
+(SHOULD DIFFER)
+> %fts release -fileset epi.1
+> %fts update -fileset epi.2 -all
+> %fts lsreplicas -fileset epi.2 -all
+(CHECK THAT srcVV,curVV and Status indicate update completed)
+> %diff -r /:/epi_1 /:/epi_1_ro
+> %diff -r /:/epi_2 /:/epi_2_ro
+
+NOTE: The old and deleted  files may still appear to be present due to caching and
+the fact that the MAXAGE setting (default = 2 hours) has not expired. Empty
+your cache with:
+
+> %cm checkfilesets
+> %cm flushfileset -path /:/epi_1_ro
+> %cm flushfileset -path /:/epi_2_ro
+
+and try the diff commands again.
+
+> %diff -r /:/epi_1 /:/epi_1_ro
+> %diff -r /:/epi_2 /:/epi_2_ro
+
+You can not be sure which site of a multi-site replica (ie. epi.1.readonly)
+is being used. The cache manager dynamically chooses which site at
+the time of the call. The cm whereis command indicates that the cache
+manager is aware of all its choices.
+
+> % cm whereis /:/epi_1_ro/rc.dce
+>The file '/:/epi_1_ro/rc.dce' resides in the cell 'server2_cell', 
+>in fileset 'epi.1.readonly', on hosts server2.osf.org, server1.osf.org.
+
+E. Disable and Re-enable a Read-Only Fileset
+To disable updates to read-only filesets, you can stop the
+repserver process servicing them. 
+
+NOTE: The local read-only fileset for release replication is NOT serviced
+by the repserver process.
+
+> %bos stop -server /.:/hosts/server1 -proc repserver
+> %bos stop -server /.:/hosts/server2 -proc repserver
+
+Clear your cache first so you are sure you're not just relying 
+on the cache. You should have access to the replicas since the 
+repserver process only controls updates to the replicas, not access.
+
+> %cm check
+> %cd /:/epi_1_ro
+> %cd /:/epi_2_ro
+
+Update the read-write fileset and force replication.
+
+> %date > /:/epi_1/time_stamp
+> %fts release epi.1
+>Couldn't talk to repserver on server2.osf.org: communications failure (dce / rpc)
+>Released fileset epi.1 successfully
+
+> %date > /:/epi_2/time_stamp
+> %fts update epi.2 -all
+>fts update: Repserver on server1.osf.org cannot update: communications failure (dce / rpc)
+
+Restart the repservers and re-try the replication.
+
+> %bos start -server /.:/hosts/server1 -proc repserver
+> %bos start -server /.:/hosts/server2 -proc repserver
+> %fts release epi.1
+>Released fileset epi.1 successfully
+> %fts update epi.2 -all
+>fts update: Repserver on server1.osf.org requested to update fileset 0,,11
+> %cat /:/epi_1_ro/time_stamp
+>Fri Apr 2 16:05:02 EST 1993
+> %cat /:/epi_2_ro/time_stamp
+>Fri Apr 2 16:06:23 EST 1993
+
+Alternatively, you can detach the aggregate housing the read-only replicas.
+Detach lfs_aggr3 on server1.
+
+> %dfsexport /dev/rz1e -detach
+>dfsexport: Revoking tokens for filesets on aggregate 3...
+
+> %fts release epi.1
+>Aggregate Id 3 is not exported from the server
+>Cannot check replication site server1.osf.org/3: Aggregate is not attached (dfs / ftu)
+>The fileset 0,,7 could not be released: Aggregate is not attached (dfs / ftu)
+>Error in release: Aggregate is not attached (dfs / ftu)
+
+> %dfsexport /dev/rz1e
+> %fts release epi.1
+>Released fileset epi.1 successfully
+
+F. Disable and Re-enable the Read-Write Fileset
+To disable a read-write fileset, you can detach tha aggregate housing
+the read-write fileset. You will still have access to the read-only
+fileset if you use an explicit read-only mount point (ie. /:/epi_2_ro)
+OR (more transparently) if there is a read-only path to the read-only
+fileset. That is, you must replicate all the filesets from root.dfs
+down to the fileset containing the mount point for the read-write
+fileset. In this example, since the /:/epi_2 mount point is located
+in root.dfs, I only need to replicate root.dfs.
+
+NOTE: The /: mount point is a special case. The /: mount point for
+root.dfs becomes a mount point for root.dfs.readonly once root.dfs is
+replicated. You MUST create an explicit read-write mount point for
+root.dfs BEFORE replicating or you will lose read-write access to root.dfs.
+Also, note that in this example, I create 2 replication sites for root.dfs,
+one on the aggregate we're detaching. A side effect of /: being
+a mount point for root.dfs.readonly is that ALL ACCESS to dfs is blocked
+if there is no root.dfs.readonly fileset attached. 
+
+> %fts crmount -dir /:/root_dfs -fileset root.dfs -rw
+
+> %fts setrepinfo -fileset root.dfs -scheduled      
+>fts setrepinfo: Using default value for maxage of 2:00:00
+>fts setrepinfo: Using derived value for failage of 1d0:00:00
+>fts setrepinfo: Using default value for reclaimwait of 18:00:00
+>fts setrepinfo: Using derived value for minrepdelay of 0:05:00
+>fts setrepinfo: Using derived value for defaultsiteage of 0:30:00
+> %fts addsite -fileset root.dfs -aggregate lfs_aggr2 -server server2 -maxsiteage 30m
+> %fts addsite -fileset root.dfs -aggregate lfs_aggr3 -server server1 -maxsiteage 30m
+> %fts update root.dfs -all
+>fts update: Repserver on server2.osf.org requested to update fileset 0,,2
+>fts update: Repserver on server1.osf.org requested to update fileset 0,,2
+
+Ensure that the update completes before detaching lfs_aggr2 by using the 
+fts lsreplicas command and checking that the srcVV and curVV match.
+
+> %fts lsreplicas root.dfs -all
+(check srcVV and curVV in output if don't match, wait and try again)
+
+Detach lfs_aggr2 on server2.
+
+> %dfsexport /dev/rz3c -detach
+>dfsexport: Revoking tokens for filesets on aggregate 2
+
+Test that read access to the fileset epi.2 is maintained even though the
+read-write fileset is not available. Flush the cache to be sure we're
+accessing the replicas, not the cache.
+
+> %cm checkfilesets
+> %cm flushfileset /.:/fs
+> %cm flushfileset /.:/fs/epi_2
+> %ls /:/epi_2
+>BosLog  FlLog   FtLog   RepLog   time_stamp
+> %cm whereis .
+>The file '.' resides in the cell 'server2_cell.qadce.osf.org', 
+>in fileset 'epi.2.readonly', on host server1.osf.org.
+
+G. Run dfs.repfs with scheduled replication for 48 hours.
+Edit the repfs.data file so that it's RW_PATH is the mount point
+to a read-write fileset whose replication type is scheduled and
+the RO_PATH is the mount point for the corresponding read-only
+fileset. The test will verify that what is written via the RW_PATH
+can be read via the RO_PATH after replication.
+By default, scheduled replication occurs periodically (every MaxSiteAge minutes). 
+By default, this occurs every 30 minutes. (MaxSiteAge = DefaultSiteAge =
+1/4 of MaxAge = 1/4 of 2h).
+
+NOTE: The repserver (currently) requires a window of inactivity on the
+read-write fileset in order to successfully update the replica(s). 
+Therefore, for a successful run, you should limit the other activity in
+the read-write fileset during the test.
+
+

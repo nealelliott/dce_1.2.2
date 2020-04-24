@@ -1,0 +1,1374 @@
+#!/bin/dcecp
+source ./template.tcl
+
+set curtest /:/delegation.current_test
+set server_loc /.:/delegation/servers
+set s0 $server_loc/server0
+set s1 $server_loc/server1
+set s2 $server_loc/server2
+set s3 $server_loc/server3
+set s4 $server_loc/server4
+set s5 $server_loc/server5
+set s6 $server_loc/server6
+set s7 $server_loc/server7
+
+set dfs_file $LFS_DIR/delegated/file0
+set eeargs -onerror
+exec rm -f $curtest
+
+puts ""
+puts "========================================"
+puts "Test: do_dfs_file.dcp"
+puts "Starting Target Restriction section"
+puts "========================================"
+flush stdout
+puts ""
+
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user delegation0 r} \
+	{user delegation1 r} \
+	{user delegation2 r} \
+	{user delegation3 r} \
+	{user delegation4 r} \
+	{user delegation5 r} \
+	{user delegation6 r} \
+	{user delegation7 r} \
+    } $dfs_file 
+
+# Try simple scenario
+puts ""
+puts "TEST 1: delegate $DARGS -a r -T delegation0 $s0 $dfs_file"
+puts "TEST 1 removed from test suite"
+#exec echo "TEST 1" > $curtest
+#eval ee $eeargs exec $SRC/delegate $DARGS -a r -T delegation0 $s0 \
+#	 $dfs_file
+#exec rm -f $curtest
+
+puts ""
+puts "TEST 2: delegate $DARGS -a r -T delegation1 $s0 $dfs_file"
+puts "TEST 2 removed from test suite"
+#exec echo "TEST 2" > $curtest
+#eval ee $eeargs exec $SRC/delegate $DARGS -a r -T delegation1 $s0 \
+#	 $dfs_file
+#exec rm -f $curtest
+
+# Add more servers to the chain
+puts ""
+puts "TEST 3: delegate $DARGS -a r -T delegation0#delegation1 \
+	 $s0 $s1 $dfs_file"
+puts "TEST 3 removed from test suite"
+#exec echo "TEST 3" > $curtest
+#eval ee $eeargs exec $SRC/delegate $DARGS -a r \
+#	 -T delegation0#delegation1 $s0 $s1 $dfs_file
+#exec rm -f $curtest
+
+puts ""
+puts "TEST 4: delegate $DARGS -a - -T delegation0#delegation2 \
+	 $s0 $s1 $dfs_file"
+exec echo "TEST 4" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a - \
+	 -T delegation0#delegation2 $s0 $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 5: delegate $DARGS -a - -T delegation2#delegation1 \
+ 	$s0 $s1 $dfs_file"
+exec echo "TEST 5" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a - \
+	 -T delegation2#delegation1 $s0 $s1 $dfs_file
+exec rm -f $curtest
+
+# Add one more server to the chain
+puts ""
+puts "TEST 6: delegate $DARGS -a r -T \
+	 delegation0#delegation1#delegation2 $s0 $s1 $s2 $dfs_file"
+puts "TEST 6 removed from test suite"
+#exec echo "TEST 6" > $curtest
+#eval ee $eeargs exec $SRC/delegate $DARGS -a r \
+#	 -T delegation0#delegation1#delegation2 $s0 $s1 $s2 $dfs_file
+#exec rm -f $curtest
+
+puts ""
+puts "TEST 7: delegate $DARGS -a - -T \
+         delegation1#delegation2 $s0 $s1 $s2 $dfs_file"
+exec echo "TEST 7" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a - \
+	 -T delegation1#delegation2 $s0 $s1 $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 8: delegate $DARGS -a - -T \
+         delegation0#delegation2 $s0 $s1 $s2 $dfs_file"
+exec echo "TEST 8" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a - \
+	 -T delegation0#delegation2 $s0 $s1 $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 9: delegate $DARGS -a - -T \
+         delegation0#delegation1 $s0 $s1 $s2 $dfs_file"
+exec echo "TEST 9" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a - \
+	 -T delegation0#delegation1 $s0 $s1 $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "========================================"
+puts "Starting Delegate Restriction section"
+puts "========================================"
+flush stdout
+
+puts ""
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user delegation0 r} \
+	{user delegation1 r} \
+	{user delegation2 r} \
+	{user delegation3 r} \
+	{user delegation4 r} \
+	{user delegation5 r} \
+	{user delegation6 r} \
+	{user delegation7 r} \
+    } $dfs_file 
+
+# Try simple scenario
+puts ""
+puts "TEST 10: delegate $DARGS -a r -R \
+         delegation0 $s0 $dfs_file"
+exec echo "TEST 10" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r -R delegation0 $s0 \
+	 $dfs_file
+exec rm -f $curtest
+
+# Add more servers to the chain
+puts ""
+puts "TEST 11: delegate $DARGS -a r -R \
+         delegation0#delegation1 $s0 $s1 $dfs_file"
+exec echo "TEST 11" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r -R \
+	 delegation0#delegation1 $s0 $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 12: delegate $DARGS -a - -R \
+         delegation0#delegation2 $s0 $s1 $dfs_file"
+exec echo "TEST 12" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a - -R \
+	 delegation0#delegation2 $s0 $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 13: delegate $DARGS -a - -R \
+         delegation2#delegation1 $s0 $s1 $dfs_file"
+exec echo "TEST 13" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a - -R \
+	 delegation2#delegation1 $s0 $s1 $dfs_file
+exec rm -f $curtest
+
+# Add one more server to the chain
+puts ""
+puts "TEST 14: delegate $DARGS -a r -R \
+         delegation0#delegation1#delegation2 $s0 $s1 $s2 $dfs_file"
+exec echo "TEST 14" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r \
+	 -R delegation0#delegation1#delegation2 $s0 $s1 $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 15: delegate $DARGS -a - -R \
+         delegation1#delegation2 $s0 $s1 $s2 $dfs_file"
+exec echo "TEST 15" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a - \
+	 -R delegation1#delegation2 $s0 $s1 $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 16: delegate $DARGS -a - -R \
+         delegation0#delegation2 $s0 $s1 $s2 $dfs_file"
+exec echo "TEST 16" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a - \
+	 -R delegation0#delegation2 $s0 $s1 $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 17: delegate $DARGS -a - -R \
+         delegation0#delegation1 $s0 $s1 $s2 $dfs_file"
+exec echo "TEST 17" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a - \
+	 -R delegation0#delegation1 $s0 $s1 $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "========================================"
+puts "Starting EPAC chain verification section"
+puts "========================================"
+flush stdout
+puts ""
+
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user delegation0 r} \
+	{user delegation1 r} \
+	{user delegation2 r} \
+	{user delegation3 r} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 18: delegate $DARGS -a r \
+         $s0 $s1 $s2 $s3 $dfs_file"
+exec echo "TEST 18" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $s1 $s2 $s3 \
+	 $dfs_file
+exec rm -f $curtest
+
+puts ""
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user delegation1 r} \
+	{user delegation2 r} \
+	{user delegation3 r} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 19: delegate $DARGS -a - \
+         $s0 $s1 $s2 $s3 $dfs_file"
+exec echo "TEST 19" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a - $s0 $s1 $s2 $s3 \
+	 $dfs_file
+exec rm -f $curtest
+
+puts ""
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user delegation0 r} \
+	{user delegation2 r} \
+	{user delegation3 r} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 20: delegate $DARGS -a - \
+         $s0 $s1 $s2 $s3 $dfs_file"
+exec echo "TEST 20" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a - $s0 $s1 $s2 $s3 \
+	 $dfs_file
+exec rm -f $curtest
+
+puts ""
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user delegation0 r} \
+	{user delegation1 r} \
+	{user delegation3 r} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 21: delegate $DARGS -a - \
+         $s0 $s1 $s2 $s3 $dfs_file"
+exec echo "TEST 21" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a - $s0 $s1 $s2 $s3 \
+	 $dfs_file
+exec rm -f $curtest
+
+puts ""
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user delegation0 r} \
+	{user delegation1 r} \
+	{user delegation2 r} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 22: delegate $DARGS -a - \
+         $s0 $s1 $s2 $s3 $dfs_file"
+exec echo "TEST 22" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a - $s0 $s1 $s2 $s3 \
+	 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "========================================"
+puts "Starting permission verification section"
+puts "========================================"
+flush stdout
+
+puts ""
+puts "****************************************"
+puts "Starting pure user read sub-section"
+puts "****************************************"
+flush stdout
+
+puts ""
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user delegation0 r} \
+	{user delegation1 r} \
+	{user delegation2 r} \
+	{user delegation3 r} \
+	{user delegation4 r} \
+	{user delegation5 r} \
+	{user delegation6 r} \
+	{user delegation7 r} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 23: delegate $DARGS -a r $s0 $dfs_file"
+exec echo "TEST 23" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 24: delegate $DARGS -a r $s1 $dfs_file"
+exec echo "TEST 24" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 25: delegate $DARGS -a r $s2 $dfs_file"
+exec echo "TEST 25" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 26: delegate $DARGS -a r $s3 $dfs_file"
+exec echo "TEST 26" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s3 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 27: delegate $DARGS -a r $s4 $dfs_file"
+exec echo "TEST 27" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s4 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 28: delegate $DARGS -a r $s5 $dfs_file"
+exec echo "TEST 28" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s5 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 29: delegate $DARGS -a r $s6 $dfs_file"
+exec echo "TEST 29" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s6 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 30: delegate $DARGS -a r $s7 $dfs_file"
+exec echo "TEST 30" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s7 $dfs_file
+exec rm -f $curtest
+
+
+puts ""
+puts "****************************************"
+puts "Starting pure user write sub-section"
+puts "****************************************"
+flush stdout
+
+puts ""
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user delegation0 w} \
+	{user delegation1 w} \
+	{user delegation2 w} \
+	{user delegation3 w} \
+	{user delegation4 w} \
+	{user delegation5 w} \
+	{user delegation6 w} \
+	{user delegation7 w} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 31: delegate $DARGS -a w $s0 $dfs_file"
+exec echo "TEST 31" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s0 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 32: delegate $DARGS -a w $s1 $dfs_file"
+exec echo "TEST 32" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 33: delegate $DARGS -a w $s2 $dfs_file"
+exec echo "TEST 33" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 34: delegate $DARGS -a w $s3 $dfs_file"
+exec echo "TEST 34" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s3 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 35: delegate $DARGS -a w $s4 $dfs_file"
+exec echo "TEST 35" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s4 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 36: delegate $DARGS -a w $s5 $dfs_file"
+exec echo "TEST 36" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s5 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 37: delegate $DARGS -a w $s6 $dfs_file"
+exec echo "TEST 37" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s6 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 38: delegate $DARGS -a w $s7 $dfs_file"
+exec echo "TEST 38" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s7 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "****************************************"
+puts "Starting pure user execute sub-section"
+puts "****************************************"
+flush stdout
+
+puts ""
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user delegation0 x} \
+	{user delegation1 x} \
+	{user delegation2 x} \
+	{user delegation3 x} \
+	{user delegation4 x} \
+	{user delegation5 x} \
+	{user delegation6 x} \
+	{user delegation7 x} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 39: delegate $DARGS -a x $s0 $dfs_file"
+exec echo "TEST 39" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s0 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 40: delegate $DARGS -a x $s1 $dfs_file"
+exec echo "TEST 40" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 41: delegate $DARGS -a x $s2 $dfs_file"
+exec echo "TEST 41" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 42: delegate $DARGS -a x $s3 $dfs_file"
+exec echo "TEST 42" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s3 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 43: delegate $DARGS -a x $s4 $dfs_file"
+exec echo "TEST 43" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s4 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 44: delegate $DARGS -a x $s5 $dfs_file"
+exec echo "TEST 44" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s5 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 45: delegate $DARGS -a x $s6 $dfs_file"
+exec echo "TEST 45" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s6 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 46: delegate $DARGS -a x $s7 $dfs_file"
+exec echo "TEST 46" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s7 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "****************************************"
+puts "Starting pure user control sub-section"
+puts "****************************************"
+flush stdout
+
+puts ""
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user delegation0 c} \
+	{user delegation1 c} \
+	{user delegation2 c} \
+	{user delegation3 c} \
+	{user delegation4 c} \
+	{user delegation5 c} \
+	{user delegation6 c} \
+	{user delegation7 c} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 47: delegate $DARGS -a c $s0 $dfs_file"
+exec echo "TEST 47" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s0 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 48: delegate $DARGS -a c $s1 $dfs_file"
+exec echo "TEST 48" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 49: delegate $DARGS -a c $s2 $dfs_file"
+exec echo "TEST 49" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 50: delegate $DARGS -a c $s3 $dfs_file"
+exec echo "TEST 50" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s3 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 51: delegate $DARGS -a c $s4 $dfs_file"
+exec echo "TEST 51" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s4 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 52: delegate $DARGS -a c $s5 $dfs_file"
+exec echo "TEST 52" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s5 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 53: delegate $DARGS -a c $s6 $dfs_file"
+exec echo "TEST 53" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s6 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 54: delegate $DARGS -a c $s7 $dfs_file"
+exec echo "TEST 54" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s7 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "****************************************"
+puts "Starting pure user sub-section"
+puts "****************************************"
+flush stdout
+puts ""
+
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user delegation0 r} \
+	{user delegation1 w} \
+	{user delegation2 x} \
+	{user delegation3 c} \
+	{user delegation4 rw} \
+	{user delegation5 rx} \
+	{user delegation6 rc} \
+	{user delegation7 rwxc} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 55: delegate $DARGS -a r $s0 $dfs_file"
+exec echo "TEST 55" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 56: delegate $DARGS -a w $s1 $dfs_file"
+exec echo "TEST 56" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 57: delegate $DARGS -a x $s2 $dfs_file"
+exec echo "TEST 57" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 58: delegate $DARGS -a c $s3 $dfs_file"
+exec echo "TEST 58" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s3 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 59: delegate $DARGS -a rw $s4 $dfs_file"
+exec echo "TEST 59" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rw $s4 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 60: delegate $DARGS -a rx $s5 $dfs_file"
+exec echo "TEST 60" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rx $s5 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 61: delegate $DARGS -a rc $s6 $dfs_file"
+exec echo "TEST 61" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rc $s6 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 62: delegate $DARGS -a rwxc $s7 $dfs_file"
+exec echo "TEST 62" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rwxc $s7 $dfs_file
+exec rm -f $curtest
+
+
+puts ""
+puts "****************************************"
+puts "Starting pure user_delegate read sub-section"
+puts "****************************************"
+flush stdout
+puts ""
+
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user_delegate delegation0 r} \
+	{user_delegate delegation1 r} \
+	{user_delegate delegation2 r} \
+	{user_delegate delegation3 r} \
+	{user_delegate delegation4 r} \
+	{user_delegate delegation5 r} \
+	{user_delegate delegation6 r} \
+	{user_delegate delegation7 r} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 63: delegate $DARGS -a r $s0 $dfs_file"
+exec echo "TEST 63" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 64: delegate $DARGS -a r $s1 $dfs_file"
+exec echo "TEST 64" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 65: delegate $DARGS -a r $s2 $dfs_file"
+exec echo "TEST 65" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 66: delegate $DARGS -a r $s3 $dfs_file"
+exec echo "TEST 66" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s3 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 67: delegate $DARGS -a r $s4 $dfs_file"
+exec echo "TEST 67" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s4 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 68: delegate $DARGS -a r $s5 $dfs_file"
+exec echo "TEST 68" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s5 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 69: delegate $DARGS -a r $s6 $dfs_file"
+exec echo "TEST 69" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s6 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 70: delegate $DARGS -a r $s7 $dfs_file"
+exec echo "TEST 70" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s7 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "****************************************"
+puts "Starting pure user_delegate write sub-section"
+puts "****************************************"
+flush stdout
+puts ""
+
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user_delegate delegation0 w} \
+	{user_delegate delegation1 w} \
+	{user_delegate delegation2 w} \
+	{user_delegate delegation3 w} \
+	{user_delegate delegation4 w} \
+	{user_delegate delegation5 w} \
+	{user_delegate delegation6 w} \
+	{user_delegate delegation7 w} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 71: delegate $DARGS -a w $s0 $dfs_file"
+exec echo "TEST 71" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s0 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 72: delegate $DARGS -a w $s1 $dfs_file"
+exec echo "TEST 72" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 73: delegate $DARGS -a w $s2 $dfs_file"
+exec echo "TEST 73" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 74: delegate $DARGS -a w $s3 $dfs_file"
+exec echo "TEST 74" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s3 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 75: delegate $DARGS -a w $s4 $dfs_file"
+exec echo "TEST 75" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s4 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 76: delegate $DARGS -a w $s5 $dfs_file"
+exec echo "TEST 76" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s5 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 77: delegate $DARGS -a w $s6 $dfs_file"
+exec echo "TEST 77" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s6 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 78: delegate $DARGS -a w $s7 $dfs_file"
+exec echo "TEST 78" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s7 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "****************************************"
+puts "Starting pure user_delegate execute sub-section"
+puts "****************************************"
+flush stdout
+puts ""
+
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user_delegate delegation0 x} \
+	{user_delegate delegation1 x} \
+	{user_delegate delegation2 x} \
+	{user_delegate delegation3 x} \
+	{user_delegate delegation4 x} \
+	{user_delegate delegation5 x} \
+	{user_delegate delegation6 x} \
+	{user_delegate delegation7 x} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 79: delegate $DARGS -a x $s0 $dfs_file"
+exec echo "TEST 79" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s0 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 80: delegate $DARGS -a x $s1 $dfs_file"
+exec echo "TEST 80" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 81: delegate $DARGS -a x $s2 $dfs_file"
+exec echo "TEST 81" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 82: delegate $DARGS -a x $s3 $dfs_file"
+exec echo "TEST 82" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s3 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 83: delegate $DARGS -a x $s4 $dfs_file"
+exec echo "TEST 83" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s4 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 84: delegate $DARGS -a x $s5 $dfs_file"
+exec echo "TEST 84" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s5 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 85: delegate $DARGS -a x $s6 $dfs_file"
+exec echo "TEST 85" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s6 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 86: delegate $DARGS -a x $s7 $dfs_file"
+exec echo "TEST 86" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s7 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "****************************************"
+puts "Starting pure user_delegate control sub-section"
+puts "****************************************"
+puts ""
+flush stdout
+
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user_delegate delegation0 c} \
+	{user_delegate delegation1 c} \
+	{user_delegate delegation2 c} \
+	{user_delegate delegation3 c} \
+	{user_delegate delegation4 c} \
+	{user_delegate delegation5 c} \
+	{user_delegate delegation6 c} \
+	{user_delegate delegation7 c} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 87: delegate $DARGS -a c $s0 $dfs_file"
+exec echo "TEST 87" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s0 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 88: delegate $DARGS -a c $s1 $dfs_file"
+exec echo "TEST 88" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 89: delegate $DARGS -a c $s2 $dfs_file"
+exec echo "TEST 89" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 90: delegate $DARGS -a c $s3 $dfs_file"
+exec echo "TEST 90" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s3 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 91: delegate $DARGS -a c $s4 $dfs_file"
+exec echo "TEST 91" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s4 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 92: delegate $DARGS -a c $s5 $dfs_file"
+exec echo "TEST 92" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s5 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 93: delegate $DARGS -a c $s6 $dfs_file"
+exec echo "TEST 93" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s6 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 94: delegate $DARGS -a c $s7 $dfs_file"
+exec echo "TEST 94" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s7 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "****************************************"
+puts "Starting pure user_delegate sub-section"
+puts "****************************************"
+puts ""
+flush stdout
+
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user_delegate delegation0 r} \
+	{user_delegate delegation1 w} \
+	{user_delegate delegation2 x} \
+	{user_delegate delegation3 c} \
+	{user_delegate delegation4 rw} \
+	{user_delegate delegation5 rx} \
+	{user_delegate delegation6 rc} \
+	{user_delegate delegation7 rwxc} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 95: delegate $DARGS -a r $s0 $dfs_file"
+exec echo "TEST 95" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 96: delegate $DARGS -a w $s1 $dfs_file"
+exec echo "TEST 96" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a w $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 97: delegate $DARGS -a x $s2 $dfs_file"
+exec echo "TEST 97" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a x $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 98: delegate $DARGS -a c $s3 $dfs_file"
+exec echo "TEST 98" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a c $s3 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 99: delegate $DARGS -a rw $s4 $dfs_file"
+exec echo "TEST 99" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rw $s4 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 100: delegate $DARGS -a rx $s5 $dfs_file"
+exec echo "TEST 100" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rx $s5 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 101: delegate $DARGS -a rc $s6 $dfs_file"
+exec echo "TEST 101" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rc $s6 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 102: delegate $DARGS -a rwxc $s7 $dfs_file"
+exec echo "TEST 102" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rwxc $s7 $dfs_file
+exec rm -f $curtest
+
+
+puts ""
+puts "****************************************"
+puts "Starting pure group sub-section"
+puts "****************************************"
+puts ""
+flush stdout
+
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{group delegation_s0 r} \
+	{group delegation_s1 w} \
+	{group delegation_s2 x} \
+	{group delegation_s3 c} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 103: delegate $DARGS -a r $s0 $dfs_file"
+exec echo "TEST 103" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 104: delegate $DARGS -a rw $s1 $dfs_file"
+exec echo "TEST 104" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rw $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 105: delegate $DARGS -a rwx $s2 $dfs_file"
+exec echo "TEST 105" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rwx $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 106: delegate $DARGS -a rwxc $s3 $dfs_file"
+exec echo "TEST 106" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rwxc $s3 $dfs_file
+exec rm -f $curtest
+
+
+puts ""
+puts "****************************************"
+puts "Starting pure group_delegate sub-section"
+puts "****************************************"
+puts ""
+flush stdout
+
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{group_delegate delegation_s0 r} \
+	{group_delegate delegation_s1 w} \
+	{group_delegate delegation_s2 x} \
+	{group_delegate delegation_s3 c} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 107: delegate $DARGS -a r $s0 $dfs_file"
+exec echo "TEST 107" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 108: delegate $DARGS -a rw $s1 $dfs_file"
+exec echo "TEST 108" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rw $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 109: delegate $DARGS -a rwx $s2 $dfs_file"
+exec echo "TEST 109" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rwx $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 110: delegate $DARGS -a rwxc $s3 $dfs_file"
+exec echo "TEST 110" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rwxc $s3 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "****************************************"
+puts "Starting mixed user/user_delegation sub-section"
+puts "****************************************"
+puts ""
+flush stdout
+
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user delegation0 r} \
+	{user_delegate delegation0 wxc} \
+	{user delegation1 w} \
+	{user_delegate delegation1 rxc} \
+	{user delegation2 x} \
+	{user_delegate delegation2 rwc} \
+	{user delegation3 c} \
+	{user_delegate delegation3 rwx} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 111: delegate $DARGS -a rwxc $s0 $dfs_file"
+exec echo "TEST 111" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rwxc $s0 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 112: delegate $DARGS -a rwxc $s1 $dfs_file"
+exec echo "TEST 112" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rwxc $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 113: delegate $DARGS -a rwxc $s2 $dfs_file"
+exec echo "TEST 113" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rwxc $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 114: delegate $DARGS -a rwxc $s3 $dfs_file"
+exec echo "TEST 114" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rwxc $s3 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "****************************************"
+puts "Starting mixed group/group_delegate sub-section"
+puts "****************************************"
+puts ""
+flush stdout
+
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{group delegation_s0 r} \
+	{group_delegate delegation_s0 wxc} \
+	{group delegation_s1 w} \
+	{group_delegate delegation_s1 rxc} \
+	{group delegation_s2 x} \
+	{group_delegate delegation_s2 rwc} \
+	{group delegation_s3 c} \
+	{group_delegate delegation_s3 rwx} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 115: delegate $DARGS -a rwxc $s0 $dfs_file"
+exec echo "TEST 115" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rwxc $s0 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 116: delegate $DARGS -a rwxc $s1 $dfs_file"
+exec echo "TEST 116" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rwxc $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 117: delegate $DARGS -a rwxc $s2 $dfs_file"
+exec echo "TEST 117" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rwxc $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 118: delegate $DARGS -a rwxc $s3 $dfs_file"
+exec echo "TEST 118" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rwxc $s3 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "****************************************"
+puts "Starting mixed user/group/user_delegate/group_delegate"
+puts "sub-section"
+puts "****************************************"
+puts ""
+flush stdout
+
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{group delegation_s0 r} \
+	{group_delegate delegation_s0 r} \
+	{user delegation1 w} \
+	{user_delegate delegation1 rxc} \
+	{group delegation_s2 x} \
+	{group_delegate delegation_s2 c} \
+	{user delegation3 r} \
+	{user_delegate delegation3 c} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 119: delegate $DARGS -a r $s0 $dfs_file"
+exec echo "TEST 119" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 120: delegate $DARGS -a rwxc $s1 $dfs_file"
+exec echo "TEST 120" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rwxc $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 121: delegate $DARGS -a rxc $s2 $dfs_file"
+exec echo "TEST 121" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rxc $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 122: delegate $DARGS -a rc $s3 $dfs_file"
+exec echo "TEST 122" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a rc $s3 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "========================================"
+puts "Starting Super User verification section"
+puts "========================================"
+puts ""
+flush stdout
+
+puts "No Super User test (yet)"
+puts ""
+flush stdout
+
+puts "========================================"
+puts "Starting unauthenticated user section"
+puts "========================================"
+puts ""
+flush stdout
+
+puts "No unauthenticated user test (yet)"
+puts ""
+flush stdout
+
+puts "========================================"
+puts "Starting Delegation Chain Length section"
+puts "========================================"
+puts ""
+flush stdout
+
+ee acl replace -acl {
+    {user_obj rwxc} \
+	{group_obj -} \
+	{other_obj -} \
+	{group testers rwxc} \
+	{user delegation0 r} \
+	{user delegation1 r} \
+	{user delegation2 r} \
+	{user delegation3 r} \
+	{user delegation4 r} \
+	{user delegation5 r} \
+	{user delegation6 r} \
+	{user delegation7 r} \
+    } $dfs_file 
+
+puts ""
+puts "TEST 123: delegate $DARGS -a r $s0 $dfs_file"
+exec echo "TEST 123" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 124: delegate $DARGS -a r $s0 $s1 $dfs_file"
+exec echo "TEST 124" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $s1 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 125: delegate $DARGS -a r $s0 $s1 $s2 $dfs_file"
+exec echo "TEST 125" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $s1 $s2 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 126: delegate $DARGS -a r $s0 $s1 $s2 $s3 $dfs_file"
+exec echo "TEST 126" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $s1 $s2 $s3 \
+	 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 127: delegate $DARGS -a r $s0 $s1 $s2 $s3 $s4 $dfs_file"
+exec echo "TEST 127" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $s1 $s2 $s3 $s4 \
+	 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 128: delegate $DARGS -a r $s0 $s1 $s2 $s3 $s4 $s5 $dfs_file"
+exec echo "TEST 128" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $s1 $s2 $s3 $s4 \
+	 $s5 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 129: delegate $DARGS -a r $s0 $s1 $s2 $s3 $s4 $s5 $s6 \
+	 $dfs_file"
+exec echo "TEST 129" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $s1 $s2 $s3 $s4 \
+	 $s5 $s6 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 130: delegate $DARGS -a r $s0 $s1 $s2 $s3 $s4 $s5 $s6 \
+	$s5 $dfs_file"
+exec echo "TEST 130" > $curtest
+eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $s1 $s2 $s3 $s4 \
+	 $s5 $s6 $s5 $dfs_file
+exec rm -f $curtest
+
+puts ""
+puts "TEST 131: delegate $DARGS -a r $s0 $s1 $s2 $s3 $s4 $s5 $s6 \
+	$s5 $s0 $dfs_file"
+puts "TEST 131 removed from test suite"
+#exec echo "TEST 131" > $curtest
+#eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $s1 $s2 $s3 $s4 \
+#	 $s5 $s6 $s5 $s0 $dfs_file
+#exec rm -f $curtest
+
+puts ""
+puts "TEST 132: delegate $DARGS -a r $s0 $s1 $s2 $s3 $s4 $s5 $s6 \
+	$s5 $s0 $s1 $dfs_file"
+puts "TEST 132 removed from test suite"
+#exec echo "TEST 132" > $curtest
+#eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $s1 $s2 $s3 $s4 \
+#	 $s5 $s6 $s5 $s0 $s1 $dfs_file
+#exec rm -f $curtest
+
+puts ""
+puts "TEST 133: delegate $DARGS -a r $s0 $s1 $s2 $s3 $s4 $s5 $s6 \
+	$s5 $s0 $s1 $s2 $dfs_file"
+puts "TEST 133 removed from test suite"
+#exec echo "TEST 133" > $curtest
+#eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $s1 $s2 $s3 $s4 \
+#	 $s5 $s6 $s5 $s0 $s1 $s2 $dfs_file
+#exec rm -f $curtest
+
+puts ""
+puts "TEST 134: delegate $DARGS -a r $s0 $s1 $s2 $s3 $s4 $s5 $s6 \
+	 $s5 $s0 $s1 $s2 $s3 $dfs_file"
+puts "TEST 134 removed from test suite"
+#exec echo "TEST 134" > $curtest
+#eval ee $eeargs exec $SRC/delegate $DARGS -a r $s0 $s1 $s2 $s3 $s4 \
+#	 $s5 $s6 $s5 $s0 $s1 $s2 $s3 $dfs_file
+#exec rm -f $curtest

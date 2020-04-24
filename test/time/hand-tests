@@ -1,0 +1,464 @@
+These are test provided to OSF by Digital Equipment Corp. for DTS.
+They are intended to be run by hand in the configurations specified
+in the tests.
+
+Certain test required the system clock to be set forward or back large
+amounts of time (more than 10 minutes).  Since the DCE version of DTS
+uses the DCE Security Service, DTS will lose authentication when this 
+occurs and be unable to perform its RPC calls.
+
+It is possible to build DTS without DCE security, which would allow
+these tests to be done.  See the DCE Porting and Testing Guide for more
+information.
+
+--------------------------------------------------------------------------
+
+
+          Time Server Experiments
+
+
+          These tests consist of verifying various types of function-
+          ality of DTS clerk /server communications. Attention should be
+          paid to the behavior of both the clerk and the server to deter-
+          mine the effects of during steady-state operation and dynamic
+          changes. All clerks/servers will have dts servers required set
+          at the default setting of 3 unless a change is specified.
+
+          1. Verify that clerks do not favor certain local time servers
+             but that the selection is random. This test will be repeated
+             20 times and will consist of synchronizing against 3 out of 6
+             servers to verify that server selection is distributed among
+             available servers. This test will also verify that clerks
+             synchronize with the minimum number of local time servers.
+
+             1,Insure 6 DTS servers exist on LAN
+               ( On a clerk execute the following commands )
+             2, dtscp> synch
+             3, dtscp> show local server
+             4, Verify that random servers are used in last synchronization
+                by repeating steps 2,3 and observing local server info.
+
+          2. Verify that clerks do not favor certain global time servers
+             but that the selection is random. This test will be repeated
+             20 times and will consist of synchronizing against 3 out of 6
+             global servers to verify that server selection is distributed
+             among available servers. All servers will be global servers.
+             This test will also verify that clerks can request time from
+             global time servers when the minimum number of time servers
+             are not present in the local set.
+             
+             1,Insure 3 or more DTS Global servers exist on LAN
+               and that only one local server exists on LAN.
+               ( On a clerk execute the following commands )
+             2, dtscp> synch
+             3, dtscp> show global server
+             4, Verify that random servers are used in last synchronization
+                by repeating steps 2,3 and observing local server info.
+
+          3. Verify that clerks will resynchronize with a server when
+             there is not the minimum number of time servers (both global
+             and local) present. The minimum number of servers will be set
+             to 3 (default) on the clerk and only 1 time server will be
+             available on the network. The clerk should resynchronize when
+             the dts servers required is set to 1 on the clerk.
+
+             1, Insure there are less than 3 DTS servers on LAN
+                ( on a Clerk execute the following commands)
+             2, dtscp> set servers required 4
+             3, dtscp> synch
+	     4. dtscp> show state   ( see note 1)
+             5, dtscp> show local server
+             6, Verify clerk synchronized with some server more than once
+             7   by observing server used in last synchronization = True.
+             8, dtscp> set servers required 1 ( on one server )
+             9, remove other 2 of the 3 servers.
+            10, dtscp> synch ( on clerk )
+            11, dtscp> show too few servers detected
+            12, verify too few servers detected incremented
+            13, dtscp> set servers required 1 
+            14, dtscp> synch ( on server then clerk )
+            15, dtscp> show local server
+            16, Verify clerk synchronized with existing server. 
+
+          4. Verify that clerks will reschedule a time request when there
+             is not the minimum number of time servers (both global and
+             local) present. The minimum number of servers will be set to
+             3 on the clerk and only 2 time servers will be available on
+             the network.
+
+          5. Verify that time servers can be moved to a new epoch and
+             synchronize only with servers in that epoch. This test will
+             consist of setting 1 of the 6 servers to a new epoch and
+             drastically changing the time value. Then adding a new server
+             to the new epoch one by one. Once 4 of 6 servers are in the
+             new epoch, the other servers should not be able to resynch
+             due to the minimum numbers of servers being absent in the old
+             epoch. It is important to examine the operation of clerks;
+             specifically, how long does it take for the clerks to settle
+             down to the new epoch and what is their transient behavior.
+
+          6. Verify that 4 time servers (all w/o a timeprovider) are
+             operational. One of these servers is modified to included
+             a time provider. Once upgraded it is determined that DTS
+             time does NOT include UTC, so a new epoch is declared. 
+             Examine the operation of clerks; specifically, how long
+             does it take for the clerks to settle down to the new epoch
+             and what is their transient behavior.
+
+          7. Verify that a clerk will determine a faulty server and ex-
+             clude it from the synchronization process.
+
+          8. Examine the scenario of 6 servers of which two are faulty.
+             The faulty servers intersect with one another, so a clerk
+             which queries the two faulty servers will synchronize to
+             the incorrect time. Assuming prompt intervention on the part
+             of the network manager (ie, responding to the logged event)
+             what are the dynamics of the scenario in terms of the clerk
+             synchronization process.
+
+          9. Verify that servers will determine when a number of server
+             are consistently out of time synch with the majority of
+             servers.
+
+          10.Verify that clerks will solicit a time request upon boot.
+
+             1, reboot system
+             2, observe DTS info messages on startup
+             3, dtscp> show local server 
+             4, verify that a synchronization occurred with some servers
+             
+          11.Verify that clerks will periodically flush the global server
+             list.
+
+          12.Verify that servers will solicit a time request upon boot.
+
+             1, reboot system
+             2, observe DTS info messages on startup
+             3, dtscp> show local server
+             4, verify that a synchronization occurred with some servers
+
+          13.Verify that servers will periodically flush the global server
+             list.
+
+          14.Given a scenario where a synchronized network (without a time
+             provider) drifts from UTC. Examine the dynamics that occur
+             when a time provider is introduced into the network.
+
+
+
+          Time Skew Experiments
+          
+          This test will consist of introducing inaccuracy to a clerk's or
+          server's internal clock. Verify that the clerks and servers 
+          resynchronize. 
+
+          1. Verify that a clerk's slow clock is speeded up to resynch
+             with the server. Set the clerk's clock 20 seconds back.
+
+          2. Verify that a clerk's fast clock is slowed down to resynch
+             with the server. Set the clerk's clock 30 seconds ahead.
+
+          3. Verify that when a clerk's time tolerance error is exceeded,
+             the time is set to a new time value which is in synch with
+             the server. Set the clerk's clock 4 hours ahead.
+
+          4. Verify that when a clerk's time tolerance error is exceeded,
+             the time is set to a new time value which is in synch with
+             the server. Set the clerk's clock 2 hours back.
+
+          5. Verify that when a positive leap second is declared , that a
+             clerk's time inaccuracy is increased by the leap second.
+
+          6. Verify that when a negative leap second is declared , that a
+             clerk's time inaccuracy is increased by the leap second.
+             
+          7. Within the DTS algorithm, leap seconds are already ac-
+             counted for, that is they are declared to occur at the end of
+             each month. However, leap seconds do not necessarily occur
+             each month with respect to a time provider. Verify that if a
+             leap second is declared, that with the use of a time provider
+             which doesn't declare a leap second as having occurred, that
+             the 1 sec inaccuracy that is introduced by the algorithm is
+             removed when synching with the time provider.
+
+          8. Verify that a server's slow clock is speeded up to resynch
+             with other servers. Set the servers clock 15 seconds back.
+
+          9. Verify that a server's fast clock is slowed down to resynch
+             with other servers. Set the server's clock 20 seconds ahead.
+
+          10.Verify that when a server's time tolerance error is ex-
+             ceeded, the time is set to a new time value which is in synch
+             with the other servers. Set the server's clock 2 hours back. 
+	     Set the server's clock 4 hours ahead.
+
+          11.Verify that when a positive leap second is declared , that a
+             server's time inaccuracy is increased by the leap second.
+
+          12.Verify that when a negative leap second is declared , that a
+             server's time inaccuracy is increased by the leap second.
+
+          13.Verify that when the time service is enabled, the DCL SET
+             TIME command doesn't work by attempting to set the time to a
+             drastically different value.
+
+          14.Verify that when the time service is disabled, the DCL SET
+             TIME command does work by attempting to set the time to a
+             drastically different value.
+
+          15.Verify that a clerk can synchronize with a time server that
+             is in another time zone. Set 2 of the servers to be in the
+             +5 time zone, 2 of the servers to be in the +4 time zone,
+             and the other 2 servers to be in the -1 time zone. Then
+             selectively remove 3 servers so that the minimum of 3 servers
+             are each in separate time zones. The clerk will be in time
+             zone +3.
+
+          16.Verify that a server can synchronize with a time server that
+             is in another time zone. Set 2 of the servers to be in the +5
+             time zone, 2 of the servers to be in the +4 time zone, and
+             the other 2 servers to be in the -1 time zone.
+
+
+          Courier Experiments
+          
+          These experiments will verify that the courier functionality of
+          servers operates as it is intended. Local servers are configured
+          on the same LAN, while global servers are configured on a 
+          separate LAN.
+
+          1. Set all local servers to be non-couriers and verify that no
+             local server can synchronize with a global server.
+
+             1, dtscp> set courier role noncourier
+             2, dtscp> synch 
+             3, dtscp> show global server
+             4, verify no global servers were used in last synchronization.
+             
+          2. Set all local servers to be couriers and verify that local
+             courier servers always synchronize with a global server.
+
+             Insure that some global servers and local servers exist on
+             LAN
+
+             1, dtscp> set courier role courier
+             2, dtscp> synch 
+             3, dtscp> show global server
+             4, verify global servers were used in last synchronization.
+
+          3. Verify that a local server (backup courier) cannot synchro-
+             nize with a global server when another local server has the
+             courier attribute set to courier.
+
+             Insure that some global servers and local servers/couriers
+             exist on LAN
+             
+             ( execute the following on one server )
+             1, dtscp> set courier role backup courier
+             2, dtscp> synch 
+             3, dtscp> show global server
+             4, verify global servers were not used in last synchronization.
+
+
+          4. Verify that a local server (backup courier) cannot synchro-
+             nize with a global server when it's datalink address is not
+             lower than another server with the courier attribute set to
+             backup courier.
+
+             Insure that 2 local servers and one global server exist in
+             LAN and the two local servers are backup couriers.
+             dtscp> set courier role backup courier
+
+             ( execute the following on one server )
+             2, dtscp> synch 
+             3, dtscp> show global server
+             4, check if global servers were used in last synchronization.
+             ( execute the following on other server )
+             5, repeat 2 - 4 on other local server and verify that one of
+                the servers synchronized with a global server and its
+                datalink address was higher than the others.
+
+          5. Verify that a local server (backup courier) always synchro-
+             nizes with a global server when no other local servers has
+             the courier attribute set to courier.
+             
+
+          6. Verify that a local server (backup courier) always synchro-
+             nizes with a global server when no other local servers has
+             the courier attribute set to backup courier.
+
+          7. Verify that a local server (backup courier) always synchro-
+             nizes with a global server when it's datalink address is the
+             lowest among other servers with the courier attribute set to
+             backup courier.
+
+
+          Exception Experiments
+          
+          These tests will ensure that event logging takes place for
+          unexpected events and that meaningful messages are displayed.
+
+          1. Verify a clerk can synchronize with a local server after the
+             clerk's power is turned off and then on again.
+
+             1, Insure that 3 local servers are available on the LAN,
+             2, Turn off, then on, a clerk.
+             3, Verify DTS synchronization from system startup messages.
+             (Once the clerk has started up execute the following command
+              from DTSCP on the clerk to verify that all 3 servers
+              have synchronized with clerk)
+             4, dtscp> show local server 
+   
+       2. Verify a clerk can synchronize with a local server after the
+             server's power is turned off and on again.
+
+             (On a server turn the power off then on. Then
+              on a clerk, execute the following command from
+              DTSCP)
+              1, show local server  (to verify that clerk synchs 
+                                           with server) 
+   
+             
+        3. Verify a clerk can synchronize with a global server after a
+             clerk's power is turned off and on again.
+
+             1, Insure that the clerk has access to at least 1 global server
+             2, On a clerk, turn power off then on.
+             3, Verify clerk's synchronization upon startup from system
+                startup messages.
+                  
+
+         4. Verify a clerk can synchronize with a global server after the
+             server's power is turned off and on again.
+
+             1, Turn the power of a global server off and then on
+             (On a clerk, execute the following commands from 
+              DTSCP once the server is up again)
+             2, dtscp> synch 
+             3, dtscp> show global server (to verify if clerk synchronized
+                               with server)
+
+          5. Verify all clerks can synchronize with servers after the all
+             systems in a network have the power turned off and on again.
+
+          6. Verify servers can synchronize with other servers after the
+             all systems (servers)in a network have the power turned off 
+             and on again.
+       
+              1, Verify that the DTS servers required parameter is set to 
+                 the maximum number of local servers available on LAN
+              2, Turn power off and then on on all availble servers on the
+                 LAN
+              (Once systems are started-up, from the DTSCP command on each
+                 system execute the following commands)
+              3, dtscp> show local server  (to verify that all
+                                 servers available have synchronized 
+                                 with that server)
+                                    
+          
+          7. Attempt to communicate with a system which was a global time
+             server but is no longer registered in the name space.
+
+             Remove the global server from the CDS directory.
+
+             (On a DTS server, execute the following commands from dtscp)
+              1, dtscp> synch 
+              2, dtscp> show global server  (to verify that global server
+                      which was deleted from CDS does not communicate)
+
+          8. Attempt to communicate with a system which was a global time
+             server but is no longer a time server.
+
+             (On a server which is a global server, execute the 
+              following command from dtscp)
+              1, dtscp> disable
+             (On another servers, execute the following from dtscp)
+              1, dtscp> synch
+              2, dtscp> show global server (to verify if global
+                                            server is not responding)
+
+             
+          9. Disconnect the thin wire connection from the clerk and
+             attempt to communicate with a global server which is not
+             reachable.
+
+
+          10.Do not register any servers in the name space and set the
+             minimum servers parameter to be 1 greater than the number of
+             local servers. This will cause the DTS code to access the
+             name space in search of a global server.
+
+
+          11.Attempt to access the name server to find a global server but
+             the name server denies access.
+
+
+          12.Attempt to communicate with a server when the circuit cost
+             exceeds the max value.
+
+
+          13.Attempt to communicate with a server when the number of hops
+             exceeds the max value.
+
+
+          14.Attempt to communicate with a server when there are no pro-
+             cess slots available.
+
+
+          15.Attempt to communicate with a server when the maximum number
+             of logical links are already active.
+
+
+          16.Have 6 time servers in the network (3 in each of two dif-
+             ferent epochs) and attempt to synchronize when the minimum
+             number of servers is set to 4.
+
+
+          17.Have no time servers in the network and attempt to synchro-
+             nize when the minimum number of servers is set to 1.
+
+             Insure that no time servers are available.
+             (On a clerk, execute the following commands from dtscp)
+              1, dtscp> set servers required 1
+              2, dtscp> show all char (to verify servers required has been
+                                          set)
+              3, dtscp> synch 
+              4, dtscp> show local server  (to verify that no servers
+                                                are listed) 
+
+          18.Have 6 time servers in the network and attempt to synchronize
+             when the minimum number of servers is set to 7.
+             
+             1, Insure that 6 local time servers exist on the LAN.
+                (On a server, execute the following from dtscp)
+             2, dtscp> set servers required 7
+             3, dtscp> synch 
+             4, show local server (to verify that server synchronized
+                               with 7 servers)
+           
+          19.Have 30 time servers on the LAN and attempt to synchronize
+             when the clerk's minimum number of servers is set to 30.
+
+          20.Have 30 time servers on the LAN and attempt to synchronize
+             with all 30 time servers..
+
+
+
+
+	Note 1.
+	-------
+	On the tests in which servers are unavailable, ie test 3 of the time
+	server experiments, because the dtscp 'synch' command returns before
+	the synch completes, there may be a timing window in which subsequent
+	commands can return before the actual synch completes.
+	If you issue a dtscp> show state  and state comes back with 'on', 
+	then the synch has completed and furthur commands will behave 
+	properly, ie:
+	
+	dtscp> set serv requ 4
+	Servers Required    =    4
+	dtscp> synch
+	dtscp> show state
+	State               =    on
+	dtscp> show/set do whatever, the synch is definitely done
+

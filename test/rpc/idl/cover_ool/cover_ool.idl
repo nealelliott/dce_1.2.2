@@ -1,0 +1,194 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: cover_ool.idl,v $
+ * Revision 1.1.4.2  1996/03/11  02:12:15  marty
+ * 	Update OSF copyright years
+ * 	[1996/03/10  19:52:38  marty]
+ *
+ * Revision 1.1.4.1  1995/12/11  20:02:18  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/11  19:30:11  root]
+ * 
+ * Revision 1.1.2.2  1993/01/07  19:53:21  bbelch
+ * 	Embedding copyright notice
+ * 	[1993/01/06  13:32:00  bbelch]
+ * 
+ * Revision 1.1  1992/01/19  03:32:17  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+[
+uuid(567a78c8-b3d9-11c9-a121-08002b1110fa),
+version(0.0)
+]
+interface cover_ool
+{
+typedef struct
+{
+    small size;
+    [size_is(size)] long a[];
+} ool_cfmt_struct_t;
+
+typedef struct
+{
+    short sh;
+    ool_cfmt_struct_t struc;
+} il_struct_t;
+
+typedef struct
+{
+    short sh;
+    ool_cfmt_struct_t struc;
+} ool_struct_t;
+
+typedef struct
+{
+    [ref] long * ref_ptr;
+    [ptr] long * full_ptr;
+} ool_ptr_struct_t;
+
+typedef struct
+{
+    [ref] long * ref_ptr;
+    ool_ptr_struct_t struc;
+    [ptr] long * full_ptr;
+} il_ptr_struct_t;
+
+const long ARRAY_SIZE = 1234;
+typedef [ptr] long ptr_array_t[];
+typedef [ptr] long * ptr_long_t;
+
+const long STRING_SIZE = 26;    /* Room for the alphabet */
+typedef [v1_string, v1_array] char v1_string_t[STRING_SIZE+1];
+typedef [v1_array] v1_string_t array_v1_string_t[ARRAY_SIZE];
+
+typedef float float_t;
+typedef [transmit_as(float_t)] struct {long l;} ool_xmitas_t;
+typedef ool_xmitas_t array_ool_xmitas_t[ARRAY_SIZE];
+
+typedef struct
+{
+    long l;
+    float f;
+} simple_ool_struct_t;
+
+typedef struct
+{
+    short sh;
+    long l;
+    float f;
+    double d;
+} combined_struct_t;
+
+typedef [transmit_as(combined_struct_t)] struct
+{
+    short sh;
+    simple_ool_struct_t struc;
+    double d;
+} struct_xmitas_t;
+
+typedef struct
+{
+    [ptr] long *lp;
+    [ptr] float *fp;
+} ptr_xmit_t;
+
+/* 07-Mar-91: Pointers in net type of transmit_as not currently, supported */
+typedef /* [transmit_as(ptr_xmit_t)] */ struct
+{
+    long l;
+    float f;
+} sub_xmitas_t;
+
+typedef struct
+{
+    short sh;
+    sub_xmitas_t struc;
+    double d;
+} complex_ool_struct_t;
+
+/*
+ * 1a) [out_of_line] conformant struct as sub-structure of [in_line] struct.
+ */
+long op1a([in] handle_t h, [in,out] il_struct_t *p);
+
+/*
+ * 1b) [out_of_line] conformant struct as sub-structure of [out_of_line] struct.
+ */
+long op1b([in] handle_t h, [in,out] ool_struct_t *p);
+
+/*
+ * 2) [out_of_line] struct containing pointers as sub-structure of [in_line]
+ *    structure containing other pointers.
+ */
+long op2([in] handle_t h, [in,out] il_ptr_struct_t *p);
+
+/*
+ * 3) Arrays of [out_of_line] types - see array2, array, cover_array, stringts.
+ *
+ * 4) Pointer to an [out_of_line] [transmit_as] [represent_as] object -
+ *    see xmitas_repas.
+ */
+
+/*
+ * 5) [out_of_line] typedef [ptr] <array_definition>.
+ */
+long op5([in] handle_t h, [in] long s, [in,size_is(s),out] ptr_array_t a);
+
+/*
+ * 6) [out_of_line] typedef [ptr] <pointer> where ptr is arrayified on param.
+ *  NOTE: Can't do!  Trying to compile op6 yields error shown.
+ *long op6([in] handle_t h, [in] long s, [in,size_is(s),out] ptr_long_t a);
+ *Size attributes can only be applied to array types
+ */
+
+/*
+ * 7) [in_line] array of [out_of_line] arrays - see cover_array.
+ */
+
+/*
+ * 8) [in_line] array of [out_of_line, v1_string, v1_array] arrays.
+ */
+long op8([in] handle_t h, [in,out] array_v1_string_t a);
+
+/*
+ * 9) [out_of_line] conformant array of [ref] pointers - see comprefs, outrefs.
+ *
+ * 10) Array of [out_of_line] type which contains data where dreps don't match
+ *     on client and server - see cover_array.
+ *
+ * 11a) Array of out_of_line represent_as type - see represent.
+ */
+
+/*
+ * 11b) Array of out_of_line transmit_as type.
+ */
+long op11b([in] handle_t h, [in,out] array_ool_xmitas_t a);
+
+/*
+ * 12a) [out_of_line] struct as sub-structure of [transmit_as] struct.
+ */
+long op12a([in] handle_t h, [in,out] struct_xmitas_t *p);
+
+/*
+ * 12b) [transmit_as] struct as sub-structure of [out_of_line] struct.
+ */
+long op12b([in] handle_t h, [in,out] complex_ool_struct_t *p);
+
+/*
+ * 12c) [out_of_line] struct as sub-structure of [represent_as] struct - TBS.
+ * 12d) [represent_as] struct as sub-structure of [out_of_line] struct - TBS.
+ * 13a) [in_line] pipe of [out_of_line] base type - see pipetest2.
+ * 13b) [out_of_line] pipe of [in_line] base type - see pipetest2.
+ */
+}

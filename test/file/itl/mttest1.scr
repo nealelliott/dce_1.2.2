@@ -1,0 +1,141 @@
+*
+* @OSF_COPYRIGHT@
+* COPYRIGHT NOTICE
+* Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+* ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+* src directory for the full copyright text.
+* 
+*
+* ID: $Id: mttest1.scr,v 1.1.419.1 1996/10/17 18:28:09 damon Exp $
+*
+* COMPONENT_NAME: Encina Development Infrastructure
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1991
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+* HISTORY
+* $Log: mttest1.scr,v $
+* Revision 1.1.419.1  1996/10/17  18:28:09  damon
+* 	Submitting on behalf of Transarc
+* 	[1996/10/17  16:54:08  damon]
+*
+* Revision 1.1.414.1  1994/02/04  20:46:05  devsrc
+* 	Merged from 1.0.3a to 1.1
+* 	[1994/02/04  15:24:52  devsrc]
+* 
+* Revision 1.1.412.1  1993/12/07  17:45:09  jaffe
+* 	1.0.3a update from Transarc
+* 	[1993/12/03  19:32:47  jaffe]
+* 
+* Revision 1.1.2.4  1993/01/11  18:31:57  htf
+* 	Embedded copyright notice
+* 	[1993/01/11  17:12:14  htf]
+* 
+* Revision 1.1.2.3  1992/10/28  17:59:07  jaffe
+* 	Transarc delta: fred-itl-ofer-fixes-9-24-92 1.1
+* 	  Selected comments:
+* 	    Include some minor fixes made to the TP ITL.
+* 	    Removed #'s from comments.
+* 	    Changed how the numThreads and numIterations variables get set.  Now use
+* 	    the new ? operator.
+* 	[1992/10/28  12:53:25  jaffe]
+* 
+* $EndLog$
+* $TALog: mttest1.scr,v $
+* Revision 1.8  1994/11/01  22:30:33  cfe
+* Bring over the changes that the OSF made in going from their DCE 1.0.3
+* release to their DCE 1.1 release.
+* [from r1.7 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+*
+* Revision 1.7  1993/01/14  17:39:00  jaffe
+* revdrop of latest OSF copyright changes to these files
+* [from r1.6 by delta osf-revdrop-01-12-92, r1.1]
+*
+* Revision 1.2  1992/09/24  15:23:30  fred
+* Include some minor fixes made to the TP ITL.
+*
+* Removed #'s from comments.
+* Changed how the numThreads and numIterations variables get set.  Now use
+* the new ? operator.
+* [from revision 1.1 by delta fred-itl-ofer-fixes-9-24-92, revision 1.1]
+*
+* Revision 1.1  1992/08/12  14:58:00  fred
+* Fix initialization code in file_test.c.  Also fixed the itl_main.c code
+* to reflect how other ITL based programs should initialize the ITL.
+* Changed the makefile to export two test scripts, that are there for
+* validating changes to ITL.
+*
+* Helps test changes/ports of ITL.
+* [added by delta fred-fix-itl-initialization, revision 1.1]
+*
+* Revision 1.4  1992/03/26  12:54:12  jaffe
+* Prologue Changes for 1.0.1
+*
+* [from revision 1.3 by delta jaffe-ttools-prologue, revision 1.1]
+*
+* Revision 1.3  1992/02/02  09:23:36  oz
+* 	 - sum should be declared as a local variable!!
+* 	[92/01/31  10:57:08  oz]
+*
+* Revision 1.2  91/12/10  19:59:10  oz
+* 	Added assertion to verify the expected results
+* 
+* Revision 1.1  91/09/21  19:48:36  oz
+* 	Initial Checkin.
+
+*
+*  If the number of threads and iterations have not been set, then 
+*  set them to the defaults.
+*	
+if (! ?numThreads) {
+    set numThreads int 40
+}
+
+if (! ?numIterations) {
+    set numIterations int 15
+}
+
+!*  A multithreaded test that is meant to check the thread
+!*  management of the it program, as well as the local and
+!*  global variable mechanism.  This test will run with $numThreads threads.
+!*  Each thread does some computation in a local variable and the
+!*  same operation on a global variable with the Fetch&Add instruction.
+!*  At the end the sum of the local variables is equal the global variable.
+!*
+*
+*
+*  Each thread initializes a variable called sum to 0
+*  then repeatedly adds to that variable, thread X adds X, then 2X, then
+*  3X up to $numIterations * X.  At the end the local value of the variable is
+*    sum == $X * $numIterations * ($numIterations + 1) / 2
+*  At the same time the thread performs the same addition on a global
+*  variable called total.  The final global value of total is the sume
+*  of all the local variable or:
+*    total == ($NI * ($NI + 1) / 2) * ($NT * ($NT + 1) / 2)
+*  where NI stands for numIterations and NT for numThreads
+*
+*  
+**  Intialize the global value of total.
+fetch&Op total = 0
+coLoop Thread 1 1 $numThreads
+   set sum local 0
+   loop Iteration 1 1 $numIterations
+      set sum ($sum + $Iteration * $Thread)
+      fetch&Op total + ($Iteration * $Thread)
+   endLoop
+   set finalValue ($Thread * $numIterations * ($numIterations + 1) / 2)
+   !* The final value for thread $Thread is $sum, expected: $finalValue
+   assert ($sum == $finalValue)
+endLoop
+** Get the current global value of total by adding 0 to it.
+set finalTotal ($numThreads * ($numThreads + 1) * $numIterations * ($numIterations + 1) / 4)
+fetch&op total + 0
+!* The final value of total is $total, expected: $finalTotal
+assert ($total == $finalTotal)
+quit

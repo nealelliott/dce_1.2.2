@@ -1,0 +1,353 @@
+
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+*> sys5lock.multi-contender.scr
+*
+* This script test the sys v lock semantics for mutil-contender case.
+*
+* lock range, possibly with different overlapping section:
+* A: hold 10-20
+* B: requests 5-13
+* C: requests 12-18
+* D: requests 17-25
+* And other variations on this theme.  Would this be likely to test
+* interesting pathways?
+*
+
+* Note: Also run it from local path.
+* Include config file.
+include config
+
+set loopTimes 10
+
+
+****************************************************************************
+* Check spokes.
+if ( $ITL_nspokes < 4) {
+  echo FAILED: You need four spokes to run the test.
+  quit
+}
+
+chdir $testDir
+
+* This file is created for file locking test.
+open $testFile ( $O_CREAT|$O_RDWR ) 0777 fileId
+write $fileId "This is a test file for file locking."
+close $fileId
+
+
+* Setup predefined conflic lock ranges
+set startConf[0] int 5
+set lenConf[0] 8
+set startConf[1] int 17
+set lenConf[1] int 8 
+set startConf[2] int 12
+set lenConf[2] 6
+set startConf[3] int 17
+set lenConf[3] int 8 
+
+* Setup predefined unconfli lock ranges
+set startUnconf[0] int 5
+set lenUnconf[0] 5
+set interval[0] 5
+set startUnconf[1] int 12
+set lenUnconf[1] 5
+set interval[1] 5
+set startUnconf[2] int 19
+set lenUnconf[2] int 5 
+set interval[2] 5
+set startUnconf[3] int 30
+set lenUnconf[3] int 5 
+set interval[3] 5
+
+set proc1 proc END_PROC
+  echo 
+  echo Run procedure 1
+  getwd wdir
+  chdir $testDir
+  sync_join "procedure1_go" $timeout
+
+  open $testFile @O_WRONLY 0777 fileId
+  set setLock fs_flock @F_WRLCK @SEEK_SET $startConf[0] $lenConf[0]
+  fcntl @fileId @F_SETLK setLock
+
+  sync_join "finish_contention" $timeout
+  close @fileId
+  chdir @wdir
+  echo End procedure 1
+END_PROC
+
+set proc2 proc END_PROC
+  echo
+  echo Run procedure 2
+  getwd wdir
+  chdir $testDir
+
+  sync_join "procedure2_go" $timeout
+
+  open $testFile @O_WRONLY 0777 fileId
+  set setLock fs_flock @F_WRLCK @SEEK_SET $startConf[1] $lenConf[1]
+  fcntl @fileId @F_SETLK setLock
+
+  sync_join "finish_contention" $timeout
+  close @fileId
+  chdir @wdir
+
+  echo End procedure 2
+END_PROC
+
+set proc3 proc END_PROC
+  echo
+  echo Run procedure 3
+  getwd wdir
+  chdir $testDir
+
+  sync_join "procedure34_go" $timeout
+
+  open $testFile @O_WRONLY 0777 fileId
+  set setLock fs_flock @F_WRLCK @SEEK_SET $startConf[2] $lenConf[2]
+  verifyStatus false
+  fcntl @fileId @F_SETLK setLock
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: This should be a conflic lock
+  }
+  verifyStatus true
+  sync_join "finish_contention" $timeout
+  close @fileId
+  chdir @wdir
+
+  echo End procedure 3
+END_PROC
+
+set proc4 proc END_PROC
+  echo
+  echo Run procedure 4
+  getwd wdir
+  chdir $testDir
+
+  sync_join "procedure34_go" $timeout
+
+  open $testFile @O_WRONLY 0777 fileId
+  set setLock fs_flock @F_WRLCK @SEEK_SET $startConf[3] $lenConf[3]
+  verifyStatus false
+  fcntl @fileId @F_SETLK setLock
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: This should be a conflic lock
+  }
+  verifyStatus true
+  sync_join "finish_contention" $timeout
+  close @fileId
+  chdir @wdir
+
+  echo End procedure 4
+END_PROC
+
+*
+* Define set of function for unconflic test.
+*
+set proc21 proc END_PROC
+  echo
+  echo Run procedure 1
+  getwd wdir
+  chdir $testDir
+
+  sync_join "contenders_go" $timeout
+
+  open $testFile @O_WRONLY 0777 fileId
+  set setLock fs_flock @F_WRLCK @SEEK_SET $startUnconf[0] $lenUnconf[0]
+  fcntl @fileId @F_SETLK setLock
+
+  sync_join "lock_off_by_1" $timeout
+
+  set setLock fs_flock @F_WRLCK @SEEK_SET ($startUnconf[0]+$lenUnconf[0]) 1
+  fcntl @fileId @F_SETLK setLock
+  set setLock fs_flock @F_WRLCK @SEEK_SET ($startUnconf[0] -1 ) 1
+  fcntl @fileId @F_SETLK setLock
+
+  sync_join "finish_contention" $timeout
+  close @fileId
+  chdir @wdir
+
+  echo End procedure 1
+END_PROC
+
+set proc22 proc END_PROC
+  echo
+  echo Run procedure 2
+
+  getwd wdir
+  chdir $testDir
+
+  sync_join "contenders_go" $timeout
+
+  open $testFile @O_WRONLY 0777 fileId
+  set setLock fs_flock @F_WRLCK @SEEK_SET $startUnconf[1] $lenUnconf[1]
+  fcntl @fileId @F_SETLK setLock
+
+  sync_join "lock_off_by_1" $timeout
+
+  set setLock fs_flock @F_WRLCK @SEEK_SET ($startUnconf[1]+$lenUnconf[1]) 1
+  fcntl @fileId @F_SETLK setLock
+  set setLock fs_flock @F_WRLCK @SEEK_SET ($startUnconf[1] - 1 ) 1
+  fcntl @fileId @F_SETLK setLock
+
+  sync_join "finish_contention" $timeout
+  close @fileId
+  chdir @wdir
+
+  echo End procedure 2
+END_PROC
+
+set proc23 proc END_PROC
+  echo
+  echo Run procedure 3
+
+  getwd wdir
+  chdir $testDir
+
+  sync_join "contenders_go" $timeout
+
+  open $testFile @O_WRONLY 0777 fileId
+  set setLock fs_flock @F_WRLCK @SEEK_SET $startUnconf[2] $lenUnconf[2]
+  fcntl @fileId @F_SETLK setLock
+
+  sync_join "lock_off_by_1" $timeout
+
+  set setLock fs_flock @F_WRLCK @SEEK_SET ($startUnconf[2]+$lenUnconf[2]) 1
+  fcntl @fileId @F_SETLK setLock
+  set setLock fs_flock @F_WRLCK @SEEK_SET ($startUnconf[2] - 1 ) 1
+  fcntl @fileId @F_SETLK setLock
+
+  sync_join "finish_contention" $timeout
+  close @fileId
+
+  chdir @wdir
+  echo End procedure 3
+END_PROC
+
+set proc24 proc END_PROC
+  echo
+  echo Run procedure 4
+
+  getwd wdir
+  chdir $testDir
+
+  sync_join "contenders_go" $timeout
+
+  open $testFile @O_WRONLY 0777 fileId
+  set setLock fs_flock @F_WRLCK @SEEK_SET $startUnconf[3] $lenUnconf[3]
+  fcntl @fileId @F_SETLK setLock
+
+  sync_join "lock_off_by_1" $timeout
+
+  set setLock fs_flock @F_WRLCK @SEEK_SET ($startUnconf[3]+$lenUnconf[3]) 1
+  fcntl @fileId @F_SETLK setLock
+  set setLock fs_flock @F_WRLCK @SEEK_SET ($startUnconf[3] - 1 ) 1
+  fcntl @fileId @F_SETLK setLock
+
+  sync_join "finish_contention" $timeout
+  close @fileId
+  chdir @wdir
+
+  echo End procedure 4
+END_PROC
+
+*
+* This is the stress loops
+*
+
+loop loopVar 1 1 $loopTimes
+
+*
+!* Test conflic muti-contender case
+*
+rexec_async $ITL_spoke[0] proc1 result[0] asyncVar[0]
+rexec_async $ITL_spoke[1] proc2 result[1] asyncVar[1]
+rexec_async $ITL_spoke[2] proc3 result[2] asyncVar[2]
+rexec_async $ITL_spoke[3] proc4 result[3] asyncVar[3]
+
+sync_create "procedure1_go" 1 $timeout
+sync_release "procedure1_go"
+sleep 1000
+
+sync_create "procedure2_go" 1 $timeout
+sync_release "procedure2_go"
+sleep 1000
+
+sync_create "procedure34_go" 2 $timeout
+sync_release "procedure34_go"
+sleep 1000
+
+sync_create "finish_contention" 4 $timeout
+sync_release "finish_contention"
+
+loop x 0 1 ( $ITL_nspokes-1 )
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ( $ITL_nspokes-1 )
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+
+*				
+!* Test unconflic multi-contender case.
+*
+rexec_async $ITL_spoke[0] proc21 result[0] asyncVar[0]
+rexec_async $ITL_spoke[1] proc22 result[1] asyncVar[1]
+rexec_async $ITL_spoke[2] proc23 result[2] asyncVar[2]
+rexec_async $ITL_spoke[3] proc24 result[3] asyncVar[3]
+
+sync_create "contenders_go" $ITL_nspokes $timeout
+sync_release "contenders_go"
+sleep 1000
+
+sync_create "lock_off_by_1" $ITL_nspokes $timeout
+sync_release "lock_off_by_1"
+sleep 1000
+
+sync_create "finish_contention" $ITL_nspokes $timeout
+sync_release "finish_contention"
+
+loop x 0 1 ( $ITL_nspokes-1 )
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ( $ITL_nspokes-1 )
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+endloop
+
+remove $testFile
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+echo
+echo Hub done.
+quit
+
+

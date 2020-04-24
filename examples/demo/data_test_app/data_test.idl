@@ -1,0 +1,277 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ * 
+ */
+/*
+ * HISTORY
+ * $Log: data_test.idl,v $
+ * Revision 1.1.7.3  1996/03/09  23:15:17  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:32:33  marty]
+ *
+ * Revision 1.1.7.2  1995/12/08  20:54:27  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  20:49:37  root]
+ * 
+ * Revision 1.1.2.2  1994/10/27  20:06:30  rrizzo
+ * 	expand copyright
+ * 	[1994/10/27  19:38:54  rrizzo]
+ * 
+ * Revision 1.1.2.1  1994/10/21  19:11:37  weir
+ * 	Submit sample program sources (CR 12635)
+ * 	[1994/10/21  19:10:51  weir]
+ * 
+ * $EndLog$
+ */
+/****************************************************************************/
+/* [27.VI.94]                                                               */
+/*                                                                          */
+/* data_test.idl --                                                         */
+/*                                                                          */
+/*                                                                          */
+/*                                                                          */
+/*                            -77 cols-                                     */
+/****************************************************************************/
+[
+uuid(005ab0d6-c4a5-1d5b-92a3-0000c0d4de56),
+version(1.0)
+]
+interface data_test
+{
+
+	/********************************************************************/
+	/* test1:                                                           */
+	/* Pointer assignment example. This illustrates how mirroring oc-   */
+	/*  curs without being able to translate server to client addresses */
+	/*  and vice versa...                                               */
+
+	const unsigned32 ARRAY_SIZE = 3;
+
+	typedef unsigned32 num_array[ARRAY_SIZE];
+	typedef [ptr] unsigned32 *num_ptr;
+
+	void test1 (
+		[in] handle_t handle,
+		[in, out] num_ptr *test1_client_ptr,
+		[in ] num_array client_array,  /* An array declared in the  */
+						/*  client.                 */
+		[out] error_status_t *status
+	);
+
+
+	/********************************************************************/
+	/* test2:                                                           */
+	/* This example illustrates passing a linked list...                */
+
+	typedef struct link {
+		unsigned32 value;
+		[ptr] struct link *next;
+	} link_t;
+
+
+	void test2 (
+		[in] handle_t handle,
+		[in, out, ref] link_t *head,
+		[out] error_status_t *status
+	);
+
+
+	/********************************************************************/
+	/* test3:                                                           */
+	/* This illustrates how a call can allocate memory for an [out]     */
+	/*  parameter. The client application allocates a null pointer to   */
+	/*  the structure of interest and passes the address of this point- */
+	/*  er as the [out] parameter.  The server app allocates a struct-  */
+	/*  ure, and on return the client stub allocates it too.  Note that */
+	/*  the structure in this case contains a pointer marked as [ref].  */
+	/*  The server's allocation of this pointer is also mirrored on     */
+	/*  the client.                                                     */
+
+	typedef struct {
+		[ref] unsigned32 *value;
+	} number;
+
+	typedef [ptr] number *number_ptr;
+
+	void test3 (
+		[in] handle_t handle,
+		[out, ref]  number_ptr *test3_client_ptr,
+		[out] error_status_t *status
+	);
+
+
+	/********************************************************************/
+	/* This illustrates the node deletion problem...                    */
+
+	[reflect_deletions] void test4 (
+		[in] handle_t handle,
+		[in, out, ptr] unsigned32 *number,
+		[out] error_status_t *status
+	);
+
+
+	/********************************************************************/
+	/* This illustrates the use the string attribute.                   */
+	/*  The size of the [out] string must be known at runtime...        */
+
+	const long int REPLY_SIZE = 100;
+
+	void test5 (
+		[in] handle_t handle,
+		[in, string]  char client_greeting[],
+		[out, string] char server_reply[REPLY_SIZE],
+		[out] error_status_t *status
+	);
+
+
+	/********************************************************************/
+	/* Some array declarations.                                         */
+
+	/********************************************************************/
+	/* An array of fixed size, used by test51() and test52()...         */
+
+	typedef char char5array[5];
+	typedef [ptr] char5array *char5ptr;  /* Originally the following    */
+		/*  warning appeared for this line:                         */
+		/* Warning: Missing pointer class for char5ptr; [ptr],      */
+		/*  [ref], or [unique] required                             */
+		/*                                                          */
+		/* I removed the warning by making this a full pointer (by  */
+		/*  adding the "[ptr]"); see pp. 17-37 - 17-44 in the 1.0.3 */
+		/*  App Guide, vol. 1. But I'm not sure at the moment if I  */
+		/*  did the right thing.                                    */
+
+
+	void test51 (
+		[in] handle_t handle,
+		[in] char5ptr a_pointer,
+		[out] error_status_t *status
+	);
+
+
+	/********************************************************************/
+	/* A conformant array: the size (length of array transmitted) is    */
+	/*  determined at run time. The array itself is a simple fixed ar-  */
+	/*  ray...                                                          */
+
+	void test52 (
+		[in] handle_t handle,
+		[in] unsigned32 size,
+		[in, size_is(size)] char an_array[],
+		[out] error_status_t *status
+	);
+
+
+	/********************************************************************/
+	/* A varying array: the portion of the array transmitted is         */
+	/*  determined at run time...                                       */
+
+	typedef struct {
+		unsigned32 first;
+		unsigned32 length;
+		[first_is(first), length_is(length)] char array[0..10];
+	} v_struct;
+
+	void test53 (
+		[in] handle_t handle,
+		[in] v_struct v_array,
+		[out] error_status_t *status
+	);
+
+
+	/********************************************************************/
+	/* A conformant and varying array: both size and the portion        */
+	/*  transmitted are determined at run time...                       */
+
+	typedef struct {
+		unsigned32 size;
+		unsigned32 first;
+		unsigned32 length;
+		[size_is(size), first_is(first), length_is(length)] char array[0..*];
+	} cv_struct;
+
+	void test54 (
+		[in] handle_t handle,
+		[in] cv_struct *cv_array,
+		[out] error_status_t *status
+	);
+
+
+	/********************************************************************/
+	/* Pipe examples...                                                 */
+
+	typedef pipe char test_pipe_t;
+
+	void test6 (
+		[in] handle_t handle,
+		[in, string]  char cmd[],
+		[out] test_pipe_t *test_pipe,
+		[out] error_status_t *status
+	);
+
+	void test7 (
+		[in] handle_t handle,
+		[in] test_pipe_t test_pipe,
+		[out] error_status_t *status
+	);
+
+
+	/********************************************************************/
+	/* Transmit_as example: Here we turn a large sparse array into      */
+	/*  a small conformant array for transmission. The server is able   */
+	/*  to reconstitute the sparse array...                             */
+
+	const long int S_ARRAY_SIZE = 32;
+
+	typedef struct {
+		unsigned32 value;
+		unsigned32 subscript;
+	} a_element;
+
+	typedef struct {
+		unsigned32 size;
+		[size_is(size)] a_element array[];
+	} compact_array_t;
+
+
+	typedef [transmit_as(compact_array_t)] unsigned32 sparse_array_t[S_ARRAY_SIZE];
+ 
+	void test8 (
+		[in] handle_t handle,
+		[in] sparse_array_t *array,
+		[out] error_status_t *status
+	);
+
+
+	/********************************************************************/
+	/* Union declaration example: a union that can hold either          */
+	/*  two UUIDs or two unsigned32 integers. NOT USED.                 */
+/*
+	typedef struct two_uuid_s_t {
+		uuid_t uuid1;
+		uuid_t uuid2;
+	} two_uuid_t;
+
+	typedef struct two_uint_s_t {
+		unsigned32 uint1;
+		unsigned32 uint2;
+	} two_uint_t;
+
+	typedef enum {
+		uuids,
+		uints
+	} union_contents;
+
+	typedef union switch (union_contents type) test_union {
+	case uuids:
+		two_uint_t integers;
+	case uints:
+		two_uuid_t ids;
+	} test_union_t;
+*/
+}
+

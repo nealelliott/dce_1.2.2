@@ -1,0 +1,371 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: tc_common,v $
+# Revision 1.1.2.2  1996/03/09  20:52:22  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:56  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:51  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:35 UTC  bell_d
+# 	Auto-configure tests to cell, debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  20:20 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:54 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  19:38 UTC  gordon_l
+# 	Fixes for change_master/becom
+# 	e_master
+# 	[1995/12/11  22:22:40  root]
+# 
+# Revision 1.1.2.2  1993/08/02  17:41:18  sekhar
+# 	Replication system test. Initial version
+# 	[1993/08/02  17:31:35  sekhar]
+# 
+# $EndLog$
+
+if [ -z "${TC_COMMON_DEFINED}" ] ; then
+
+TC_COMMON_DEFINED=1
+
+. $PHOME/profile
+. $PHOME/replist
+. $PHOME/repdb
+. $PHOME/sft
+. $PHOME/slv
+. $PHOME/rgy
+
+#-----------------------------------------------------------------------
+#  tc_get_auth - Get DCE cell credentials via dce_login_noexec
+#                Note: dce_login_noexec is an unsupported hack so this
+#                will have to be changed eventually
+#
+#  IN arg1,arg2. celladmin principal and celladmin passwd
+#-----------------------------------------------------------------------
+tc_get_auth()
+{
+    if [ ! -h /usr/bin/dce_login_noexec ]; then
+        ln -s /usr/bin/dce_login /usr/bin/dce_login_noexec
+    fi
+
+    KRB5CCNAME=$(dce_login_noexec $CELLADMIN $CELLPW)
+    export KRB5CCNAME
+}
+
+#-----------------------------------------------------------------------
+#  tc_destroy_auth - kdestroy DCE cell credentials
+#-----------------------------------------------------------------------
+tc_destroy_auth()
+{
+    if [[ $dce_login_succeeded -eq 0 && -n "${KRB5CCNAME}" ]]; then
+        kdestroy
+    fi
+}
+
+#-----------------------------------------------------------------------
+#  tc_wait_bgjobs - Waits for all the shell background jobs to complete.
+#
+#  IN arg1 ........ Information message to output
+#-----------------------------------------------------------------------
+tc_wait_bgjobs()
+{
+    let IL=IL+1
+    replog_msg "Waiting for $1 to complete : `date`"
+    wait
+    replog_msg "$1 completed : `date`"
+    let IL=IL-1
+}
+    
+#-----------------------------------------------------------------------
+#  tc_common_upd - Runs the update test to add principals, groups etc
+#                  which are required by a given test. The update
+#                  is run on the specified list of hosts.
+#
+#  IN : arg1 ..... List of hostnames
+#       arg2 ..... Number of principals to be added.
+#
+#-----------------------------------------------------------------------
+
+tc_common_upd()
+{
+    typeset nprinc h_list
+
+    set -A h_list $1 ; set -A nprinc $2
+    #   Run the update test to add princ, groups etc
+    #   to the registry.
+
+    replog_msg "Running update to add rgy items for use by this test."
+    sft_x_update_hosts "${h_list[*]}"  $nprinc $SFT_UPDATE_ADD
+    tc_wait_bgjobs "update test"
+
+    sft_v_update_hosts  "${h_list[*]}" $SFT_UPDATE_ADD ; st=$?
+
+    if [ st -ne 0 ] ; then       
+        return
+    fi
+
+#   Wait for the updates to propagate to all the slaves.
+
+    sa_wait_prop_complete "${SLV_NAMES[*]}" ; st=$?
+    if [ $st -ne 0 ] ; then
+        return
+    fi
+
+#   Verify the registry consistency 
+    rgy_cmp_db  "${SLV_HOSTNAMES[*]}" "${SLV_NAMES[*]}" ; st=$? 
+    if [ $st -ne 0 ] ; then
+         return
+    fi
+}
+
+
+#-----------------------------------------------------------------------
+#  tc_common_cleanup: Common cleanup function for all test cases
+#
+#-----------------------------------------------------------------------
+
+tc_common_cleanup()
+{
+    tc_destroy_auth
+}
+
+#-----------------------------------------------------------------------
+#  tc_common_init : Initialization function for all test cases
+#
+#-----------------------------------------------------------------------
+tc_common_init()
+{
+    typeset st idnm
+
+    #   Make sure logged in as root. Root access is required
+    #   since secd will be restarted.
+
+    dce_login_succeeded=1
+    idnm=`id -un` 
+    if [ $idnm != "root" ] ; then
+        replog_msg "You must be logged in as root to execute this test"
+        return 1
+    fi
+
+    #  check for set of NUM_SLAVES variable
+    #
+    if [ -z "${NUM_SLAVES}" ] ; then
+       replog_msg "NUM_SLAVES undefined"
+       return 1
+    else
+         replog_msg "$NUM_SLAVES NUM_SLAVES"
+    fi
+
+     typeset -i j
+
+     # auto-configure- set LOGS_DIR, SLV_NAMES, SLV_HOSTS (values previously set
+     # by hand in the profile)
+     #
+     # SLV_HOSTS and SLV_NAMES are set to the same strings - ie. hostnames of
+     # machines in the cell who are not the server
+     #
+     # LOGS_DIR is set to the /net accessible tmp/secrep directory
+
+     SERVER_NAME=`uname -n`
+     LOGS_DIR=$NET/$SERVER_NAME/tmp/secrep
+#D# added this mkdir and chmod to ensure access to the log dir
+#D# if the directory is there, remove it 
+     if [ -d $LOGS_DIR ] ; then
+	rm -rf $LOGS_DIR
+     fi
+     mkdir $LOGS_DIR ; chmod 777 $LOGS_DIR
+
+     MACHINES=$(cdscp list dir "/.:/hosts/*" | awk 'BEGIN {for (i=0;i<3;i++) getline;} {print $1}')
+     st=$?
+     tet_infoline "MACHINES are $MACHINES"
+     if [ $st -ne 0 -o -z "$MACHINES" ] ; then
+         replog_abort "tc_common_init" "cdscp"
+         return 1 
+     fi
+
+     SLV_HOSTS="$SERVER_NAME "
+     SLV_NAMES="$SERVER_NAME "
+
+     # Set no more than NUM_SLAVES machines as slave replicas - defined in profile
+     # Will set $NUM_SLAVES number of machines or the amount of available non-server machines,
+     # whichever is less
+     j=0
+     for i in $MACHINES
+     do
+       if [ $i != $SERVER_NAME ]
+       then
+       if [ $j -lt $NUM_SLAVES ] ; then
+	   SLV_HOSTS="${SLV_HOSTS} $i"
+           SLV_NAMES="${SLV_NAMES} $i"
+         j=j+1
+         fi
+       fi
+     done
+     replog_msg "${SLV_NAMES} "
+
+#D# This seems to have moved from SLV_NAMES to CONFIG_NAMES
+#D# On short examination it seems that both are needed. 
+#D# set CONFIG_NAMES and CONFIG_HOSTS to SLV_NAMES and SLV_HOSTS
+ 
+    CONFIG_HOSTS="$SLV_HOSTS"
+    CONFIG_NAMES="$SLV_NAMES"
+    SLV_CNT=$NUM_SLAVES
+
+
+    #   Check to make sure that some required variables
+    #   are set. If not then return
+
+    if [ -z "${LOGS_DIR}" ] ; then
+        replog_msg "LOGS_DIR undefined"
+        return 1
+    fi
+
+    if [ -z "${PSARGS}" ] ; then
+        replog_msg "PSARGS undefined."
+        return 1
+    fi
+
+    if [ -z "${CONFIG_HOSTS}" ] ; then
+        replog_msg "CONFIG_HOSTS not set"
+        return 1
+    fi
+
+    if [ -z "${CONFIG_NAMES}" ] ; then
+        replog_msg "CONFIG_NAMES not set"
+        return 1
+    fi
+
+    tc_get_auth $CELLADMIN $CELLPW
+
+    if [ -z "${KRB5CCNAME}" ] ; then
+        replog_error "dce_login_noexec failed"
+        return 1
+    fi
+
+    dce_login_succeeded=0  # Set flag so that tc_common_cleanup() will
+                           # destroy the credentials.
+    #    slv_init must be called first.
+    slv_init ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_abort "tc_common_init" "slv_init"
+        return $st
+    fi
+
+    sft_init ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_abort "tc_common_init" "sft_init"
+        return $st
+    fi
+
+    #    Start and stop the master. The intent is that if there
+    #    are more than two slaves when the master is starting,
+    #    then multiple propagation tasks will be started in the
+    #    master and testing should be done for multiple tasks.
+
+    secd_stop $MASTER_HOSTNAME $MASTER_NAME ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_abort "tc_common_init" "secd_stop"
+        return $st
+    fi
+
+    secd_start $MASTER_HOSTNAME $MASTER_NAME ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_abort "tc_common_init" "secd_start"
+        return $st
+    fi
+}
+
+#-----------------------------------------------------------------------
+#
+#   Queues an initrep to a replica as follows:
+#       1. shuts the replica down
+#       2. initrep the replica.
+#       3. Waits until the replica is marked for initiazation before
+#          returning.
+#
+#   IN arg1 : Name of the host running the replica
+#      arg2 : Name of the replica
+#
+#-----------------------------------------------------------------------
+
+tc_common_q_initrep()
+{
+    typeset rnm rh st
+
+    rh=$1 ; rnm=$2
+
+    secd_stop $rh $rnm ; st=$?
+    if [ $st -ne 0 ] ; then
+        return $st
+    fi
+
+    sa_initrep  $rnm ; st=$?
+    if [ $st -ne 0 ] ; then
+        return $st
+    fi
+
+    #    Note that since secd is stopped on $rnm , $rnm will have to 
+    #    "marked for initialization" and cannot enter the "initializing"
+    #    state until secd is restarted.
+
+    sa_wait_slv_mrkinit $rnm ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_error "$rnm should be marked for initialization but is not"
+    fi
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#
+#   Queues a delrep to a replica as follows:
+#
+#       1. shuts the replica down
+#       2. delrep the replica.
+#       3. Waits until the replica is marked for deletion before
+#          returning.
+#
+#   IN arg1 : Name of the host running the replica
+#      arg2 : Name of the replica
+#
+#-----------------------------------------------------------------------
+
+tc_common_q_delrep()
+{
+    typeset rnm rh st
+
+    rh=$1 ; rnm=$2
+
+    secd_stop $rh $rnm ; st=$?
+    if [ $st -ne 0 ] ; then
+        return $st
+    fi
+
+    sa_delete $rnm ; st=$?
+    if [ $st -ne 0 ] ; then
+        return $st
+    fi
+
+    #    Wait until $rnm is "marked for deletion" on the master's 
+    #    replica list. This is guranteed to occur since secd is stopped 
+    #    on $rnm.
+
+    replist_wait_slv_mrkdel $MASTER_NAME $rnm ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_error "$rnm should be marked for deletion but is not"
+    fi
+    return $st
+}
+
+fi

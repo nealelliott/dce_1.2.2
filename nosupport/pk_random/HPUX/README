@@ -1,0 +1,129 @@
+The enclosed is a /dev/random pseudo-driver for HP-UX 10.01, derived
+from Ted Ts'o's /dev/random driver for linux.  This uses a split
+driver; one source file contains the machine- and os-independant bits
+(mostly the management of the random pool itself) and the other
+containing glue into the HP-UX interrupt system and I/O system.
+
+The driver can be added to a stock HP-UX system just by building the
+driver and relinking the kernel; see the "kernel" make target in this
+makefile for details.
+
+The driver source files are:
+	random-pool.h
+	random-pool.c
+	random-dpool.c
+	random-hpux.c
+	random-hpux-assem.c
+
+This driver is founded on the belief that a good source of
+hard-to-predict bits is from device interrupts, especially ones where
+physical movement is involved (e.g., disk drive and keyboard).  If you
+sample a high-resolution counter when interrupts come in, and then
+"mix" that counter into an "entropy pool", you can make it very
+difficult for an attacker to predict the contents of the pool.
+
+In this particular implementation, the high-resolution counter is the
+PA control register 16, which is incremented once each system clock
+cycle.  The actual "hook" code which reads CR16 is found in the source
+file random-hpux-assem.s in this directory; it records the samples
+into a buffer which is subsequently processed using the
+`random_deferred' timer callback, which runs once per second.
+
+The hook is installed into the global external interrupt table by
+random_hook_intr().
+
+Driver interface:
+	The interface to the generator is very simple... just open
+/dev/random and read from it.
+
+	Data can be mixed into the pool by writing to /dev/random;
+this is best for
+
+	There are a number of ioctls, most of which gather statistics.
+
+WARNINGS:
+
+1) Stability:
+
+This driver has been tested so far on exactly one system, on one
+version of the HP-UX OS; use at your own risk.
+
+This patches itself into the I/O system in a rather brutal, low-level
+way.  This driver is explicitly *NOT* supported by HP; it is provided
+for information about how such a driver *might* be implemented on UNIX
+and similar systems.
+
+The data structures it uses are subject to change in future revisions
+of the OS; it is likely that adjustments to this driver for future
+HP-UX revisions will require access to kernel source.
+
+2) Security:
+
+This driver has not been subject to a lot of security analysis, but it
+is almost certainly better than the DES-based random generator used in
+Kerberos V5 (and DCE), which uses far more predictable inputs.
+
+This driver does not hook itself into the interrupt system (and thus
+begin collecting random bits) until it has been opened for the first
+time.  See the driver source for an explanation why.
+
+Putting an entry like the following early in /etc/inittab will get the
+driver started early at boot time:
+
+	rndi::sysinit:/sbin/date >/dev/random 2>&1
+
+It is probably better to have a cron job extracting ~1K of entropy
+from the driver every few minutes into a file in /etc, and then dump
+the contents of that file into /dev/random at system boot time.
+
+The entropy estimation is probably wildly optimistic.  On my system,
+an 80MHz 9000/712, it seems to estimate at least ~15 bits of entropy
+per interrupt, which would require an unpredictability of ~.5ms per
+device interupt; this seems high to me for all but keystroke
+interrupts.
+
+3) Attacking the driver.
+
+Clearly, anyone with priviledged access to the system can read the
+state of the driver out of /dev/kmem, or patch it to behave in a more
+predictable way.  Aside from this, the strongest position for an
+attacker is as an unpriviledged user on the same system.  From this
+vantage point, there are clearly several avenues of attack on the
+driver:
+
+ a) obtaining samples of its output and attempting to derive the state
+of the pool.
+
+ b) obtaining its initial state, estimating the inputs based on
+environmental information, and correcting that estimate based on reads
+from the driver.
+
+The first seems impractical.  The driver is constructed such that
+all output from the pool is fed through a one-way function.  Assuming
+that one-way function is strong, it should not be possible to derive
+information about the contents of the pool; however this is a big
+assumption.
+
+The second may be feasible; in particular, the counter read by the
+driver is also readable by user-space processes; it is conceivable
+that a program running in user space on an otherwise lightly loaded
+system (spinning while reading the counter, looking for "jumps" in the
+value which are indicative of time lost while the system handles
+interrupts) could obtain information about the inputs to the random
+pool, though it is unclear how much accuracy is possible.
+
+Periodic reads of values from the driver could prove useful in
+checking the state of the driver versus reality; the statistics ioctls
+might also prove to be useful in tracking the state of the driver.
+
+Therefore, some conservative engineering principles apply to use of
+this driver:
+
+	1) sanity check the output.
+	2) make sure you mix in some "secret" data into the pool at
+	   system boot time; the contents of the system's keytab
+	   (/krb5/v5srvtab) is probably not a bad start.
+	3) Use it in conjunction with other random number generators;
+	   do not use it as the sole generator.
+	4) Keep untrusted users and processes off of systems used for
+	   generation of high-value keys.

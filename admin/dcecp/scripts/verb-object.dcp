@@ -1,0 +1,150 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+#
+# HISTORY
+# $Log: verb-object.dcp,v $
+# Revision 1.1.6.3  1996/03/09  23:06:42  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:25:31  marty]
+#
+# Revision 1.1.6.2  1995/12/08  21:24:41  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/4  1995/07/26  19:12 UTC  truitt
+# 	Merge script changes.
+# 
+# 	HP revision /main/HPDCE02/truitt_dcecp_chfts43/1  1995/07/26  19:11 UTC  truitt
+# 	CHFts14274: Add 'checkpoint' and 'discard'.
+# 
+# 	HP revision /main/HPDCE02/3  1995/05/01  18:47 UTC  truitt
+# 	Merge help changes.
+# 
+# 	HP revision /main/HPDCE02/truitt_dcecp_chfts26/1  1995/05/01  18:45 UTC  truitt
+# 	CHFts15144: Fix the help so that if the command "help info"
+# 	is entered, for example, the "operations" command used does
+# 	not print out an odd error message.
+# 
+# 	HP revision /main/HPDCE02/2  1995/03/30  17:46 UTC  truitt
+# 	Merge warranty patch changes.
+# 
+# 	HP revision /main/truitt_dcecp_chfts23/1  1995/03/30  17:44 UTC  truitt
+# 	CHFts14675: New registry functionality to support warranty
+# 	patch work.
+# 
+# 	HP revision /main/HPDCE02/1  1995/03/29  16:55 UTC  jrr
+# 	Fix situation where verb-object syntax can't find help for un-autoloaded procs.
+# 	[1995/12/08  17:58:03  root]
+# 
+# Revision 1.1.2.3  1994/08/30  21:08:05  rousseau
+# 	Fix duplicate help problem (CR 11924).
+# 	[1994/08/30  21:07:49  rousseau]
+# 
+# Revision 1.1.2.2  1994/08/16  00:06:17  melman
+# 	check info commands for $obj then for $obj*
+# 	[1994/08/16  00:05:59  melman]
+# 
+# Revision 1.1.2.1  1994/06/20  21:03:16  salamone
+# 	Provide auto-loading procedure support.
+# 	Renamed file from .dcecp to .dcp
+# 	[1994/06/20  18:04:46  salamone]
+# 
+# Revision 1.1.2.4  1994/06/09  16:02:34  devsrc
+# 	cr10892 - fix copyright
+# 	[1994/06/09  15:48:10  devsrc]
+# 
+# Revision 1.1.2.3  1994/06/09  13:12:01  melman
+# 	catch two verbs entered as error
+# 	[1994/06/08  23:12:10  melman]
+# 
+# Revision 1.1.2.2  1994/05/10  14:13:24  melman
+# 	fix calling command when args is a list
+# 	[1994/05/10  13:32:10  melman]
+# 
+# Revision 1.1.2.1  1994/03/08  15:49:45  melman
+# 	resolve list, rename, and set conflicts
+# 	[1994/03/08  14:58:35  melman]
+# 
+# 	init.dcecp and verb commands
+# 	[1994/03/08  14:46:06  melman]
+# 
+# $EndLog$
+#
+
+# source this file to allow operation-object syntax
+proc dcecp_verb {verb obj args} {
+    # check if $obj is a command or short for one
+    set object [info commands $obj]
+    if {[llength $object] < 1} {set object [info commands $obj*]}
+
+    # This handles the case of two verbs: "help show" or "create delete"
+    set lev [info level]
+    if $lev>2 {
+        if [string match [lindex [info level [expr $lev-2]] 0] dcecp_verb] {
+            error "Object \"$verb\" does not support verb."
+        }
+    }
+
+    if {[llength $object] < 1} {
+        # Take one last stab to see if it's a script that has not yet
+        # been autoloaded.
+        if {[catch {uplevel $obj $verb $args} msg] == 0} {
+            return "$msg"
+        } else {
+            error "$msg"
+        }
+    } elseif {[llength $object] > 1} {
+        error "Object \"$obj\" is not unique: [lsort $object]"
+    } else {
+        if {[catch {$object operations}] != 0 } {
+            error "Command \"$verb\" is not supported by \"$object\" object."
+        } elseif {[llength [lsearch [$object operations] $verb]] < 1} {
+            error "Command \"$verb\" is not supported by \"$object\" object."
+        } else {
+            eval $object $verb $args
+        }
+    }
+}
+
+proc activate     args {eval dcecp_verb activate $args}
+proc add          args {eval dcecp_verb add $args}
+proc catalog      args {eval dcecp_verb catalog $args}
+proc check        args {eval dcecp_verb check $args}
+proc checkpoint   args {eval dcecp_verb checkpoint $args}
+proc configure    args {eval dcecp_verb configure $args}
+proc create       args {eval dcecp_verb create $args}
+proc deactivate   args {eval dcecp_verb deactivate $args}
+proc delete       args {eval dcecp_verb delete $args}
+proc designate    args {eval dcecp_verb designate $args}
+proc destroy      args {eval dcecp_verb destroy $args}
+proc disable      args {eval dcecp_verb disable $args}
+proc discard      args {eval dcecp_verb discard $args}
+proc dump         args {eval dcecp_verb dump $args}
+proc enable       args {eval dcecp_verb enable $args}
+proc export       args {eval dcecp_verb export $args}
+proc import       args {eval dcecp_verb import $args}
+proc merge        args {eval dcecp_verb merge $args}
+proc modify       args {eval dcecp_verb modify $args}
+proc operations   args {eval dcecp_verb operations $args}
+proc permissions  args {eval dcecp_verb permissions $args}
+proc ping         args {eval dcecp_verb ping $args}
+proc remove       args {eval dcecp_verb remove $args}
+proc replace      args {eval dcecp_verb replace $args}
+proc show         args {eval dcecp_verb show $args}
+proc start        args {eval dcecp_verb start $args}
+proc stop         args {eval dcecp_verb stop $args}
+proc synchronize  args {eval dcecp_verb synchronize $args}
+proc unexport     args {eval dcecp_verb unexport $args}
+
+# These 3 verbs conflict with Tcl commands so put a d in front of them
+# Another possibility is to map them to other words:
+#    list -> display
+#    rename -> move
+#    set -> change
+
+proc dlist         args {eval dcecp_verb list $args}
+proc drename       args {eval dcecp_verb rename $args}
+proc dset          args {eval dcecp_verb set $args}

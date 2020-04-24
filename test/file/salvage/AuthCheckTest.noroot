@@ -1,0 +1,148 @@
+#!/bin/sh
+
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: AuthCheckTest.noroot,v $
+# Revision 1.1.10.1  1996/10/17  18:35:06  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:57:24  damon]
+#
+# Revision 1.1.2.3  1993/01/11  18:37:06  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:21:33  htf]
+# 
+# Revision 1.1.2.2  1992/10/28  18:15:50  jaffe
+# 	New File
+# 	[1992/10/28  15:03:48  jaffe]
+# 
+# $EndLog$
+
+###############################################################################
+#     Copyright (C) 1992 Transarc Corporation - All rights reserved           #
+###############################################################################
+#
+# This script is run from the AuthCheckTest script and is not designed to be 
+# invoked directly. This test performs some authorization tests for a non-root 
+# user on the salvage/ recovery command
+
+. $UTIL_DIR/fs_FunctionsScript
+
+errorCount=0
+
+#
+# The following test purposes are run as non-root user as specified by.
+# the testUser environment variable
+#
+
+#
+# Basic tests
+#
+
+salvage ${help}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E30 "salvage ${help} failed as non-root" ${FALSE} -log ${logFile} 
+
+salvage ${verify} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E31 "salvage ${verify} failed as non-root" ${FALSE} -log ${logFile} 
+
+salvage ${recover} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E32 "salvage ${recover} failed as non-root" ${FALSE} -log ${logFile} 
+
+salvage ${recoverVerify} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E33 "salvage ${recoverVerify} failed as non-root" ${FALSE} -log ${logFile} 
+
+salvage ${salvage} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E34 "salvage ${salvage} failed as non-root" ${FALSE} -log ${logFile} 
+
+salvage ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E35 "salvage failed as non-root" ${FALSE} -log ${logFile} 
+
+salvage ${recover} ${salvage} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E36 "salvage ${recover} ${salvage} failed as non-root" ${FALSE} -log ${logFile} 
+
+#
+# Error Tests
+#
+
+#
+# With only read access to the aggregate.
+#
+
+chmod 0400 ${aggr}
+if [ "`ls -l $aggr | cut -c2-10`" != "r--------" ]
+then
+	echo "${programName}: failed to \"chmod 0 ${aggr} \" as `whoami`" | tee -a ${logFile}
+	exit ${setupFailureExitCode}
+fi
+
+if [ ! -r ${aggr} ]
+then
+	echo "${programName}: does not allow user `whoami` read access to device ${aggr}" | tee -a ${logFile}
+	exit ${setupFailureExitCode}
+fi
+
+if [ -w ${aggr} ]
+then
+	echo "${programName}: still allows user `whoami` write access to device ${aggr}" | tee -a ${logFile}
+	exit ${setupFailureExitCode}
+fi
+
+salvage ${verify} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E40 "salvage ${verify} failed for `whoami` who has read access to device file ${aggr}" ${FALSE} -log ${logFile} 
+
+salvage ${recover} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_NONZERO} E41 "salvage ${recover} succeeded for `whoami` who does not have write access to device file ${aggr}" ${FALSE} -log ${logFile} 
+
+salvage ${recoverVerify} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_NONZERO} E42 "salvage ${recoverVerify} succeeded for `whoami` who does not have write access to device file ${aggr}" ${FALSE} -log ${logFile} 
+
+salvage ${salvage} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_NONZERO} E43 "salvage ${salvage} succeeded for `whoami` who does not have write access to device file ${aggr}" ${FALSE} -log ${logFile} 
+
+salvage ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_NONZERO} E44 "salvage succeeded for `whoami` who does not have write access to device file ${aggr}" ${FALSE} -log ${logFile} 
+
+#
+# Remove read access also.
+#
+
+chmod 0 ${aggr}
+if [ "`ls -l $aggr | cut -c2-10`" != "---------" ]
+then
+	echo "${programName}: failed to \"chmod 0 ${aggr} \" as `whoami`" | tee -a ${logFile}
+	exit ${setupFailureExitCode}	
+fi
+
+if [ -r ${aggr} ]
+then
+	echo "${programName}: still allows user `whoami` read access to device ${aggr}" | tee -a ${logFile}
+	exit ${setupFailureExitCode}	
+fi
+
+if [ -w ${aggr} ]
+then
+	echo "${programName}: still allows user `whoami` write access to device ${aggr}" | tee -a ${logFile}
+	exit ${setupFailureExitCode}
+fi
+
+salvage ${verify} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_NONZERO} E50 "salvage ${verify} succeeded for `whoami` who does not have read access to device file ${aggr}" ${FALSE} -log ${logFile} 
+
+salvage ${recover} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_NONZERO} E51 "salvage ${recover} succeeded for `whoami` who does not have write access to device file ${aggr}" ${FALSE} -log ${logFile} 
+
+salvage ${recoverVerify} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_NONZERO} E52 "salvage ${recoverVerify} succeeded for `whoami` who does not have write access to device file ${aggr}" ${FALSE} -log ${logFile} 
+
+salvage ${salvage} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_NONZERO} E53 "salvage ${salvage} succeeded for `whoami` who does not have write access to device file ${aggr}" ${FALSE} -log ${logFile} 
+
+salvage ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_NONZERO} E54	 "salvage succeeded for `whoami` who does not have write access to device file ${aggr}" ${FALSE} -log ${logFile} 
+
+exit ${errorCount}
+

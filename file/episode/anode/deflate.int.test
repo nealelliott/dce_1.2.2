@@ -1,0 +1,102 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: deflate.int.test,v $
+# Revision 1.1.12.1  1996/10/02  17:16:59  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:26:52  damon]
+#
+# Revision 1.1.6.2  1994/06/09  13:57:16  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:32:16  annie]
+# 
+# Revision 1.1.6.1  1994/02/04  20:10:59  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:08:58  devsrc]
+# 
+# Revision 1.1.4.1  1994/01/28  20:43:33  annie
+# 	expand OSF copyright
+# 	[1994/01/28  20:42:10  annie]
+# 
+# 	expand OSF copyright
+# 
+# Revision 1.1.2.2  1993/01/28  16:19:19  shl
+# 	Transarc delta: ota-ot3802-deflate-needs-tlock 1.2
+# 	  Selected comments:
+# 	    The basic problem here is that epit_Deflate does not grab the volume's
+# 	    tlock (since there is not volume_table tlock) and so it doesn't merge
+# 	    with transactions that deleted files from the pages being deflated.
+# 	    The conditions actually required to reproduce this problem in practice
+# 	    are pretty damn obtuse.  That these changes actually accomplish this,
+# 	    however, proves that they are not impossibly obtuse.  This first
+# 	    revisions just allow that reproduction.  The actual bug fix will be in a
+# 	    subsequent revision.
+# 	    This script makes many modifications to files designed to generate large
+# 	    EC without touching the bitmap.
+# 	    Basically moved Deflate function from volume_table.c where there is no
+# 	    appropriate tlock to volume.c where it can grab the same tlock that
+# 	    Delete uses.
+# 	[1993/01/27  16:36:08  shl]
+# 
+# $EndLog$
+# /* Copyright (C) 1993 Transarc Corporation - All rights reserved */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/deflate.int.test,v 1.1.12.1 1996/10/02 17:16:59 damon Exp $
+
+# deflate.int -- operate on a collection of files in a volume in an attempt to
+#     create an maintain a large EC without touching the bitmap.  We keep files
+#     inline so they don't do any allocates.  We do use create (and write_aux)
+#     so the volume from which this script is started should be inflated to
+#     allow for allocation of 3 regular and 2 acl anodes without triggering any
+#     block allocations.  Any operation that calls epif_Mark should conflict
+#     with the volume header.  ChangeLink is especially good if the link count
+#     goes to zero so that it touched the ZLC list.
+
+deflate.int 1
+
+create_file a
+write_file 0 10
+change_link -1
+change_link +1
+
+open_file a
+write_aux acl 0 9
+change_link -1
+change_link +1
+
+create_file b
+write_aux acl 0 8
+change_link +1
+change_link -2
+change_link +1
+
+open_file b
+replace_aux acl a acl
+
+open_file b
+write_file 0 11
+
+create_dir c
+write_file 0 12
+
+open_file c
+replace_aux acl a acl
+replace_aux ifacl a acl
+replace_aux idacl a acl
+
+open_file c
+write_file 11 11
+change_link +222
+change_link -223
+get_info h=0
+change_link +50
+change_link -49
+
+delete_file a
+delete_file b
+delete_file c
+
+end

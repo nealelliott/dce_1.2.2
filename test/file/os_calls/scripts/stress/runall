@@ -1,0 +1,89 @@
+#!/bin/sh
+# This script intends to run all script and the conbinations in one time.
+#
+#
+# ID: $Id: 
+#
+# ORIGINS: Transarc Corp.
+#
+# (C) COPYRIGHT Transarc Corp. 1992
+# All Rights Reserved
+# Licensed Materials - Property of Transarc
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+#
+
+#
+# @OSF_COPYRIGHT
+#
+# HISTORY
+# $Log$
+# $EndLog$
+#
+
+#
+# This script intends to run all distributed tests in this directory.
+# Before running the script, read README carefully and set up those
+# setup files for each scripts if there are no such files. This script
+# will use rsh (auto_spoke) to run our remote ITL file_test so be
+# careful in case of running script with no window open and Hub exits
+# abnormally there may be some "rsh" and "rshd" running in machines
+# you stained. Check that and kill them manually.
+#
+
+numOfFiles=0
+numErrors=0
+
+echo | tee -a runall.log
+echo Running script runall  | tee -a runall.log
+
+echo | tee -a runall.log
+for fileName in `ls *.scr`
+do
+if test -f $fileName.setup
+then
+  echo | tee -a runall.log
+  date | tee -a runall.log
+  echo | tee -a runall.log
+  echo Script running         ====== $fileName ====== | tee -a runall.log
+  echo Run with the script with setup file $fileName.setup | tee -a runall.log
+  /tmp/file_test -l /.:/dfs-test/g -C $fileName.setup -O $fileName.log -I $fileName
+  returnFlag=$?
+  echo "                  ****** Error Checking *******"| tee -a runall.log
+  echo "                  ****** ITL complaints *******"| tee -a runall.log
+  grep "###" $fileName*log | tee -a  runall.log
+  echo "                  ****** Other Errors   *******"| tee -a runall.log
+  grep -i error $fileName*log | tee -a  runall.log
+  echo "                  ****** Script  Errors *******"| tee -a runall.log
+  grep -i FAILED $fileName*log | tee -a  runall.log
+  if [ $returnFlag != 0 ]
+  then
+    numErrors=`expr $numErrors  + 1`
+    echo Script crashed          ====== $fileName ====== | tee -a runall.log
+  else 
+    echo Script success          ====== $fileName ====== | tee -a runall.log
+  fi
+  echo | tee -a runall.log
+fi
+date | tee -a runall.log
+numOfFiles=`expr $numOfFiles  + 1`
+done
+echo | tee -a runall.log
+
+echo | tee -a  runall.log
+echo The total scripts run is $numOfFiles | tee -a  runall.log
+echo | tee -a  runall.log
+if test $numErrors -ne 0
+then
+   echo $numErrors scripts crashed. | tee -a runall.log
+else
+   echo Runall is successfully done. |tee -a runall.log
+   echo Check with runall.log file to see if something else wrong in *.log files
+fi
+echo "Scripts done, better check logfiles (first runall.log)"
+
+echo | tee -a  runall.log
+echo End runall file | tee -a runall.log
+date | tee -a  runall.log
+echo | tee -a  runall.log

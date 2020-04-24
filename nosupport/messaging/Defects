@@ -1,0 +1,84 @@
+	Known Defects in the Current MOS Implementation
+
+03-December-1996
+
+These are the known defects in the current Message-Oriented Services
+(MOS) implementation.
+
+________________________________________________________________________
+
+---- Queue Manager (qmgr)
+
+Blocking dequeue not supported
+    Blocking dequeue is not yet supported.
+
+Messages read from backing store not sorted properly
+    When persistent messages are read from the backing store at 
+    qmgr startup time, they are not enqueued in the proper order.
+    They are enqueued in priority order, but within each priority,
+    they should be ordered by enqueue time.
+
+TTR not implemented
+    TTR (time-to-receive, ie, delayed queuing) not yet implemented.
+
+Dequeue and protection levels
+    Protection levels are not looked at during the dequeue operation.
+
+Use DCED to start qmgr
+    Have not looked into getting dced to start the qmgr.
+
+Does not change key automatically
+    The queue manager does not change key automatically.
+    It does call sec_key_mgmt_manage_key(), but the keytab file never changes.
+    (I'm not sure exactly when to expect the key to be changed.)
+
+________________________________________________________________________
+
+---- API
+
+Asynchronus enqueue not yet supported
+    Asynchronus enqueuing is not yet supported.
+
+Unauthenticated users
+    Unauthenticated users may not be handled gracefully.
+    Some testing needs to be done in this area.
+
+Default queue manager
+    The API does not yet look at profiles for the default queue manager.
+    For now, only the environment variable is considered.
+
+Handle links
+    (Need qmgr handles on alias_add() and alias_remove().
+    How do you create links if you don't have a qmgr handle or name?)
+    Or use default qmgr?
+
+Handle resource groups
+
+________________________________________________________________________
+
+---- Administrative tool (dcecp)
+
+dcecp support
+    dcecp does not yet support MOS.  Instead, we have provide "moscp", which
+    is a stripped-down dcecp, doing only message queue commands.  Some
+    features of moscp are not supported fully.  These are discussed below.
+
+	moscp does not support lists of objects for queue operations.
+	For example,
+	    SUPPORTED:
+	    moscp> queue create checkingq
+	    moscp> queue create savingsq
+
+	    NOT SUPPORTED:
+	    moscp> queue create {checkingq savingsq}
+
+	"queue list" and "queue dequeue"
+	    Selection criteria is specified as a mask type and value.  A mask
+	    operator is currently not allowed to be specified; the default
+	    mask operator is "equal to".
+
+	datatype
+	    Only supports the default datatype, a nil UUID, which is an array
+	    of bytes. Application-specific datatypes are not supported throough
+	    the admin interface.
+

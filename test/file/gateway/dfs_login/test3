@@ -1,0 +1,188 @@
+# @HP_COPYRIGHT@
+#
+#
+# HISTORY
+# $Log: test3,v $
+NONERevision 1.1.6.1  1996/10/17  18:23:41  damon
+NONE	Submitting on behalf of Transarc
+NONE
+NONERevision 1.1.5.2  1996/10/17  16:52:03  damon
+NONE	Submitting on behalf of Transarc
+NONE
+# Revision /main/HPDCE02/4  1995/06/22  20:15 UTC  maunsell_c
+# 	mothra C&S fixes
+# 
+# Revision /main/HPDCE02/3  1995/03/30  20:06 UTC  maunsell_c
+# 	DFS_SYSNAME test was incorrect
+# 
+# Revision /main/HPDCE02/2  1995/02/14  22:43 UTC  maunsell_c
+# 	@sys @host changes for nfs/dfs gateway
+# 
+# Revision /main/HPDCE02/1  1994/11/07  20:45 UTC  maunsell_c
+# 	test fixes-enhances from last pull up from OSF
+# 
+#Revision 1.1.2.1  1994/08/22  16:16:29  maunsell_c
+#	use root dce login
+#	test dfs_login function
+#	new test, performs successful dfs_login
+#
+#Revision 1.1.1.4  1994/08/22  16:07:34  maunsell_c
+#	use root dce login
+#
+# $EndLog$
+#
+###############################################################################
+# This test is applicable to DFS/NFS exporter.
+# The script tests the dfs_login funtion
+###############################################################################
+#
+# if not run via the runtests script use          
+#         test3 >test3.log 2>&1
+# to log test data
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+rc=0
+ty=dfs_login/logout
+
+: ${SERVER= `mount | grep "/\.\.\. on" | cut -d' ' -f3 | sed 's/:\/\.\.\.//'`}
+: ${rootpasswd="-dce-"}
+bogus_sysname="bogus.sysname"
+
+echo ""
+echo "RUNNING dfs_login/logout COMMANDS on $hn."
+echo "========================================================================="
+date
+echo ""
+
+###############################################################################
+
+
+   echo ""
+   echo "dfs_login -h $SERVER root $rootpasswd"
+   dfs_login -h $SERVER root $rootpasswd 
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E1)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "dfs_login -h $SERVER root $rootpasswd"
+   dfs_login -h $SERVER root  $rootpasswd
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E2)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "dfs_login -h $SERVER root"
+   dfs_login -h $SERVER root
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E3)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "ls /:/@sys"                        
+   ls /:/@sys 
+   rf=$?
+   if test $rf -eq 0
+      then
+      echo "worked ($rf) ($p: E3c)"
+      rc=`expr $rc + 1`
+   fi
+
+
+   echo ""
+   echo "ls /:/@host"
+   ls /:/@host
+   rf=$?
+   if test $rf -eq 0
+      then
+      echo "worked ($rf) ($p: E3f)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "dfs_login -h $SERVER -S"
+   dfs_login -h $SERVER -S
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E3a)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "dfs_login -h $SERVER -S $bogus_sysname"
+   dfs_login -h $SERVER -S $bogus_sysname
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E3b)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo "export DFS_SYSNAME=$bogus_sysname"
+   export DFS_SYSNAME=$bogus_sysname
+   echo ""
+   echo "dfs_login -h $SERVER"
+   dfs_login -h $SERVER
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "worked ($rf) ($p: E3d)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "ls /:/@sys"
+   ls /:/@sys
+   rf=$?
+   if test $rf -eq 0
+      then
+      echo "worked ($rf) ($p: E3e)"
+      rc=`expr $rc + 1`
+   fi
+   
+   echo ""
+   echo "dfs_logout -h $SERVER"
+   dfs_logout -h $SERVER
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E4)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "dfs_logout -h $SERVER"
+   dfs_logout -h $SERVER
+   rf=$?
+   if test $rf -eq 0
+      then
+      echo "worked ($rf) ($p: E5)"
+      rc=`expr $rc + 1`
+   fi
+
+
+########################################
+
+echo ""
+echo "Done at `date`."
+echo ""
+if [ $rc -eq 0 ]
+   then
+   echo "$ty/$p PASSED"
+else 
+   echo "$ty/$p FAILED $rc errors"
+fi
+exit $rc

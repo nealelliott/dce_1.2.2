@@ -1,0 +1,84 @@
+# /* Copyright (C) 1994 Transarc Corporation - All rights reserved. */
+# $Header: /afs/tr/project/fs/dev/dfs-dev/src/file/episode/anode/RCS/nbs-recovery.test,v 1.1 1994/03/16 20:16:01 ota Exp $
+
+# nbs-recovery -- This has three variants.  Variant 1&2 create an aggregate
+#     with small or large blocks.  Variant 3 can be run repeatedly.  It
+#     attaches the device causing recovery of the previous aggregate.
+#     Then it does a check_device.  For each file created in variant 1|2
+#     it reads it with NBS checking.  Then it truncates each file to
+#     zero length and forks a thread to write into each.  It also forks
+#     nbs-meta.int to free metadata blocks.
+#
+# CAUTIONS -- Should be run with var=1..3 ONLY.
+
+nbs-recovery 1
+
+(var=1) open_device 1 4096 1024 1000
+(var=1) create_aggregate 200
+(var=1) create_vol work 0,,0 4000
+(var=1) create_file a
+(var=1) create_file b
+(var=1) create_file c
+(var=1) create_file d
+(var=1) create_file e
+(var=1) create_file f
+(var=1) save /tmp/nbs.fn
+(var=1) end
+
+(var=2) open_device 1 65536 1024 100
+(var=2) create_aggregate 30
+(var=2) create_vol work 0,,0 4000
+(var=2) create_file a
+(var=2) create_file b
+(var=2) create_file c
+(var=2) create_file d
+(var=2) create_file e
+(var=2) create_file f
+(var=2) save /tmp/nbs.fn
+(var=2) end
+
+(var=3) open_device 1
+(var=3) restore /tmp/nbs.fn
+(var=3) # all the rest...
+
+open_file work.root
+check_device
+set_transfer_size 1024
+
+open_file a
+read_file 0 eof nbs
+open_file b
+read_file 0 eof nbs
+open_file c
+read_file 0 eof nbs
+open_file d
+read_file 0 eof nbs
+open_file e
+read_file 0 eof nbs
+open_file f
+read_file 0 eof nbs
+
+open_file a
+truncate_file 0
+fork nbs-recovery.int.test
+open_file b
+truncate_file 0
+fork nbs-recovery.int.test
+open_file c
+truncate_file 0
+fork nbs-recovery.int.test
+open_file d
+truncate_file 0
+fork nbs-recovery.int.test
+open_file e
+truncate_file 0
+fork nbs-recovery.int.test
+open_file f
+truncate_file 0
+fork nbs-recovery.int.test
+
+fork nbs-meta.int.test
+
+wait
+
+end

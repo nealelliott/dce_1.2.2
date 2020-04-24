@@ -1,0 +1,137 @@
+#!/bin/csh -f
+
+if ($?SLV_TEST_AGGRS == 0) then
+    setenv SLV_TEST_AGGRS /afs/transarc.com/usr/ota/de/salvage-data
+endif
+if ($?SLV_TEST_OUTPUT == 0) then
+    setenv SLV_TEST_OUTPUT /afs/transarc.com/usr/ota/de/salvage-data/salvage-output
+endif
+if ($?SLV_TEST_STAGE == 0) then
+    setenv SLV_TEST_STAGE /tmp/salvage-data
+endif
+if ($?SLV_TEST_SPL_STAGE == 0) then
+    setenv SLV_TEST_SPL_STAGE /tmp
+endif
+
+set time = 1
+
+#
+# This script used to expect epi-blake to be in /tmp, and to expect sfile
+# to be in /tmp/salvage-data.
+#
+# Instead, we now look for epi-blake.Z in SLV_TEST_AGGRS
+# and use it to create epi-blake in SLV_TEST_SPL_STAGE;
+# and we look for sfile.Z in SLV_TEST_AGGRS and use it to create
+# sfile in SLV_TEST_STAGE.
+#
+if (! -d ${SLV_TEST_AGGRS} || \
+    ! -f ${SLV_TEST_AGGRS}/epi-blake.Z || \
+    ! -f ${SLV_TEST_AGGRS}/sfile.Z || \
+    ! -d ${SLV_TEST_STAGE} || \
+    ! -d ${SLV_TEST_SPL_STAGE} || \
+    ! -d ${SLV_TEST_OUTPUT}) then
+    echo Initial files not set up correctly.
+    exit 1
+endif
+if (! -f $epiobj/ravage/scp || \
+    ! -f $epiobj/scavenge/salt ) then
+    echo Object directories are not setup correctly
+    exit 1
+endif
+
+# pick up other scripts from wherever we found this script
+set refdir = $0
+set path = ($refdir:h $path)
+set scriptpath = (`which all_salvage`)
+if ($#scriptpath != 1) then
+    echo $scriptpath
+    exit 1
+endif
+set scriptpath = (`which misc_salvage`)
+if ($#scriptpath != 1) then
+    echo $scriptpath
+    exit 1
+endif
+
+# Get the salvager out of the object tree by adding salvage dir to the
+# front of $path list.  Then double check that this really worked.
+if (! -x $epiobj/salvage/salvage ) then
+    echo Object directory does not contain the salvager
+    exit 1
+endif
+set path = ( $epiobj/salvage $path )
+set salvagepath = (`which salvage`)
+if ($#salvagepath != 1) then
+    echo $salvagepath
+    exit 1
+endif
+ls -Ll $salvagepath[1]
+if ($status) exit 1
+
+if ($#argv > 0) then
+    echo Sleeping for $1 seconds
+    sleep $1
+endif
+
+# get scp and other ravage scripts.  We must prepend to the path, because
+# their names (bash, copy, etc.) are all too likely to be in the namespace
+# already.
+set path = ( $epiobj/ravage $path )
+
+zcat ${SLV_TEST_AGGRS}/epi-blake.Z | scp - ${SLV_TEST_SPL_STAGE}/epi-blake
+zcat ${SLV_TEST_AGGRS}/sfile.Z | scp - ${SLV_TEST_STAGE}/sfile
+
+# set up for scavenge/efs_query.pl
+setenv RVG_AGGR_TMP_DIR ${SLV_TEST_SPL_STAGE}
+
+# set up for ravage/ravage
+setenv RVG_OUTPUT ${SLV_TEST_OUTPUT}
+
+echo Starting simple_test on epi-blake ...
+
+perl -I $epiobj/scavenge $epiobj/scavenge/simple_test \
+    ${SLV_TEST_SPL_STAGE}/epi-blake \
+    >& ${SLV_TEST_OUTPUT}/epi-blake.simple_test.O
+
+echo ... done with simple_test on epi-blake.
+
+echo Starting simple_test on sfile ...
+
+perl -I $epiobj/scavenge $epiobj/scavenge/simple_test \
+    ${SLV_TEST_STAGE}/sfile \
+    >& ${SLV_TEST_OUTPUT}/sfile.simple_test.O
+
+echo ... done with simple_test on sfile.
+
+echo Starting salt on epi-blake ...
+
+perl -I $epiobj/scavenge $epiobj/scavenge/salt \
+    ${SLV_TEST_SPL_STAGE}/epi-blake \
+    >& ${SLV_TEST_OUTPUT}/salt.O
+
+echo ... done with salt on epi-blake.
+
+echo Starting misc_salvage ...
+
+misc_salvage > ${SLV_TEST_OUTPUT}/output
+
+echo ... done with misc_salvage.
+
+echo Starting all_salvage ...
+
+all_salvage >> ${SLV_TEST_OUTPUT}/output
+
+echo ... done with all_salvage.
+
+echo Starting ravage on epi-blake ...
+
+ravage epi-blake ${SLV_TEST_SPL_STAGE}
+
+echo ... done with ravage on epi-blake.
+
+# This is too slow and of marginal utility, so punt it for now.
+#echo Starting ravage on sfile ...
+#
+#ravage sfile ${SLV_TEST_STAGE}
+#
+#echo ... done with ravage on sfile.

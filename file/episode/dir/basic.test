@@ -1,0 +1,136 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: basic.test,v $
+# Revision 1.1.12.1  1996/10/02  17:20:20  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:29:37  damon]
+#
+# Revision 1.1.6.1  1994/06/09  14:00:01  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:35:19  annie]
+# 
+# Revision 1.1.4.3  1993/01/18  22:10:22  cjd
+# 	embedded copyright notice
+# 	[1993/01/18  21:51:24  cjd]
+# 
+# Revision 1.1.4.2  1993/01/13  16:40:31  shl
+# 	Transarc delta: bwl-ot6299-dirLength-dead 1.1
+# 	  Selected comments:
+# 	    Dead code.
+# 	    Delete tests of dir_Length.
+# 	[1993/01/12  20:05:36  shl]
+# 
+# Revision 1.1.2.2  1992/05/06  14:13:17  jdp
+# 	Initial revision.
+# 	[1992/05/05  23:53:19  jdp]
+# 
+# $EndLog$
+basic 1
+open_device 1 4096 1024 1000
+create_aggregate
+
+exist_vol bar 0,,23 100
+check_device
+
+create_file x				# try a write spanning block #0-#1
+write_file 4086 20
+read_file 4086 20
+
+# There are 8 direct blocks, so 8*4096 if the first byte in an indirect block
+create_file y				# try a write from direct to indirect
+write_file 28671 10000			# write block #6,7,8&9
+read_file 28671 10000
+read_file 100 1 0			# make sure others are zero
+
+create_file z				# in the middle of tree[1]
+write_file 1234567890 5000		# write blocks 301408 & 301409
+read_file 1234567890 5000
+read_file 100000000 1 0
+
+# with a bsize of 4096, ibsize = 1016.
+# This gives the block addresses for indirectBlockTree as follows:
+#   tree[0] 8 to 1023
+#   tree[1] 1024 to (1016^2 + 1023)=1033279
+#   tree[2] 1033280 to (1016^3 + 1033279)=1049805375
+#   tree[3] 1049805376 to (1016^4 + 1049805375)=1066602254911
+# Thus the first byte of tree[2] is 1033280*4096 = 4232314880, which is
+# just less than 2^32.
+
+create_file a	 			# at the boundary of tree 1&2
+
+check_device
+
+# switch devices
+open_device 0 1024 1024 2000
+create_aggregate
+check_device
+
+exist_volume xxx 123,,987654321 170
+
+#create_file l
+#write_file 8190 4			# blocks 7&8
+#read_file 8190 4
+#delete_file
+
+#create_file l
+#write_file 262140 8			# blocks 255 & 256
+#read_file 262140 8
+#delete_file
+
+#create_file l
+#write_file 63242230 20			# blocks 61759 & 61760
+#read_file 63242230 20
+#delete_file
+
+check_device
+# now go back an see if its still there...
+open_device 1
+open_volume 0,,23
+
+open_file (2,1)
+read_file 4086 20
+delete_file
+
+open_file (3,2)
+read_file 28671 10000
+read_file 100 1 0			# make sure others are zero
+#EOF read_file 100000 1 0
+delete_file
+
+open_file (4,3)
+read_file 1234567890 5000
+read_file 100 1 0			# make sure others are zero
+read_file 1000000000 1 0
+#EOF read_file 2000000000 1 0
+delete_file
+
+# begin directory testing
+open_file (5,4)		# open a file 
+
+create_dir mung 1	# create a single entry called "mung0"
+lookup_dir mung0    # check the existence of "mung0"
+is_empty_dir        # check if the directory is empty
+list_dir            # list directory contents
+fixdd_dir		# fix dot dot directory
+list_dir            # list directory contents
+add_dir_entry mung0	# attempt to create "mung0"
+check_dir           # check directory
+#add_dir fubar
+list_dir            # list directory contents 
+delete_dir mung0	# attempt to delete "mung0"
+delete_dir mung0	# attempt to delete "mung0"
+lookup_dir mung0    # check the existence of "mung0"
+list_dir            # list directory contents 
+is_empty_dir        # check if the directory is empty
+check_dir           # check directory
+
+delete_file
+
+check_device
+end
+

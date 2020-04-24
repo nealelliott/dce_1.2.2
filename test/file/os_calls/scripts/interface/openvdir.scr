@@ -1,0 +1,176 @@
+*
+* ID: $Id:
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+*  openvdir.scr --
+*	This script implements a series of tests by using
+*       dir functions. This test will only concern about
+*       virtual directory test (dfs). It also uses the open,
+*       read, write, close commands to open test virtual directories.
+
+*  Terminology:
+*  PASSED -- no problem for the testings.
+*  FAILED -- failed when doing basic checks.
+*  XXXXXX -- Need further considerations or enhancement.
+
+*
+*  Errors: 9
+*
+
+*
+* Common settings.
+*
+include common1.env
+echo
+echo Running openvdir.scr
+echo
+
+set BaseDirName /...
+
+************************************************************************
+!*                  BASIC CHECKING
+************************************************************************
+*
+!* Use opendir, readdir, mkdir and closedir commands to test vdir.
+*
+
+* Note the vdir has been set up for read only and no write permission.
+* --------------------------------------------------------------------
+
+*
+!* Change to the virtual dir $BaseDirName to test
+*
+chdir $BaseDirName
+
+*
+!* Open the vdir $BaseDirName
+*
+opendir $BaseDirName BaseDirNamePtr
+
+*
+!* Read the vdir $BaseDirName and check the dir info
+*
+readdir $BaseDirNamePtr dirInfo
+if ($dirInfo.d_name != ".") {
+  set errorMessage ("FAILED: expect directory dot, but it is " + $dirInfo.d_name+" --E1")
+  exec err_Process
+}
+
+*
+* Read next dir ent
+*
+readdir $BaseDirNamePtr dirInfo
+if ( $dirInfo.d_name != ".." ) {
+  set errorMessage ("FAILED: expect directory dot-dot here, but it is " + $dirInfo.d_name+" --E2")
+  exec err_Process
+}
+
+*
+* Read next dir ent
+*
+readdir $BaseDirNamePtr dirInfo
+* It could be anything instead of a null string.
+if ( $dirInfo.d_name == "" ) {
+  set errorMessage ("FAILED: expect cell_name here, but it is " + $dirInfo.d_name+" --E3")
+  exec err_Process
+}
+closedir $BaseDirNamePtr
+
+verifyStatus false
+umask 0
+*
+!* Use open, read, write and close commands to test vdir.
+*
+!* open vdir for write (error check).
+open $BaseDirName $O_WRONLY 0777 BaseDirNameId
+if ( $ITL_Status == 0 ) {
+  set errorMessage ("FAILED: The vdir was opened for write, " + $BaseDirNmae
++" --E4")
+  exec err_Process
+}
+
+!* open vdir for write+truncate (error check).
+open $BaseDirName ($O_TRUNC|$O_WRONLY) 0777 BaseDirNameId
+if ( $ITL_Status == 0 ) {
+  set errorMessage ("FAILED: The vdir was opened for write+trunc. " + $BaseDirNmae+" --E5")
+  exec err_Process
+}
+!* open vdir for read+truncate (error check).
+open $BaseDirName ($O_TRUNC|$O_RDONLY) 0777 BaseDirNameId
+if ( $ITL_Status == 0 ) {
+  set errorMessage ("FAILED: The vdir was opened for reading+truncate. " + $BaseDirName+" --E6")
+  exec err_Process
+}
+verifyStatus true
+open $BaseDirName $O_RDONLY 0777 BaseDirNameId
+
+*
+* read dirent.	
+*
+* read length 16 means reading the first 16 bytes in the dir entry.
+* OSF1 does not aloow you read dir by read sys call.
+if ( $ITL_SystemType == "aix" ) {
+  read $BaseDirNameId 16 offset
+  if ( $CommandResult != 16 ) {
+    set errorMessage ("FAILED: read vdir for reading, return wrong size, " + $BaseDirName+" --E7")
+    exec err_Process
+  }
+}
+
+!* close dir file.
+close $BaseDirNameId
+
+verifyStatus false
+   
+*
+!* Check that mkdir does not work under the virtual directory (error check).
+*
+
+mkdir $testDir 0777
+if ( $ITL_Status == 0 ) {
+   set errorMessage ( "FAILED: The dir " + $testDir+" is created under the vdir" +  $BaseDirName+" --E8")
+   exec err_Process
+}
+
+*
+!* Check that file-create does not work under virtual directory (error check).
+*
+open $testFile $O_CREAT 0777 testFileId
+if ( $ITL_Status == 0 ) {
+   close $testFileId
+   remove $testFile
+   set errorMessage ( "FAILED: The file is created under the vdir" +  $testFile+" --E9")
+   exec err_Process
+}
+
+verifyStatus true
+
+************************************************************************
+!* Cleaning up.
+************************************************************************
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+*rmdir $testDir
+exec report_Proc "openvdir.scr" $errorCounter
+echo
+quit

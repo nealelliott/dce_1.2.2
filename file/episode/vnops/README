@@ -1,0 +1,194 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: README,v $
+# Revision 1.1.9.1  1996/10/02  17:43:09  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:35:24  damon]
+#
+# Revision 1.1.4.1  1994/06/09  14:04:50  annie
+# 	fixed copyright in src/file
+# 	[1994/06/09  13:20:30  annie]
+# 
+# Revision 1.1.2.3  1993/01/21  18:25:48  zeliff
+# 	Embedding copyright notices
+# 	[1993/01/19  16:47:40  zeliff]
+# 
+# Revision 1.1.2.2  1992/08/31  20:52:03  jaffe
+# 	Transarc delta: mason-ot2456-add-readme-file 1.1
+# 	  Selected comments:
+# 	    Add a readme file to describe (briefly) the purpose of all the stand-alone
+# 	    programs.
+# 	    This file describes (in a nutshell) the stand-alone programs.
+# 	[1992/08/30  03:10:48  jaffe]
+# 
+# $EndLog$
+The file/episode/* subdirectories contain a number of unsupported, but
+useful programs.  This file gives a brief description of each one
+along with a short description of its syntax.
+
+Last Updated: Thursday, July 16, 1992.
+
+* file/episode/anode
+** test_anode
+
+The test_anode program is a user-space simulator which allows testing
+of the internal Episode code interfaces.  It is built upon a
+traditional-style UNIX kernel multi-threading model (non-preemptive,
+multi-threading) and allows for direct testing of the anode layer.
+
+This directory also contains a large number of *.int and *.test files
+which are tests developed for both regression and development testing.
+
+Usage:
+
+test_anode [[-runtest] <testfile>] [-set{,test,verify,async,logbuf} debug <n>] [-setpreempt <ms> ] [-settrace [<mask> | <typename>]]+ [-setsleep] [-traceanode [+<skip count>] {d<mindev> | <volIx>,<anodeIx>}+] [-tracebuffer [+<skip count>] {d<mindev> | <blk>}+] [-variation <n>]
+
+where the first argument type is the test script to use, the second
+argument type controls various debugging variables (asdb_episode_*),
+the third increases preemption by changing the scheduling algorithm,
+the fourth is for function trace. -setsleep sets bits to indicate when
+a thread blocks for any resource (this touches a number of debugging
+variables).  The other options allow for finer control over the tests
+to increase the range and variation of testing.
+
+** findlog
+
+The findlog program reads an aggregate (one created by test_anode, or
+one created by newaggr) and generates a text file description of the
+log's location.  This can be used by the readlog program (mentioned in
+the logbuf section later) which will generate an ASCII representation
+of the contents of the log itself.
+
+Usage:
+
+findlog <aggregate> <description-file-to-write>
+
+* file/episode/logbuf
+
+** readlog
+
+The readlog program reads the log from an aggregate and prints out an
+ASCII representation of the log itself.  It requires a file which
+describes the actual location of the log (see anode/findlog).
+
+The ASCII dump is written to the standard output.
+
+Usage:
+
+readlog [-oldformat] [-recover] [-quiet] [-set{,logbuf,recover,async}debug #] blockListFile
+
+* file/episode/sautils
+
+** asdb
+
+This allows for all I/O to a particular aggregate to be halted.  It is
+used in recovery testing to simulate a file system crash.  It is used
+by the RCX testing itself (see file/episode/rcx).
+
+** epistat
+
+This allows for tuning and reading of internal Episode data
+structures.
+
+Usage:
+
+epistat [1|2|4] [package] [instance]
+
+Where 1 is get, 2 is set, and 4 is getnext.
+
+
+The following table demonstrates the semantic package.instance values
+and their numeric counterparts:
+
+log.passno 8.1
+log.activesize 8.2
+log.lsn 8.3
+log.ecthrottlecounter 8.4
+log.lfthrottlecounter 8.5
+log.fsynccalled 8.6
+buffer.nbufs 9.1
+buffer.nallocsok 9.2
+buffer.nallocswaited 9.3
+buffer.meanrecycleage 9.4
+buffer.meanreuseage 9.5
+buffer.meanpoolsize 9.6
+buffer.allocs 9.7
+buffer.hits 9.8
+buffer.misses 9.9
+buffer.inuse 9.10
+vnops.bufferPoolSize 10.0
+vnops.anodePoolSize 10.1
+vnops.dirBufferPoolSize 10.2
+vnops.vnodePoolSize 10.3
+vnops.flockPoolSize 10.4
+vnops.isExportable 10.5
+dirbuf.nbuffers 11.0
+dirbuf.calls 11.1
+dirbuf.ios 11.2
+dirbuf.waiters 11.3
+dirbuf.hashSize 11.4
+logtune.maxlogs 14.0
+logtune.fullsize 14.1
+logtune.maxtran 14.2
+buffertune.debuglevel 15.0
+buffertune.decayrate1 15.1
+trace.episode.anode 16.0
+trace.episode.async 16.1
+trace.episode.logSleepCnt 16.2
+trace.episode.logbuf 16.3
+trace.episode.recover 16.4
+trace.episode.vnops 16.5
+trace.osi 16.6
+
+** efts
+
+The efts is a utility for directly testing and using fileset
+interfaces without the ftserver.
+
+Usage:
+
+Use the "efts help" command to get a complete listing of operations.
+Many operations are quite similar to their fts counterparts.
+
+* file/episode/utils
+
+** epimount
+
+This allows for the mounting of filesets as normal filesystems.
+
+Usage:
+
+epimount <fileset-id> <fileset-name> <aggregate-device> <mount-point>
+
+** epiunmount
+
+This allows for the unmounting of a fileset mounted using epimount.
+
+Usage:
+
+epiunmount <mount-point>
+
+* file/episode/vnops
+
+** newvol
+
+This allows for the creation of a fileset on a quiescent aggregate.
+It cannot be use (without causing substantial damage) on an active
+aggregate (one that is attached, or one which has a fileset mounted
+currently) because it does not use the kernel interfaces for fileset
+creation.
+
+Usage:
+
+newvol -volid <volume_id> -volname <volume_name> [-quota <blocks>] [-status <status message>] [-register] [-verbose] [-quiet] [-acl <acl>] <device_name>
+
+
+** test_vnodeops
+
+A single-threaded test simulation package for testing the vnode
+interface layer.

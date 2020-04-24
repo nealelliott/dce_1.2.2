@@ -1,0 +1,95 @@
+#
+#      SCCS:  @(#)makefile	1.4 (92/11/10) 
+#
+#	UniSoft Ltd., London, England
+#
+# (C) Copyright 1992 X/Open Company Limited
+#
+# All rights reserved.  No part of this source code may be reproduced,
+# stored in a retrieval system, or transmitted, in any form or by any
+# means, electronic, mechanical, photocopying, recording or otherwise,
+# except as stated in the end-user licence agreement, without the prior
+# permission of the copyright owners.
+#
+# X/Open and the 'X' symbol are trademarks of X/Open Company Limited in
+# the UK and other countries.
+#
+#
+# ************************************************************************
+#
+# SCCS:   	@(#)makefile	1.4 92/11/10
+# NAME:		makefile
+# PRODUCT:	DTET (Distributed Test Environment Toolkit) release 1.0b
+# AUTHOR:	Andrew Dingwall, UniSoft Ltd.
+# DATE CREATED:	June 1992
+#
+# DESCRIPTION:
+#	apilib makefile
+# 
+# MODIFICATIONS:
+# 
+# ************************************************************************
+
+include ../defines.mk
+LCDEFS = $(TET_CDEFS)
+include ../common.mk
+
+LIBNAME = $(LIBDAPI)
+
+all install: $(LIBNAME)
+
+OFILES = dconfig.o dresfile.o dcancel.o tet_fork.o tet_exec.o
+
+MEMBERS = $(LIBNAME)(dconfig.o) $(LIBNAME)(dresfile.o) $(LIBNAME)(dcancel.o) \
+	$(LIBNAME)(tet_fork.o) $(LIBNAME)(tet_exec.o)
+
+
+$(LIBNAME): $P lib_made $(MEMBERS)
+	sleep 2
+	touch lib_made
+	$(RANLIB) $@
+
+.PRECIOUS: $(LIBNAME)
+
+lib_made:
+	$(MAKE) $(OFILES)
+	$(AR) rv $(LIBNAME) `$(LORDER) $(OFILES) | $(TSORT)`
+	rm -f $(OFILES)
+
+
+CFILES = $(OFILES:.o=.c) ../tcm/*.c
+
+LLIBS = 
+
+lint:
+	lint -u $(CDEFS) $(OFILES:.o=.c) $(LLIBS) $(LINTLIBS)
+
+tags: $(CFILES)
+	ctags $(CFILES)
+
+scope: $(CFILES)
+	ls -d $(CFILES) | sort -t/ +1 -o $@
+
+CLEAN clean:
+	rm -f $(OFILES)
+
+CLOBBER clobber: clean
+	rm -f lib_made
+
+FORCE FRC: clobber all
+
+
+# dependencies
+dcancel.o $(LIBNAME)(dcancel.o): $(DINC)/dtet/tet_api.h
+
+dconfig.o $(LIBNAME)(dconfig.o): $(DINC)/dtet/tet_api.h
+
+dresfile.o $(LIBNAME)(dresfile.o): $(DINC)/dtet/tet_api.h \
+	$(DINC)/dtet/tet_jrnl.h $(INC)/dtmsg.h $(INC)/dtetlib.h \
+	$(INC)/servlib.h
+
+tet_exec.o $(LIBNAME)(tet_exec.o): $(DINC)/dtet/tet_api.h \
+	$(INC)/dtetlib.h $(INC)/error.h $(INC)/servlib.h
+
+tet_fork.o $(LIBNAME)(tet_fork.o): $(DINC)/dtet/tet_api.h
+

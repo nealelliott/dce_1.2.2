@@ -1,0 +1,413 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: secd,v $
+# Revision 1.1.2.2  1996/03/09  20:52:06  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:45  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:24  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:05 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  19:58 UTC  bissen
+# 	 	 merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:54 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  19:35 UTC  gordon_l
+# 	Fixes for change_master/becom
+# 	e_master
+# 	[1995/12/11  22:22:28  root]
+# 
+# Revision 1.1.2.3  1993/08/11  13:24:36  sekhar
+# 	Fixed array indexing in secd_print_state .
+# 	[1993/08/11  13:17:06  sekhar]
+# 
+# Revision 1.1.2.2  1993/08/02  17:40:42  sekhar
+# 	Replication system test. Initial version
+# 	[1993/08/02  17:30:31  sekhar]
+# 
+# $EndLog$
+#
+
+# History of changes
+#
+# secd_wait_bindexport - use sa_wait_prop_complete() instead of a sleep.
+# secd_start ........... always direct output to a log file ( because
+#                        secd now closes the file descriptors ).
+
+if [ -z "${SECD_DEFINED}" ] ; then
+
+SECD_DEFINED=1
+
+
+. $PHOME/profile
+. $PHOME/replog
+. $PHOME/repdb
+. $PHOME/sa
+
+#-----------------------------------------------------------------------
+#  secd_wait_bindexport ***** NO LONGER USED ****
+#      Waits until secd has exported its bindings to the name space.
+#      The purpose of this function is to prevent a race conditon which
+#      can cause the slave to abort. 
+#
+#      The sequence of events which causes the slave to die is the
+#      is as follows: 
+#         
+#          1. master and slaves are stopped ( e.g. to compare registries )
+#          2. slaves are restarted
+#          3. master is restarted  
+#          4. master is shutdown   
+#
+#      where master shutdown (step 4) happens immediately after 
+#      master restart (step 2). If this shutdown happens before
+#      the slave had a chance to call rs_login_setup_host_identity()
+#      call then the slave would abort (and coredump).
+# 
+#      This can be avoided by calling this function after master 
+#      has been restarted. This function introduces a sleep 
+#      thus guranteeing the slaves enough time to come up.
+#   
+#-----------------------------------------------------------------------
+
+# secd_wait_bindexport()
+# {
+#     replog_msg "Waiting for slaves to export bindings to namespace."
+#     sa_wait_prop_complete "$1"
+# }
+
+#-----------------------------------------------------------------------
+#  secd_tst  
+#      Checks if secd is running or not running on the specified list 
+#      of hosts. 
+#   
+#  IN : arg1 ..... Array of host names separted by a white space e.g. "x y z"
+#       arg2 ..... $SECD_EXISTS  
+#                  $SECD_NOTEXIST
+#
+#  OUT : ST_SECD . Array of entries with one entry for each host. 
+#                  An entry contains the status of secd on the host.
+#                  (0 if secd running and SECD_EXIST specified
+#                     or if secd not running and SECD_NOTEXIST specified)
+#                   1 for all other cases
+#
+#  RETURNS : 0 if secd is running and SECD_EXISTS is specified
+#              or if secd is not running and SECD_NOTEXIST is specifed
+#            1 for all other cases.
+#-----------------------------------------------------------------------
+
+secd_tst()
+{
+    typeset i st hostlist retst
+   
+    set -A hostlist $1 
+    retst=0
+    i=0
+    while [ $i -lt ${#hostlist[*]} ]
+    do 
+        st=`$RSH_COMM ${hostlist[i]} -n "ps $PSARGS" ' | grep secd | grep -v "grep secd" > /dev/null ; echo $?'`
+        if [[    $2 = $SECD_EXISTS    && st -eq 0     \
+              || $2 = $SECD_NOTEXIST && $st -eq 1 ]] ; then
+            ST_SECD[i]=0
+        else
+            ST_SECD[i]=1
+            retst=1
+        fi
+        i=`expr $i + 1`
+    done
+    return $retst
+}
+
+#-----------------------------------------------------------------------
+#  secd_get_state
+#      Gets the information about secd (running or stopped) on the specified
+#      host list in the array ST_SECD. 
+#   
+#  IN : arg1 ..... Array of host names separted by a white space e.g. "x y z"
+#
+#  OUT : ST_SECD . Array of entries with one entry for each host. 
+#                  An entry contains the status of secd on the host.
+#
+#-----------------------------------------------------------------------
+
+secd_get_state()
+{
+    typeset i hostlist st
+   
+    set -A hostlist $1 
+    i=0
+    while [ $i -lt ${#hostlist[*]} ]
+    do 
+        st=`$RSH_COMM ${hostlist[i]} -n "ps $PSARGS" \
+           ' | grep secd | grep -v "grep secd" > /dev/null ; echo $?'`
+        if [ $st -eq 0 ] ; then
+            ST_SECD[i]=ST_SECD_RUNNING
+        else
+            ST_SECD[i]=ST_SECD_STOPPED
+        fi
+        i=`expr $i + 1`
+    done
+}
+
+#-----------------------------------------------------------------------
+#  secd_print_state
+#      Prints the state about secd (running or stopped) on the 
+#      host list.
+#
+#  IN : arg1 .. Array of host names e.g. "x y z".
+#   
+#-----------------------------------------------------------------------
+
+secd_print_state()
+{
+    typeset i hostlist
+   
+    set -A hostlist $1 
+    secd_get_state "${hostlist[*]}"   # Sets ST_SECD
+    i=0
+    while [ $i -lt ${#hostlist[*]} ]
+    do
+        if [ ${ST_SECD[i]} -eq $ST_SECD_RUNNING ] ; then
+            replog_msg "Secd running on host ${hostlist[i]}"
+        else
+            replog_msg "Secd stopped on host ${hostlist[i]}"
+        fi
+        i=`expr $i + 1`
+    done
+}
+
+#-----------------------------------------------------------------------
+#  secd_print_state_all
+#      Prints the state about secd (running or stopped) on all the
+#      security slaves and the master configured in the cell.
+#
+#-----------------------------------------------------------------------
+
+secd_print_state_all()
+{
+    typeset hostlist 
+    
+    repdb_get_replist # Sets REP_NAME and REP_HOSTNAME
+    secd_print_state ${REP_HOSTNAME[*]}
+}
+
+#-----------------------------------------------------------------------
+#  secd_tst_wait  - Like secd_tst this also checks if secd is running 
+#                   or not running on the specified list of hosts. However if
+#                   the test fails then the test is retried repeatedly
+#                   upto a max number of times. This function should be
+#                   used instead of secd_tst if some time is to be 
+#                   allowed for secd to startup or terminate.
+#   
+#  IN : arg1 ..... Array of host names separted by a white space e.g. "x y z"
+#       arg2 ..... $SECD_EXISTS  or $SECD_NOTEXIST
+#
+#  RETURNS : 0 if secd is running and SECD_EXISTS is specified
+#              or if secd is not running and SECD_NOTEXIST is specifed
+#            1 for all other cases.
+#-----------------------------------------------------------------------
+
+secd_tst_wait()
+{
+    typeset i j fail hostlist host st st_secd
+
+    set -A hostlist $1
+
+    if [ $2 = $SECD_EXISTS ] ; then
+        replog_msg "Waiting until secd started on hosts: $1"
+    else
+        replog_msg "Waiting until secd stopped on hosts: $1"
+    fi
+    let IL=IL+1
+    i=1 ;
+    while [ $i -le $SECD_LOOP_CNT ] 
+    do 
+        secd_tst "${hostlist[*]}" $2 ; st=$?  # Also sets ST_SECD
+        if [ $st -eq 0 ] ; then
+            break
+        fi
+
+        if [ $2 = $SECD_EXISTS ] ; then
+            replog_msg "Waiting $SECD_LOOP_INT secs for secd to start on hosts : ${hostlist[*]}"
+        else
+            replog_msg "Waiting $SECD_LOOP_INT secs for secd to stop  on hosts : ${hostlist[*]}"
+        fi
+        sleep $SECD_LOOP_INT
+
+        i=`expr $i + 1`
+    done
+    let IL=IL-1
+
+#   Check and print the status of secd on each host
+#   (the status was stored in ST_SECD in the previous loop).
+
+    j=0 ; st=0
+    while [ $j -lt ${#hostlist[*]} ]
+    do 
+        if [ $2 = $SECD_EXISTS ] ; then
+            if [ ${ST_SECD[j]} -ne 0 ] ; then
+                replog_error "secd not running on ${hostlist[j]}"
+                st=1
+            else
+                replog_msg "secd running on ${hostlist[j]}"
+            fi 
+        else      
+            if [ ${ST_SECD[j]} -ne 0 ] ; then
+                st=1
+                replog_error "secd not stopped on ${hostlist[j]}"
+            else
+                replog_msg "secd stopped on ${hostlist[j]}"
+            fi 
+        fi
+        j=`expr $j + 1`
+    done
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#  secd_start 
+#     Starts secd on list of specified hosts. Any options 
+#     specified in arg2 as well as the global options 
+#     specified by SECD_OPTIONS are passed to secd .
+#     If SECD_OPTIONS is not null then the secd output
+#     is redirected to a file.
+#
+#     Also verifies that the secd is running on the hosts and
+#     that sec_admin can bind to each replica.
+#
+#  IN : arg1 ............. Array of host names separted by a 
+#                          white space e.g. "x y z"
+#       arg2 ............. Correponding replica names
+#       arg3 (OPTIONAL) .. arguments for to be passed to secd
+#
+#  RETURNS : 0 on success 1 otherwise.
+#-----------------------------------------------------------------------
+
+secd_start()
+{
+    typeset rh st r_list h_list
+ 
+    set -A h_list $1 ; set -A r_list $2 
+    replog_msg "Attempting to start secd on hosts : ${h_list[*]} (secd options : $3)"
+    replog_blank
+    let IL=IL+1
+    for rh in ${h_list[*]}
+    do 
+        replog_msg "Starting secd on $rh"
+        $RSH_COMM $rh -n "secd $SECD_OPTIONS $3 > $LOGS_DIR/$rh/secd_log 2>&1 &"
+    done
+    secd_tst_wait   "${h_list[*]}" $SECD_EXISTS   ; st=$?
+    if [ $st -eq 0 ] ; then
+        sa_bind_rep_wait "${r_list[*]}" ; st=$?
+    fi
+    let IL=IL-1
+    if [ $st -eq 0 ] ; then
+        replog_msg "Successfully started secd on hosts : ${h_list[*]}"
+    else
+        replog_msg "Failed to start secd on all hosts: ${h_list[*]}"
+    fi
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#   secd_start_nobind() :
+#
+#   Starts secd on the host but does not make any attempt to bind (via sec_admin)
+#   the replica. This must be used to restart a slave for which there
+#   is a delrep pending in the master's propagation queue. If secd_start()
+#   were used then there would be a race condition i.e. the slave may be
+#   deleted before sec_admin could bind to the slave. 
+# 
+#-----------------------------------------------------------------------
+
+secd_start_nobind()
+{
+    typeset rh st r_list h_list
+ 
+    set -A h_list $1 ; set -A r_list $2 
+    replog_msg "Attempting to start secd ( options : $3 ) on hosts : ${h_list[*]}"
+    let IL=IL+1
+    for rh in ${h_list[*]}
+    do 
+        replog_msg "Starting secd on $rh"
+        $RSH_COMM $rh -n "secd $SECD_OPTIONS $3 > $LOGS_DIR/$rh/secd_log 2>&1 &"
+    done
+    let IL=IL-1
+    secd_tst_wait   "${h_list[*]}" $SECD_EXISTS   ; st=$?
+    if [ $st -eq 0 ] ; then
+        replog_msg "Successfully started secd on hosts : ${h_list[*]}"
+    else
+        replog_msg "Failed to start secd on all hosts: ${h_list[*]}"
+    fi
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#  secd_kill - Kills using the shell command the security server on the
+#              the list of specified hosts .
+#
+#  IN : arg1 .. Array of hostnames (e.g. "x y z" ) on which secd is to be killed.
+#-----------------------------------------------------------------------
+
+secd_kill()
+{
+    typeset st hostlist
+
+    set -A hostlist $1
+
+    for i in ${hostlist[*]} 
+    do
+        replog_msg "Killing slave security server on $i"
+        $RSH_COMM $i "export PHOME=$PHOME ; export TET_ROOT=$TET_ROOT ; export LOGS_DIR=$LOGS_DIR ; $PHOME/secd_kill_remote"
+    done
+    secd_tst_wait "${hostlist[*]}" $SECD_NOTEXIST ; st=$?
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#  secd_stop - Stops the security servers on the replicas. Also
+#              Verifies that secd has really been stopped.
+#
+#  IN arg1 ... List of host names
+#     arg2 ... List of replcia names.
+#
+#  RETURNS : 0 on sucess ; 1 otherwise.
+#-----------------------------------------------------------------------
+
+secd_stop()
+{
+    typeset h_list r_list st
+
+    set -A h_list $1 ; set -A r_list $2
+
+    replog_msg "Attempting to stop secd on hosts: ${h_list[*]}"
+    replog_blank
+    let IL=IL+1
+    sa_stop "${r_list[*]}" ; st=$?
+    if [ $st -eq 0 ] ; then
+        secd_tst_wait "${h_list[*]}" $SECD_NOTEXIST ; st=$?
+    fi
+    let IL=IL-1
+    replog_blank
+    if [ $st -ne 0 ] ; then
+        replog_error "Failed to stop secd on hosts : ${h_list[*]}"
+        secd_print_state_all
+    else
+        replog_msg "Successfully stopped secd on hosts : ${h_list[*]}"
+    fi
+    return $st
+}
+
+fi

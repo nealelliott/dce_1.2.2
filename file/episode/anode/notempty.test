@@ -1,0 +1,110 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: notempty.test,v $
+# Revision 1.1.12.1  1996/10/02  17:18:32  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:28:34  damon]
+#
+# Revision 1.1.6.1  1994/06/09  13:58:32  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:33:45  annie]
+# 
+# Revision 1.1.4.3  1993/01/18  22:06:44  cjd
+# 	embedded copyright notice
+# 	[1993/01/18  21:46:42  cjd]
+# 
+# Revision 1.1.4.2  1992/09/15  17:33:15  jaffe
+# 	Transarc delta: mason-ot2930-logbuf-parts-of-nbs 1.14
+# 	  Selected comments:
+# 	    This is the logbuf portion of new block security (making sure someone
+# 	    else's data does not appear in your file across a system crash.)  For
+# 	    details, see the OT report, the postings to transarc.afs.episode, and
+# 	    the white paper on this subject.  Not done yet.  SNAPSHOT ONLY.
+# 	    Just wanted to fix a small nit in test_res.
+# 	    More work on NBS.  This is only a snapshot.
+# 	    Another snapshot; this time we make the interfaces between anode & buffer
+# 	    uniform (each was using a different convention).  Clean up names at the same
+# 	    time.  SNAPSHOT ONLY.
+# 	    Another snapshot.  NBS now works in the forward direction for basic.test!
+# 	    This part of this delta was removed and added to delta
+# 	    mason-ot5070-gc-tran-in-logfull-avoidance
+# 	    Snapshot of code working in the forward path in mp.test.
+# 	    Removed the contents of revision 1.6
+# 	    Checkpoint.  No work done here, just made sure that the other new
+# 	    delta works OK (mason-ot5070-gc-tran-in-logfull-avoidance).
+# 	    Make all_tests work again.
+# 	    Increase log size.
+# 	    Finish making all the tests run now.
+# 	    Cleanup compilation on OSF/1.
+# 	    Continue work to get new block security going.
+# 	    Add a script for the nbs tests.
+# 	[1992/09/14  19:50:16  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/05  19:58:33  jdp
+# 	delta mason-bug-2303 1.4
+# 	[1992/05/04  15:35:43  jdp]
+# 
+# $EndLog$
+# /* Copyright (C) 1992, 1990 Transarc Corporation - All rights reserved */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/notempty.test,v 1.1.12.1 1996/10/02 17:18:32 damon Exp $
+
+notempty 1
+
+# tickle bug where truncate doesn't empty whole file.
+
+modify_afsdb logbuf on 31		# turn on new buffer randomization
+modify_afsdb anode on 31		# turn on code block counting
+
+open_device 1 4096 1024 110
+create_aggregate 25
+
+create_vol foo 0,,0 1000
+vol_info g=4
+
+# fill in all the blocks at the edge of the indirect blocks using the
+# following block addresses (note ibsize==1016):
+#   0, 7 (direct blocks)
+#   8, .+1015 (first and last blocks in first indirect block (tree 0))
+#   8+1016, .+1015 (first and last blocks in first indirect block of tree 1)
+#   8+1016+1016, .+1015 (f&l in second indirect block of tree 1)
+#   8+1016+1016*2, .+1015 (f&l in third indirect block of tree 1)
+# etc.
+
+create_file a
+write_file 0 4096 0			# first direct block
+write_file 28672 8192 0			# last direct and first indirect
+write_file 4190208 8192 0		# blks 1023,1024
+write_file 8351744 8192 0		# blks 2039, 2040
+write_file 12513280 8192 0		# blks 3055, 3056
+write_file 16674816 8192 0
+write_file 20836352 8192 0
+write_file 24997888 8192 0
+write_file 29159424 8192 0
+write_file 33320960 8192 0
+write_file 37482496 8192 0
+write_file 41644032 8192 0
+write_file 45805568 8192 0
+write_file 49967104 8192 0
+write_file 54128640 8192 0
+write_file 58290176 8192 0
+write_file 62451712 8192 0
+write_file 66613248 8192 0
+write_file 70774784 8192 0
+write_file 74936320 8192 0
+write_file 79097856 8192 0
+write_file 83259392 8192 0
+write_file 87420928 8192 0
+write_file 91582464 8192 0
+write_file 95744000 8192 0
+write_file 99905536 8192 0
+(code = AGGREGATEFULL) write_file 104067072 8192 0
+
+delete_file
+
+check_device
+end

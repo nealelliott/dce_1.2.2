@@ -1,0 +1,538 @@
+		
+			REPLICATION TEST PLAN
+
+This plan tests underlying replication functionality.  It does not make
+exhaustive tests of the replication-related FTS commands.
+
+Sumary: rtest1, rtest2, rtest3 = about 50 pages of shell procedures.
+
+
+PART 1. Single-server testing.  Limited to one replication site,
+	scheduled replication only.  No peer-to-peer tests.
+
+
+			A. BASIC TESTS:
+
+TEST_SS_B_001:
+
+	DESCRIPTION:
+
+		1. Use ``fts setrepinfo -scheduled'' and ``fts addsite''
+		   to create a replicated pair, and create xxx and
+		   xxx.RO mount points for the related filesets.
+
+	STATUS:
+
+		1. Done, rtest1 and rtest2.
+		2. Also tests release replication.
+
+TEST_SS_B_002:
+
+        DESCRIPTION:
+
+		1. Create short (< 100 byte), medium (1024 < blocksize),
+		   long (>= blocksize) files in xxx and ensure that they
+		   are propagated eventually.
+
+	STATUS:
+
+		1. Done, rtest1 and rtest2.
+		2. Does not test large files.
+
+TEST_SS_B_003:
+
+        DESCRIPTION:
+
+		1. Delete files and check propagation.
+
+	STATUS:
+
+		1. Done, rtest1 and rtest2.
+
+TEST_SS_B_004:
+
+        DESCRIPTION:
+
+		1. Update (e.g. extend) files and check propagation, of
+		   both status and data.
+
+	STATUS:
+
+		1. Done, rtest1 and rtest2.
+
+TEST_SS_B_005:
+
+        DESCRIPTION:
+
+		1. Use ``ls -R'' and ``diff'' to test for unexpected
+		   differences (ls for status, diff for data).
+
+	STATUS:
+
+		1. Done, rtest1 and rtest2.
+		2. Does not use "ls -R".
+
+TEST_SS_B_006:
+
+        DESCRIPTION:
+
+		1. Use ``fts lsreplicas'' to test for propagation.
+
+	STATUS:
+
+		1. Done, rtest1 and rtest2.
+
+TEST_SS_B_007:
+
+        DESCRIPTION:
+
+		1. Use ``fts lshead'' and check fileset version numbers
+		   to check for propagation.
+
+	STATUS:
+
+		1. Done, rtest5.
+
+TEST_SS_B_008:
+
+        DESCRIPTION:
+
+		1. Copy whole directory trees into replicated filesets
+		   and check for propagation.
+
+	STATUS:
+
+		1. Done, rtest1 and rtest2.
+
+TEST_SS_B_009:
+
+        DESCRIPTION:
+
+		1. Use ``fts rmsite'' to get repserver to shut down and
+		   destroy a replica.
+
+	STATUS:
+
+		1. Done, rtest1 and rtest2.
+
+TEST_SS_B_010:
+
+        DESCRIPTION:
+
+		1. Ensure that ``fts delete <read/write>'' does
+		   something sensible if there are outstanding replicas.
+
+	STATUS:
+
+		1. Done, rtest5.
+
+TEST_SS_B_011:
+
+        DESCRIPTION:
+
+		1. Try to propagate a replica to an aggregate with
+		   insufficient space for it and ensure that something
+		   reasonable happens.
+
+	STATUS:
+
+		1. Done, rtest5.
+
+TEST_SS_B_012:
+
+        DESCRIPTION:
+
+		1. Try to propagate a replica from an aggregate with no
+		   further free space and ensure that something
+		   reasonable happens.
+
+	STATUS:
+
+		1. Done, rtest5.
+
+TEST_SS_B_013:
+
+        DESCRIPTION:
+
+		1. Place R/O replicas of different filesets on the same
+		   aggregate, and on different aggregates, and ensure
+		   that the single repserver keeps them all up to date.
+
+	STATUS:
+
+		1. TBD.
+
+TEST_SS_B_014:
+
+        DESCRIPTION:
+
+		1. Ensure that space is reclaimed for deleted files
+		   after the reclaimDally.
+
+	STATUS:
+
+		1. TBD.
+
+TEST_SS_B_015:
+
+        DESCRIPTION:
+
+		1. Crash and restart the repserver and ensure that it
+		   picks up where it left off, not leaving any stray
+		   unmanaged filesets (check with ``fts lshead'').
+
+	STATUS:
+
+		1. TBD.
+
+TEST_SS_B_016:
+
+        DESCRIPTION:
+
+		1. Invent a pair of processes, the ``mutator'' and the
+		   ``checker'', where the mutator makes lots of
+		   modifications within a fileset, and the ``checker''
+		   can tell whether those modifications are consistent.
+		   Allow the mutator to run on the R/W of a replicated
+		   pair of filesets, and allow the checker to run on the
+		   R/O.
+
+	STATUS:
+
+		1. TBD.
+
+
+			B. ERROR TESTS:
+
+TEST_SS_E_001:
+
+        DESCRIPTION:
+
+		1. Ensure that you can't do ``fts addsite'' to add an
+		   existing rep site.
+
+	STATUS:
+
+		1. Done, rtest5.
+
+TEST_SS_E_002:
+
+        DESCRIPTION:
+
+		1. Ensure that you can't add a second replication site
+		   (with fts addsite) to a second aggregate on the same
+		   server.
+
+	STATUS:
+
+		1. Done, rtest5.
+
+
+			C. STRESS TESTS:
+
+TEST_SS_S_001:
+
+        DESCRIPTION:
+
+		1. Get a single repserver to manage propagation of lots
+		   of replicas with lots of activity.
+
+	STATUS:
+
+		1. TBD.
+
+TEST_SS_S_002:
+
+        DESCRIPTION:
+
+		1. Lots of instances of mutator/checker pairs.
+
+	STATUS:
+
+		1. TBD.
+
+
+
+PART 2. Two-server testing.  Can test multiple sites for scheduled
+	replication, all roles for release replication, and peer-to-peer
+	communication.  Call the two file servers A and B.
+
+
+			A. BASIC TESTS:
+
+TEST_TS_B_001:
+
+        DESCRIPTION:
+
+		1. Scheduled replication.  Set up a R/W fileset
+		   (here, ``xxx'') to have two replicas, one each on A
+		   and B.  Create mount points for xxx and xxx.RO.
+
+	STATUS:
+
+		1. Done, rtest3.
+
+TEST_TS_B_002:
+
+        DESCRIPTION:
+
+		1. Ensure propagation with all the mechanisms above
+		   (fts lsreplicas, fts lshead, diff, ls -R).
+
+	STATUS:
+
+		1. Done, rtest3.
+
+TEST_TS_B_003:
+
+        DESCRIPTION:
+
+		1. Remove one of the replicas (fts rmsite) and see if
+		   replication continues.
+
+	STATUS:
+
+		1. Done, rtest3.
+
+TEST_TS_B_004:
+
+        DESCRIPTION:
+
+		1. Add the first replica back (fts addsite), remove the
+		   second (fts rmsite), and see if replication
+		   continues.
+
+	STATUS:
+
+		1. Done, rtest3.
+
+TEST_TS_B_005:
+
+        DESCRIPTION:
+
+		1. Add the second replica back (fts addsite) and see if
+		   the replica gets there too.
+
+	STATUS:
+
+		1. Done rtest3.
+
+TEST_TS_B_006:
+
+        DESCRIPTION:
+
+		1. Use ``repserver -verbose'' (not under bosserver) to
+		   verify replication progress.
+
+	STATUS:
+
+		1. TBD.
+
+TEST_TS_B_007:
+
+        DESCRIPTION:
+
+		1. See if ``cm whereis xxx.RO/.'' returns both servers.
+
+	STATUS:
+
+		1. Done, rtest6.
+
+TEST_TS_B_008:
+
+        DESCRIPTION:
+
+		1. Try to tell which replica a CM is using (perhaps with
+		   different ``maxsiteage'' parameters).  Make
+		   unavailable the replica that's in use and see if the
+		   CM fails over to the other replica.  The replica
+		   might be made unavailable with ``fts rmsite'' or by
+		   crashing or halting the server, or by halting the
+		   repserver (so that the token lifetime is expired).
+
+	STATUS:
+
+		1. TBD.
+
+TEST_TS_B_009:
+
+        DESCRIPTION:
+
+		1. Move the source R/W fileset from one server to
+		   another, and see if the repservers track it
+		   correctly.
+
+	STATUS:
+
+		1. Done, rtest6 (disabled).
+
+TEST_TS_B_010:
+
+        DESCRIPTION:
+
+		1. Use ``fts update xxx -all'' to request a immediate
+		   repserver update on all servers.  Verify that the
+		   update request propagates correctly from the
+		   first-contacted repserver to the other repserver(s).
+
+	STATUS:
+
+		1. Done, rtest3.
+
+TEST_TS_B_011:
+
+        DESCRIPTION:
+
+		1. Release replication.  Set up a R/W fileset xxx to be
+		   release-style replicated.
+
+	STATUS:
+
+		1. Done, rtest3.
+
+TEST_TS_B_012:
+
+        DESCRIPTION:
+
+		1. Add a distinguished (local) R/O site and see if it's
+		   reachable from a CM.
+
+	STATUS:
+
+		1. Done, rtest3.
+
+TEST_TS_B_013:
+
+        DESCRIPTION:
+
+		1. Add a distant R/O site (off the primary) and see if
+		   it updates.
+
+	STATUS:
+
+		1. Done, rtest3.
+
+TEST_TS_B_014:
+
+        DESCRIPTION:
+
+		1. Make changes to the R/W and verify that none of the
+		   R/O filesets changes.
+
+	STATUS:
+
+		1. Done, rtest3.
+
+TEST_TS_B_015:
+
+        DESCRIPTION:
+
+		1. Release the replica and verify that the distinguished
+		   R/O fileset changes immediately.
+
+	STATUS:
+
+		1. Done, rtest3.
+
+TEST_TS_B_016:
+
+        DESCRIPTION:
+
+		1. Verify that the non-distinguished R/O fileset changes
+		   soon.
+
+	STATUS:
+
+		1. Done, rtest3.
+
+TEST_TS_B_017:
+
+        DESCRIPTION:
+
+		1. Verify that the update-yourself-now message is passed
+		   correctly from site to site.
+
+	STATUS:
+
+		1. TBD.
+
+TEST_TS_B_018:
+
+        DESCRIPTION:
+
+		1. Verify that CMs correctly fail over to available
+		   sites.
+
+	STATUS:
+
+		1. TBD.
+
+TEST_TS_B_019:
+
+        DESCRIPTION:
+
+		1. Combinations.  Try changing a replication scheme from
+		   release-style to scheduled-style, and vice versa.
+
+	STATUS:
+
+		1. Done, rtest3.
+
+
+			B. ERROR TESTS:
+
+TEST_TS_E_001:
+
+        DESCRIPTION:
+
+		1. Ensure that you can't remove the distinguished
+		   replica from a release-replica scenario until all
+		   other replicas are removed.
+
+	STATUS:
+
+		1. Done, rtest6.
+
+TEST_TS_E_002:
+
+        DESCRIPTION:
+
+		1. Try changing a replication scheme from
+		   scheduled-style to release-style when there's no
+		   replica on the R/W machine (and thus there's no
+		   distinguished replica).  This should fail gracefully.
+
+	STATUS:
+
+		1. Done, rtest6.
+
+
+			C. STRESS TESTS:
+
+TEST_TS_S_001:
+
+        DESCRIPTION:
+
+		1. Make the same repserver manage lots of replicated
+		   filesets.
+
+	STATUS:
+
+		1. TBD.
+
+TEST_TS_S_002:
+
+        DESCRIPTION:
+
+		1. Ensure that there's lots of activity
+		   (mutator/checker pairs) being managed by the two
+		   servers.
+
+	STATUS:
+
+		1. TBD.
+
+
+
+
+

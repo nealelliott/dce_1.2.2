@@ -1,0 +1,99 @@
+Test Name: DLGCFG001
+
+
+Purpose: Do a sanity level test of delegation
+
+This test makes use of three processes:
+dlg_client = initiator process
+dlg_intermediary = intermediary process
+acl_server = acl server
+
+dlg_client, dlg_intermediary and acl_server are not located
+in this area of the source tree.
+
+The source for dlg_client and dlg_intermediary are located
+in src/test/security/api/moretests.
+The source for the acl_server is located in
+src/client/admin/acl_edit/svr_example
+
+dlg_client calls dlg_intermediary which then
+checks with acl_server on whether access is accepted or denied.
+
+Procedures for running the test are at the bottom.
+
+dlg_client -la
+Stuffs attribute in EPAC and uses client side sec_login and
+sec_cred calls to make sure it's really there
+
+dlg_client -ra
+Stuffs attr in EPAC and makes simple RPC to dlg_intermediary
+which uses sec_cred calls to make sure it's really there).
+
+dlg_client -c  
+Does a sec_login_become_initiator, enabling traced delegation
+and uses sec_login_cred_get_initiator and sec_cred calls to
+make sure the setup worked
+
+
+dlg_client -nbi 
+Makes RPC to dlg_intermediary without having called
+sec_login_become_initiator first and expects to get the error
+sec_login_s_deleg_not_enabled back).
+
+dlg_client -dis
+It enables delegation, then disables it via sec_login_disable_delegation()  
+call, then tries to make the dlg_test call to the dlg_intermediary, which
+should get an error saying that delegation isn't enabled.  dlg_client expects
+to get this error back and succeeds if it does.
+
+
+dlg_client -dt i
+Test impersonation. With this testcase sec_login_become_impersonator
+is called instead of sec_login_become_delegate.
+The intermediary "impersonates" the delegation
+initiator.  dlg_svr is the impersonator.
+
+dlg_client -name
+-name tests sec_cred's support on rpc_s_authz_name.  The main functions
+tested are sec_cred_inq_auth_service_info() and sec_cred_get_client_princ_name()
+.
+It also tests authz's compliance with sec_cred's functions, which means that
+the rest fo sec_cred's functions will not comply with rpc_s_authz_name.
+
+dlg_client    
+Enables delegation, calls dlg_test_access() at intermediary,
+intermediary becomes a delegate and calls sec_acl_test_access()
+at the acl_server (client is 'dlg_test', intermediary is
+'dlg_svr') The only ACL entries in the acl_server are the ones
+set up by the dlg_acl_setup script which allow dlg_test rwx
+permissions and allow dlg_svr rwx permisssions as a delegate
+only.  So, if the test access works, that means that the target
+server (acl_server) successfully saw both the initiator and
+delegate identities and that the acl access check algorithm,
+that now understands delegate entries, works).
+
+NOTE: The client and delegate can be run on any node,
+      but the for this test the server is always run
+      on the machine where the test is started.
+
+Procedure for running this test:
+
+$ ksh
+$ cd /dcetest/dcelocal/test/tet/system
+$ . profile.dcest.tet
+$ run.sec -l 1 -m "client_machine delegate_machine" dlgcfg001
+
+You can also run the client and intermediary 
+on the same machine with:
+
+run.sec -l 1 -m "hosta hosta"
+
+or 
+
+run.sec -l 1 -m "hosta" 
+
+will do the same thing too.
+
+To view the results of the test, you would enter the following:
+
+$ run_summary.ksh  test_log_file

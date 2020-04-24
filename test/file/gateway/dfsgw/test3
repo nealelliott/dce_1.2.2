@@ -1,0 +1,169 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for 
+# the full copyright text.
+#
+#
+# HISTORY
+# $Log: test3,v $
+# Revision 1.1.6.1  1996/10/17  18:23:51  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:52:07  damon]
+#
+# Revision 1.1.2.2  1994/08/22  16:16:31  maunsell_c
+# 	fix grep of /etc/hosts
+# 	[1994/08/18  16:01:05  maunsell_c]
+# 
+# Revision 1.1.2.1  1994/07/28  17:38:29  mckeen
+# 	Initial Revision
+# 	[1994/07/28  14:10:32  mckeen]
+# 
+# $EndLog$
+#
+###############################################################################
+# This test is applicable to DFS/NFS exporter.
+# The script tests the dfsgw delete funtion
+###############################################################################
+#
+# if not run via the runtests script use
+#         test3 >test3.log 2>&1
+# to log test data
+###############################################################################
+
+d=`pwd`
+: ${hn=`hostname`}
+p=`basename $0`
+rc=0
+ty=dfsgw
+: ${addrtyp="inet"}
+: ${uid="0"}
+: ${dceid="cell_admin"}
+: ${dcepasswd="-dce-"}
+bogushn1="123"
+bogushn2="bogushn"
+bogusuid1="bogus"
+bogusuid2="1234356"
+bogusaddrtyp="bogusnet"
+bogusdcepasswd="boguspasswd"
+bogusdotaddr="11223344"
+
+###############################################################################
+echo ""
+echo "dfsgw delete COMMAND on $hn."
+echo "========================================================================="
+date
+echo ""
+###############################################################################
+echo ""
+echo "dfsgw delete $hn:$uid"
+dfsgw del $hn:$uid
+rf=$?
+if test $rf -eq 0
+then
+   echo "worked ($rf) ($p: E1)"
+   rc=`expr $rc + 1`
+fi
+
+
+echo ""
+echo "dfsgw add $hn:$uid $dceid:$dcepasswd $addrtyp"
+dfsgw add $hn:$uid $dceid:$dcepasswd $addrtyp
+rf=$?
+if test $rf -ne 0
+then
+   echo "Unable to add entry to authentication table for dfsgw delete testing ($rf) ($p: E2)"
+   echo "$p exiting..."
+   rc=`expr $rc + 1`
+   exit $rc 
+fi
+
+echo ""
+echo "dfsgw del $hn:$uid $addrtyp extra"
+dfsgw del $hn:$uid $addrtyp extra
+rf=$?
+if test $rf -eq 0
+then 
+   echo "worked ($rf) ($p: E3)"
+   rc=`expr $rc + 1`
+fi
+
+echo ""
+echo "dfsgw del $hn:$uid"
+dfsgw del $hn:$uid
+rf=$?
+if test $rf -ne 0
+then
+   echo "failed ($rf) ($p: E4)"
+   rc=`expr $rc + 1`
+fi
+
+grep "	$hn$" /etc/hosts >out
+if  [ $? -ne 0 ]
+then
+   ypmatch $hn hosts >out
+   if [ $? -ne 0 ]
+   then
+     /etc/ping $hn 64 1 >out
+     if [ $? -ne 0 ]
+     then
+        echo "sorry, unable to obtain hostaddr for dfsgw deletel testing ($rf) ($p: E5)"
+        echo "$p exiting..."
+        rc=`expr $rc + 1`
+        exit $rc 
+     else
+        haddr=`cut -d' ' -f4 out | sed 's/://'`
+     fi
+   else
+      haddr=`cut -f1 out`
+   fi
+else
+haddr=`cut -f1 out`
+fi
+rm -f out
+echo ""
+echo "dfsgw add $haddr:$uid $dceid:$dcepasswd $addrtyp"
+dfsgw add $haddr:$uid $dceid:$dcepasswd $addrtyp
+rf=$?
+if test $rf -ne 0
+then
+   echo "Unable to add entry to authentication table for dfsgw delete testing ($rf) ($p: E6)
+"
+   echo "$p exiting..."
+   rc=`expr $rc + 1`
+   exit $rc
+fi
+
+echo ""
+echo "dfsgw del $haddr:$uid"
+dfsgw del $haddr:$uid
+rf=$?
+if test $rf -ne 0
+then
+   echo "failed ($rf) ($p: E7)"
+   rc=`expr $rc + 1`
+fi
+
+echo ""
+echo "dfsgw del $bogusdotaddr:$uid"
+dfsgw del $bogusdotaddr:$uid
+rf=$?
+if test $rf -eq 0
+then
+   echo "failed ($rf) ($p: E8)"
+   rc=`expr $rc + 1`
+fi
+
+
+########################################
+
+echo ""
+echo "Done at `date`."
+echo ""
+if [ $rc -eq 0 ]
+then
+   echo "$ty/$p PASSED"
+else
+   echo "$ty/$p FAILED $rc errors"
+fi
+exit $rc

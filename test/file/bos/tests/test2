@@ -1,0 +1,171 @@
+#!/bin/sh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: test2,v $
+# Revision 1.1.10.1  1996/10/17  18:17:08  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:49:34  damon]
+#
+# Revision 1.1.4.4  1993/01/11  17:38:40  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  16:55:31  htf]
+# 
+# Revision 1.1.4.3  1992/10/28  16:00:11  jaffe
+# 	Transarc delta: comer-ot4849-misc-bos-command-test-cleanup 1.3
+# 	  Selected comments:
+# 	    Miscellaneous clean-up of the bos command test suite.
+# 	    More cleanup of the bos test suite
+# 	    Installed a working version.
+# 	    Change Makefiles to install files into the export tree.  This should
+# 	    later be changed to install into the install tree as soon as we decide
+# 	    on the correct tree layout.  In the meantime, put the files under
+# 	    export/<machine>/test/bos.
+# 	[1992/10/27  16:49:27  jaffe]
+# 
+# Revision 1.1.4.2  1992/09/25  17:01:20  jaffe
+# 	Transarc delta: rajesh-ot5015-bos-test-fixes 1.7
+# 	  Selected comments:
+# 	    Various changes to fix problems in Ot 5015. This version of the delta
+# 	    is only a checkpoint and is not yet ready.
+# 	    Remove bos exec test cases. Changed usage comment to refer to test2
+# 	    instead of test1.
+# 	    Add in a utility functions that is used to check if a server has
+# 	    a dfs-server DCE principal.
+# 	    Accidentally deleted all functions except DetermineLocalAuth() in
+# 	    util/gen_FunctionsScript. So modified to include all functions previously
+# 	    existing in the util/gen_FunctionsScript.
+# 	    Some more fixes.
+# 	    Fix problem in DetermineLocalAuth function in gen_FunctionsScript.
+# 	    Just another checkpoint.
+# 	    Changes to fix problems found during execution of test11. The delta is now
+# 	    ready for export.
+# 	[1992/09/23  20:42:08  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/21  12:34:56  jaffe
+# 	Transarc delta: fred-merge-tests 1.1
+# 	  Files modified:
+# 	    Makefile
+# 	    bos: Makefile, READ_ME, init_dce, kills, runc, runtests
+# 	    bos: setup, shows
+# 	    bos/tests: Makefile, test0, test1, test10, test11, test12
+# 	    bos/tests: test2, test3, test4, test5, test6, test7, test8
+# 	    bos/tests: test9; bos/tests/procs: Makefile
+# 	    cm: Makefile, runtests, test0, test1, test2, test3, test4
+# 	    cm: test5, test6; config: chk_errnr, echeck, environment
+# 	    fs: Makefile, READ_ME, err1, err2, longalpha, longfox
+# 	    fs: longmix, prog1.c, rtest1, shortalpha, shortfox, shortmix
+# 	    fs: test1, test10, test2, test2b, test2s, test3, test4
+# 	    fs: test5, test6, test7, test8, test9
+# 	    fts: Makefile, check, etest.sed, etest1, etest2, etest3
+# 	    fts: etest4, etest5, etest6, rtest1, rtest2, runrtests
+# 	    fts: runtests, test1, test10, test11, test12, test13, test2
+# 	    fts: test3, test4, test5, test6, test7, test8, test9
+# 	    low: Makefile, ctrl.asc, prog11.c, prog12.c, prog14.c
+# 	    low: prog3a.c, prog8.c, prog9.c, rtest1, rtest2, styl.asc
+# 	    low: test1, test10, test11, test12, test13, test14, test2
+# 	    low: test3, test4, test5, test6, test7, test8, test9
+# 	    naming: Makefile, bostest, fstest, ftstest
+# 	    scout: Makefile, test1, test2; setup: Makefile, environment
+# 	    ubik: Makefile, READ_ME, init, kills, runc, setup, shows
+# 	    ubik: udbg; util: Makefile, sys.c
+# 	  Selected comments:
+# 	    Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	    the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	    should be looking at the same test code.
+# 	    Changes to facilitate merge of local DFS test code with the OSF's.
+# 
+# 	$TALog: test2,v $
+# 	Revision 4.8  1994/11/01  22:21:19  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r4.7 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	[1992/05/20  17:20:03  jaffe]
+# 
+# $EndLog$
+#
+
+###############################################################################
+#    Copyright (C) 1991, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This test is applicable to DFS running bosserver.
+# The script tests some very basic bos subcommands.
+
+###############################################################################
+
+# Usage:                test2
+
+# Typically run via:    test2 >& test2.out
+# or via the bos/runtests script.
+
+###############################################################################
+
+# Test environment:
+# This test requires DFS running bosserver.
+
+# Privilege required:
+# You must be authenticated to DCE as someone who's in admin.bos, and
+# you must be logged into Unix as local root.
+
+# Highest error number is: 3.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+rc=0
+ty=bos
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${SERVER_1=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name=/.../$CELL_NAME}
+: ${dns_server_prefix=/.:/hosts/}
+
+PATH=":"$bin_dir":"$PATH
+
+av_arg="$AUTH_ARG $VERB_ARG"
+
+###############################################################################
+
+echo ""
+date
+echo "RUNNING bos COMMANDS in CELL $CELL_NAME."
+echo "========================================================================"
+
+###############################################################################
+
+echo ""; echo "Testing getlog BosLog"
+   bos getlog $dns_server_prefix$SERVER_1 -file BosLog $av_arg
+   if test $? -ne 0
+      then echo "- bos getlog failed ($p: E2)"; rc=`expr $rc + 1`
+      fi
+echo ""; echo "Testing status -long"
+   bos status $dns_server_prefix$SERVER_1 -long $av_arg
+   if test $? -ne 0
+      then echo "- bos status failed ($p: E3)"; rc=`expr $rc + 1`
+      fi
+
+###############################################################################
+
+sync; sync; sleep 2
+
+echo ""; echo "Done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################

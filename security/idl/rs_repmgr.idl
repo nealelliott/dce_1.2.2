@@ -1,0 +1,228 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rs_repmgr.idl,v $
+ * Revision 1.1.7.2  1996/03/09  23:28:47  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:44:12  marty]
+ *
+ * Revision 1.1.7.1  1995/12/08  17:35:57  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:55:43  root]
+ * 
+ * Revision 1.1.5.2  1993/08/04  13:38:16  cuti
+ * 	Insert dce/ in front of imported file name
+ * 	[1993/08/03  20:52:17  cuti]
+ * 
+ * Revision 1.1.2.6  1993/02/26  23:49:20  emartin
+ * 	em_bl6f: bump minor version
+ * 	[1993/02/24  22:11:48  emartin]
+ * 
+ * 	em_bl6f: do rs_rep_mgr_stop_until_sw_compat
+ * 	[1993/02/22  22:45:32  emartin]
+ * 
+ * Revision 1.1.2.5  1992/12/29  13:53:03  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:49:17  zeliff]
+ * 
+ * Revision 1.1.2.4  1992/12/18  22:11:03  sekhar
+ * 	[OT 6540] Replication code drop bl6c
+ * 	[1992/12/18  21:47:29  sekhar]
+ * 
+ * Revision 1.1.3.2  1992/12/11  21:36:37  emartin
+ * 	bl6c: replication updates
+ * 
+ * Revision 1.1.2.3  1992/11/04  19:33:11  ahop
+ * 	Third replication drop: bl6a
+ * 	Add encryption_key as input to copy_all
+ * 	[1992/11/03  18:19:20  ahop]
+ * 
+ * Revision 1.1.2.2  1992/08/31  18:21:54  sekhar
+ * 	First replication code drop.
+ * 	[1992/08/31  17:49:42  sekhar]
+ * 
+ * $EndLog$
+ */
+
+/*
+ * Copyright (c) Hewlett-Packard Company 1992
+ * Unpublished work. All Rights Reserved.
+ */
+/*
+ *      Operations between registry server replicas. 
+ */
+  
+[
+ uuid(B62DC198-DFD4-11CA-948F-08001E02594C),
+ version(2.0),
+ pointer_default(ptr)
+]
+
+interface rs_repmgr
+{
+    import "dce/rgynbase.idl";
+    import "dce/rplbase.idl";
+    import "dce/rsbase.idl";
+
+    /*
+     *  rs_rep_mgr_get_info_and_creds
+     *
+     *  get a replica's basic state information
+     *  and credentials to authenticate to it
+     */
+    void rs_rep_mgr_get_info_and_creds(
+        [in]    handle_t                    h,
+        [out]   rs_replica_info_t           *rep_info,
+        [out]   rs_replica_auth_p_t         *rep_auth_info,
+        [out]   error_status_t              *st
+    );
+
+    /*
+     *  rs_rep_mgr_init 
+     *
+     *  master tells slave to initialize itself from
+     *  one of the "init_from_reps".  "init_id" identifies
+     *  the initialize event and prevents redundant
+     *  initializations.
+     *
+     *  The slave returns the id of the replica it will 
+     *  init from and the last update sequence number and 
+     *  timestamp of the "init_from_rep". 
+     */
+    void rs_rep_mgr_init(
+        [in]    handle_t                    h,
+        [in]    uuid_p_t                    init_id,
+        [in]    unsigned32                  nreps,
+        [in, size_is(nreps)]    
+                uuid_p_t                    init_from_rep_ids[],
+        [in, size_is(nreps)]    
+                rs_replica_twr_vec_p_t      init_from_rep_twrs[],
+        [in]    rs_replica_master_info_p_t  master_info,
+        [out]   uuid_t                      *from_rep_id,
+        [out]   rs_update_seqno_t           *last_upd_seqno,
+        [out]   sec_timeval_t               *last_upd_ts,
+        [out]   error_status_t              *st
+    );
+
+    /*
+     *  rs_rep_mgr_init_done
+     *
+     *  slave tells master that it is finished initializing
+     *  itself from "from_rep_id"
+     */
+    void rs_rep_mgr_init_done(
+        [in]    handle_t                    h,
+        [in]    uuid_p_t                    rep_id,
+        [in]    uuid_p_t                    init_id,
+        [in]    uuid_p_t                    from_rep_id,
+        [in]    rs_update_seqno_t           *last_upd_seqno,
+        [in]    sec_timeval_t               *last_upd_ts,
+        [in]    error_status_t              *init_st,
+        [out]   error_status_t              *st
+    );
+
+    /*
+     *  rs_rep_mgr_i_am_slave
+     *
+     *  message sent from a slave to the master when 
+     *  the slave restarts.  The slave sends the master 
+     *  its current tower set and software compatability
+     *  version.
+     */
+    void rs_rep_mgr_i_am_slave(
+        [in]    handle_t                    h,
+        [in]    uuid_p_t                    rep_id,
+        [in]    unsigned32                  compat_sw_rev,
+        [in]    rs_replica_twr_vec_p_t      rep_twrs,
+        [out]   error_status_t              *st
+    );
+
+    /*
+     *  rs_rep_mgr_i_am_master
+     *
+     *  New master tells a slave that it is now
+     *  the master.
+     *
+     */
+    void rs_rep_mgr_i_am_master(
+        [in]    handle_t                    h,
+        [in]    rs_replica_master_info_p_t  master_info,
+        [out]   error_status_t              *st
+    );
+
+    /*
+     *  rs_rep_mgr_become_master
+     *
+     *  The master tells a slave to become the new master.
+     *  The base_prop_seqno is the sequence number of
+     *  the earliest update currently on the prop queue.
+     */
+    void rs_rep_mgr_become_master(
+        [in]    handle_t                    h,
+        [in]    rs_update_seqno_t           base_prop_seqno,
+        [in]    rs_replica_master_info_p_t  old_master_info,
+        [out]   rs_replica_master_info_t    *new_master_info,
+        [out]   error_status_t              *st
+    );
+
+    /*
+     *  rs_rep_mgr_copy_all
+     *
+     *  A request sent from one replica (A) to another (B) asking 
+     *  replica B to push its entire database to A.
+     *
+     *  Replica B which is pushing its database 
+     *  uses "copy_master_info" as the master_info
+     *  which accompanies the updates it sends.
+     *  "rep_auth_info" includes a session key which
+     *  is used by the two replicas to authenticate 
+     *  eachother.  "encryption_key" is a key (pickled and
+     *  encrypted with the session key) that B will use
+     *  to encrypt the account auth_keys during propagation.
+     *
+     *  Replica B returns the seqno and timestamp of 
+     *  its last update to A if the copy all completes 
+     *  successfully.
+     */
+    void rs_rep_mgr_copy_all(
+        [in]        handle_t                    h,
+        [in]        rs_replica_master_info_p_t  copy_master_info,
+        [in]        rs_replica_auth_p_t         rep_auth_info,
+        [in, ptr]   rs_acct_key_transmit_t      *encryption_key, 
+        [out]       rs_update_seqno_t           *last_upd_seqno,
+        [out]       sec_timeval_t               *last_upd_ts,
+        [out]       error_status_t              *st
+    );
+    
+    /*
+     *  rs_rep_mgr_copy_propq
+     *
+     *  request from a slave, which is becoming the master,
+     *  to the old master to send the new master the
+     *  propagation queue
+     */
+    void rs_rep_mgr_copy_propq(
+        [in]    handle_t                    h,
+        [out]   error_status_t              *st
+    );
+
+    /* 
+     *  rs_rep_mgr_stop_until_compat_sw
+     *
+     *  Master tells slave to not run until its
+     *  software has been updated to compat_sw_rev.
+     */
+   void rs_rep_mgr_stop_until_compat_sw(
+        [in]    handle_t                    h,
+        [in]    unsigned32                  compat_sw_rev,
+        [in]    rs_replica_master_info_p_t  master_info,
+        [out]   error_status_t              *st
+    );
+
+}

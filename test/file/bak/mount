@@ -1,0 +1,149 @@
+#!/bin/sh
+
+
+#Path=/opt/backup/file Oper=dump NReq=1 TNam=smallest.full.1 TId=805376901
+#Path=/opt/backup/file Oper=dump NReq=1 TNam=smallest.full.2 TId=805376901
+
+echo "Path=$1 Oper=$2 NReq=$3 TNam=$4 TId=$5" > /dev/console
+echo "Path=$1 Oper=$2 NReq=$3 TNam=$4 TId=$5"
+
+DATA_DIR=`dirname $1`/data
+SCAN_LOCK=$DATA_DIR/.scan
+
+if [ ! -d $DATA_DIR ]
+then
+	mkdir -p $DATA_DIR
+fi
+
+if [ $3 = "25" ]
+then
+	exit 1
+fi
+
+if [ $2 = "scantape" ]
+then
+
+#	echo "SLEEPING for 120 seconds"
+#	sleep 120
+
+	CURFILE=`ls -l $1 | awk '{print $NF}'`
+	ROOT=`echo $CURFILE | sed -e 's/\.[0123456789]*$//'`
+	EXT=`echo $CURFILE | sed -e 's/.*\.\([0123456789]*\)$/\1/'`
+
+	if [ -f $SCAN_LOCK ]
+	then
+		FILE="$ROOT.`expr $EXT + 1`"
+	else
+		touch $SCAN_LOCK
+		FILE="$ROOT.1"
+	fi
+	if [ -f $FILE ]
+	then
+		ln -fs $FILE $1
+		echo TAPE FILE: `ls -l $1 | sed "s/.* //"`
+		exit 0
+	else
+		exit 1
+	fi
+	
+elif [ $2 = "labeltape" ]
+then
+
+	#
+	# mount the requested tape, create it if necessary
+	#
+
+	if [ $4 = "bogus" ]
+	then
+	    if [ ! -f $DATA_DIR/none ]
+	    then
+		touch $DATA_DIR/none
+	    fi
+	    ln -fs $DATA_DIR/none $1
+	elif [ ! -f $DATA_DIR/$4 ]
+	then
+	    touch $DATA_DIR/$4
+	    ln -fs $DATA_DIR/$4 $1
+	fi
+	echo TAPE FILE: `ls -l $1 | sed "s/.* //"`
+	exit 0
+
+elif [ $2 = "readlabel" ]
+then
+
+	rm -f $SCAN_LOCK
+
+	#
+	# mount the requested tape, if no tape specified, use the tape
+	# most recently mounted
+	#
+
+	if [ $4 = "none" ]
+	then
+	    if [ ! -f $1 ]
+	    then
+		exit 1
+	    fi
+	else
+	    if [ ! -f $DATA_DIR/$4 ]
+	    then
+		exit 1
+	    fi
+	    ln -fs $DATA_DIR/$4 $1
+	fi
+	echo TAPE FILE: `ls -l $1 | sed "s/.* //"`
+	exit 0
+
+elif [ $2 = "dump" -o $2 = "savedb" ]
+then
+
+	rm -f $SCAN_LOCK
+
+	#
+	# mount the requested tape, if the tape doesn't exist, check
+	# for a tape named "none" before creating an empty file. A tape
+	# with a bogus label messes up the dump.
+	#
+
+	if [ $4 = "none" ]
+	then
+	    exit 1
+	fi
+
+	if [ -f $DATA_DIR/none ]
+	then
+	    if [ -f $DATA_DIR/$4 ]
+	    then
+		rm -f $DATA_DIR/$4
+	    fi
+	    mv $DATA_DIR/none $DATA_DIR/$4
+
+	elif [ ! -f $DATA_DIR/$4 ]
+	then
+	    touch $DATA_DIR/$4
+	fi
+	ln -fs $DATA_DIR/$4 $1
+	echo TAPE FILE: `ls -l $1 | sed "s/.* //"`
+	exit 0
+
+elif [ $2 = "restore" -o $2 = "restoredb" ]
+then
+
+	#
+	# mount the requested tape, return error if it doesn't exist
+	#
+
+	if [ ! -f $DATA_DIR/$4 ]
+	then
+		exit 1
+	fi
+	ln -fs $DATA_DIR/$4 $1
+	echo TAPE FILE: `ls -l $1 | sed "s/.* //"`
+	exit 0
+
+else
+	#
+	# error: invalid command
+	#
+	exit 1
+fi

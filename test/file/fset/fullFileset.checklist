@@ -1,0 +1,84 @@
+This is the test checklist for full fileset testing.  It is biased towards 
+LFS filesets.
+
+
+BASIC:
+  - Fill a fileset to 90% full and verify that the warning message is
+    printed in fts lsquota.
+  - Fill a fileset to one allocation unit shy of full.
+  - Fill a fileset to exactly its quota. 
+  - Create a zero length file in a full fileset.  This must be done in
+    a directory that has space available, i.e. is not in a full fragment.
+  - Create a link file in a full fileset.  This must be done in
+    a directory that has space available, i.e. is not in a full fragment.
+  - In a fileset with one allocation unit left open a file, and write some
+    data (less than the allocation unit size).  While that file is open, 
+    try to open a second file and write
+    data to it.  This should fail.  While the second file is open write some
+    additional data into the first file (still less than the allocation
+    unit).  This should succeed.
+  - Start a process that will eventually cause a fileset to be full.  When
+    it becomes full, and while this process is still attempting to add
+    data to the fileset, increase the quota of the fileset. (Would be nice
+    if this could be set up under the following conditions. Process just
+    issues writes to a file.  Eventually write fails due to lack of space.
+    Increase quota, and then re-issue write.)
+  - Start a process that writes data into the fileset until it is full.
+    When the fileset becomes full, remove an existing file, and verify that
+    the first process can continue to write data.
+  - Create a fileset.  Inside of it create a mount point for a second 
+    fileset.  Inside of this second fileset create a mount point for 
+    another fileset.  Now fill the second fileset to capacity.  Check that
+    the quota on the first and third filset have not changed.  Then
+    create a file, with data, in the third fileset.  (All filesets should
+    be on the same aggregate.)
+
+ERROR:
+  - Fill a fileset to its quota then try to write a 1 byte file into the 
+    fileset.
+  - Fill a fileset to within 1 allocation unit of its quota, then try to write
+    a file of one allocation unit plus 1 bytes.
+  - With a full fileset, try to reduce the quota.  (I really don't know what
+    will happpen here, but I assume it is an error.)
+* - Create a fileset and set it's quota to one (frgament size) less than the 
+    blocksize plus fragment size.
+* - Create a fileset and set its quota to 1.
+* - Create a fileset and set its quota to 0.
+  - Try to create a mount point for another fileset inside of a full fileset.
+    This must be done in a directory that has no additional space,
+    i.e. is a multiple of the fragment size.
+  - Create a zero length file in a full fileset, in 
+    a directory that has no space available, i.e. is a multiple of
+    the fragment size.
+
+
+STRESS:
+  - With a fileset at 95% full, run a number of concurrent processes that
+    create, expand, shrink, and destroy files, but as a whole do not
+    push the fileset over the quota limit.  This should run for a number of
+    hours without failing.
+
+==============================================================================
+
+NOTES:
+	Tests to implement this checklist must be able to account for the
+	following.
+
+	- Does the file system allow for overdraw, i.e. the ability to
+	  continue to write files past quota.  (My current thinking is 
+	  that this can be handled transparently by the tests, i.e. if
+	  the 'overdraw' flag is set then just adjust the definition of
+	  what "full" means by the overdraw percentage.)
+	- What is the allocation unit for the file system.
+	  (This my need to be passed in, if cannot be determined from
+	   existing commands.)
+
+	(*) - is really a quota tests.
+
+
+
+    LFS -
+
+	Files must be greater than 92 bytes to use an entire fragment.
+	Othersies they are stored in-line in the anode.
+

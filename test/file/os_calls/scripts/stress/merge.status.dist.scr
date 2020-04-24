@@ -1,0 +1,284 @@
+*
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+* 
+* USAGE: ./file_test -l /.:/dfs_test/a    (for hub)
+*        ./file_test -c /.:/dfs_test/a    (for two spokes)
+*
+
+*
+* status.dist.scr.
+*    This script implements the followings.
+*
+
+*
+* Make a number of status updates via the stress processes, while
+* simultaneously having several concurrent test threads stating the
+* file.  Ensure that the last stat done by a test thread starts after
+* the end of the last update made via a stress process, so that it, at
+* least, should see the final status.  Then compare this final test
+* status with what is expected.  Also compare it with the value seen by
+* the stress processes.
+*
+* ACL cache: Make changes to the access info for a file via a stress
+* process.  Then, have a number of test processes on the same client
+* stat the file, all authenticated as the same pag.  Then, redo the
+* test, only with all of the stats being done by *different* pags.
+*
+* Next, rerun same tests, only with chmods being done by the stress
+* processes concurrently with the stats being done by both the same PAG
+* and by different PAGs.  Issue final access via test process, and
+* ensure that it reports the right answer.
+*
+
+!* Include config file.
+include config
+
+set loopTimes 10
+
+* 
+* The procedure will update the test file.
+*
+set stress1_Proc proc END_PROC
+
+  echo
+  echo stress1 process (update file data).
+
+  set dataFile vector64k
+  set vectorData vector 0x0
+  open @dataFile @O_RDONLY 0777 dataFid
+  read @dataFid $CONST64K vectorData
+  close @dataFid
+
+  chdir $testDir
+  sync_join "begin_sync" $timeout
+
+  umask 0
+
+  open $testFile (@O_RDWR|@O_APPEND) 0777 fileId
+  write @fileId @vectorData
+  if ( @CommandResult != $CONST64K ) {
+    echo FAILED: write failed in write vector procedure.
+  }
+
+  sync_join "stat_merges" $timeout
+
+  sync_join "finish_sync" $timeout
+
+  echo End stress test.
+  chdir $currentDir
+  echo
+
+END_PROC
+
+* 
+* The procedure will update file status (utimes).
+*
+set stress2_Proc proc END_PROC
+
+  echo
+  echo stress2 process (utimes file).
+
+  umask 0
+
+  chdir $testDir
+  sync_join "begin_sync" $timeout
+
+  if ( $ITL_SystemType == solaris ) {
+    utimes $testFile "" "" 0 "" "" 0 
+  }
+  else {
+    utimes $testFile "" "" -1 "" "" -1
+  }
+
+  sync_join "stat_merges" $timeout
+
+  sync_join "finish_sync" $timeout
+
+  echo End stress test.
+  chdir $currentDir
+  echo
+END_PROC
+
+* 
+* The procedure will update file status (chmod).
+*
+set stress3_Proc proc END_PROC
+
+  echo
+  echo stress3 process (chmod file).
+
+  umask 0
+
+  chdir $testDir
+  sync_join "begin_sync" $timeout
+
+  chmod $testFile 0666
+
+  sync_join "stat_merges" $timeout
+
+  sync_join "finish_sync" $timeout
+
+  echo End stress test.
+  chdir $currentDir
+  echo
+END_PROC
+
+* 
+* The procedure will update file status (hardlink).
+*
+set stress4_Proc proc END_PROC
+
+  echo
+  echo stress4 process (hardlink file).
+
+  umask 0
+
+  chdir $testDir
+  sync_join "begin_sync" $timeout
+
+  hardlink $testFile linkfile
+
+  sync_join "stat_merges" $timeout
+
+  sync_join "finish_sync" $timeout
+
+  echo End stress test.
+  chdir $currentDir
+  echo
+END_PROC
+
+* 
+* The procedure will check the result of status merge.
+*
+set stat_Proc proc END_PROC
+
+  echo
+  echo Stat process (stat file status).
+
+  set dataFile vector64k
+  set vectorData vector 0x0
+  open @dataFile @O_RDONLY 0777 dataFid
+  read @dataFid $CONST64K vectorData
+  close @dataFid
+  
+  chdir $testDir
+
+  sync_join "begin_sync" $timeout
+  sync_join "stat_merges" $timeout
+
+  set junk vector 0x0
+  open linkfile @O_RDONLY 0777 fileId
+  lseek @fileId @SEEK_END (-$CONST64K)
+  read @fileId $CONST64K junk
+  if ( @junk !=  @vectorData ) {
+    echo FAILED: data read is wrong.
+  }
+  stat $testFile var
+  if ( @var.st_nlink != 2 ) {
+    echo FAILED: link count is wrong.
+  }
+  if ( @var.st_mode & 0777 & ~(0666) ) {
+    echo FAILED: mode bit is wrong.
+  }
+  if ( @var.st_size != ( ($loopTimes + 1 ) * $CONST64K ) )  {
+    echo FAILED: file size is wrong.
+  }
+
+  sync_join "finish_sync" $timeout
+
+  echo End stat process.
+  chdir $currentDir
+  echo
+
+END_PROC
+
+
+***********************************************************************
+echo
+* Check if there are enogh spokes.
+if ( $ITL_nspokes < 5 ) {
+  echo To run the test you have at least 5 spokes.
+  quit
+}
+
+*
+!* Test status merge.
+*
+chdir $testDir
+
+* This loop will do more stress test.
+loop loopVar 1 1 $loopTimes
+
+verifyStatus false
+access $testFile $accessFlagE
+if ( $ITL_Status == 0 ) {
+  remove $testFile
+}
+verifyStatus true
+
+open $testFile ($O_CREAT|$O_RDWR) 0777 fileId
+loop x 1 1 $loopTimes
+  write $fileId $NUMVEC64K
+  if ( $CommandResult != $CONST64K ) {
+    echo FAILED: write failed in write vector procedure.
+  }
+endloop
+
+rexec_async $ITL_spoke[0] stress1_Proc result[0] fsyncId[0]
+rexec_async $ITL_spoke[1] stress2_Proc result[1] fsyncId[1]
+rexec_async $ITL_spoke[2] stress3_Proc result[2] fsyncId[2]
+rexec_async $ITL_spoke[3] stress4_Proc result[3] fsyncId[3]
+loop x 4 1 ($ITL_nspokes-1)
+  rexec_async $ITL_spoke[$x] stat_Proc result[$x] fsyncId[$x]
+endloop
+
+sync_create "begin_sync" $ITL_nspokes  $timeout
+sync_release "begin_sync"
+
+sync_create "stat_merges" $ITL_nspokes  $timeout
+sync_release "stat_merges"
+
+sync_create "finish_sync" $ITL_nspokes  $timeout
+sync_release "finish_sync"
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $fsyncId[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+remove $testFile
+remove linkfile
+echo
+
+endloop
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+
+echo
+
+echo Hub done.

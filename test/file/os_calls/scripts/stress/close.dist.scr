@@ -1,0 +1,743 @@
+
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+*> Close system call.
+*
+* Check that space gets reclaimed after closing a file that was open
+* on a test host when a file was deleted (via remote host is fine; the
+* statfs call should tell how much space is available).
+*
+* Check that file locks are released when a file is closed.  Check one
+* case where test host locks file, remote stress host tries and waits
+* for lock, and then test host closes the file.
+*
+* Also check where two tests processes on the same test host run, one
+* locking a file, the other waiting for the lock, and then the first
+* closing the file (and releasing the lock).
+*
+* Do above file lock tests for both files and directories, and for
+* files, in separate test cases for files opened for read, for write,
+* for read/trunc, and for write/trunc.
+*
+
+
+*
+* Note: Try this test on both single machin cell and multi-machine cell.
+*       You have to be root to run the test and it can be tested only
+*       via DFS.
+*
+* 
+* USAGE: ./file_test -l {HUBNAME} -I {this_script} ; For HUB
+*        ./file_test -c {HUBNAME} : For other spokes
+*
+
+*
+* Note:
+* 1. Run this script from both DFS and local path (not for LFS).
+* 2. be sure you have set the env var LOCAL_PATH of current working directory
+*    before run the script.
+*
+
+* Include config file.
+include config
+
+*
+* Set local path of the current working directory.
+* This tests that when file get deleted the space get released also.
+* The local path is used to get free blocks by statfs (which does not
+* work in DFS.
+*
+
+access $localPath $accessFlagE
+if ( $ITL_Status != 0 ) {
+  echo WARNING: You have to set the env var LOCAL_PATH of the working directory if UFS s tested.
+  quit
+}
+
+set loopTimes 10
+
+*
+* This procedure test if file deleted the allocated quota is freed.
+*
+set quota_Proc proc END_PROC
+  echo
+  echo Create file and delete it to see if the space has been reclaimed.
+
+  getwd workDir
+  set dataFile vector64k
+  set vectorData vector 0x0
+  open @dataFile @O_RDONLY 0777 dataFid
+  read @dataFid $CONST64K vectorData
+  close @dataFid
+
+  chdir $testDir
+
+  sync_join "create_file" $timeout
+
+  open $testFile (@O_CREAT|@O_RDWR) 0777 fileId
+  loop x 1 1 $loopTimes
+    write @fileId @vectorData
+  endloop
+  close @fileId
+
+  sync_join "create_file_done" $timeout
+
+  sync_join "delete_file" $timeout
+  remove $testFile
+  sync_join "delete_file_done" $timeout
+
+  verifyStatus false
+  stat $testFile var
+  verifyStatus true
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo Test process done.
+  echo 
+END_PROC
+
+*
+* This procedure stats a file (test1).
+*
+set test_Proc proc END_PROC
+  echo
+  echo Stats a test file.
+
+  getwd workDir
+  chdir $testDir
+
+  sync_join "create_file" $timeout
+  sync_join "create_file_done" $timeout
+  stat $testFile var
+
+  sync_join "delete_file" $timeout
+  sync_join "delete_file_done" $timeout
+
+  verifyStatus false
+  stat $testFile var
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: the file is there.
+  }
+  verifyStatus true
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo Stat process done.
+  echo 
+END_PROC
+
+*
+* This procedure opens file, gets lock on whole file and closes it.
+*
+set closeLockFile_Proc proc END_PROC
+  echo
+  echo Close file to release lock.
+
+  getwd workDir
+  chdir $testDir
+
+
+* lock on whole file
+
+  sync_join "write_lock" $timeout
+
+  open $testFile @O_WRONLY 0777 fileId
+
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+
+  sync_join "write_lock_done" $timeout
+  sync_join "close_write_lock" $timeout
+
+  close @fileId
+
+  sync_join "close_write_lock_done" $timeout
+
+* lock file by open with write/trunc.
+
+  sync_join "write_trunc_lock" $timeout
+
+  open $testFile (@O_WRONLY|@O_TRUNC) 0777 fileId
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+
+  sync_join "write_trunc_lock_done" $timeout
+  sync_join "close_write_trunc_lock" $timeout
+
+  close @fileId
+
+  sync_join "close_write_trunc_lock_done" $timeout
+
+* lock file by open with read.
+
+  sync_join "read_lock" $timeout
+
+  open $testFile @O_RDONLY 0777 fileId
+  set setExclusiveLock fs_flock @F_RDLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+
+  sync_join "read_lock_done" $timeout
+
+* lock file by open with read/trunc.
+
+  sync_join "read_trunc_lock" $timeout
+  close @fileId
+
+  open $testFile (@O_RDONLY|@O_TRUNC) 0777 fileId
+  set setExclusiveLock fs_flock @F_RDLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+
+  sync_join "read_trunc_lock_done" $timeout
+  sync_join "close_read_trunc_lock" $timeout
+
+  close @fileId
+
+  sync_join "close_read_trunc_lock_done" $timeout
+
+  chdir @workDir
+
+  echo Close-lock process done.
+  echo 
+END_PROC
+
+*
+* This procedure opens dir, gets lock on whole file and closes it.
+*
+set closeLockDir_Proc proc END_PROC
+  echo
+  echo Close dir to release lock.
+
+  getwd workDir
+  chdir $testDir
+
+
+* lock on directory.
+
+  sync_join "write_lock" $timeout
+
+  verifyStatus false
+  open $testDir @O_WRONLY 0777 fileId
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: pass open dir with write for in write lock test.
+    close @fileId
+  }
+  verifyStatus false
+
+  sync_join "write_lock_done" $timeout
+
+  sync_join "close_write_lock" $timeout
+  sync_join "close_write_lock_done" $timeout
+
+* lock dir by open with write/trunc.
+
+  sync_join "write_trunc_lock" $timeout
+
+  verifyStatus false
+  open $testDir (@O_WRONLY|@O_TRUNC) 0777 fileId
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: pass open dir with write/trunc for in write lock test.
+    close @fileId
+  }
+  verifyStatus true
+
+  sync_join "write_trunc_lock_done" $timeout
+
+  sync_join "close_write_trunc_lock" $timeout
+  sync_join "close_write_trunc_lock_done" $timeout
+
+* lock dir by open with read.
+
+  sync_join "read_lock" $timeout
+
+  open $testDir @O_RDONLY 0777 fileId
+  set setExclusiveLock fs_flock @F_RDLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+  if ( @ITL_Status != 0 ) {
+    echo FAILED: Can't get shared lock in read lock test.
+  }
+
+  sync_join "read_lock_done" $timeout
+
+* lock dir by open dir with read/trunc.
+
+  sync_join "read_trunc_lock" $timeout
+  close @fileId
+
+  verifyStatus false
+  open $testDir (@O_RDONLY|@O_TRUNC) 0777 fileId
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: pass open dir with read/trunc for in read lock test.
+    close @fileId
+  }
+  verifyStatus true
+
+  sync_join "read_trunc_lock_done" $timeout
+
+  sync_join "close_read_trunc_lock" $timeout
+  sync_join "close_read_trunc_lock_done" $timeout
+
+  chdir @workDir
+
+  echo Close-lock process done.
+  echo 
+END_PROC
+
+*
+* This procedure tries to get lock and gets it after the other closes it.
+*
+
+set getLockFile_Proc proc END_PROC
+  echo
+  echo Try to get lock on whole file.
+
+  getwd workDir
+  chdir $testDir
+
+* lock on whole file
+
+  open $testFile @O_WRONLY 0777 fileId
+
+  sync_join "write_lock" $timeout
+  sync_join "write_lock_done" $timeout
+
+* Get lock first.
+  set setExclusiveLock fs_flock @F_RDLCK @SEEK_SET 0 0
+  fcntl @fileId @F_GETLK setExclusiveLock
+  if ( @setExclusiveLock.l_type == @F_UNLCK ) {
+     echo FAILED: It is a write lock and get lock should unchange the l_type.
+  }
+
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 0
+  verifyStatus false
+  fcntl @fileId @F_SETLK setExclusiveLock
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: gets the file lock in write lock.
+  }
+  verifyStatus true
+
+  sync_join "close_write_lock" $timeout
+  sync_join "close_write_lock_done" $timeout
+
+* By now I should get the lock.
+  fcntl @fileId @F_SETLK setExclusiveLock
+  if ( @setExclusiveLock.l_type != @F_WRLCK ) {
+    echo FAILED: F_GETLK gets wrong file lock type in write lock.
+  }
+  if ( @setExclusiveLock.l_start != 0 ) {
+    echo FAILED: F_GETLK gets wrong file lock_start in write lock. 
+  }
+  if ( @setExclusiveLock.l_len != 0 ) {
+    echo FAILED: F_GETLK gets wrong file lock_length in write lock.
+  }
+  close @fileId
+
+* lock file by open with write/trunc.
+
+  sync_join "write_trunc_lock" $timeout
+  sync_join "write_trunc_lock_done" $timeout
+
+  open $testFile (@O_WRONLY|@O_TRUNC) 0777 fileId
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 0
+  verifyStatus false
+  fcntl @fileId @F_SETLK setExclusiveLock
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: gets the file lock in write/trunc lock.
+  }
+  verifyStatus true
+
+  sync_join "close_write_trunc_lock" $timeout
+  sync_join "close_write_trunc_lock_done" $timeout
+
+* By now I should get the lock.
+  fcntl @fileId @F_SETLK setExclusiveLock
+  if ( @setExclusiveLock.l_type != @F_WRLCK ) {
+    echo FAILED: F_GETLK gets wrong file lock type in write/trunc lock.
+  }
+  if ( @setExclusiveLock.l_start != 0 ) {
+    echo FAILED: F_GETLK gets wrong file lock_start in write/trunc lock. 
+  }
+  if ( @setExclusiveLock.l_len != 0 ) {
+    echo FAILED: F_GETLK gets wrong file lock_length in write/trunc lock.
+  }
+  close @fileId
+
+
+* lock file by open with read.
+
+  sync_join "read_lock" $timeout
+  sync_join "read_lock_done" $timeout
+
+  open $testFile @O_RDONLY 0777 fileId
+
+* Get lock first.
+  set setExclusiveLock fs_flock @F_RDLCK @SEEK_SET 0 0
+  fcntl @fileId @F_GETLK setExclusiveLock
+  if ( @setExclusiveLock.l_type != @F_UNLCK ) {
+     echo FAILED: It is shared lock and get lock should set l_type to unlock.
+  }
+
+* I should get the lock without any prooblem (shared lock).
+  set setExclusiveLock fs_flock @F_RDLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+  if ( @setExclusiveLock.l_type != @F_RDLCK ) {
+    echo FAILED: F_GETLK gets wrong file lock type in read lock.
+  }
+  if ( @setExclusiveLock.l_start != 0 ) {
+    echo FAILED: F_GETLK gets wrong lock_start in read lock. 
+  }
+  if ( @setExclusiveLock.l_len != 0 ) {
+    echo FAILED: F_GETLK gets wrong file lock_length in read lock.
+  }
+  close @fileId
+
+
+* lock file by open with read/trunc.
+
+  sync_join "read_trunc_lock" $timeout
+  sync_join "read_trunc_lock_done" $timeout
+
+  open $testFile (@O_RDONLY|@O_TRUNC) 0777 fileId
+  set setExclusiveLock fs_flock @F_RDLCK @SEEK_SET 0 0
+  verifyStatus false
+  fcntl @fileId @F_SETLK setExclusiveLock
+  if ( @ITL_Status != 0 ) {
+    echo FAILED: Can't get a shared file lock in read/trunc lock.
+  }
+  verifyStatus true
+
+  sync_join "close_read_trunc_lock" $timeout
+  sync_join "close_read_trunc_lock_done" $timeout
+
+* By now I should get the lock.
+  fcntl @fileId @F_SETLK setExclusiveLock
+  if ( @setExclusiveLock.l_type != @F_RDLCK ) {
+    echo FAILED: F_GETLK gets wrong lock type in read/trunc lock.
+  }
+  if ( @setExclusiveLock.l_start != 0 ) {
+    echo FAILED: F_GETLK gets wrong lock_start in read/trunc lock. 
+  }
+  if ( @setExclusiveLock.l_len != 0 ) {
+    echo FAILED: F_GETLK gets wrong lock_length in read/trunc lock.
+  }
+  close @fileId
+
+  chdir @workDir
+
+  echo GetLock process done.
+  echo 
+END_PROC
+
+*
+* This procedure tries to get lock on dir and gets it after the other closes it*
+set getLockDir_Proc proc END_PROC
+  echo
+  echo Try to get lock on directory.
+
+  getwd workDir
+  chdir $testDir
+
+* lock on whole dir
+
+  sync_join "write_lock" $timeout
+  sync_join "write_lock_done" $timeout
+
+  verifyStatus false
+  open $testDir @O_WRONLY 0777 fileId
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: pass open dir with write in dir test.
+    close @fileId
+  }
+  verifyStatus true
+
+  sync_join "close_write_lock" $timeout
+  sync_join "close_write_lock_done" $timeout
+
+* lock dir by open with write/trunc.
+
+  sync_join "write_trunc_lock" $timeout
+  sync_join "write_trunc_lock_done" $timeout
+
+  verifyStatus false
+  open $testDir (@O_WRONLY|@O_TRUNC) 0777 fileId
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: pass open dir with write/trunc for a dir.
+    close @fileId
+  }
+  verifyStatus true
+
+  sync_join "close_write_trunc_lock" $timeout
+  sync_join "close_write_trunc_lock_done" $timeout
+
+* lock dir by open with read.
+
+  sync_join "read_lock" $timeout
+  sync_join "read_lock_done" $timeout
+
+  open $testDir @O_RDONLY 0777 fileId
+
+* Get lock first.
+  set setExclusiveLock fs_flock @F_RDLCK @SEEK_SET 0 0
+  fcntl @fileId @F_GETLK setExclusiveLock
+  if ( @setExclusiveLock.l_type != @F_UNLCK ) {
+     echo FAILED: It is shared lock and get lock should set l_type to unlock.
+  }
+
+  set setExclusiveLock fs_flock @F_RDLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+  if ( @setExclusiveLock.l_type != @F_RDLCK ) {
+    echo FAILED: F_GETLK gets wrong dir lock type in read lock.
+  }
+  if ( @setExclusiveLock.l_start != 0 ) {
+    echo FAILED: F_GETLK gets wrong dir lock_start in read lock. 
+  }
+  if ( @setExclusiveLock.l_len != 0 ) {
+    echo FAILED: F_GETLK gets wrong dir lock_length in read lock.
+  }
+  close @fileId
+
+
+* lock dir by open with read/trunc.
+
+  sync_join "read_trunc_lock" $timeout
+  sync_join "read_trunc_lock_done" $timeout
+
+  verifyStatus false
+  open $testDir (@O_RDONLY|@O_TRUNC) 0777 fileId
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: pass open dir with read/trunc.
+    close @fileId
+  }
+  verifyStatus true
+
+  sync_join "close_read_trunc_lock" $timeout
+  sync_join "close_read_trunc_lock_done" $timeout
+
+  chdir @workDir
+
+  echo GetLock process done.
+  echo 
+END_PROC
+
+****************************************************************************
+* Check spokes.
+if ( $ITL_nspokes != 2 ) {
+  echo FAILED: You need two spokes to run the test.
+  quit
+}
+
+chdir $testDir
+
+* This is the test directory for dir lock test.
+verifyStatus false
+access $testDir $accessFlagE
+if ( $ITL_Status != 0 ) {
+  mkdir $testDir 0777
+}
+verifyStatus true
+
+loop loopVar 1 1 $loopTimes
+
+* This file is created for file locking test.
+open $testFile ( $O_CREAT|$O_RDWR ) 0777 fileId
+write $fileId "This is a test file for file locking."
+close $fileId
+
+!* Dispatch close-quota test procedure.
+rexec_async $ITL_spoke[0] quota_Proc result[0] asyncVar[0]
+rexec_async $ITL_spoke[1] test_Proc result[1] asyncVar[1]
+
+sync_create "create_file" $ITL_nspokes $timeout
+sync_release "create_file"
+
+sync_create "create_file_done" $ITL_nspokes $timeout
+sync_release "create_file_done"
+
+* Set current free quota.
+  chdir $localPath
+  statfs . statfsVar
+  set oldBlocks $statfsVar.f_bfree
+  chdir $currentDir
+  chdir $testDir
+
+sync_create "delete_file" $ITL_nspokes $timeout
+sync_release "delete_file"
+
+sync_create "delete_file_done" $ITL_nspokes $timeout
+sync_release "delete_file_done"
+
+* Set current free quota.
+  chdir $localPath
+  statfs . statfsVar
+  set newBlocks $statfsVar.f_bfree
+  chdir $currentDir
+  chdir $testDir
+
+* The size of the test file is 64k * $loopTimes.
+* In fact we need check the difference between two vars.
+
+  echo oldBlocks = $oldBlocks, newBlocks = $newBlocks .
+  if ( $oldBlocks == $newBlocks ) {
+    echo FAILED: The file has been deleted but the space has not been released.
+  }
+
+sync_create "finish_sync" $ITL_nspokes $timeout
+sync_release "finish_sync"
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+* This file is created for file locking test.
+open $testFile ( $O_CREAT|$O_RDWR ) 0777 fileId
+write $fileId "This is a test file for file locking."
+close $fileId
+
+!* Dispatch file close and lock test procedures.
+rexec_async $ITL_spoke[0] closeLockFile_Proc result[0] asyncVar[0]
+rexec_async $ITL_spoke[1] getLockFile_Proc result[1] asyncVar[1]
+
+sync_create "write_lock" $ITL_nspokes $timeout
+sync_release "write_lock"
+
+sync_create "write_lock_done" $ITL_nspokes $timeout
+sync_release "write_lock_done"
+
+sync_create "close_write_lock" $ITL_nspokes $timeout
+sync_release "close_write_lock"
+
+sync_create "close_write_lock_done" $ITL_nspokes $timeout
+sync_release "close_write_lock_done"
+
+sync_create "write_trunc_lock" $ITL_nspokes $timeout
+sync_release "write_trunc_lock"
+
+sync_create "write_trunc_lock_done" $ITL_nspokes $timeout
+sync_release "write_trunc_lock_done"
+
+sync_create "close_write_trunc_lock" $ITL_nspokes $timeout
+sync_release "close_write_trunc_lock"
+
+sync_create "close_write_trunc_lock_done" $ITL_nspokes $timeout
+sync_release "close_write_trunc_lock_done"
+
+sync_create "read_lock" $ITL_nspokes $timeout
+sync_release "read_lock"
+
+sync_create "read_lock_done" $ITL_nspokes $timeout
+sync_release "read_lock_done"
+
+sync_create "read_trunc_lock" $ITL_nspokes $timeout
+sync_release "read_trunc_lock"
+
+sync_create "read_trunc_lock_done" $ITL_nspokes $timeout
+sync_release "read_trunc_lock_done"
+
+sync_create "close_read_trunc_lock" $ITL_nspokes $timeout
+sync_release "close_read_trunc_lock"
+
+sync_create "close_read_trunc_lock_done" $ITL_nspokes $timeout
+sync_release "close_read_trunc_lock_done"
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+!* Dispatch dir close and lock test procedures.
+rexec_async $ITL_spoke[0] closeLockDir_Proc result[0] asyncVar[0]
+rexec_async $ITL_spoke[1] getLockDir_Proc result[1] asyncVar[1]
+
+sync_create "write_lock" $ITL_nspokes $timeout
+sync_release "write_lock"
+
+sync_create "write_lock_done" $ITL_nspokes $timeout
+sync_release "write_lock_done"
+
+sync_create "close_write_lock" $ITL_nspokes $timeout
+sync_release "close_write_lock"
+
+sync_create "close_write_lock_done" $ITL_nspokes $timeout
+sync_release "close_write_lock_done"
+
+sync_create "write_trunc_lock" $ITL_nspokes $timeout
+sync_release "write_trunc_lock"
+
+sync_create "write_trunc_lock_done" $ITL_nspokes $timeout
+sync_release "write_trunc_lock_done"
+
+sync_create "close_write_trunc_lock" $ITL_nspokes $timeout
+sync_release "close_write_trunc_lock"
+
+sync_create "close_write_trunc_lock_done" $ITL_nspokes $timeout
+sync_release "close_write_trunc_lock_done"
+
+sync_create "read_lock" $ITL_nspokes $timeout
+sync_release "read_lock"
+
+sync_create "read_lock_done" $ITL_nspokes $timeout
+sync_release "read_lock_done"
+
+sync_create "read_trunc_lock" $ITL_nspokes $timeout
+sync_release "read_trunc_lock"
+
+sync_create "read_trunc_lock_done" $ITL_nspokes $timeout
+sync_release "read_trunc_lock_done"
+
+sync_create "close_read_trunc_lock" $ITL_nspokes $timeout
+sync_release "close_read_trunc_lock"
+
+sync_create "close_read_trunc_lock_done" $ITL_nspokes $timeout
+sync_release "close_read_trunc_lock_done"
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+remove $testFile
+
+endloop
+
+rmdir $testDir
+chdir $currentDir
+exec clearDir_Proc $testDir
+echo
+echo Hub done.
+quit

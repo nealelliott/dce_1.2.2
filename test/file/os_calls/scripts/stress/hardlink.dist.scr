@@ -1,0 +1,361 @@
+
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* Test stress links running concurrently with test links, over a set
+* of names.  For each name, hard link should be atomic, with one process
+* creating the name, and the other getting the error EEXIST.  It is a
+* good idea to create a *set* of names with one call to the test/stress
+* processes from the hub, so as to increase the likelihood of real
+* concurrency between the link calls.  Test that name exists in both the
+* name cache and the dir listing cache (readdir and lookups both work).
+* Check stated properties (link count and ctime increase, mtime stays
+* the same) of resulting link to ensure we linked to the right object.
+*
+* Test race conditions, such as name already created both by stress
+* processes and by test processes first, via either link or create.
+*
+* Test what happens when normal client test processes are run, but
+* other names are being modified concurrently via the stress path in the
+* same directory.
+*
+* Test what happens in above if other names being modified by the test
+* path in the same directory.
+*
+
+*
+* Note: Try this test on both single machin cell and multi-machine cell.
+*       You have to be root to run the test and it can be tested only
+*       via DFS.
+*
+* 
+* USAGE: ./file_test -l {HUBNAME} -I {this_script} ; For HUB
+*        ./file_test -c {HUBNAME} : For other spokes
+*
+
+* Include config file.
+include config
+
+set loopTimes 10
+
+*
+* This procedure stats a file (test1).
+*
+set test_Proc proc END_PROC
+  echo
+  echo Try hardlink a precreated files while another process does the same.
+
+  getwd workDir
+  chdir $testDir
+
+  sync_join "begin_sync" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    set linkName ( "tmpfile" + @x )
+    verifyStatus false
+    hardlink @fileName @linkName
+    if ( @ITL_Status != 0 ) {
+      if ( @ITL_Status != @EEXIST ) {
+        echo FAILED: Hardlink call failed in test procedure.
+      }
+    }
+    verifyStatus false
+  endloop
+
+  sync_join "hardlink_done" $timeout
+
+  loop x 1 1 $loopTimes
+    set flag string "false"
+    opendir . dirPtr
+    readdir @dirPtr dirInfo
+    readdir @dirPtr dirInfo
+    set fileName ( $testFile + @x )
+    do 
+      readdir @dirPtr dirInfo
+      if ( @dirInfo.d_name == @fileName ) {
+        set flag true
+      }
+    while ( @CommandResult != 0 ) 
+    closedir @dirPtr
+    if ( flag == "false" ) {
+      echo FAILED: Fail to lookup a test file @fileName .
+    }
+  endloop
+
+  loop x 1 1 $loopTimes
+    set flag string "false"
+    opendir . dirPtr
+    readdir @dirPtr dirInfo
+    readdir @dirPtr dirInfo
+    set linkName ( "tmpfile" + @x )
+    do 
+      readdir @dirPtr dirInfo
+      if ( @dirInfo.d_name == @linkName ) {
+        set flag true
+      }
+    while ( @CommandResult != 0 ) 
+    closedir @dirPtr
+    if ( flag == "false" ) {
+      echo FAILED: Fail to lookup a link file @linkName .
+    }
+  endloop
+
+  sync_join "unlink_create" $timeout
+  sync_join "concurrent_modify" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    set linkName ( "tmpfile" + @x )
+    verifyStatus false
+    hardlink @linkName @fileName
+    if ( @ITL_Status != 0 ) {
+      if ( @ITL_Status != @EEXIST ) {
+        echo FAILED: Concurrent hardlink call failed in test.
+      }
+    }
+    verifyStatus false
+  endloop
+
+
+  sync_join "concurrent_modify_done" $timeout
+
+  sync_join "finish_sync" $timeout
+
+  chdir @workDir
+
+  echo Test1 process done.
+  echo 
+END_PROC
+
+
+*
+* This procedure creates a set of random files and does utimes, chmod
+* create adn delete the test file.
+*
+
+set stress_Proc proc END_PROC
+
+  echo
+  echo Try hardlink concurrently.
+
+  chdir $testDir
+
+  sync_join "begin_sync" $timeout
+
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    set linkName ( "tmpfile" + @x )
+    hardlink @fileName @linkName
+    if ( @ITL_Status != 0 ) {
+      if ( @ITL_Status != @EEXIST ) {
+        echo FAILED: Hardlink call failed in stress procedure.
+      }
+    }
+  endloop
+  verifyStatus true
+
+  sync_join "hardlink_done" $timeout
+
+  loop x 1 1 $loopTimes
+    set flag string "false"
+    opendir . dirPtr
+    readdir @dirPtr dirInfo
+    readdir @dirPtr dirInfo
+    set fileName ( $testFile + @x )
+    do 
+      readdir @dirPtr dirInfo
+      if ( @dirInfo.d_name == @fileName ) {
+        set flag true
+      }
+    while ( @CommandResult != 0 ) 
+    closedir @dirPtr
+    if ( flag == "false" ) {
+      echo FAILED: Fail to lookup a test file @fileName .
+    }
+  endloop
+
+  loop x 1 1 $loopTimes
+    set flag string "false"
+    opendir . dirPtr
+    readdir @dirPtr dirInfo
+    readdir @dirPtr dirInfo
+    set linkName ( "tmpfile" + @x )
+    do 
+      readdir @dirPtr dirInfo
+      if ( @dirInfo.d_name == @linkName ) {
+        set flag true
+      }
+    while ( @CommandResult != 0 ) 
+    closedir @dirPtr
+    if ( flag == "false" ) {
+      echo FAILED: Fail to lookup a link file @linkName .
+    }
+  endloop
+
+  sync_join "unlink_create" $timeout
+
+* Unlink files and create another set of files to be modified later.
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    unlink @fileName
+  endloop
+  loop x 1 1 $loopTimes
+    set fileName ( "modfyfile" + @x )
+    open @fileName (@O_CREAT|@O_RDWR) 0777 fileId[@x]
+    write @fileId[@x] @fileName
+    close @fileId[@x]
+  endloop
+
+  sync_join "concurrent_modify" $timeout
+
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    set linkName ( "tmpfile" + @x )
+    hardlink @linkName @fileName
+    if ( @ITL_Status != 0 ) {
+      if ( @ITL_Status != @EEXIST ) {
+        echo FAILED: Concurrent hardlink call failed in test.
+      }
+    }
+  endloop
+  verifyStatus true
+
+  sync_join "concurrent_modify_done" $timeout
+  sync_join "finish_sync" $timeout
+  chdir $currentDir
+
+  echo Stress process done.
+  echo
+END_PROC
+
+set stat_Proc proc END_PROC
+
+  echo
+  echo Stat those linknames.
+
+  getwd workDir
+  chdir $testDir
+
+  sync_join "begin_sync" $timeout
+  
+  sync_join "hardlink_done" $timeout
+
+  loop x 1 1 $loopTimes
+    set linkName ( "tmpfile" + @x )
+    stat @linkName var[@x]
+    if ( @var[@x].st_nlink != 2 ) {
+      echo FAILED: Hardlink failed to increase the loink count.
+    }
+  endloop
+
+  sync_join "unlink_create" $timeout
+  sync_join "concurrent_modify" $timeout
+  loop x 1 1 $loopTimes
+    set fileName ( "modfyfile" + @x )
+    open @fileName (@O_CREAT|@O_RDWR) 0777 fileId[@x]
+    write @fileId[@x] @fileName
+    close @fileId[@x]
+  endloop
+
+  sync_join "concurrent_modify_done" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    stat @fileName var[@x]
+    if ( @var[@x].st_nlink != 2 ) {
+      echo FAILED: Hardlink failed to increase the loink count.
+    }
+  endloop
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo Stat process done.
+  echo
+END_PROC
+
+
+****************************************************************************
+* Check spokes.
+if ( $ITL_nspokes < 3 ) {
+  echo FAILED: You need at least three spokes to run the test.
+  quit
+}
+
+chdir $testDir
+
+* Create a set of files prepared to hardlinked by test/stress.
+loop x 1 1 $loopTimes
+  set fileName ( $testFile + $x )
+  open $fileName ($O_CREAT|$O_RDWR) 0777 fileId[$x]
+  write $fileId[$x] $fileName
+  close $fileId[$x]
+endloop
+
+loop loopVar 1 1 $loopTimes
+
+!* Dispatch procedures among spokes (test, stress, and stat).
+rexec_async $ITL_spoke[0] test_Proc result[0] asyncVar[0]
+rexec_async $ITL_spoke[1] stress_Proc result[1] asyncVar[1]
+
+loop x 2 1 ($ITL_nspokes-1)
+  rexec_async $ITL_spoke[$x] stat_Proc result[$x] asyncVar[$x]
+endLoop
+
+!* Create and release sync variables.
+sync_create "begin_sync" $ITL_nspokes $timeout
+sync_release "begin_sync"
+
+sync_create "hardlink_done" $ITL_nspokes $timeout
+sync_release "hardlink_done"
+
+sync_create "unlink_create" $ITL_nspokes $timeout
+sync_release "unlink_create"
+
+sync_create "concurrent_modify" $ITL_nspokes $timeout
+sync_release "concurrent_modify"
+
+sync_create "concurrent_modify_done" $ITL_nspokes $timeout
+sync_release "concurrent_modify_done"
+
+sync_create "finish_sync" $ITL_nspokes $timeout
+sync_release "finish_sync"
+
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+endloop
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+quit
+

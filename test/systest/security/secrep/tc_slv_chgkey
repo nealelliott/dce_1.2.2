@@ -1,0 +1,136 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: tc_slv_chgkey,v $
+# Revision 1.1.2.2  1996/03/09  20:52:25  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:58  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:56  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:32 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  20:18 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:54 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  19:39 UTC  gordon_l
+# 	Fixes for change_master/becom
+# 	e_master
+# 	[1995/12/11  22:22:42  root]
+# 
+# Revision 1.1.2.2  1993/08/02  17:41:31  sekhar
+# 	Replication system test. Initial version
+# 	[1993/08/02  17:31:58  sekhar]
+# 
+# $EndLog$
+#
+
+if [ -z "${TC_SLV_CHGKEY_DEFINED}" ] ; then
+
+TC_SLV_CHGKEY_DEFINED=1
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  DESCRIPTION: 
+#      This test case is part of the security replication system test
+#      and tests that the master key can be successfully changed using
+#      the sec_admin change key command.
+#
+#      The test is done as follows:
+#      1.  The update test is first run to add add princs, groups etc.
+#      2.  The master key on each of the slaves is changed.
+#      3.  The rgylogin and query test are run on each slave.
+#          The query test binds to the slave on which it is run.
+#          Both rgylogin and query tests should pass even after the
+#          master key has been changed.
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+tet_startup="tc_slv_chgkey_init"
+tet_cleanup="tc_slv_chgkey_cleanup"
+tet_testlist="tc_slv_chgkey"
+
+iclist="ic1"
+ic1="tc_slv_chgkey"
+
+tc_slv_chgkey_init()
+{
+    typeset st
+    tet_infoline "............... Test: tc_slv_chgkey"
+    tc_common_init ; st=$?
+    if [ $st -ne 0 ] ; then
+        tet_delete $ic1 "tc_slv_chgkey_init(): Initialization failed"
+        return 
+    fi
+    #   Run the update test to add princ, groups etc to the registry
+    #   These will required to run the rgylogin and query tests.
+
+    tc_common_upd "${REP_HOSTNAMES[*]}" $RGYLOGIN_NPRINC ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult  "$testdesc" $st
+        return
+    fi
+}
+
+tc_slv_chgkey_cleanup()
+{
+    sft_cleanup
+    tc_common_cleanup
+}
+
+tc_slv_chgkey()
+{
+    typeset st i
+
+    testdesc="Changing master key"
+    replog_testhdr "$testdesc"
+
+#   change the master key on all the replicas
+
+    sa_change_key "${REP_NAMES[*]}" ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+#   ensure that logins and queries to each slave are 
+#   still successful after the keys has been changed.
+
+    sft_x_query_hosts         "${REP_HOSTNAMES[*]}" "${REP_NAMES[*]}"
+    sft_x_rgylogin_hosts      "${REP_HOSTNAMES[*]}" $RGYLOGIN_NPRINC
+    tc_wait_bgjobs "query and rgylogin tests"
+
+    sft_v_rgylogin_hosts "${REP_HOSTNAMES[*]}" ; st1=$?
+    sft_v_query_hosts    "${REP_HOSTNAMES[*]}" ; st2=$?
+
+    st=0
+    if [[ $st1 -ne 0 || $st2 -ne 0 ]] ; then
+        st=1 
+    fi
+    replog_testresult  "$testdesc" $st 
+    return
+}
+
+. $TET_ROOT/profile.dcest
+. ./profile
+. $PHOME/replog
+. $PHOME/tc_common
+. $PHOME/sft
+. $PHOME/slv
+. $TCM
+#. $TET_ROOT/lib/xpg3sh/tcm.sh
+
+fi

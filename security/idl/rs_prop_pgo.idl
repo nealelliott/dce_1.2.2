@@ -1,0 +1,196 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rs_prop_pgo.idl,v $
+ * Revision 1.1.8.1  1996/05/10  13:18:42  arvind
+ * 	Drop 1 of DCE 1.2.2 to OSF
+ *
+ * 	HP revision /main/DCE_1.2/1  1996/03/27  17:46 UTC  hanfei
+ * 	merge in global group work for DCE 1.2.2
+ *
+ * 	HP revision /main/hanfei_dce1.2_b1/2  1996/03/14  19:00 UTC  hanfei
+ * 	multi-cell group work: add rs_prop_pgo_add_member_global().
+ *
+ * 	HP revision /main/hanfei_dce1.2_b1/1  1996/02/29  16:22 UTC  hanfei
+ * 	add cell and principal uuid arrays as arg in (r)rs_prop_pgo_add_member().
+ * 	[1996/05/09  20:52:04  arvind]
+ *
+ * Revision 1.1.4.2  1993/08/04  13:37:54  cuti
+ * 	Insert dce/ in front of imported file name
+ * 	[1993/08/03  20:51:58  cuti]
+ * 
+ * Revision 1.1.2.3  1992/12/29  13:31:12  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:49:00  zeliff]
+ * 
+ * Revision 1.1.2.2  1992/08/31  18:21:19  sekhar
+ * 	First replication code drop.
+ * 	[1992/08/31  17:49:08  sekhar]
+ * 
+ * $EndLog$
+ */
+
+/*
+ * Copyright (c) Hewlett-Packard Company 1992
+ * Unpublished work. All Rights Reserved.
+ *
+ *  NAME:
+ *
+ *      rs_prop_pgo.idl
+ *
+ *  FACILITY:
+ *
+ *      Security 
+ *
+ *  ABSTRACT:
+ *
+ *      Registry server propagation interface - PGO items
+ */
+
+[
+    uuid(c23626e8-de34-11ca-8cbc-08001e0394c7),
+    version(1.0),
+    pointer_default(ptr)
+]
+
+interface rs_prop_pgo
+
+{
+    import 
+        "dce/rgynbase.idl",
+        "dce/rplbase.idl";
+
+    /* 
+     * data type used for bulk pgo add propagations during initialization    
+     */
+    typedef  struct  {
+    	sec_rgy_name_t        name;
+        sec_rgy_pgo_item_t    item;
+        sec_rgy_foreign_id_t  client;   /* client that originated the update */
+    }  rs_prop_pgo_add_data_t;    
+
+
+    /*
+     * rs_prop_pgo_add
+     */
+    void  rs_prop_pgo_add (
+        [in]        handle_t                  h,
+        [in]        sec_rgy_domain_t          domain,
+        [in]        unsigned32                num_pgo_items,
+        [in, size_is(num_pgo_items)]
+                    rs_prop_pgo_add_data_t    pgo_items[],
+        [in, ref]   rs_replica_master_info_t  * master_info,
+        [in]        boolean32                 propq_only,
+        [out]       error_status_t            * status
+    );
+    
+    /*
+     * rs_prop_pgo_delete 
+     */
+    void rs_prop_pgo_delete (
+        [in]       handle_t                  h, 
+        [in]       sec_rgy_domain_t          domain,
+        [in, ref]  sec_rgy_name_t            name,
+        [in]       sec_timeval_sec_t         cache_info,
+        [in, ref]  rs_replica_master_info_t  * master_info,
+        [in]       boolean32                 propq_only,
+        [out]      error_status_t            * status
+    );
+    
+    /*
+     * rs_prop_pgo_rename 
+     */
+    void  rs_prop_pgo_rename (
+        [in]       handle_t                   h,
+        [in]       sec_rgy_domain_t           domain,
+        [in, ref]  sec_rgy_name_t             old_name,
+        [in, ref]  sec_rgy_name_t             new_name,
+        [in]       sec_timeval_sec_t          cache_info,
+        [in, ref]  rs_replica_master_info_t   * master_info, 
+        [in]       boolean32                  propq_only,
+        [out]      error_status_t             * status
+    );                                        
+    
+    /*
+     * rs_prop_pgo_replace 
+     */
+    void  rs_prop_pgo_replace (
+        [in]       handle_t                  h,
+        [in]       sec_rgy_domain_t          domain,
+        [in, ref]  sec_rgy_name_t            name,
+        [in, ref]  sec_rgy_pgo_item_t        * item,
+        [in]       sec_timeval_sec_t         cache_info,
+        [in, ref]  rs_replica_master_info_t  * master_info,
+        [in]       boolean32                 propq_only,
+        [out]      error_status_t            * status
+    );
+    
+
+    /*
+     * rs_prop_pgo_add_member
+     */
+    void  rs_prop_pgo_add_member (
+        [in]       handle_t                  h,
+        [in]       sec_rgy_domain_t          domain,
+        [in]       sec_rgy_name_t            go_name,
+        [in]       unsigned32                num_members,
+        [in, size_is(num_members)]
+                   sec_rgy_member_t          members[],
+        [in, ref]  rs_replica_master_info_t  * master_info,
+        [in]       boolean32                 propq_only,
+        [out]      error_status_t            * status
+    );
+
+    /*
+     * rs_prop_pgo_add_member_global
+     *
+     *	This function is a superset of rs_prop_pgo_add_member().
+     *	It can handle adding both global and local prinicpals
+     *	for group member.  We keep rs_prop_pgo_add_member()
+     *	for migration purpose.
+     *	This fucntion has been modified so two new
+     *	arguments, cell_uuids and princ_uuids, are
+     *	added.  This change is for multi-cell group
+     *	( global group ) work because members can
+     *	be foreign principals and when addng these
+     *	members, the uuids information is required
+     *	at the replica. ( we cannot count on the foreign 
+     *	cell that the foreign principals belongs to is 
+     *	up when propogation is carried at the replica. )
+     */
+    void  rs_prop_pgo_add_member_global (
+        [in]       handle_t                  h,
+        [in]       sec_rgy_domain_t          domain,
+        [in]       sec_rgy_name_t            go_name,
+        [in]       unsigned32                num_members,
+        [in, size_is(num_members)]
+                   sec_rgy_member_t          members[],
+	[in, size_is(num_members)]
+		   uuid_p_t		     cell_uuids[],
+	[in, size_is(num_members)]
+		   uuid_p_t		     princ_uuids[],
+        [in, ref]  rs_replica_master_info_t  * master_info,
+        [in]       boolean32                 propq_only,
+        [out]      error_status_t            * status
+    );
+    
+    /*
+     * rs_prop_pgo_delete_member
+     */
+    void  rs_prop_pgo_delete_member (
+        [in]       handle_t                  h,
+        [in]       sec_rgy_domain_t          domain,
+        [in, ref]  sec_rgy_name_t            go_name,
+        [in, ref]  sec_rgy_name_t            person_name,
+        [in, ref]  rs_replica_master_info_t  * master_info,
+        [in]       boolean32                 propq_only,
+        [out]      error_status_t            * status
+    );
+     
+}

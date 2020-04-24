@@ -1,0 +1,79 @@
+#!/bin/csh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: _testall,v $
+# Revision 1.1.4.2  1996/03/11  01:38:40  marty
+# 	Update copyright years
+# 	[1996/03/10  19:41:35  marty]
+#
+# Revision 1.1.4.1  1995/12/11  16:56:13  root
+# 	Submit
+# 	[1995/12/11  16:40:39  root]
+# 
+# Revision 1.1.2.6  1994/08/17  11:51:42  marrek
+# 	Use uname -n .
+# 	[1994/08/17  07:37:10  marrek]
+# 
+# Revision 1.1.2.5  1994/07/06  15:54:15  marrek
+# 	Add version string in July 1994 code drop.
+# 	[1994/07/06  15:42:44  marrek]
+# 
+# Revision 1.1.2.4  1994/06/21  14:29:40  marrek
+# 	June 1994 code submission.
+# 	[1994/06/16  07:50:49  marrek]
+# 
+# Revision 1.1.2.3  1994/06/10  20:24:47  devsrc
+# 	cr10872 - fixed copyright
+# 	[1994/06/10  17:00:53  devsrc]
+# 
+# Revision 1.1.2.2  1994/05/18  22:10:13  zeliff
+# 	ot10647: supply path prefix for xt_test and test scripts
+# 	[1994/05/15  20:45:21  zeliff]
+# 
+# Revision 1.1.2.1  1994/05/10  14:39:42  marrek
+# 	Add shell interpreter in first line.
+# 	[1994/05/09  09:13:26  marrek]
+# 
+# 	Created in April 1994 submission.
+# 	[1994/05/03  12:17:47  marrek]
+# 
+# $EndLog$
+#
+# $RCSfile: _testall,v $ $Revision: 1.1.4.2 $ $Date: 1996/03/11 01:38:40 $
+#
+
+if (-e /usr/bin/echo) then
+	set ECHO=/usr/bin/echo
+else
+	set ECHO=echo
+endif
+if !($?XT_TEST_FLAGS) then
+	set XT_TEST_FLAGS =
+endif
+set resultfile = ../../$1.`uname -n`.result
+$XT_TEST_PATH/xt_test -0 |& tee $resultfile
+$ECHO `pwd` |& tee -a $resultfile
+$ECHO "   on `uname -n` `uname -s` \[`date`\]" |& tee  -a $resultfile
+$ECHO " " |& tee -a $resultfile
+if ($?XT_TEST_FLAGS) then
+	echo XT_TEST_FLAGS = $XT_TEST_FLAGS|& tee  -a $resultfile
+else
+	echo XT_TEST_FLAGS not set | tee -a $resultfile
+endif
+foreach file (*b *i *v *[0-9]s)
+	set logfile = ${file}.`uname -n`.log
+	$ECHO  "\t\t\t\t    $file\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"
+	$XT_TEST_PATH/xt_test $XT_TEST_FLAGS -i $file >&! $logfile
+	set keepstatus = $status
+	$API_SCRIPTS/result $file |& tee -a $resultfile
+	if ($keepstatus) then
+		$ECHO cleaning tree
+		$API_SCRIPTS/cleantree
+	endif
+end

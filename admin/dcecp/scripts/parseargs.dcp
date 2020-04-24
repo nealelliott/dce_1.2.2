@@ -1,0 +1,315 @@
+# @OSF_COPYRIGHT@
+#  COPYRIGHT NOTICE
+#  Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+#  ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+#  the full copyright text.
+# 
+# HISTORY
+# $Log: parseargs.dcp,v $
+# Revision 1.1.4.2  1996/03/09  23:06:38  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:25:28  marty]
+#
+# Revision 1.1.4.1  1995/12/08  21:24:27  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/3  1995/10/17  15:39 UTC  kevins
+# 	Merge chfts15887 into HPDCE02
+# 
+# 	HP revision /main/HPDCE02/kevins_chfts15887/1  1995/10/17  15:37 UTC  kevins
+# 	Need to modify the method for setting script debuging variable.
+# 
+# 	HP revision /main/HPDCE02/2  1995/02/02  15:37 UTC  truitt
+# 	Merge.
+# 
+# 	HP revision /main/HPDCE02/truitt_dcecp_chfts07/1  1995/02/02  15:35 UTC  truitt
+# 	CHFts14262: Align the script help messages with those
+# 	from the compiled commands.
+# 
+# 	HP revision /main/HPDCE02/1  1994/12/08  17:33 UTC  truitt
+# 	Initial HPDCE02 branch.
+# 
+# 	HP revision /main/truitt_dcecp_msg_chk/1  1994/12/08  17:32 UTC  truitt
+# 	Fix parsing messages.
+# 	[1995/12/08  17:57:57  root]
+# 
+# Revision 1.1.2.7  1994/09/29  17:50:25  kevins
+# 	OT 12409 make parseargs support help -verbose
+# 	[1994/09/29  17:37:47  kevins]
+# 
+# Revision 1.1.2.6  1994/09/22  18:34:04  kevins
+# 	OT 12296 modified task script debug entries
+# 	[1994/09/22  18:26:13  kevins]
+# 
+# Revision 1.1.2.5  1994/08/08  18:07:36  kevins
+# 	OT 11577 Removed all calls to _dcp_debug
+# 	[1994/08/08  16:04:00  kevins]
+# 
+# Revision 1.1.2.4  1994/08/03  21:00:40  kevins
+# 	OT 11478 Reworked help sub-processing
+# 	[1994/08/03  20:42:48  kevins]
+# 
+# Revision 1.1.2.3  1994/06/26  14:08:30  kevins
+# 	OT 11080 fixed verb help processing
+# 	[1994/06/26  13:56:30  kevins]
+# 
+# Revision 1.1.2.2  1994/06/22  19:16:18  kevins
+# 	OT11037 modified parser variable names
+# 	[1994/06/22  19:16:02  kevins]
+# 
+# Revision 1.1.2.1  1994/06/21  20:26:56  kevins
+# 	OT 11017 Initial submission of parseargs.dcp
+# 	[1994/06/21  20:26:05  kevins]
+# 
+# $EndLog$
+
+if { [ info globals PARSEARGS_DEBUG ] == "" } {
+    set PARSEARGS_DEBUG 0
+}
+
+#
+# _dcp_split_options is a parsing procedure to split the argument list
+# into an argc, argv variables. 
+#
+# argc = an integer indicating the number of arguments 
+# argv = a character array argv(0), argv(1)... that contain all of the 
+#        arguments passed in. 
+#
+
+
+proc _dcp_split_options {arg_options argc argv} {
+  upvar 1 argv margv
+  upvar 1 argc margc
+
+
+  set margc [llength $arg_options]
+  set i 0
+  while { $i < $margc } {
+    set margv($i) [lindex $arg_options $i]
+    incr i
+  }
+}
+
+# 
+# proc parseargs - parses the arguments passed in according to 
+#      the parse options. The proc also takes a few flags. 
+#
+# parse_options - is an arg table describing the parsing options.
+#		  the general form of parse_options is:
+#                 parse_options {
+#			{-switch type    variable "help string"}
+#			{verb    command variable command_name "help string"}}
+#      Where:
+#        -switch - is the actual string value of the switch to be parsed.
+#        type    is the type of variable to be associated with -switch
+#		 acceptable types are: integer, string, float, boolean, command,
+#                help, operations
+#        variable - is the name of the variable which will hold the value of the
+#		  switch. That is, in the option "-switch value" variable 
+#                 would contain "value".
+#        help string - is the string which describes the option.
+#
+#        verb -  This is for second level parsing. Typically a command 
+#                contains an object and a verb. The verb portion 
+# 		 generally calls another proc.
+#        command_name - is simply the proc name to store in the variable 
+#
+# local_args - these are the arguments to be parsed. All of the recognized 
+#              entries are parsed out and local_args is reset with the 
+#              values that were not parsable. 
+#
+# args - This can, currently, take a couple of flags.
+#          -found_one This flag will tell the parser that when one proc 
+#	              argument has been found return. So the parser would
+#		      in "user create" return after create command had been 
+#                     found and processed.
+#          -no_leftovers This flag will cause an error to be generated if more
+#                        than one leftover option is found. 
+#
+# The only time, currently, that parseargs returns useful message, besides 
+# after an error. is when help or operations are type are requested. In this 
+# situation the help or operation string are returned. Help also has an option
+# '-verbose' which is not imbedded in the arg table. This option requires that 
+# a variable in the calling funtion, typically a noun, is defined with the 
+# verbose message. Currently that variable is called 'verbose_prose'. 
+# 
+
+proc parseargs {parse_options local_args args} {
+
+
+  upvar 1 local_args _dcp_args
+  if { [llength $_dcp_args] == 0 } { return }
+
+  _dcp_split_options $_dcp_args argc argv
+  set _dcp_found_one 0
+  set _dcp_no_leftovers 0
+  set _dcp_help ""
+  set _dcp_operations ""
+
+  foreach _dcp_parse_option $parse_options {
+     set arg_table_length [llength $_dcp_parse_option]
+     if { $arg_table_length <= 2 || $arg_table_length >= 6} {
+       error "Parser \"option\" definition is invalid."
+     }
+
+     # set the oprations list
+     lappend _dcp_operations [lindex $_dcp_parse_option 0] 
+
+     # set the help list
+     set _dcp_list_size [expr [llength $_dcp_parse_option] - 1 ]
+     set _dcp_temp1 [lindex $_dcp_parse_option 0] 
+     set _dcp_temp2 [lindex $_dcp_parse_option $_dcp_list_size]
+     set _dcp_help [format "%s%-19s %s \n" $_dcp_help  $_dcp_temp1 $_dcp_temp2]
+     
+     # setup a local variable that represents the calling proc variable 
+     # for the option. 
+
+     upvar 1 [lindex $_dcp_parse_option 2] local_[lindex $_dcp_parse_option 2]
+     set _dcp_parse_option [lreplace $_dcp_parse_option 2 2 \
+	                   local_[lindex $_dcp_parse_option 2]]
+     set [lindex $_dcp_parse_option 0] $_dcp_parse_option
+  }
+
+  if {[llength $_dcp_help] > 0} { set _dcp_help [string trimright $_dcp_help]}
+
+  # check to see if this is a second level request for help 
+  set _dcp_current_level [info level]
+  if { $_dcp_current_level > 3 } { 
+    set _dcp_recurse_level [expr $_dcp_current_level - 2]
+    set _dcp_parse_proc_check [info level $_dcp_recurse_level]
+    set _dcp_proc_name [lindex $_dcp_parse_proc_check 0]
+    if { [string compare  $_dcp_proc_name parseargs] == 0 } {
+       upvar 2 transfer_help second_level_help
+       upvar 1 help_prose _dcp_tmp_help
+       set _dcp_tmp_help ""
+       set second_level_help $_dcp_help
+       return 
+     }
+  }
+
+  # check/set the flags.
+  set i 0
+  set _dcp_parse_left_over 0
+  if { [lsearch $args -found_one] != -1 } { set _dcp_found_one 1 }
+  if { [lsearch $args -no_leftovers] != -1} { set _dcp_no_leftovers 1 }
+
+  # process each of the options 
+  while { $i < $argc } {
+    _dcp_parseargs_debug "i = $i, argc = $argc, argv = $argv($i)"
+    set _dcp_parse_option [ info locals $argv($i)* ]
+    if {[llength $_dcp_parse_option] == 0} {
+      if { $_dcp_parse_left_over == 1} {
+	error "Unknown option \"$argv($i)\"."
+      } elseif { $_dcp_found_one || !$_dcp_no_leftovers } {
+	set _dcp_parse_left_over 0
+      } else {
+	set _dcp_parse_left_over 1
+      }
+    } elseif {[llength $_dcp_parse_option] > 1} {
+      error "Ambiguous option \"$argv($i)\" could be: $_dcp_parse_option."
+    } else {
+        if { [string compare \
+             [lindex [set $_dcp_parse_option] 1] boolean] == 0 } {
+	  set argv($i) "1"
+        } elseif { [string compare \
+                   [lindex [set $_dcp_parse_option] 1] string] == 0 } {
+	  if { [expr $i + 1] == $argc } {
+             error "Option \"$argv($i)\" requires a string argument."
+          } else {
+             set argv($i) ""
+             incr i
+          }
+	} elseif {[string compare [lindex [set $_dcp_parse_option] 1] integer] == 0 } {
+	  if { [expr $i + 1] == $argc } {
+             error "Option \"$argv($i)\" requires an integer argument."
+          } else {
+             set argv($i) ""
+             incr i
+	     set _dcp_temp $argv($i)
+	     if { [catch  { incr _dcp_temp } msg] != 0 } {
+	       error $msg
+             }
+	   }
+	} elseif { [string compare [lindex [set $_dcp_parse_option] 1] float] == 0 } {
+	  if { [expr $i + 1] == $argc } {
+             error "Option \"$argv($i)\" requires a floating point argument."
+          } else {
+             set argv($i) ""
+             incr i
+	     set _dcp_temp $argv($i)
+	     if { [scan $_dcp_temp "%f" _dcp_temp2] != 1 } {
+	       error "Variable \"$_dcp_temp\" is not a valid floating point number."
+             }
+	   }
+        } elseif { [string compare [lindex [set $_dcp_parse_option] 1] command] == 0 } {
+	  set argv($i) ""
+          set [lindex [set $_dcp_parse_option] 2] [lindex [set $_dcp_parse_option] 3]
+       	  if { $_dcp_found_one == 1 } {
+	    set j 0
+	    set _dcp_args ""
+	    while { $j < $argc } {
+              if { [string length $argv($j)] > 0 } {
+		lappend _dcp_args $argv($j)
+              }
+	      incr j
+	    }
+            return
+	  }
+        } elseif {[string compare [lindex [set $_dcp_parse_option] 1] operations ]==0} {
+          upvar 1 help_prose _dcp_operations_information
+          set _dcp_operations_information  $_dcp_operations
+	  return
+	} elseif {[string compare \
+                  [lindex [set $_dcp_parse_option] 1] help ] == 0} {
+          _dcp_parseargs_debug "Processing help"
+          upvar 1 help_prose transfer_help
+          upvar 1 verbose_prose _dcp_verbose_help_prose 
+          set transfer_help $_dcp_help
+	  if { $argc == [expr $i + 2] } {
+            incr i
+            set _dcp_prsr_hlp_func [ info locals $argv($i)* ]
+            _dcp_parseargs_debug "help argument $argv($i)"
+            if { [string match $argv($i)* -verbose ] == 1} {
+              if { [info exists _dcp_verbose_help_prose] == 0 } {
+                  error "No verbose help for this command."
+              }
+              set transfer_help $_dcp_verbose_help_prose
+              return
+            }
+            if { [llength $_dcp_prsr_hlp_func] == 0 } {
+              error "Unknown help option \"$argv($i)\"."
+            }
+            if {[string compare \
+                        [lindex [set $_dcp_prsr_hlp_func] 1] command]==0 } {
+              return [[lindex [set $_dcp_prsr_hlp_func] 3] " " ]
+            } else { set transfer_help "" }
+           
+          }
+          return 
+	}
+	set [lindex [set $_dcp_parse_option] 2]  $argv($i)
+	set argv($i) ""
+    }
+    incr i
+  }
+  set j 0
+  set _dcp_args ""
+  while { $j < $argc } {
+    if { [string length $argv($j)] > 0 } {
+      lappend _dcp_args $argv($j)
+    }
+    incr j
+  }
+  return
+
+}
+
+proc _dcp_parseargs_debug {args} {
+    global PARSEARGS_DEBUG
+
+    if {$PARSEARGS_DEBUG != 0} {
+	puts stderr "DEBUG: [lindex [info level [expr [info level] - 1]] 0]:\
+                             [string range $args 1 \
+                             [expr [string length $args] - 2]]"
+    }
+}

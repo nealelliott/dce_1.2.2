@@ -1,0 +1,148 @@
+#!/bin/sh
+
+#
+# @OSF_COPYRIGHT@
+#
+
+# 
+# HISTORY
+# $Log: runacltest2,v $
+# Revision 1.1.2.2  1993/01/28  21:35:02  shl
+# 	Transarc delta: rajesh-ot6318-acl-recovery-test 1.7
+# 	  Selected comments:
+# 	    Test recovery for correct restoration of acls.
+# 	    Another checkpoint since I am upgrading to dfs-102-2.2.
+# 	    Needed to import another delta.
+# 	    Since the acl tests should not be run as root, but checkaggr needs
+# 	    to be run as root, modifications were needed. The main program acldriver
+# 	    is to be invoked as root, with the name of the local/DCE user to run the
+# 	    ACL tests as specified via an environment variable. The user's DCE passwd
+# 	    is specified likewise. The remaining programs are invoked as necessary.
+# 	    The shell script runacltest executes this shell script after acquiring DCE
+# 	    credentials of a regular DCE user. This shell script actually invokes
+# 	    the ACL test driver to run the acl tests in a loop. A specific number
+# 	    of loop iterations can be specified via environment variable NUMTIMES.
+# 	    A value of -1 for NUMTIMES means loop forever.
+# 	    Add support for running multiple copies of ACL tests on different
+# 	    filesets in the same aggregate simultaneously.
+# 	    See above.
+# 	    Debug support code added in previous revision of this delta.
+# 	    Debug and remove bugs in the support code added by the previous revision
+# 	    of this delta.
+# 	    Miscellaneous changes to increase robustness and quality.
+# 	    Message format changes. Save the results dir for each  iteration of acl test.
+# 	[1993/01/27  23:15:10  shl]
+#
+# $EndLog$
+#
+
+#
+# Env. variables reqd.
+# ACLTESTDIR - dir containing driver.sh, scripts and utils dir
+# NUMTIMES   - number of iterations of ACL tests
+# NUMSETS    - number of concurrent sets of ACL tests in each iteration
+#
+
+# Start a set of ACL tests
+# $1 == iteration number 
+runsets()
+{
+	iterationnum=$1;
+	setnum=1;
+	while [ $setnum -le $NUMSETS ]
+	do
+		cd "set${setnum}" ; 
+		logfile="output.set${setnum}.iteration${iterationnum}"
+		echo "%%% Starting ACL test iteration $iterationnum, number $setnum, logfile is $logfile \n"
+		( 
+			echo "!!! Process # $$ executing ACL test set $setnum";
+			runtest $setnum $iterationnum 
+			sleep 5
+			mv results results.$iterationnum
+		) >$logfile 2>&1 &
+		echo "%%% Completed ACL test iteration $iterationnum, set number $setnum, logfile was $logfile \n"
+		cd $ACLTESTDIR
+		setnum=`expr $setnum + 1`
+		sleep 5
+	done
+	wait
+}	
+
+# Start iteration of ACL tests
+# $1 = set number
+# $2 iteration number
+runtest ()
+{
+	echo; echo; echo;
+	echo "### $0: Begin iteration $2, set $1 of acl tests"
+	find scratch/* -exec acl_edit {} -n -m user_obj:rwxcid \;
+	rm -rf scratch/*
+	if [ $DEBUG -eq 1 ] 
+	then	
+		$ACLTEST -exectrace 
+	else 
+		$ACLTEST  
+	fi 	
+	if [ $? -ne 0 ] 
+	then
+		echo "### $0: FAILED ACL test iteration $2, set $1 exiting"
+		exit 1	
+	fi
+	echo "### $0: End iteration $2, set $1 of acl tests"
+}
+
+echo; echo
+echo "### $0: starting"
+
+[ $DEBUG ] && set -x;
+
+ACCESSTEST="accheck";
+SYSCALLTEST="syscalls";
+CHMODTEST="chmodtest";
+GETSETTEST="getset";
+ACLSIZETEST="sizetest";
+INHERITTEST="inherit";
+ENTIRETEST="";
+export ACCESSTEST SYSCALLTEST CHMODTEST GETSETTEST ACLSIZETEST INHERITTEST ENTIRETEST
+
+if [ "${DEBUG}" ] 
+then
+	echo "### $0: Local identity `whoami`"
+	echo "### $0: DCE identity is: "
+	klist
+	echo "### $0: End identity"
+	echo
+fi
+
+cd $ACLTESTDIR
+echo  "### $0: $ACLTEST ###"
+echo; echo; echo;
+
+i=1;
+# Run test infinitely if NUMTIMES = -1 else specified number of times
+if [ $NUMTIMES -eq -1 ]
+then
+	while [ 1 ] 		
+	do
+		echo; echo "### $0: Starting ACL test iteration $i."; echo
+		runsets $i;
+		wait
+		echo; echo "### $0: Completed ACL test iteration $i."; echo
+		i=`expr $i + 1`;			
+	done
+else 
+
+	while [ $i -le $NUMTIMES ] 
+	do
+		echo; echo "### $0: Starting ACL test iteration $i."; echo
+		runsets $i;
+		wait
+		echo; echo "### $0: Completed ACL test iteration $i."; echo
+		i=`expr $i + 1`;				
+	done
+fi
+i=`expr $i - 1`;				
+wait
+echo "### $0: acl tests - $i iterations completed"
+
+

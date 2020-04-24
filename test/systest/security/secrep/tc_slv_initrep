@@ -1,0 +1,113 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: tc_slv_initrep,v $
+# Revision 1.1.2.2  1996/03/09  20:52:28  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:30:02  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:48:03  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:33 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  20:25 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:54 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  19:40 UTC  gordon_l
+# 	Fixes for change_master/becom
+# 	e_master
+# 	[1995/12/11  22:22:45  root]
+# 
+# Revision 1.1.2.3  1993/08/03  15:35:32  sekhar
+# 	Source $PHOME/tc_common .
+# 	[1993/08/03  15:35:11  sekhar]
+# 
+# Revision 1.1.2.2  1993/08/02  17:41:57  sekhar
+# 	Replication system test. Initial version
+# 	[1993/08/02  17:32:41  sekhar]
+# 
+# $EndLog$
+#
+
+#  History of changes :
+#      
+if [ -z "${TC_SLV_INITREP_DEFINED}" ] ; then
+
+TC_SLV_INITREP_DEFINED=1
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  DESCRIPTION:
+#      This test case is part of the security replication system test
+#      and tests that a slave can be initialized forcibly using the
+#      sec_admin command initrep .
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+tet_startup="tc_slv_initrep_init"
+tet_cleanup="tc_slv_initrep_cleanup"
+tet_testlist="tc_slv_initrep"
+
+iclist="ic1"
+ic1="tc_slv_initrep"
+
+tc_slv_initrep_init()
+{
+    typeset st
+    tet_infoline "............... Test: tc_slv_initrep"
+    tc_common_init ; st=$?
+    if [ $st -ne 0 ] ; then
+        tet_delete $ic1 "tc_slv_initrep_init(): Initialization failed"
+        return 
+    fi
+    if [ $SLV_CNT -eq 0 ] ; then
+        tet_delete $ic1 "tc_slv_initrep_init(): Test requires at least one slave in the cell"
+        return 
+    fi
+}
+
+tc_slv_initrep_cleanup()
+{
+    tc_common_cleanup
+}
+
+
+tc_slv_initrep()
+{
+    typeset st slvhost slvnm
+
+    testdesc="Initrep replica" ; replog_testhdr "$testdesc"
+ 
+    slvhost=${SLV_HOSTNAMES[0]} ; slvnm=${SLV_NAMES[0]}
+
+    sa_initrep $slvnm ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    sa_wait_prop_complete "${SLV_NAMES[*]}" ; st=$?
+    replog_testresult "$testdesc" $st
+}
+. $TET_ROOT/profile.dcest
+. ./profile
+. $PHOME/replog
+. $PHOME/tc_common
+. $PHOME/slv
+. $TCM
+#. $TET_ROOT/lib/xpg3sh/tcm.sh
+
+fi

@@ -1,0 +1,246 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: afsvl_data.idl,v $
+ * $EndLog$
+ */
+/*
+*/
+/* Copyright (C) Transarc Corporation 1996, 1995, 1991--All Rights Reserved */
+
+interface afsvl_data
+{
+
+	import "dcedfs/common_data.idl";		/* global datatypes */
+
+/*
+ * This package is also excerpted in afsvl_data.idl, which must be changed
+ * whenever this file is changed.
+ */
+
+/* Current limitations on parameters that affect other packages (i.e. volume) */
+	const	short int MAXFTNAMELEN	=	112;
+	const	short int MAXNSERVERS	=	16;
+	const	short int MAXTYPES	=	3;
+	const	short int MAXVOLTYPES	=	8;
+	const	short int MAXKPRINCIPALLEN =	64;
+	const	short int MAXLOCKNAMELEN =	64;
+	/* max interfaces per site: */
+	const	short int ADDRSINSITE	=	4;
+	const	short int MAXBULKLEN    =	25;
+	const	short int MAXVLCELLCHARS =	128;
+	const	short int MAXVLHOSTCHARS =	64;
+	const	short int MAXVLHOSTSPERCELL = 	64;
+
+/*
+ * Complete server info for one cell.  An RPC mimic of ``struct afsconf_cell''.
+ */
+	typedef struct {byte hstnam[MAXVLHOSTCHARS];} hostnam;
+	typedef struct vlconf_cell {
+	    byte name[MAXVLCELLCHARS];		/*Cell name*/
+	    afsHyper CellID;			/* identifier for that cell */
+	    unsigned32 numServers;		/*Num active servers for the cell*/
+	    afsNetAddr hostAddr[MAXVLHOSTSPERCELL]; /*addresses for cell's servers*/
+	    hostnam hostName[MAXVLHOSTSPERCELL];	/*Names for cell's servers*/
+	    unsigned32 spare1;
+	    unsigned32 spare2;
+	    unsigned32 spare3;
+	    unsigned32 spare4;
+	    unsigned32 spare5;
+	} vlconf_cell;
+
+	typedef struct {
+		byte text[MAXKPRINCIPALLEN];
+	}  kerb_princ_name;
+
+/* External (visible) representation of an individual vldb entry
+ *
+ * Some explaination is in order here, because there are some non-obvious
+ * fields and some implicit structuring; only those are described.
+ * ---------------------------------------------------------------------------
+ * VolIDs[] - unique (cell-wide) volume instance IDs.
+ * VolTypes[] - a value representing a volume instance type, defined via
+ *     VOLTIX_TO_VOLTYPE().
+ *
+ *  The pair (VolIDs[i], VolTypes[i]) defines the type of a volume instance ID.
+ *  For a given volume, each instance type is associated with exactly one ID.
+ *  Currently, only the three (RW/RO/BACK) volume instance types are defined.
+ *  A pair (VolIDs[i], VolTypes[i]) is valid when VolIDs[i] != 0,,0.
+ *
+ *  Note that because a file-server must be able to map a volume ID to
+ *  a disk location, the implication of the above is that there can be only
+ *  one of each type of a volume's instances on a machine.
+ *
+ * volumeType - ignore, since entry represents all instances of the volume,
+ *              which may be of as many as MAXVOLTYPES different types;
+ *              initially set to VOLTIX_TO_VOLTYPE(RWVOL).
+ * ---------------------------------------------------------------------------
+ * nServers - number of valid site*[] tuples; high-water mark for parallel
+ *     arrays.
+ * siteAddr[] - server network-addresses
+ * sitePartition[] - partition (aggregate) numbers
+ * siteFlags[] - VLSF_* flags (volume location site flags)
+ *
+ *  The pair (siteAddr[i], sitePartition[i]) defines the location (site) of
+ *  a subset of the volume's instances.  The corresponding flags siteFlags[i]
+ *  define, among other things, the types of this volume's instances located
+ *  on this site.
+ *
+ *  In the case of a multi-homed host, there are multiple paths to each
+ *  partition on that host, with each path represented by a different siteAddr
+ *  value.  All paths to the same server partition ("equivalent site names")
+ *  are stored consecutively in the arrays, with all but the first having the
+ *  VLSF_SAMEASPREV flag set.  Multi-homed hosts are defined as having a
+ *  distinguished primary address, which always appears as the first entry in
+ *  a set of equivalent site names.
+ * ---------------------------------------------------------------------------
+ * Time parameters relevant to both scheduled- and release-replication:
+ *
+ * maxTotalLatency - amount of time CMs distribute data from RO volume
+ *     instances without verifying that it is current.
+ * hardMaxTotalLatency - amount of time CMs distribute data from RO volume
+ *     instances if the data cannot be verified as current.
+ * reclaimDally - amount of time FX waits before it reclaims storage space
+ *     from deleted (RW) files.
+ *
+ * Time parameters relevant to scheduled-replication only:
+ *
+ * minimumPounceDally - specifies how long repservers wait after a RW volume
+ *     instance changes before attempting to update RO instances of volume.
+ * sitemaxReplicaLatency[] - specifies maximum amount of time that a RO volume
+ *     instance can be out of date on a given site.
+ * defaultMaxReplicaLatency - default sitemaxReplicaLatency value.
+ */
+
+	typedef struct vldbentry {
+		byte		name[MAXFTNAMELEN];	/* Volume name */
+		unsigned32	volumeType;
+
+		unsigned32	nServers;
+		afsNetAddr	siteAddr[MAXNSERVERS];
+		unsigned32	sitePartition[MAXNSERVERS];
+		unsigned32	siteFlags[MAXNSERVERS];
+		unsigned32	sitemaxReplicaLatency[MAXNSERVERS];
+		kerb_princ_name	sitePrincipal[MAXNSERVERS];	/* principal */
+		afsUUID		siteOwner[MAXNSERVERS];
+		afsUUID		siteObjID[MAXNSERVERS];
+
+		afsHyper	VolIDs[MAXVOLTYPES];
+		unsigned32	VolTypes[MAXVOLTYPES];
+		afsHyper	cloneId;	/* Used during cloning */
+
+		unsigned32	flags;		/* General flags */
+
+		unsigned32	maxTotalLatency;
+		unsigned32	hardMaxTotalLatency;
+		unsigned32	minimumPounceDally;
+		unsigned32	defaultMaxReplicaLatency;
+		unsigned32	reclaimDally;
+		unsigned32	WhenLocked;
+		unsigned32	spare1;
+		unsigned32	spare2;
+		unsigned32	spare3;
+		unsigned32	spare4;
+		byte		LockerName[MAXLOCKNAMELEN];
+		byte		charSpares[50];
+	}  vldbentry ;
+/*
+ * The first two charSpares serve as the min and max authn_level values
+ * for the fileset, same-cell and other-cell.  These are the allocated
+ * charSpares indices:
+ */
+const long VLAUTHN_MINLCLLEVEL = 0;
+const long VLAUTHN_MAXLCLLEVEL = 1;
+const long VLAUTHN_MINRMTLEVEL = 2;
+const long VLAUTHN_MAXRMTLEVEL = 3;
+
+/* flags for whole VLDB entry
+ *
+ * VLF_RWEXISTS - RW volume instance site known.
+ * VLF_LAZYREP - volume is known to be replicated.
+ * VLF_LAZYRELE - if set, volume is release-replicated; otherwise, volume is
+ *     schedule-replicated. (if known to be replicated at all)
+ * VLF_SOCKFLAG - if set, use sockets for fileset transfers instead of
+ *                RPC pipes (not secure).
+ */
+	const long VLF_RWEXISTS	=	0x01000;
+	const long VLF_ROEXISTS=	0x02000;	/* backward compatibility only */
+	const long VLF_BACKEXISTS =	0x04000;
+	const long VLF_LAZYREP =	0x08000;
+	const long VLF_LAZYRELE =	0x10000;
+#if !defined(OSF_NO_SOCKET_DUMP)
+	const long VLF_SOCKFLAG =	0x20000;
+#endif /* OSF_NO_SOCKET_DUMP */
+
+/* flags for VLDB site entries
+ *
+ * VLSF_SAMEASPREV - equivalent site as previous entry
+ * VLSF_PARTIALADDRS - only some net addresses for site are represented.
+ * VLSF_ZEROIXHERE - a volume instance with ID VolIDs[0] is located at this
+ *     site.  VLSF_ZEROIXHERE>>1 means that a volume instance with ID
+ *     VolIDs[1] located at this site, and so forth, up to MAXVOLTYPES.
+ */
+	const long VLSF_NEWREPSITE =    0x01;
+/* 	const long VLSF_SPARE1 =	0x02; */ /* used for VLSF_ROVOL in flprocs.c */
+/* 	const long VLSF_SPARE2 =	0x04; */ /* used for VLSF_RWVOL in flprocs.c */
+/* 	const long VLSF_SPARE3 =	0x08; */ /* used for VLSF_BACKVOL in flprocs.c */
+	const long VLSF_SAMEASPREV =	0x10;
+	const long VLSF_DEFINED =	0x20;
+	const long VLSF_PARTIALADDRS =	0x40;
+	const long VLSF_ZEROIXHERE =	0x80000000;
+
+
+/* Compact (visible) representation of an individual vldb entry, with site cookies */
+	typedef struct compactvldbentry {
+		byte	name[MAXFTNAMELEN];		/* Volume name */
+		unsigned32	volumeType;		/* Volume type (VOLTIX_TO_VOLTYPE(RWVOL, ROVOL, BACKVOL)) */
+		unsigned32	nServers;		/* Number of servers that have this volume */
+		unsigned32	siteCookies[MAXNSERVERS];	/* cookies for server info */
+		unsigned32	sitePartition[MAXNSERVERS];	/* Server Partition number */
+		unsigned32	siteFlags[MAXNSERVERS];        /* Server flags */
+		unsigned32	sitemaxReplicaLatency[MAXNSERVERS];	/* Per-site max latency */
+		afsHyper		VolIDs[MAXVOLTYPES];
+		unsigned32	VolTypes[MAXVOLTYPES];
+		afsHyper		cloneId;		/* Used during cloning */
+		unsigned32	flags;		/* General flags */
+		unsigned32	maxTotalLatency;
+		unsigned32	hardMaxTotalLatency;
+		unsigned32	minimumPounceDally;
+		unsigned32	defaultMaxReplicaLatency;
+		unsigned32	reclaimDally;
+		unsigned32	WhenLocked;
+		unsigned32	spare1;
+		unsigned32	spare2;
+		unsigned32	spare3;
+		unsigned32	spare4;
+		byte	LockerName[MAXLOCKNAMELEN];
+		byte	charSpares[50];
+	}  compactvldbentry ;
+/*
+ * The first two charSpares serve as the min and max authn_level values
+ * for the fileset.
+ */
+
+	typedef struct siteDesc {
+	    afsNetAddr Addr[ADDRSINSITE];
+	    byte KerbPrin[MAXKPRINCIPALLEN];
+	    afsUUID Owner;
+	    afsUUID ObjID;
+	    unsigned32 CreationQuota;
+	    unsigned32 CreationUses;
+	    unsigned32 DeletedFlag;
+	    unsigned32 spare2;
+	    unsigned32 spare3;
+	    unsigned32 spare4;
+	    unsigned32 spare5;
+	} siteDesc;
+
+	typedef [string] byte volumeName[MAXFTNAMELEN];
+
+}

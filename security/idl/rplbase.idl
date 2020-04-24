@@ -1,0 +1,333 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rplbase.idl,v $
+ * Revision 1.1.10.3  1996/03/09  23:28:17  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:45  marty]
+ *
+ * Revision 1.1.10.2  1995/12/08  17:33:22  root
+ * 	Submit OSF/DCE 1.2.1
+ * 
+ * 	HP revision /main/HPDCE02/2  1995/05/15  21:03 UTC  greg
+ * 	Create SEC_migrate_merge mainline from SEC_migrate and HPDCE02.
+ * 	[1995/04/22  13:35 UTC  greg  /main/HPDCE02/SEC_migrate_merge/1]
+ * 
+ * 	Merge .../greg_sec_migrate/LATEST --> .../SEC_migrate/LATEST.
+ * 	[1995/02/11  22:14 UTC  greg  /main/HPDCE02/SEC_migrate/2]
+ * 
+ * 	Add rs_replica_sw_vers_info_t.
+ * 	[1995/02/05  19:51 UTC  greg  /main/HPDCE02/SEC_migrate/greg_sec_migrate/2]
+ * 
+ * 	Create initial SEC_migrate mainline.
+ * 	Compiled but not tested.
+ * 	[1995/01/27  21:15 UTC  greg  /main/HPDCE02/SEC_migrate/1]
+ * 
+ * 	[1995/01/21  22:07 UTC  greg  /main/HPDCE02/greg_migration2/2]
+ * 
+ * 	add new replica prop types for sw versioning.
+ * 	[1995/01/21  22:01 UTC  greg  /main/HPDCE02/greg_migration2/1]
+ * 
+ * 	HP revision /main/HPDCE02/1  1994/11/15  21:22 UTC  mullan_s
+ * 	Merge.
+ * 	[1995/12/08  16:55:17  root]
+ * 
+ * Revision 1.1.6.2  1994/09/20  20:14:37  rps
+ * 	[OT11944] fix rs_update_seqno_t comment
+ * 	[1994/09/20  20:08:31  rps]
+ * 
+ * Revision 1.1.6.1  1994/06/02  21:28:27  mdf
+ * 	hp_sec_to_osf_3 drop, merge up with latest.
+ * 	[1994/05/24  15:16:01  mdf]
+ * 
+ * 	hp_sec_to_osf_3 drop
+ * 
+ * Revision 1.1.8.3  1993/12/17  22:30:33  hanfei
+ * 	state_dup_master
+ * 	[1993/12/17  22:08:16  hanfei]
+ * 
+ * Revision 1.1.8.2  1993/12/16  19:01:25  hanfei
+ * 	add rs_c_state_becoming_slave
+ * 	[1993/12/10  16:20:56  hanfei]
+ * 
+ * Revision 1.1.6.3  1993/09/15  15:41:36  root
+ * 	    Loading drop DCE1_0_3b03
+ * 
+ * Revision 1.1.2.6  1993/02/26  23:48:56  emartin
+ * 	add sw_rev to rs_replica_info_t
+ * 	[1993/02/22  22:44:24  emartin]
+ * 
+ * Revision 1.1.2.5  1992/12/29  13:30:37  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:48:44  zeliff]
+ * 
+ * Revision 1.1.2.4  1992/12/18  22:10:58  sekhar
+ * 	[OT 6540] Replication code drop bl6c
+ * 	[1992/12/18  21:47:13  sekhar]
+ * 
+ * Revision 1.1.4.2  1992/12/11  21:35:44  emartin
+ * 	bl6c: rs_replica_info_t - base_propq_seqno field
+ * 
+ * Revision 1.1.2.3  1992/10/07  20:29:36  sekhar
+ * 	[OT 5566]  Bl5 Replication code drop from HP.
+ * 	[1992/10/07  19:13:44  sekhar]
+ * 
+ * Revision 1.1.3.2  1992/10/06  15:49:17  burati
+ * 	 Second replication code drop: bl5
+ * 
+ * Revision 1.1.2.2  1992/08/31  18:20:55  sekhar
+ * 	First security replication code drop
+ * 	[1992/08/31  15:08:53  sekhar]
+ * 
+ * Revision 1.1  1992/01/19  14:54:59  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+
+/*
+ * Copyright (c) Hewlett-Packard Company 1991, 1992
+ * Unpublished work. All Rights Reserved.
+ */
+/*
+ *      Base constants and types for registry server replication
+ */
+
+[
+ pointer_default(ptr)
+]
+interface rplbase
+{
+    import "dce/rgynbase.idl";
+
+
+    /*  Replica states  */
+
+    /*
+     * Master hasn't yet acknowledged that it knows about the replica
+     */
+    const unsigned32    rs_c_state_unknown_to_master    =   1;
+    /* 
+     * Master knows about the replica, but it isn't init'd yet
+     */
+    const unsigned32    rs_c_state_uninitialized        =   2;
+    const unsigned32    rs_c_state_initializing         =   3;
+    const unsigned32    rs_c_state_in_service           =   4;
+    const unsigned32    rs_c_state_renaming             =   5;
+    const unsigned32    rs_c_state_copying_dbase        =   6;
+    const unsigned32    rs_c_state_in_maintenance       =   7;
+    const unsigned32    rs_c_state_mkey_changing        =   8;
+    const unsigned32    rs_c_state_becoming_master      =   9;
+    const unsigned32    rs_c_state_closed               =   10;
+    const unsigned32    rs_c_state_deleted              =   11;
+    const unsigned32    rs_c_state_becoming_slave	=   12;
+    const unsigned32    rs_c_state_dup_master	        =   13;
+
+    /* 
+     * A replica's name service name is an arbitarily long string
+     */
+    typedef [string] unsigned char *rs_replica_name_p_t;
+
+    /*
+     * Software version string
+     */
+    typedef unsigned char           rs_sw_version_t[64];
+
+    /* 
+     * structure for mapping numeric software versions
+     * into printstrings.
+     */
+    typedef struct
+    {
+        unsigned32       sw_vers;
+        rs_sw_version_t  sw_vers_printstring;
+    } rs_replica_sw_vers_info_t;
+
+    /* 
+     * Authentication information used between replicas
+     */
+
+    /* 
+     * auth info is a Privilege Ticket-Granting Ticket of the krb5 
+     * variety  (the only type currently supported)
+     */
+    const unsigned32    rs_c_auth_info_krb5_ptgt   =   1;
+
+    typedef struct
+    {
+        unsigned32      info_type;
+        unsigned32      info_len;
+        [size_is(info_len)]
+        byte            info[];
+    } rs_replica_auth_t, *rs_replica_auth_p_t;
+
+    /* 
+     * Use twr_p_t rather than twr_t as our base replica tower type
+     * to avoid problems with arrays of conformant structures on the
+     * wire
+     */
+    typedef struct 
+    {   
+        unsigned32                      num_towers;
+        [size_is(num_towers)] twr_p_t   towers[];
+    } rs_replica_twr_vec_t, *rs_replica_twr_vec_p_t;
+
+
+    /*  Replica propagation states 
+     * 
+     *  States which drive whether the master sends
+     *  an init request, an update, or a delete
+     *  request to a slave.
+     */
+
+    typedef unsigned32  rs_replica_prop_t;
+
+    const rs_replica_prop_t rs_c_replica_prop_unknown   =   0;
+    const rs_replica_prop_t rs_c_replica_prop_init      =   1;
+    const rs_replica_prop_t rs_c_replica_prop_initing   =   2;
+    const rs_replica_prop_t rs_c_replica_prop_update    =   3;
+    const rs_replica_prop_t rs_c_replica_prop_delete    =   4;
+
+    /* 
+     * The following prop type was added as part of the
+     * security server migration work for DCE 1.1.  Because the prop
+     * type appears on the wire in the rs_replist_read_full() operation, the
+     * rs_replist interface was revised and the server modified
+     * to support both versions.  It returns the new value
+     * only if contacted over the new interface.  If contacted 
+     * over an old interface and the new prop types is
+     * in effect, the server returns rs_c_replica_prop_unknown
+     */
+    const rs_replica_prop_t rs_c_replica_prop_bad_sw_rev   =   5;
+
+    /*  
+     *  Every event (eg. update) at the master is assigned a 
+     *  monotonically increasing seqno and a timestamp.  Most 
+     *  of these events are propagated as updates to the slaves,
+     *  but some events happen only at the master. This means 
+     *  that a slave may have gaps in the seqno's of its updates.
+     */  
+    typedef struct 
+    {
+        unsigned32  high;
+        unsigned32  low;
+    } rs_update_seqno_t;
+
+    typedef struct 
+    {
+        rs_replica_prop_t   prop_type;
+        boolean32           last_upd_inited;
+        rs_update_seqno_t   last_upd_seqno;
+        sec_timeval_t       last_upd_ts; 
+        unsigned32          num_updates;
+    } rs_replica_prop_info_t, *rs_replica_prop_info_p_t;                        
+
+    /*  Replica communication states
+     *
+     *  Summary information about the communication
+     *  state between the master and a replica
+     */
+    typedef unsigned32  rs_replica_comm_t;
+
+    const rs_replica_comm_t rs_c_replica_comm_ok            =   1;
+    const rs_replica_comm_t rs_c_replica_comm_short_failure =   2;
+    const rs_replica_comm_t rs_c_replica_comm_long_failure  =   3;
+
+
+    typedef struct
+    {
+        rs_replica_comm_t   comm_state; 
+        error_status_t      last_status;
+        /* 
+         * offset in tower vector to current comm tower 
+         * -1 = no current comm tower
+         */
+        signed32            twr_offset; 
+    } rs_replica_comm_info_t, *rs_replica_comm_info_p_t;
+
+    /*
+     *  Replica information
+     */
+    typedef struct 
+    {
+        uuid_t                      rep_id;     /* instance uuid */
+        rs_replica_name_p_t         rep_name;   /* (global) name service name */
+        boolean32                   master;     /* 'true' if master replica */
+        boolean32                   deleted;    /* 'true' if marked as deleted */
+
+        /* 
+         * 'towers' has to be a pointer because rs_replica_twr_vec_t is 
+         * conformant, and arrays containing conformant structures
+         * (e.g., rs_replist_t, below) are illegal in network 
+         * idl interfaces.
+         */
+        rs_replica_twr_vec_p_t      rep_twrs; 
+
+    } rs_replica_item_t, *rs_replica_item_p_t;
+
+    /*
+     *  Public information which the master manages about each 
+     *  replica
+     */
+    typedef struct 
+    {
+        uuid_t                      rep_id;     /* instance uuid */
+        rs_replica_name_p_t         rep_name;   /* (global) name service name */
+        boolean32                   master;     /* 'true' if master replica */
+        boolean32                   deleted;    /* 'true' if marked as deleted */
+        rs_replica_prop_info_t      prop_info;  /* propagation info */
+        rs_replica_comm_info_t      comm_info;  /* communication info */
+
+        /* 
+         * 'towers' has to be a pointer because rs_replica_twr_vec_t is 
+         * conformant, and arrays containing conformant structures
+         * (e.g., rs_replist_t, below) are illegal in network 
+         * idl interfaces.
+         */
+        rs_replica_twr_vec_p_t      rep_twrs; 
+
+    } rs_replica_item_full_t, *rs_replica_item_full_p_t;
+
+    typedef struct 
+    {
+        unsigned32              rep_state;
+        uuid_t                  cell_sec_id;
+        uuid_t                  rep_id;
+        uuid_t                  init_id;
+        rs_update_seqno_t       last_upd_seqno;
+        sec_timeval_t           last_upd_ts; 
+        rs_sw_version_t         sw_rev;
+        unsigned32              compat_sw_rev;
+        /* If this is info from the master, seqno of 
+         * last update that has been propagated to all 
+         * replicas.
+         * Meaningless field if this isn't the
+         * master
+         */
+        rs_update_seqno_t       base_propq_seqno;   
+        boolean32               master;
+        boolean32               master_known;
+        uuid_t                  master_id;
+        /* Seqno when became master 
+         */
+        rs_update_seqno_t       master_seqno;   
+    } rs_replica_info_t, *rs_replica_info_p_t;
+
+    typedef struct 
+    {
+        uuid_t              master_id;
+        rs_update_seqno_t   master_seqno;
+        unsigned32          master_compat_sw_rev;
+        sec_timeval_t       update_ts;
+        rs_update_seqno_t   update_seqno;
+        rs_update_seqno_t   previous_update_seqno;
+    } rs_replica_master_info_t, *rs_replica_master_info_p_t;
+
+}
+

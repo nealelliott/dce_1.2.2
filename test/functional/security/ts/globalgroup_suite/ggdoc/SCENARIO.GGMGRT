@@ -1,0 +1,258 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: SCENARIO.GGMGRT,v $
+BINRevision 1.1.2.1  1996/10/16  14:07:34  arvind
+BIN	OSF DCE 1.2.2 Drop 4.5
+BIN
+# $EndLog$
+#
+
+Details for migration testing
+
+    Verify the migration compatibility of DCE R1.2.2.  Details are in ATTACH 1.
+
+    In this section, the trigger of modifying the registry database is
+    typing commands manually.
+    It is difficult to replace above method to convenient scripts.
+
+    Basic test plan of this term is:
+    - verify if the registry database can be automatically converted
+      by installing DCE R1.2.2 bits
+    - verify if the global group operations are available after moving the
+      cell's Security Registry to dce1.2.2 format by the following operation:
+
+          dcecp> registry modify -version secd.dce.1.2.2
+
+
+
+------------------------------ ATTACH 1 ------------------------------
+
+GLOBALGROUP TEST SCENARIO (migration testing)
+
+1. Prerequisites
+
+    Migration tests require two cells consisting of three nodes at minimum.
+    One of the cells must have a master and a slave replica server.
+    The other must have a master replica server.
+
+	cL	local cell (cell on the local host).
+		This cell will have a master and a slave replica server.
+	cR	remote cell (cell on the remote host)
+
+    NOTICE:
+	In each scenario, pre-DCE R1.2.2 bits must be installed in all
+	the testing nodes.
+
+
+2. Test Scenario
+2.1 Setting up test condition
+
+    Create a group and accounts into the local cell like bellow;
+
+	dcecp> group create gG
+	dcecp> principal create pL
+	dcecp> principal create pLa
+	dcecp> account create pL -group none -organization none
+	dcecp> account create pLa -group none -organization none
+
+	- gG means a group object which will include foreign principals
+	- pL means a principal object which belongs to the local cell
+	- pLa means another principal object which belongs to the local cell
+
+    Create an account into the remote cell like bellow;
+
+	dcecp> principal create pR
+	dcecp> account create pR -group none -organization none
+
+	- pR means a principal object which belongs to the remote cell
+
+    After this operation, enable the cells to show each name space using
+    "dcecp cdscache create", and connect to remote cell using
+    "dcecp registry connect".
+
+    And, add the slave replica server on the cell /.../cL.
+
+
+2.2 Details for testing
+
+    Here are a scenario diagram for migration testing.
+
+    The basic procedures are:
+    (1) install pre-DCE R1.2.2 bits to all the testing node in the local cell
+    (2) modify the registry database by some local member operation
+    (3) install DCE R1.2.2 bits, and verify if the database can be automatically
+	converted
+    (4) modify the registry database by some global group operation, and
+	verify if the operation to be rejected as error "Object not found"
+    (5) move the cell's Security Registry to "dce1.2.2" operation using
+	`dcecp registry modify -version'
+    (6) if any replica servers are not capable of supporting the new software
+	version, verify that the master replica propagates a stop request to
+	those replicas
+    (7) install DCE R1.2.2 bits to the slave replica node which the master
+	replica has shut down
+    (8) modify the registry database by some global group operation, and
+	verify that the operation be succeed
+
+    In the diagram below, `GG operation' means to modify registry database
+    by adding or removing global principals as a group member.
+
+
+    [scenario]
+			master		slave		remote
+			(running)	(running)	(running)
+			  !		  !		  !
+  local group operation ->*		  !		  !
+			  !-> OK	  !		  !
+			  !		  !		  !
+	       STOP DCE ->* ------------->*		  !
+							  !
+     install DCE R1.2.2 ->*		   		  !
+	      START DCE ->* ------------->*		  !
+			  |-> database	  !		  !
+			  |    conversion !		  !
+			  |		  !		  !
+  local group operation ->*		  !		  !
+			  |-> OK	  !		  !
+			  |		  !		  !
+	   GG operation ->*		  !		  !
+			  |-> Object	  !		  !
+			  |    not found  !		  !
+			  |		  !		  !
+  dcecp registry modify	  |		  !		  !
+	       -version ->*		  !		  !
+			  |-------------->!		  !
+			  |  propagate	  !-> set	  !
+			  |		  !  {propstatus  !
+			  |		  !   badversion} !
+			  |		  !		  !
+			  |    STOP DCE ->*		  !
+			  |				  !
+			  | install	   		  !
+			  |  DCE R1.2.2 ->*		  !
+			  |   START DCE ->*		  !
+			  |		  |		  !
+  local group operation ->*		  |		  !
+			  |-> OK	  |		  !
+			  |		  |		  !
+	   GG operation ->* - - - - - - - | - - - - - - ->!
+			  |-> OK	  |		  !
+			  |		  |		  !
+
+
+(1) login to the cell cL as a cell_admin
+
+	dce_login cell_admin
+
+(2) add the local principal pL as a member of the group gG
+
+	rgy_edit> domain g
+	rgy_edit> member gG -a pL
+
+(3) verify that group gG has a member above
+
+	rgy_edit> domain g
+	rgy_edit> view gG -m
+
+(4) STOP the cell /.../cL
+
+	dce_config
+
+(5) install DCE R1.2.2 bits to the master replica server node in /.../cL
+
+(6) remember the database information before the new version softwares be started
+
+	ls -la /opt/dcelocal/var/security/rgy_data /opt/dcelocal/var/security/.mkey
+
+(7) START the cell /.../cL
+
+	dce_config
+
+(8) verify if the database can be automatically converted
+
+	ls -la /opt/dcelocal/var/security/rgy_data /opt/dcelocal/var/security/.mkey
+
+(9) login to the cell cL as a cell_admin
+
+	dce_login cell_admin
+
+(10) remove the principal pL from the membership list of the group gG
+
+	dcecp> group remove gG -member pL
+	dcecp>
+
+(11) verify that group gG has no members
+
+	dcecp> group list gG
+	dcecp>
+
+(12) add the principals, /.../cR/pR and pL, as members of the group gG, and verify that the operation be rejected as error "Object not found"
+
+	dcecp> group add gG -member /.../cR/pR pL
+	Object not found
+	dcecp>
+
+(13) move the cell's Security Registry to dce1.2.2 format by the following operation
+
+	dcecp> registry modify -version secd.dce.1.2.2
+	dcecp>
+
+(14) verify that the slave replica server is given {propstatus badversion} attributes by master replica server
+
+	dcecp> registry show /.:/sec/master -master
+		...
+	{name /.../cR/subsys/dce/sec/<hostname of slave replica server>}
+	{type slave}
+	{propstatus badversion}
+		...
+	dcecp>
+
+(15) STOP the DCE on the slave replica server node in the cell /.../cL
+
+	dce_config
+
+(16) install DCE R1.2.2 bits to the slave replica server node in /.../cL
+
+(17) START the DCE on the slave replica server node in the cell /.../cL
+
+	dce_config
+
+(18) add the principal pLa as a member of the group gG
+
+	dcecp> group add gG -member pLa
+	dcecp>
+
+(19) verify that group gG has a member above
+
+	dcecp> group list gG
+	/.../cL/pLa
+	dcecp>
+
+(20) add the principals, /.../cR/pR and pL, as members of the group gG
+
+	dcecp> group add gG -member /.../cR/pR pL
+	dcecp>
+
+(21) bind to the master replica server, and verify that group gG has members above
+
+	dcecp> set _s(sec) /.:/sec/master
+	dcecp> group list gG
+	/.../cL/pLa
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(22) bind to the slave replica server, and verify that group gG has members seen in (21) above
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	/.../cL/pLa
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>

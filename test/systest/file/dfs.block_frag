@@ -1,0 +1,382 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dfs.block_frag,v $
+# Revision 1.1.8.2  1996/03/11  02:43:44  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:07:15  marty]
+#
+# Revision 1.1.8.1  1995/12/11  21:59:20  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:58:39  root]
+# 
+# Revision 1.1.6.2  1994/07/19  13:20:04  rdl
+# 	Made command line interface uniform with the other automated DFS system tests.
+# 	[1994/07/19  13:13:45  rdl]
+# 
+# Revision 1.1.6.1  1994/06/10  20:49:08  devsrc
+# 	cr10872 - fixed copyright
+# 	[1994/06/10  17:19:04  devsrc]
+# 
+# Revision 1.1.4.2  1993/10/27  14:44:41  gmd
+# 	Moved test for DFSTAB_EDITTED to main section.
+# 	If editting dfstab file, save a copy of dfstab first
+# 	and restore it at the end of the test.
+# 	[1993/10/27  14:44:06  gmd]
+# 
+# Revision 1.1.4.1  1993/10/27  14:21:21  gmd
+# 	Look for check_RC.ksh in TROOT, not current directory.
+# 	If LOGSIZE specified, use it during newaggr.
+# 	Remove typo that caused dfstab to be overwritten.
+# 	Add salvageit routine to loop.
+# 	[1993/10/27  14:18:09  gmd]
+# 
+# Revision 1.1.2.2  1993/07/30  15:43:31  gmd
+# 	Initial version.
+# 	[1993/07/30  14:49:37  gmd]
+# 
+# $EndLog$
+############################################################################
+# TITLE: dfs.block_frag
+# SYNTAX:
+#	dfs.block_frag <datafile>
+# OBJECTIVE:
+#	Test the ability to newaggr with all possible block and fragment
+#	combinations. Try a number of fileset operations to show that
+#	all combinations are usable.
+# DESCRIPTION:
+#	for all blocksizes
+#		for all fragsizes
+#			newaggr
+#			dfsexport
+#			create filesets and mountpoints
+#			(do fileset operations - not yet implemented)
+#			(if there's a repsite, do rep operations - not yet implemented)
+#			delete mountpoints and filesets
+#			detach
+#
+# NOTE: This script has the potential for checking correct space allocation
+#	percentages (ie. % of aggregate reserved for cloning) but currently
+#	only calculates space for the read-write filesets.
+############################################################################
+#
+# FORMATIT
+#
+#################################################################
+formatit()
+{
+echo "$SCRIPT: Formatting aggregate"
+if (( $LOGSIZE )); then
+  newaggr $DEVNAME $BLOCKSIZE $FRAGSIZE -logsize $LOGSIZE -overwrite
+else
+  newaggr $DEVNAME $BLOCKSIZE $FRAGSIZE -overwrite
+fi
+if [ $? -ne 0 ]
+then
+  echo "NEWAGGR FAILED!"
+  newaggr $DEVNAME $BLOCKSIZE $FRAGSIZE -verbose
+  exit 1
+fi
+echo "$SCRIPT: Formating w/ $BLOCKSIZE $FRAGSIZE PASSED"
+}
+#################################################################
+#
+# EXPORTIT
+#
+#################################################################
+exportit()
+{
+echo "$SCRIPT: Exporting w/$BLOCKSIZE $FRAGSIZE"
+
+dfsexport $DEVNAME
+if [ $? -ne 0 ]
+then
+  echo "DFSEXPORT FAILED!"
+  dfsexport $DEVNAME -verbose
+  exit 1
+fi
+
+echo "$SCRIPT: Exporting w/ $BLOCKSIZE $FRAGSIZE PASSED"
+}
+#################################################################
+#
+# CREATE A SINGLE FILESET
+#
+#################################################################
+create_fileset()
+{
+NEWFILESET=$1.$2
+NEWMOUNTPOINT=$MOUNT_BASE/$1_$2
+
+fts create $NEWFILESET -aggr $AGGNAME -server $SERVER
+check_RC "$?" "create"
+fts crmount -fileset $NEWFILESET -dir $NEWMOUNTPOINT
+check_RC "$?" "crmount"
+
+FILESETS="${FILESETS}${NEWFILESET} "
+MOUNTPOINTS="${MOUNTPOINTS}${NEWMOUNTPOINT} "
+
+}
+#################################################################
+#
+# DELETE ALL THE FILESETS 
+#
+#################################################################
+delete()
+{
+echo "$SCRIPT: Deleting filesets"
+
+for M in $MOUNTPOINTS
+do
+  fts delmount $M
+  check_RC "$?" "delmount"
+done
+MOUNTPOINTS=""
+
+for F in $FILESETS
+do
+  fts delete $F -aggr $AGGNAME -server $SERVER
+  check_RC "$?" "delete"
+done
+FILESETS=""
+}
+#################################################################
+#
+# CREATE ALL THE FILESETS THAT WILL FIT, LARGEST TO SMALLEST
+#
+#################################################################
+create()
+{
+echo "$SCRIPT: Creating filesets"
+
+let FREESPACE=`fts aggrinfo -server $SERVER -aggr $AGGNAME | awk '{print $5}'`
+echo "$SCRIPT: FREESPACE = $FREESPACE"
+let i=0
+while (( FREESPACE > 0 ))
+do
+  while (( FREESPACE > LARGE_FILESET_SIZE ))
+  do
+    let i=i+1
+    create_fileset large $i
+    fts setquota -fileset $NEWFILESET -size $LARGE_FILESET_SIZE
+    check_RC "$?" "setquota"
+    (( FREESPACE = FREESPACE - LARGE_FILESET_SIZE ))
+echo "$SCRIPT: FREESPACE = $FREESPACE"
+  done
+  while (( FREESPACE > MEDIUM_FILESET_SIZE ))
+  do
+    let i=i+1
+    create_fileset medium $i
+    fts setquota -fileset medium.$i -size $MEDIUM_FILESET_SIZE
+    check_RC "$?" "setquota"
+    (( FREESPACE = FREESPACE - MEDIUM_FILESET_SIZE ))
+echo "$SCRIPT: FREESPACE = $FREESPACE"
+  done
+  while (( FREESPACE > SMALL_FILESET_SIZE ))
+  do
+    let i=i+1
+    create_fileset small $i
+    fts setquota -fileset small.$i -size $SMALL_FILESET_SIZE
+    check_RC "$?" "setquota"
+    (( FREESPACE = FREESPACE - SMALL_FILESET_SIZE ))
+  done
+  let FREESPACE=0
+done
+
+echo "$SCRIPT: Creating $i filesets on aggr w/ $BLOCKSIZE $FRAGSIZE PASSED"
+}
+
+#################################################################
+#
+# UNEXPORTIT
+#
+#################################################################
+unexportit()
+{
+echo "Detaching aggregate"
+dfsexport $DEVNAME -detach
+if [ $? -ne 0 ]
+then
+  echo "DFSEXPORT DETACH FAILED!"
+  dfsexport $DEVNAME -detach -verbose
+  exit 1
+fi
+echo "$SCRIPT: Detaching aggr w/ $BLOCKSIZE $FRAGSIZE PASSED"
+}
+
+#################################################################
+#
+# SALVAGEIT
+#
+#################################################################
+salvageit()
+{
+echo "Salvaging aggregate"
+salvage $DEVNAME 
+if [ $? -ne 0 ]
+then
+  echo "SALVAGE FAILED!"
+  salvage $DEVNAME -verbose
+  exit 1
+fi
+echo "$SCRIPT: Salvaging aggr w/ $BLOCKSIZE $FRAGSIZE PASSED"
+}
+
+#################################################################
+#
+# FILSET OPERATIONS
+# For all filesets/mountpoints, do the following fileset operations.
+# Do some negative testing here - ie. try to overfill a fileset,
+# clone when there's no room on the aggregate, clonesys when
+# there's only room for some, etc.
+#################################################################
+fts_ops()
+{
+echo "$SCRIPT: Fileset operations not yet implemented"
+#fill
+#clone
+#dump
+#empty
+#fill_from_clone
+#clone
+#restore
+}
+#################################################################
+#
+# REPLICATION OPERATIONS
+# For all filesets, replicate and verify replication. Again, do
+# some negative testing here - ie. try to release when there's
+# no room, move the rw fileset away from its "staging" replica,
+# etc.
+#################################################################
+rep_ops()
+{
+echo "$SCRIPT: Replication operations not yet implemented"
+#addsite
+#release
+#moveaway
+#release
+#empty
+#fill
+#moveback
+#rmsite
+}
+#################################################################
+#
+# MAIN
+#
+#################################################################
+# use input args
+SCRIPT=`basename $0`
+
+USAGE="Usage: `basename $0` [-f] data_file"
+
+DATAFILE=
+while getopts :f: ARG
+do
+	case ${ARG} in
+		f)	if [ -n "$DATAFILE" ]	# multiple -f's?
+			then
+				echo $USAGE
+				exit 1
+			fi
+			DATAFILE=$OPTARG;;
+
+		*)	echo $USAGE
+			exit 1;;
+	esac
+done
+shift $(($OPTIND - 1))
+
+if [ -n "$DATAFILE" ]	# has DATAFILE been specified yet?
+then
+	if [ $# -gt 0 ]
+	then
+		echo $USAGE
+		exit 1
+	fi
+elif [ $# -ne 1 ]	# no DATAFILE anywhere
+then
+	echo $USAGE
+	exit 1
+else
+	DATAFILE=$1	# DATAFILE without -f
+fi
+
+if [ ! -r $DATAFILE ]	# DATAFILE exist and have read permission?
+then
+	echo "`basename $0`: Cannot open $DATAFILE for reading"
+	exit 2
+fi
+
+echo "Data file: $DATAFILE"
+
+# source in configuration data
+. $DATAFILE
+
+# source in Check Return Code and exit if failure routine
+# (Used here whenever "-verbose" switch not an option)
+. ${TROOT}/systest/file/check_RC.ksh
+
+if [ "$SERVER" != "`hostname`" ]; then
+	echo "Doublecheck that the data in $DATAFILE is accurate for this machine"
+	exit 1
+fi
+
+echo "For all possible blocksizes,try all possible fragsizes"
+echo "WARNING! THIS TEST WILL WIPE OUT ANY DATA ON $DEVNAME!"
+echo "Press <RETURN> ONLY IF YOU KNOW $DEVNAME IS EXPENDABLE!"
+echo "Otherwise, use <CTL-C> to EXIT!"
+read
+
+START_DATE=`date`
+echo "START DATE AND TIME IS $START_DATE"
+
+if [ "$DFSTAB_EDITTED" = "FALSE" ]; then
+  cp $DCELOCAL/var/dfs/dfstab $DCELOCAL/var/dfs/dfstab.$$
+  echo "# blkdev aggname aggtype aggid " \
+  >> $DCELOCAL/var/dfs/dfstab
+  echo "$DEVNAME      $AGGNAME        lfs     $AGGID" \
+  >> $DCELOCAL/var/dfs/dfstab
+fi
+
+logsizes="$LOGSIZE_RANGE"
+for BLOCKSIZE in $BLOCKSIZE_RANGE
+do
+  # get appropriate logsize for this blocksize
+  LOGSIZE=`print ${logsizes} | sed 's/ .*$//'`
+  logsizes=`print ${quotas} | sed 's/^[^ ]* *//'`
+
+  for FRAGSIZE in $FRAGSIZE_RANGE
+  do
+    if [ $FRAGSIZE -gt $BLOCKSIZE ]; then
+      continue
+    else
+      formatit
+      exportit
+      create
+      fts_ops
+      if [ "$REPSITE" != "" ]; then
+        rep_ops
+      fi
+      delete
+      unexportit
+      salvageit
+    fi		# end if FRAGSIZE okay
+  done  	# done with this FRAGSIZE
+done		# done with this BLOCKSIZE
+
+if [ "$DFSTAB_EDITTED" = "FALSE" ]; then
+  mv $DCELOCAL/var/dfs/dfstab.$$ $DCELOCAL/var/dfs/dfstab
+fi
+
+echo "$SCRIPT: START DATE AND TIME WAS $START_DATE"
+echo "$SCRIPT: END DATE AND TIME IS `date`"
+echo "$SCRIPT: PASSED"
+#################################################################
+

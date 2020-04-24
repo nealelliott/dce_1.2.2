@@ -1,0 +1,350 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dcerpbnk,v $
+# Revision 1.1.14.2  1996/03/09  20:50:59  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:28:57  marty]
+#
+# Revision 1.1.14.1  1995/12/11  22:00:52  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  20:03 UTC  bell_d
+# 	 	Version Debugged for dcerpbnk with authorization on
+# 
+# 	HP revision /main/HPDCE01/2  1994/03/28  20:33 UTC  truitt
+# 
+# 	HP revision /main/HPDCE01/truitt_junk/1  1994/03/28  20:26 UTC  truitt
+# 	Update test to latest tet version
+# 	[1995/12/11  21:40:02  root]
+# 
+# Revision 1.1.5.2  1993/07/09  12:36:17  root
+# 	Initial King Kong branch
+# 	[1993/07/09  12:35:51  root]
+# 
+# Revision 1.1.3.4  1993/05/11  19:24:24  bissen
+# 	adding loop number and non-loop test conditions -bissen
+# 	[1993/05/11  19:24:01  bissen]
+# 
+# Revision 1.1.3.3  1993/04/23  14:42:30  giza
+# 	add time looping
+# 	[1993/04/22  23:13:34  giza]
+# 
+# Revision 1.1.3.2  1993/03/31  12:47:01  mgm
+# 	Initial GAMERA branch
+# 
+# Revision 1.1.2.2  1992/11/03  21:20:45  mgm
+# 	Ported to TET by Rick OBrien.  Bsubmit'd by Mary MacGregor
+# 	[1992/11/03  21:19:55  mgm]
+# 
+# $EndLog$
+#
+#   TEST_NAME: dcerpbnk
+#
+#   COMPONENT_NAME: dce.systest
+#
+#   FUNCTIONS: create_bank
+#              start_server
+#              create_accounts
+#              start_clients
+#              wait_for_clients
+#              check_results
+#
+#   ORIGINS: 27
+#
+#
+#   (C) COPYRIGHT International Business Machines Corp. 1991
+#   All Rights Reserved
+#
+#
+#   FILES: dcerpbnk
+#          bnk.functions
+#          bnk.clientwrapper
+#	   bankd
+#	   bank
+#	   transactions
+#
+#   REQUIREMENTS:
+#      Threads, rpc, cds, security 
+#
+#   RESTRICTIONS:
+#      None
+#
+#   DESCRIPTION:
+#	This is the shell script for the dcerpbnk test case.  It does the
+#	following:
+#	1) creates a bank file 
+#       2) starts bankd on the host that this driver is started on
+#	3) creates the preset accounts 
+#	4) runs transactions on every host in $HOSTLIST 
+#	5) checks results after all transactions complete
+#	6) errors found in transactions results are logged (JOURNAL)
+#	7) kills bankd 
+#	8) exits with 1 if errors were found and 0 if not.
+#
+#  CHANGE HISTORY
+#  	4/25/91		Initial design		Gerald Cantor
+#  	5/01/91		Coding complete		Gerald Cantor
+#      10/16/91		Modified call to 
+#			transactions to include
+#			-S and -s flags.	Gerald Cantor
+#      12/14/91		Modified wait loop for
+#			cds exporting.		Gerald Cantor
+#      12/15/91		Cat bank to end of 
+#			transaction log.	Gerald Cantor
+#      12/17/91		Update prologs.		Gerald Cantor
+#      12/17/91		Added calls to su.dce
+#			for bank(d) calls.	Gerald Cantor
+#      12/30/91		Remove admin.acf and
+#			trans.acf from file 
+#			list.  Added code to 
+#			test for a file to 
+#			inform dcerpbn1 when
+#			bankd has exported its
+#			interfaces.		Gerald Cantor
+#      11/03/92		Ported to TET		Rick O'Brien
+#
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1 ic2"
+ic1="nonauth_bnk"
+ic2="auth_bnk"
+testlist="$ic1 $ic2"
+
+startup ()
+{
+#===============================================================================
+# INITIALIZE VARIABLES
+
+export CELL_ADMIN="cell_admin"
+export ADMIN_PASSWD="-dce-"
+export TCDIR="/tmp"
+export BANK="baybank"
+export CLIENTDATA=dcerpbnk_client.data
+
+export TRANS_TIME="20"		# Amount of time (in seconds) allotted
+				# for doing transactions.
+
+export ENTRY_SYNTAX="3"         #Use rpc_c_syntax_dce for namespace
+                                #ex[im]porting
+export AUTH_LVL="2"             #Authenication level
+export AUTH_SVC="1"             #Authenticaion service
+export AUTHZ_SVC="1"            #Authorization level
+
+# NO_SECURE is handled/assigned in ic.
+
+export PROTO="ncadg_ip_udp"            #Use datagram protocol string
+export ADMIN_ENTRY="/.:/ad_intf"
+export TRANS_ENTRY="/.:/tr_intf"
+
+export SERVER_PARMS="-B $BANK -P $PROTO -S $ADMIN_ENTRY -s $TRANS_ENTRY"
+export CLIENT_PARMS="-B $BANK -S $ADMIN_ENTRY -s $TRANS_ENTRY"
+CELL_NAME=` /usr/bin/getcellname | awk -F/ '{ print $3}'`
+export CELL_NAME
+
+#exec 8<$TET_ROOT/systest/client_names_$CELL_NAME
+#while read -u8 HOST
+for HOST in $(cdscp list dir "/.:/hosts/*" | awk 'BEGIN {for (i=0;i<3;i++) getline;}\
+							{print $1}')
+do
+	rm $STTMPDIR/trans_res.$HOST
+done
+#exec 8<&-
+
+#===============================================================================
+
+    ping_hosts
+
+    RC=0
+
+    # This is the NAMELIST used by OSF.  
+    # NOTE: If you change the following NAMELIST you MUST also update
+    #       the namelist in transactions.c
+
+    #    NAMELIST='Dave Deanna Gerald Jean Jerod Jim Julie Ken Sandra Wayne'
+
+    NAMELIST="Mary Jim Jake Baab Lois John Pete Tammy Hannah Mercedes"
+
+}
+
+
+rpc_bnk ()
+{
+	LOOP=1
+	CURRENT_LOOP=1
+	if [ -n "$RUNNING_TIME" ]
+	then
+       		SECONDS_TO_EXECUTE=`awk "BEGIN { printf (\"%d\", 3600 * $RUNNING_TIME); exit; }"`
+	fi
+        SECONDS=0
+        while [ $LOOP -eq 1 ]
+        do
+                tet_infoline "Starting iteration $CURRENT_LOOP"
+                if [ $CURRENT_LOOP -eq 1 ]
+                then
+                        test_fail=0
+                fi
+
+		create_bank
+       		if [ $? -ne 0 ]
+		then
+                        print "in create_bank"
+			print $?
+			tet_result FAIL
+       	        return
+		fi
+	
+		start_server
+       	 	if [ $? -ne 0 ]
+       	 	then
+                        print "in start_server"
+			tet_result FAIL
+       	        	 return
+       	 	fi
+	
+echo "HOSTLIST=$HOSTLIST"
+		create_accounts
+       	 	if [ $? -ne 0 ]
+       	 	then
+                        print "in create_accounts"
+       	      		   tet_result FAIL
+       	     	    return
+       	 	fi
+	
+	
+		start_clients
+       	 	if [ $? -ne 0 ]
+       	 	then
+                        print "in start_clients"
+       	       		  tet_result FAIL
+       	       		  return
+       		 fi
+	
+	
+		wait_for_clients
+       	 	if [ $? -ne 0 ]
+       	 	then
+                        print "in wait_for_clients"
+       	       		  tet_result FAIL
+       	       		  return
+       	 	fi
+
+
+                check_results
+                if [ $RC -ne 0 ]
+                then
+                        print "in check_results"
+                        tet_infoline "invocation $CURRENT_LOOP failed"
+                        test_fail=1
+			RC=0
+                fi
+
+if [ -f ./core ];then
+	mv ./core /tmp/rpc/dcerpbnk/core.dcerpbnk$CURRENT_LOOP
+	echo " mv ./core /tmp/rpc/dcerpbnk/core.dcerpbnk$CURRENT_LOOP "
+fi
+                cleanup
+
+                CURRENT_LOOP=`expr $CURRENT_LOOP + 1`
+		if [ -n "$LOOPS_TO_EXECUTE" ] 
+		then
+			if [ $CURRENT_LOOP -gt $LOOPS_TO_EXECUTE ]
+			then
+				LOOP=0
+			fi
+		elif [ -n "$RUNNING_TIME" ]
+		then
+			if [ "$SECONDS" -ge "$SECONDS_TO_EXECUTE" ]
+			then
+				LOOP=0
+			fi
+		else
+			LOOP=0
+		fi
+        done
+        num_loops=`expr $CURRENT_LOOP - 1`
+        measure="minutes"
+        minutes=`expr $SECONDS / 60`
+        if [ $minutes -lt 2 ]
+        then
+          minutes=$SECONDS
+          measure="seconds"
+        fi
+
+        if [ -n "$PRIN_NAME" ]
+        then
+          testname=dcerpbnk_auth
+        else
+          testname=dcerpbnk
+        fi
+
+        tet_infoline "$testname test ran for $num_loops loops/iterations in $minutes $measure"
+
+        if [ $test_fail -eq 0 ]
+        then
+                tet_result PASS
+        else
+                tet_result FAIL
+        fi
+}
+
+
+cleanup ()
+{
+#	exec 8<$TET_ROOT/systest/client_names_$CELL_NAME
+#	while read -u8 HOST
+for HOST in $(cdscp list dir "/.:/hosts/*" | awk 'BEGIN {for (i=0;i<3;i++) getline;}\
+							{print $1}')
+        do
+                echo "---------------------" >> $STTMPDIR/trans_res.$HOST
+                cat $BANK >> $STTMPDIR/trans_res.$HOST
+        done
+#	exec 8<&-
+        killproc bankd
+
+	# When an rpc error occurs, the state of the naming space is not valid
+	# The following deletes the objects, so that the next iteration runs ok.
+	
+        export KRB5CCNAME=`dce_login_noexec cell_admin -dce-`
+        cdscp <<-EOF
+delete object /.:/ad_intf
+delete object /.:/tr_intf
+q
+EOF
+        FILE=`echo ${KRB5CCNAME} |awk '{split ($1,word,":"); print word[2]}'`
+        rm $FILE
+}
+
+nonauth_bnk ()
+{
+    SERVER_PARMS="$SERVER_PARMS -N"
+    CLIENT_PARMS="$CLIENT_PARMS -N"
+
+    rpc_bnk
+}
+
+auth_bnk ()
+{
+    tet_infoline "Running with Authorization on"
+    export PRIN_NAME="bankd"
+    export SERVER_PARMS="-V $AUTH_SVC $SERVER_PARMS -n $PRIN_NAME"
+    export CLIENT_PARMS="-V $AUTH_SVC -A $AUTH_LVL -Z $AUTHZ_SVC $CLIENT_PARMS -p $PRIN_NAME"
+
+    # Set up the server principal and key table
+    dce_login $CELL_ADMIN $ADMIN_PASSWD -exec ./key_setup.sh $ADMIN_PASSWD
+
+    rpc_bnk
+}
+
+# tcc will fail if these files don't exist and get sourced
+# so there is no need to check that this happens
+
+. $TET_ROOT/profile.dcest
+. $TET_ROOT/systest/$OS_VER/rpc/ts/common_functions
+. ./bnk.functions
+. $TCM

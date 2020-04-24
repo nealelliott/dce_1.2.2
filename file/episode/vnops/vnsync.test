@@ -1,0 +1,116 @@
+# /* Copyright (C) 1994 Transarc Corporation - All rights reserved. */
+# $Header: /afs/tr/project/fs/dev/dfs-dev/src/file/episode/vnops/RCS/vnsync.test,v 1.3 1994/05/11 20:06:00 ota Exp $
+
+vnsync 1
+
+open_device 1 8192 1024 1000
+create_aggregate
+
+fork_vget
+
+create_vol xxx 777,,888 10000
+fork_stopuse 1
+lookuppn /
+vn_mkdir many_created1
+fork_create
+fork_delete
+vn_mkdir many_created2
+fork_create
+fork_create
+fork_delete
+fork_delete
+
+create_vol yyy 666,,777 10000
+fork_stopuse 1
+
+lookuppn /
+vn_mkdir many_created
+fork_create
+fork_delete
+fork_delete
+
+create_vol zzz 555,,666 10000
+fork_stopuse 1
+
+lookuppn /
+vn_mkdir many_created
+fork_create
+fork_create
+fork_delete
+
+fork_vget
+
+open_vol 777,,888
+
+echo create
+
+root_vnode
+vn_create foo
+check_code 0
+
+echo mkdir
+
+root_vnode
+vn_mkdir baz
+check_code 0
+
+echo getattr (stat)
+
+root_vnode
+vn_stat
+
+echo lookup
+
+vn_lookup foo
+check_code 0
+root_vnode
+vn_lookup baz
+check_code 0
+vn_lookup .
+check_code 0
+vn_lookup ..
+check_code 0
+vn_lookup gorp
+check_code 2
+
+echo rdwr (read and write)
+
+root_vnode
+check_code 0
+vn_lookup foo
+check_code 0
+vn_write 0 60 3
+check_code 0
+vn_read 0 60 3
+check_code 0
+check_sizes 60 8192 0
+vn_write 0 60
+check_code 0
+vn_read 0 60
+check_code 0
+check_sizes 60 8192 0
+
+lookuppn /baz
+vn_create foo
+check_code 0
+
+lookuppn /baz
+vn_chmod 0444
+check_code 0
+check_mode 0444
+vn_lookup foo
+check_code 13
+
+lookuppn /baz
+vn_chmod 0744
+vn_lookup foo
+check_code 0
+
+# This leads to unavoidable asserts in vnd_Delete with link count problems.
+# fork_destroy
+
+release_vnode
+echo waiting 100 seconds...
+sleep 100
+
+end

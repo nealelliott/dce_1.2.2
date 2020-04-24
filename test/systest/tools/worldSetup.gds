@@ -1,0 +1,351 @@
+#!/bin/ksh
+#set -x
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: worldSetup.gds,v $
+# Revision 1.1.65.2  1996/03/11  02:49:35  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:10:14  marty]
+#
+# Revision 1.1.65.1  1995/12/11  22:51:44  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  22:23:52  root]
+# 
+# Revision 1.1.62.2  1993/10/28  21:05:11  mhickey
+# 	Submit of the enhanced worldSetup that corresponds
+# 	to the enhanced gdsSetup and sTest.gds files.
+# 
+# 	Defect 9209.
+# 	[1993/10/28  20:59:32  mhickey]
+# 
+# Revision 1.1.2.2  1993/09/29  21:55:09  pellis
+# 	Ported to DCE 1.0.3.
+# 	[1993/09/29  21:54:25  pellis]
+# 
+# Revision 1.1.2.1  1993/09/23  20:24:26  pellis
+# 	Moved from ./systest/tools/*.
+# 	[1993/09/23  20:19:46  pellis]
+# 
+# Revision 1.1.2.3  1993/04/05  20:05:39  mhickey
+# 	Changed paths to systest directories, and changed to use
+# 	rsh instead of ropen.
+# 
+# 	 NOTE: Currently gdsditadm dumps core over an rsh, so this is not
+# 	       working!!
+# 	[1993/04/05  20:05:12  mhickey]
+# 
+# Revision 1.1.2.2  1992/07/27  18:57:37  mhickey
+# 	Modified to skip the cell setup steps if CELLNAME = NO_CELL since these
+# 	are not required for GDS testing.  Changed ropen
+# 	commands to run in background instead of in windows
+# 	since when the windows go away, so do the GDS process
+# 	attached to them.
+# 
+# 	Defect 4817.
+# 	[1992/07/27  17:05:34  mhickey]
+# 
+# $EndLog$
+#
+#
+#
+#
+# This program will automatically set up each machine that is going to be
+# involved in the scenario.
+#
+# Wayne Mock - 032490
+#
+# See the scenario design document for more details.
+#
+# 07/22/92; mhickey:  Modified to do only GDS setup, since no-one else is 
+#                     currently using this script to setup their systest
+#                     configurations.
+#
+# 10/20/93; mhickey:  Modified to handle the new sTest config specs ,
+#                     multiple dir ids per sys, etc.  Also removed some
+#                     dead (commented for two releases) code from the gds
+#                     startup routine.
+#
+
+waitForMatch()
+{
+#set -x
+        match=$1
+        file=$2
+
+        until grep "$match" "$file" ; do
+                sleep 10
+        done
+
+} # end waitForMatch()
+
+#---------------------------------- step() ------------------------------------
+
+step()
+{
+#set -x
+        stuff="$*"
+        xx_log ""
+        xx_log "Step $STEP - $stuff"
+        STEP=`expr $STEP + 1`
+
+} # end step()
+
+
+#------------------------------- getClients() ---------------------------------
+
+#------------------------------ cleanup() -------------------------------------
+#
+cleanup()
+{
+#set -x
+        case ${RC} in
+        0)
+                banner setup OK
+                xx_log " GDSSETUP IS OKAY"
+                ;;
+        1)
+                banner setup failed!
+                ;;
+        2)
+                banner setup stopped "by user"
+                ;;
+        esac
+
+        grep -v "grep -error-" ${ELOG} | grep error- 
+
+	xx_log "Start Time:  ${START_TIME}"
+	xx_log "End Time:    `date`"
+
+        exit ${RC}
+
+} # end cleanup()
+
+
+#------------------------------ startGdsSetup() -----------------------------
+#
+startGdsSetup()
+{
+#set -x
+	step "Start initial DSA(s)..."
+
+        #
+        # rsh to each initial DSA and set it up
+        #
+        for initspec in $GDS_INITIALDSA
+        do
+           #
+           # break up the spec into dir id and machine spec
+           #
+           set `echo $initspec | tr ',' ' '`
+           # 
+           # add the dir id to the list of initial dir ids
+           #
+           INIT_IDS="${INIT_IDS} $1 "
+           #
+           # convert the machine spec to a machine name
+           #
+           machname=`eval "echo \\$${2}"`
+           #
+           # clear the log file for this setup
+           #           
+           echo > ${STLOGDIR}/gdsSetup.$machname.init
+           if [ "$machname" != "$LOCHOST" ]
+           then
+              ${RSH_COMM} ${machname} "ksh -c 'export TERM=vt100 ; . ${STROOT}/profile.dcest ; ${STDEXC}/gdsSetup ${OPTS} init'" > ${STLOGDIR}/gdsSetup.${machname}.init 2>&1 &
+              rcheck $? 0 "${RSH_COMM} ${1} \"ksh -c 'export TERM=vt100;  . ${STROOT}/profile.dcest ; ${STDEXC}/gdsSetup ${OPTS} init'\"" || RC=1
+           else
+              ${STDEXC}/gdsSetup ${OPTS} init > ${STLOGDIR}/gdsSetup.${machname}.init 2>&1 
+              rcheck $? 0 "${STDEXC}/gdsSetup ${OPTS} init" || RC=1
+           fi
+           step "Wait for initial DSA setup for machine $1 to complete..."
+           xx_log "waitForMatch \"Completed gdsSetup\" ${STLOGDIR}/gdsSetup.${machname}.init"
+           waitForMatch "Completed gdsSetup" "${STLOGDIR}/gdsSetup.${machname}.init"
+     done
+
+     step "Start other DSAs and clients..."
+     unset machlist
+     for i in ${GDS_HOSTCONFIG}
+     do
+        set `echo $i | sed 's/:/ /g'`
+        #
+        # convert the machine spec to a machine name
+        # 
+        machname=`eval "echo \\$${1}"`
+        dirspecs=$3
+        #
+        # check to see if we have to do this one. If we just set up an initial
+        # dsa on this machine, and the other dir id's on the system lack
+        # initial dsa's, then we have no need to revisit the DSA;  all the
+        # other dir id's will have been set up on the first invocation of
+        # gdsSetup.
+        isinit=`echo $GDS_INITIALDSA | tr ' ' '\' | grep ",$1"`
+        if [ "$isinit" != "" ]
+        then
+           set $isinit
+           need_to_do=`echo $dirspecs | grep "dir=$1,"`
+           if [ "$need_to_do" = "" ]
+           then
+              continue
+           fi
+        fi
+
+        machlist="${machlist} $machname"
+        sleep 45
+        echo > ${STLOGDIR}/gdsSetup.$machname	# clear log file
+        if [ "$machname" != "$LOCHOST" ]
+        then
+           ${RSH_COMM} ${machname} "ksh -c 'export TERM=vt100; . ${STROOT}/profile.dcest ; ${STDEXC}/gdsSetup ${OPTS}'" > ${STLOGDIR}/gdsSetup.${machname} 2>&1 &
+           rcheck $? 0 "${RSH_COMM} ${machname} \"ksh -c ' . ${STROOT}/profile.dcest ; ${STDEXC}/gdsSetup ${OPTS}'\"" || RC=1
+        else
+            ${STDEXC}/gdsSetup ${OPTS} > ${STLOGDIR}/gdsSetup.${machname} 2>&1 &
+            rcheck $? 0 "${STDEXC}/gdsSetup ${OPTS} " || RC=1
+        fi
+     done
+
+     for i in ${machlist}
+     do
+        xx_log "waitForMatch \"Completed gdsSetup\" ${STLOGDIR}/gdsSetup.${i}"
+        waitForMatch "Completed gdsSetup" "${STLOGDIR}/gdsSetup.${i}"
+     done
+
+} # end startGdsSetup()
+
+
+#------------------------------- checkSetup() -----------------------------
+#
+checkSetup()
+# $1 filename
+{
+#set -x
+	filename=${1}
+
+	step "Check all machines for correct ${filename} setup."
+
+	for i in ${ALL_MACH} ; do
+           machname=`eval "echo \\$${i}"`                
+           if [ -f ${STLOGDIR}/${filename}.${machname} ]
+           then
+              lpath=${STLOGDIR}/${filename}.${machname}
+           elif [ -f ${STLOGDIR}/${filename}.${machname}.init ]
+           then
+              lpath=${STLOGDIR}/${filename}.${machname}.init
+           else
+              xx_error "Can't find $filename log file for $i!!"
+              RC=1
+              return 0
+           fi
+	   grep -v "grep -error--" $lpath | grep "error--"
+           rcheck $? 1 "Did ${machname} setup correctly?" && RC=1
+	done
+}
+
+#------------------------------- initialize() ---------------------------------
+#
+initialize()
+{
+#set -x
+	step "Initializing..."
+
+	. ${OPTS}
+        
+        xx_log ""
+
+        # Verify that user is either 'root' or 'operator'. Change contributed
+        # by Dave Weisman of the Open Software Foundation. -fpg (9/17/91)
+
+        id | egrep "(root|operator)" >>/dev/null 2>&1
+        rcheck $? 0 "Running as root or operator?" || { echo echo >$ER; exit; }
+
+        if [ "${SHOW_DISPLAY}" != "" ]
+        then
+           DISPLAYOPT="-display `hostname`:0.0"
+        else
+           DISPLAYOPT="-display ${SHOW_DISPLAY}:0.0"
+        fi
+  
+	${CELL_FUNCTIONS}		# does not matter which one.
+
+	CELL_ALREADY_KNOWN='yes'
+	export CELL_ALREADY_KNOWN
+
+#	initLetters ""
+
+} # end initialize()
+
+
+#---------------------------------- main --------------------------------------
+#
+
+OPTS=${1}
+
+WS=`basename $0` ; export WS
+. $STDEXC/systest.functions $WS
+
+TCSUBDIR=directory/gds/dcegdshd
+TCDIR=$STROOT/$TCSUBDIR
+
+
+trap "RC=2 ; cleanup ; exit ${RC}" 1 2 3 15
+
+test $# -ne 1 && { xx_log "usage:  ${PGM} <config-file>" ; exit 1 ; }
+
+PGM=`basename $0`
+RC=0
+STEP=1
+LOCHOST=`hostname`
+ELOG=${STLOGDIR}/${PGM}.${LOCHOST} ; echo > ${ELOG} ; export ELOG
+JOURNAL=${ELOG} ; export JOURNAL
+
+export CP2ALL_LIST OPTS PGM
+
+START_TIME=`date`
+
+chkproc ropend
+
+# rcheck $? 0 "Is ropend running here?" || 
+# {
+# 	xx_error "Execute this command to start ropend:"
+# 	xx_error "${STEXC}/ropend \&"
+# 	exit 1
+# }
+
+initialize
+
+#
+# Don't do the normal setup steps, since we don't have GDS system test 
+# integrated with CDS yet
+#
+# step "Begin cellSetup for all cells..."
+
+# for i in $CELL_FUNCTIONS ; do
+#	ropen -w -n "cellSetup $i" $LOCHOST ". /systest_deliverables/systest/profile.dcest_nolog; cellSetup $i $OPTS"
+#	rcheck $? 0 "ropen -w -n \"cellSetup $i\" $LOCHOST \"cellSetup $i $OPTS\""
+# done
+
+# step "Wait until genSetup starts on all machines..."
+# until chkproc genSetup ; do
+#	sleep 10
+# done
+
+# step "Wait until genSetup completes on all machines..."
+# while chkproc genSetup
+# do
+#	sleep 10
+# done
+
+step "Begin GDS setup for the world..."
+
+startGdsSetup
+checkSetup gdsSetup
+
+cleanup
+
+#------------------------------------------------------------------------------
+#--  End of sSetup
+#------------------------------------------------------------------------------

@@ -1,0 +1,482 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: sec_authn.idl,v $
+ * Revision 1.1.62.2  1996/08/09  12:07:03  arvind
+ * 	Merge code review cleanup from mb_u2u2
+ * 	[1996/07/03  19:29 UTC  burati  /main/DCE_1.2.2/mb_u2u2/1]
+ *
+ * 	u2u cleanup (rtn for checking u2u status code)
+ * 	[1996/05/24  23:15 UTC  sommerfeld  /main/DCE_1.2.2/1]
+ *
+ * Revision 1.1.62.1  1996/06/04  22:00:00  arvind
+ * 	Merge u2u  signature changes from mb_u2u
+ * 	[1996/05/06  19:45 UTC  burati  /main/DCE_1.2/1]
+ * 
+ * 	merge u2u work
+ * 	[1996/04/29  19:17 UTC  burati  /main/mb_u2u/1]
+ * 
+ * 	u2u work off Mothra, before 1.2 branch is available
+ * 	[1996/04/29  19:11 UTC  burati  /main/mb_mothra8/1]
+ * 
+ * Revision 1.1.60.2  1996/03/09  23:29:08  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:44:32  marty]
+ * 
+ * Revision 1.1.60.1  1995/12/08  17:37:15  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:56:02  root]
+ * 
+ * Revision 1.1.58.6  1994/09/21  19:07:42  sommerfeld
+ * 	[OT10413] on client, retain & check timestamps for CN mutual authentication.
+ * 	[1994/09/21  19:06:05  sommerfeld]
+ * 
+ * Revision 1.1.58.5  1994/08/09  17:32:38  burati
+ * 	DFS/EPAC/KRPC/dfsbind changes
+ * 	[1994/08/09  16:59:53  burati]
+ * 
+ * Revision 1.1.58.4  1994/08/04  16:13:01  mdf
+ * 	Hewlett Packard Security Code Drop
+ * 	[1994/07/26  19:10:04  mdf]
+ * 
+ * Revision 1.1.58.2  1994/06/02  21:28:42  mdf
+ * 	hp_sec_to_osf_3 drop, merge up with latest.
+ * 	[1994/05/24  15:16:24  mdf]
+ * 
+ * 	hp_sec_to_osf_3 drop
+ * 
+ * Revision 1.1.58.1  1994/01/28  23:10:57  burati
+ * 	Delegation/EPAC changes (dlg_bl1)
+ * 	[1994/01/18  20:54:08  burati]
+ * 
+ * Revision 1.1.56.1  1993/10/05  22:30:58  mccann
+ * 	CR8651 64 bit porting changes
+ * 	[1993/10/04  19:12:27  mccann]
+ * 
+ * Revision 1.1.4.2  1992/12/29  13:53:51  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:49:36  zeliff]
+ * 
+ * Revision 1.1.2.2  1992/02/20  21:00:51  sommerfeld
+ * 	Fixes OT 2085.
+ * 	Add sec_krb_timestamp (for benefit of new changes to security and
+ * 	rpc6 cn authentication).
+ * 	[1992/02/20  20:58:30  sommerfeld]
+ * 
+ * Revision 1.1  1992/01/19  14:55:08  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+
+/*  sec_authn.idl
+**
+** Copyright (c) Hewlett-Packard Company 1991, 1994, 1995
+** Unpublished work. All Rights Reserved.
+**
+*/
+/*
+**  Copyright (c) 1991 by
+**      Hewlett-Packard Company, Palo Alto, Ca. & 
+**      Digital Equipment Corporation, Maynard, Mass.
+**
+**  NAME:
+**      sec_authn.idl
+**
+**  FACILITY:
+**      Security / Remote Procedure Call
+**
+**  ABSTRACT:
+**      This module contains the specification for the interface
+**      between the runtime and the security service.
+*/
+
+[local] interface sec_authn
+{
+    import "dce/lbase.idl";
+    import "dce/id_base.idl";
+    import "dce/rpc.idl";
+    import "dce/sec_base.idl";
+
+    const unsigned32 SEC_AUTHZ_FMT_V1_0 = 1;
+    const unsigned32 SEC_AUTHZ_FMT_V1_1 = 2;
+
+    /*
+     * common type definitions.
+     */
+
+    typedef void *sec_krb_parsed_name;
+
+    typedef void *sec_krb_cred;
+
+    typedef void *sec_krb_ccache; /* DEPRECIATED */
+
+    typedef void *sec_krb_ticket; /* DEPRECIATED */
+
+    typedef struct {
+        unsigned32      length;
+        byte_p_t        data;
+    } sec_krb_message;
+
+    typedef unsigned32 sec_krb_timestamp;
+
+    typedef struct {
+        byte    bits[8];
+    } sec_des_block;
+
+    typedef struct {
+        byte    bits[8];
+    } sec_des_key;
+
+    typedef sec_des_block sec_des_key_schedule[16];
+
+    typedef struct {
+	unsigned32 i[2]; /* Number of bits processed so far */
+        unsigned32 buffer[4]; /* Holds 4-word result of MD computation */
+	byte in[64];     /* input buffer */
+	byte digest[16]; /* actual digest after sec_md_final */
+    } sec_md_struct, *sec_md_ptr;
+
+    /*
+     * Destructors.
+     *
+     * These are passed a pointer to the pointer, so that the
+     * reference can be wiped out.
+     *
+     * !!! do we have a destructor for everything we allocate here?
+     */
+
+    void sec_krb_parsed_name_free (
+        [in, out] sec_krb_parsed_name           *pname
+    );
+    
+    void sec_krb_cred_free (
+        [in, out] sec_krb_cred                  *cred
+    );
+
+    void sec_krb_ccache_free (
+        [in, out] sec_krb_ccache                *ccache
+    );
+
+    void sec_krb_message_free (
+        [in, out] sec_krb_message               *message
+    );
+
+    void sec_krb_ticket_free (
+        [in, out] sec_krb_ticket                *ticket /* DEPRECIATED */
+    );
+
+    void sec_id_pac_free (
+        [in, out] sec_id_pac_t                  *pac
+    );
+
+    error_status_t sec_id_pac_copy (
+        [in] sec_id_pac_t                       *pac,
+        [out] sec_id_pac_t                      *opac
+    );
+
+    error_status_t sec_krb_parse_name (		/* DEPRECIATED */
+        [in] char *name,
+        [out] sec_krb_parsed_name *pname
+    );
+
+    error_status_t sec_krb_sec_parse_name (
+	[in] rpc_auth_identity_handle_t auth_ident,
+	[in] unsigned32 authn_level,
+        [in] char *name,
+        [out] sec_krb_parsed_name *pname
+    );
+
+    error_status_t sec_krb_unparse_name (
+        [in] sec_krb_parsed_name pname,
+        [out] char **name
+    );
+
+    error_status_t sec_krb_get_cc (		/* DEPRECIATED */
+        [in] rpc_auth_identity_handle_t auth_ident,
+        [out] sec_krb_ccache            *ccache
+    );
+    
+    /*
+     * Retrive a ticket from the credential cache or the KDC.
+     *
+     * authz_proto should be either rpc_c_authz_name or rpc_c_authz_dce.
+     */
+
+    error_status_t sec_krb_get_cred (
+        [in] sec_krb_ccache             ccache,
+        [in] sec_krb_parsed_name        server_name,
+        [in] unsigned32                 authn_level,
+        [in] unsigned32                 authz_proto,
+        [in] unsigned32                 tkt_length,
+        [in] unsigned_char_p_t          tkt_data,
+        [out] sec_krb_cred              *cred,
+        [out] unsigned32                *expiration
+    );
+
+    error_status_t sec_krb_get_name (		/* DEPRECIATED */
+        [in] sec_krb_ccache             ccache,
+        [out] sec_krb_parsed_name       *client_name
+    );
+
+    error_status_t sec_krb_get_pac (		/* DEPRECIATED */
+        [in] rpc_auth_identity_handle_t auth_ident,
+        [out] sec_id_pac_t              *pac
+    );
+
+    error_status_t sec_krb_build_message (	/* DEPRECIATED */
+        [in] sec_krb_ccache             ccache,
+        [in] sec_krb_cred               cred,
+        [in] sec_des_block              *challenge,
+        [in] unsigned32                 authn_level,
+        [in] unsigned32                 authz_proto,
+        [in] unsigned32                 key_seq,
+        [in] sec_des_key                *key,
+        [in] sec_id_pac_t               *client_pac,
+        [out] sec_krb_message           *message
+    );
+
+    error_status_t sec_krb_dg_build_message (
+        [in] sec_krb_ccache             ccache,
+        [in] sec_krb_cred               cred,
+        [in] sec_des_block              *challenge,
+        [in] unsigned32                 authn_level,
+        [in] unsigned32                 authz_proto,
+        [in] unsigned32                 key_seq,
+        [in] sec_des_key                *key,
+	[in] sec_des_block		*ivec,
+	[in] unsigned32			authz_fmt,
+        [out] sec_krb_message           *message
+    );
+
+    error_status_t sec_krb_st_translate(        /* DEPRECIATED */
+        [in] signed32 code
+    );
+
+    error_status_t sec_krb_decode_message (	/* DEPRECIATED */
+        [in] sec_krb_message            *message,
+        [in] sec_des_block              *challenge,
+        [in] boolean32                  use_replay,
+        
+        [out] char                      **client_name,
+        [out] sec_id_pac_t              *client_pac,
+        [out] sec_krb_parsed_name       *server_name,
+        [out] unsigned32                *authn_level,
+        [out] unsigned32                *authz_proto,
+        [out] unsigned32                *key_seq,
+        [out] sec_des_key               *key,
+        [out] unsigned32                *expiration,
+        [out] sec_krb_ticket            *ticket
+    );
+
+    error_status_t sec_krb_dg_decode_message (
+        [in] sec_krb_message            *message,
+        [in] sec_des_block              *challenge,
+	[in] unsigned32			authz_fmt,
+	[out] char                      **client_name,
+        [out] sec_id_pac_t              *client_pac,
+	[out] rpc_authz_cred_handle_t   *client_creds,
+        [out] sec_krb_parsed_name       *server_name,
+        [out] unsigned32                *authn_level,
+        [out] unsigned32                *authz_proto,
+        [out] unsigned32                *key_seq,
+        [out] sec_des_key               *key,
+	[out] sec_des_block		*ivec,
+        [out] unsigned32                *expiration
+    );
+
+    error_status_t sec_krb_dg_decode_msg_frags (
+        [in] sec_krb_message            *message,
+        [in] sec_des_block              *challenge,
+        [in] unsigned32			authz_fmt,
+        [out] char                      **client_name,
+        [out] sec_id_pac_t              *client_pac,
+        [out] sec_bytes_t               *raw_epac_setP,
+        [out] rpc_authz_cred_handle_t   *client_creds,
+        [out] sec_krb_parsed_name       *server_name,
+        [out] unsigned32                *authn_level,
+        [out] unsigned32                *authz_proto,
+        [out] unsigned32                *key_seq,
+        [out] sec_des_key               *key,
+        [out] sec_des_block		*ivec,
+        [out] unsigned32                *expiration
+    );
+
+    error_status_t sec_krb_dg_decode_message_kern (
+        [in] sec_krb_message            *message,
+        [in] sec_des_block              *challenge,
+	[in] unsigned32			authz_fmt,
+	[in] handle_t                   h,
+	[in] uuid_t                     *actuid,
+	[in] unsigned32                 boot_time,
+	[in] error_status_t             completion_status,
+	[out] char                      **client_name,
+        [out] sec_id_pac_t              *client_pac,
+	[out] rpc_authz_cred_handle_t   *client_creds, /* FAKE-EPAC */
+        [out] sec_krb_parsed_name       *server_name,
+        [out] unsigned32                *authn_level,
+        [out] unsigned32                *authz_proto,
+        [out] unsigned32                *key_seq,
+        [out] sec_des_key               *key,
+	[out] sec_des_block		*ivec,
+        [out] unsigned32                *expiration
+    );
+
+    /* Register server by keytable */
+    error_status_t sec_krb_register_server (
+        [in] unsigned_char_p_t                  server_princ_name,
+        [in] rpc_auth_key_retrieval_fn_t        get_key_func,
+        [in] void                               *arg
+    );
+
+    /* Register server with u2u protocol, by identity handle. */
+    error_status_t sec_krb_register_server_u2u (
+        [in] unsigned_char_p_t                  server_princ_name,
+        [in] rpc_auth_identity_handle_t         id_h
+    );
+
+    /*
+     * returns pointer to a name which was previously passed to
+     * sec_krb_register_server, in storage maintained by this 
+     * module; caller must not attempt to modify this name
+     */
+
+    error_status_t sec_krb_get_server (
+        [out] unsigned_char_p_t                 *server_name
+    );
+
+    void sec_krb_init ();
+    
+    /*
+     * DES interface (for testing purposes only; this will be overlaid
+     * by a header file).
+     */
+
+    const signed32 sec_des_decrypt = 0;
+    const signed32 sec_des_encrypt = 1;
+    
+    void sec_des_cbc_cksum (
+         [in] sec_des_block                     *plaintext,
+         [out] sec_des_block                    *cksum,
+         [in] signed32                          length,
+         [in] sec_des_key_schedule              key,
+         [in] sec_des_block                     *ivec
+     );
+
+    void sec_des_ecb_encrypt (
+        [in] sec_des_block                      *inblock,
+        [out] sec_des_block                     *outblock,
+        [in] sec_des_key_schedule               key,
+        [in] signed32                           direction
+    );
+
+    void sec_des_cbc_encrypt (
+        [in] sec_des_block                      *inblocks,
+        [out] sec_des_block                     *outblocks,
+        [in] signed32                           length,
+        [in] sec_des_key_schedule               key,
+        [in] sec_des_block                      *ivec,
+        [in] signed32                           direction
+    );
+
+    error_status_t sec_des_key_sched (
+        [in] sec_des_key *                              key,
+        [out] sec_des_key_schedule                      schedule
+    );
+
+    error_status_t sec_des_new_random_key (
+        [out] sec_des_key *key
+    );
+
+    error_status_t sec_des_generate_random_block (
+        [out] sec_des_block *key
+    );
+
+    /* Initialize MD5 state structure */
+    void sec_md_begin(
+	[out] sec_md_ptr state
+    );
+
+    /* Add more bytes to cksum */
+    void sec_md_update(
+	[in, out] sec_md_ptr state,
+	[in] byte *data,
+	[in] unsigned32 length
+    );
+
+    /* Finalize buffer (fold in length; put in canonical byte order) */
+    void sec_md_final(
+        [in, out] sec_md_ptr state
+    );
+
+    error_status_t sec_krb_cn_build_message (
+	[in] sec_krb_ccache     		ccache, 
+	[in] sec_krb_cred 			cred,
+	[in] unsigned32				authn_level, 
+	[in] unsigned32 			authz_proto, 
+	[in] unsigned32				authz_fmt,
+	[out] sec_des_key                       *key,
+	[out] sec_krb_timestamp			*ctime,
+	[out] unsigned32			*cusec,
+	[out] sec_krb_message			*message
+    );
+
+    error_status_t sec_krb_cn_build_rep_message (
+	[in] unsigned32  			authn_level,
+        [in] sec_krb_timestamp			ctime,
+        [in] unsigned32				cusec,
+        [out] sec_krb_message			*rep_message,
+        [in] sec_des_key			*key
+    );
+
+    error_status_t sec_krb_cn_build_err_message (
+	[in] unsigned32 	             	authn_level,
+	[in] unsigned32         	     	error,
+	[in] sec_krb_timestamp     	 	ctime,
+	[in] unsigned32            	  	cusec,
+	[out] sec_krb_message      	  	*err_message,
+	[in] sec_des_key             		*key
+    );
+    error_status_t sec_krb_cn_decode_message (
+	[in] sec_krb_message          		*message,
+	[in] unsigned32				authz_fmt,
+	[out] unsigned char            		**client_name,
+	[out] sec_id_pac_t             		*client_pac,
+	[out] rpc_authz_cred_handle_t   	*client_creds, /* FAKE-EPAC */
+	[out] sec_krb_parsed_name		*server_name,
+	[out] unsigned32        		*authz_proto,
+	[out] sec_des_key			*key,
+	[out] unsigned32			*expiration,
+	[out] sec_krb_timestamp			*ctime,
+	[out] unsigned32			*cusec
+    );
+
+    error_status_t sec_krb_cn_decode_err_message (
+	[in] unsigned32              		authn_level,
+	[in] sec_krb_message        		*err_message,
+	[out] unsigned32             		*error,
+	[in] sec_des_key 			*key
+    );
+
+    error_status_t sec_krb_cn_decode_rep_message (
+	[in] unsigned32                      	authn_level,
+	[in] sec_krb_message                 	*message,
+	[in] sec_krb_timestamp			ctime,
+	[in] unsigned32				cusec,
+	[in] sec_des_key                     	*key
+    );
+
+    boolean32 sec_krb_must_use_u2u (
+        [in] error_status_t                     status
+    );
+
+    boolean32 sec_krb_never_valid (
+        [in] error_status_t                     status
+    );
+}

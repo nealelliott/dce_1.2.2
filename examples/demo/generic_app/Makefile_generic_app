@@ -1,0 +1,199 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: Makefile_generic_app,v $
+# Revision 1.1.7.3  1996/03/09  23:15:19  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:32:34  marty]
+#
+# Revision 1.1.7.2  1995/12/08  20:54:33  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/08  20:49:43  root]
+# 
+# Revision 1.1.2.2  1994/10/27  20:06:40  rrizzo
+# 	expand copyright
+# 	[1994/10/27  19:39:00  rrizzo]
+# 
+# Revision 1.1.2.1  1994/10/21  19:13:17  weir
+# 	Submit sample program sources (CR 12635)
+# 	[1994/10/21  19:12:33  weir]
+# 
+# $EndLog$
+##############################################################################
+# [22.VI.94]                                                                 #
+#                                                                            #
+# Makefile: A generic makefile suitable for building the sample              #
+#           application.                                                     #
+#                                                                            #
+#                               -77 cols-                                    #
+##############################################################################
+
+# Library and include paths:
+DCEROOT = /opt/dcelocal
+
+# SAMS reference:
+SAMS = sams
+
+# IDL compiler:
+IDLC = /bin/idl
+# IDLC = /project/dce/build/nb_ux/tools/hp800/bin/idl
+
+# Library directories:
+LIBDIRS = -L$(DCEROOT)/usr/lib
+
+# Libraries:
+LIBS = -ldce 
+LIBALL	= $(LIBDIRS) $(LIBS)
+
+# Include directories (some compilers need -I. to pick up local header files):
+INC = -I. -I$(DCEROOT)/share/include -I$(DCEROOT)/usr/include
+
+#
+# NOTE: The following five lines are needed on HPUX...
+#
+# LDFLAGS =-Wl,-Bimmediate,-Bnonfatal
+# IDLCC=-cc_cmd 'c89 -c'
+# IDLCOPT=-cc_opt -D_HPUX_SOURCE
+# CDEFS = -D_HPUX_SOURCE
+# CC = c89
+#
+
+
+# CC flags:
+CFLAGS = -g $(CDEFS) $(INC)
+
+# IDL compiler flags. There are two versions of this line because, for the
+#  sample_bind interface, we explicitly declare and initialize the entry-
+#  point vector ourselves, so we specify that no epv structure be generated
+#  by IDL for it; but for the sample interface itself, we want to use the
+#  default epv structure, so when processing its .idl file we let IDL go
+#  ahead and generate the structure. There actually is no particular reason
+#  for explicitly declaring the vector for sample_bind (that I can see),
+#  but it's instructive to see the two ways this can be done.
+#
+# The "-keep all" option is specified in order to avoid having IDL continu-
+#  ally create and delete stub files. Doing it this way makes the build
+#  much shorter...
+NO_EPV_IFLAGS = -v -no_mepv $(IDLCC) $(IDLCOPT) $(INC) -keep all
+IFLAGS = -v $(IDLCC) $(IDLCOPT) $(INC) -keep all
+# -cc_cmd "$(CC) $(CFLAGS) -c" -keep all
+
+# Interface name:
+IF = sample
+
+##############################################################################
+# TARGETS:
+# Executables...
+CLIENT = $(IF)_client
+SERVER = $(IF)_server
+
+# Objects:
+CLIENTO = $(IF)_client.o
+SERVERO = $(IF)_server.o
+CLIENTSO = $(IF)_cstub.o
+SERVERSO = $(IF)_sstub.o
+DBSO = $(IF)_db_cstub.o
+MGRO = $(IF)_manager.o
+SVCMSGO = dcesmpmsg.o 
+SVCSVCO = dcesmpsvc.o
+
+# Remote bind interface:
+BIND_REMOTE = sample_bind
+BIND_REMOTEC = $(BIND_REMOTE).c
+BIND_REMOTEO = $(BIND_REMOTE).o
+
+# Sams generated:
+SVCH = dcesmpmsg.h dcesmpsvc.h dcesmpmac.h
+SVCMSGC = dcesmpmsg.c 
+SVCSVCC = dcesmpsvc.c
+FROMSAMS = $(SVCH) $(SVCC)
+
+# IDL generated:
+HDR = $(IF).h
+DBHDR = $(IF)_db.h
+SHDR = $(SERVER).h
+CLIENTSC = $(IF)_cstub.c
+SERVERSC = $(IF)_sstub.c
+DBSC = $(IF)_db_cstub.c
+FROMIDL = $(HDR) $(CLIENTSC) $(SERVERSC)
+FROMDBIDL = $(DBHDR) $(DBSC)
+FROMBINDIDL = sample_bind.h sample_bind_sstub.c sample_bind_cstub.c
+
+##############################################################################
+# DEPENDENCIES:
+
+all: $(CLIENT) $(SERVER)
+
+##############################################################################
+# Executables (.o dependencies):
+
+$(SERVER):	$(SERVERSO) $(BIND_REMOTEO) $(DBSO) $(SERVERO) $(MGRO) \
+		$(SVCMSGO) $(SVCSVCO) sample_bind.h sample_bind_sstub.c
+		$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(SERVERSO) $(BIND_REMOTEO) \
+		$(DBSO) $(SERVERO) $(MGRO) $(SVCMSGO) $(SVCSVCO) \
+		sample_bind_sstub.o $(LIBALL)
+
+$(CLIENT):	$(CLIENTSO) $(CLIENTO) $(SVCMSGO) $(SVCSVCO) sample_bind.h \
+		sample_bind_cstub.c
+		$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(CLIENTSO) $(CLIENTO) \
+		sample_bind_cstub.o $(SVCMSGO) $(SVCSVCO) $(LIBALL)
+
+##############################################################################
+# Object files (.c and .h dependencies):
+
+$(SERVERSO):	$(SERVERSC) $(HDR) $(SHDR) sample_bind_sstub.c
+
+$(CLIENTSO):	$(CLIENTSC) $(HDR) sample_bind_cstub.c
+
+$(DBSO):	$(DBSC) $(DBHDR)
+
+$(SERVERO):	$(IF)_server.c $(HDR) $(SHDR) $(DBHDR) $(SVCH)
+
+$(CLIENTO):	$(IF)_client.c	$(HDR) $(SVCH) $(FROMBINDIDL)
+
+$(BIND_REMOTEO):	sample_bind.c sample_bind.h $(SHDR) $(SVCH)
+
+$(MGRO):	$(IF)_manager.c $(HDR) $(SHDR) $(DBHDR) $(SVCH)
+
+$(SVCMSGO):	$(SVCMSGC)
+
+$(SVCSVCO):	$(SVCSVCC)
+
+##############################################################################
+# IDL generated files (.idl and .acf dependencies):
+
+$(FROMIDL):	$(IF).idl $(IF).acf
+	$(IDLC) $(IF).idl $(IFLAGS)
+
+$(FROMDBIDL):	$(IF)_db.idl $(IF)_db.acf
+	$(IDLC) $(IF)_db.idl $(IFLAGS)
+
+$(FROMBINDIDL):	sample_bind.idl sample_bind.acf
+	$(IDLC) sample_bind.idl $(NO_EPV_IFLAGS)
+
+##############################################################################
+# Sams generated files (.sams dependencies):
+
+$(FROMSAMS): smp.sams
+	$(SAMS) smp.sams
+
+##############################################################################
+clean:
+	rm -f $(FROMIDL) $(SERVERSO) $(SERVERO) $(DBSO) $(MGRO) $(UTILO) \
+		$(CLIENTSO) $(CLIENTO) $(UTILO) $(FROMSAMS) \(null\).idl \
+		dcesmp.cat dcesmp.msg dcesmpmsg.c dcesmpmsg.idx \
+		dcesmpmsg.man dcesmpmsg.sgm dcesmpsvc.c sample_bind.h \
+		sample_db.h dcesmpmsg.o dcesmpsvc.o sample_bind.o \
+		dcesmpmsg.sml sample_bind_cstub.o sample_bind_sstub.o .idl \
+		sample_bind_cstub.c sample_bind_sstub.c sample_db_cstub.c
+
+rmtarget:
+	rm -f $(CLIENT) $(SERVER) core
+
+clobber: clean rmtarget
+

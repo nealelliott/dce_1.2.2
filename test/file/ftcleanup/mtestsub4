@@ -1,0 +1,857 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+#    Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This script tests fileset cleanup of Episode filesets.  It exercises
+# the normal aborted-move cases. This script tests the same-server
+# move cases that are not tested by mtest1.
+
+###############################################################################
+
+# Usage:	mtestsub4
+
+# Typically run via:    mtestsub4 >& mtestsub4.out
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode. DFS server $SERVER_1
+# must export Episode aggregates $SERV1_AGGR1 and $SERV1_AGGR3.
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1,in
+# order to run the fts commands contained in this script. You must also be
+# able to create mount points in $export_root.
+
+# Highest error number is: 64.
+
+###############################################################################
+
+d=`pwd`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=mov
+
+# Load the test context.
+. $dn/statusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+ft_1=Dogbreath.$$
+
+dir_1=$test_root/Plague.$$
+
+SHORT_SERVER_1=`echo $SERVER_1 | sed -e 's;/.*/\([^/]*\);\1;'`
+SHORT_SERVER_1=`echo $SERVER_1 | sed -e 's;/.*/\([^/]*\);\1;'`
+
+export ft_1 dir_1 SHORT_SERVER_1 SHORT_SERVER_1
+
+###############################################################################
+
+echo ""
+echo "$ty/$p starting as PID $$ at `date` on $hn"
+echo "   in cell $CELL_NAME."
+echo "Using aggregates $SERV1_AGGR1 on $SERVER_1 and $SERV2_AGGR2 on $SERVER_2."
+
+echo ""
+echo "Will attempt moves between $SERV1_AGGR1 and $SERV1_AGGR3"
+if test "$SERV1_AGGR1" = "$SERV1_AGGR3"
+    then
+	echo 'These are the same aggregate!  ABORTING'
+	exit 2
+fi
+
+if test "$CELL_NAME" = ""
+   then echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting."
+	 exit 2
+   fi
+
+bombset=" "
+for pel in $path /opt/dcelocal/bin /opt/dce*/bin . ; do
+	if [ -x $pel/bomb ]
+	then
+		bombset="$pel/bomb set"
+		echo "Using $pel/bomb as bomb-setter."
+		break
+	fi
+done
+if [ "$bombset" = " " ]
+then
+	echo "No bomb_set program to be found in any obvious place!  Aborting."
+	exit 2
+fi
+export bombset
+
+###############################################################################
+
+# : ${CASES="1 2 3 4 5 6 7 8 9 10 11 13 14 15 16 18 19 21 22 23"}
+: ${CASES="1 2 7 8 9 11 13 14 15 16 18 19 21 22 23"}
+export CASES
+
+echo ""; echo "Fileset moves"; echo "-------------"
+
+########################################
+
+echo ""; echo "Creating filesets with names starting with $ft_1 ...."
+for ix in $CASES; do
+    fts create $ft_1.$ix $SERVER_1 $SERV1_AGGR1 $cav_arg; rf=$?
+    if test $rf -ne 0
+	then echo "- fts create failed (errno $rf) ($p: E$ix.61)"; rc=`expr $rc + 1`
+	     echo "BAILING OUT of this part"; continue
+	fi
+
+    ftid=`fts lsfldb $ft_1.$ix $cav_arg | sed -n '/readWrite/s/.*readWrite.*ID \([^ ,]*\),,\([^ ]*\) .*/\1,,\2/p'`
+    fthi=`echo $ftid | sed -n 's/\([^,]*\),,\([^,]*\)/\1/p'`
+    ftlo=`echo $ftid | sed -n 's/\([^,]*\),,\([^,]*\)/\2/p'`
+    if test "$fthi" -eq 0 -a "$ftlo" -eq 0
+	then echo "- fileset ID is unreasonable ($ftid, $fthi, $ftlo) ($p: E$ix.62)"
+	     rc=`expr $rc + 1`
+	     echo "BAILING OUT of this part"; continue
+	fi
+    eval ftid_$ix=$ftid
+
+    echo "Creating mount point at $dir_1.$ix for $ft_1.$ix ..."
+    fts crmount $dir_1.$ix $ft_1.$ix $CELL_ARG; rf=$?
+    if test $rf -ne 0
+	then echo "- fts crmount failed (errno $rf) ($p: E$ix.63)"; rc=`expr $rc + 1`
+	     echo "BAILING OUT of this part"; continue
+	fi
+
+    setFsetRootProt $dir_1.$ix $testuid "E$ix.64"
+    rf=$?
+    if test $rf -ne 0
+    then
+	     echo "BAILING OUT of this part"; continue
+    fi        
+
+done
+
+########################################
+
+echo ""; echo "Putting stuff in the new filesets..."
+for ix in $CASES; do
+    cd /tmp; cd $dir_1.$ix; rf=$?
+    if test `pwd` != $dir_1.$ix -o $rf -ne 0
+	then echo "- cd $dir_1.$ix failed (errno $rf, wd `pwd`) ($p: E$ix.64)"
+	     echo "BAILING OUT of this part"; continue
+	fi
+
+    cat > f0 << ==END==
+
+    We hold these truths to be self-evident, that all men are created equal,
+    that they are endowed by their creator with certain unalienable rights,
+    that among these are life, liberty, and the pursuit of happiness. That
+    to secure these rights, governments are instituted among men, deriving
+    their just powers from the consent of the goverened.
+
+    That whenever any form of government becomes destructive of these ends,
+    it is the right of the people to alter or abolish it, and to institute
+    new government, laying its foundations on such principles and organizing
+    its powers in such form, as to them shall seem most likely to effect
+    their safety and happiness.
+
+==END==
+    echo "fset $ix here; Elvis has just left the building" > f1.$ix
+    echo "She wants to sell my back monkey" > f2.$ix
+    echo "Buy Sam a drink and get his fish one too" > f3.$ix
+    echo "This is $dir_1/file_1.$ix." > file_1.$ix
+    cat file_1.$ix file_1.$ix file_1.$ix file_1.$ix | sed 's/file_1/file_4.$ix/' > file_4.$ix
+    cat file_4.$ix file_4.$ix file_4.$ix file_4.$ix | sed 's/file_4/file_16/' > file_16.$ix
+    mkdir d1 d2...$ix d3
+    cp f* d1
+    cp file_4.$ix d2...$ix
+    cp file_16.$ix d3
+    fts lsmount $dir_1.$ix
+    cm whereis .
+done
+
+cd /tmp
+
+########################################
+
+export SERVER_1 SERV1_AGGR1 SERV1_AGGR3 cav_arg CELL_ARG
+
+echo "Starting to fork move cases at `date`"
+for ix in $CASES; do
+
+########################################
+
+# set up a sub-shell.
+outfile=/tmp/$ty.$p.$$.$ix; rm -rf $outfile
+resfile=/tmp/$ty.$p.$$.RES.$ix; rm -rf $resfile
+export outfile resfile
+
+(echo ""; echo "Case ${ix}:") > $outfile
+echo 0 > $resfile
+(
+msg=""
+case $ix in
+	1) msg="Initial state.";;
+	2) msg="Abort after making the source fileset busy.";;
+	3) msg="Abort after creating the clone.";;
+	4) msg="Abort after initially making the new clone busy.";;
+	5) msg="Abort after setting CLONEINPROG and ZAPME in the source and clone.";;
+	6) msg="Abort after finishing the source clone, while the clone is still busy.";;
+	7) msg="Abort after making the clone.";;
+	8) msg="Abort after the clone is made and no filesets are busy.";;
+	9) msg="Abort after making the clone busy in preparing to dump it.";;
+	10) msg="Abort after first creating the target.";;
+	11) msg="Abort after first making the target busy.";;
+	13) msg="Abort after marking the target with ZAPME.";;
+	14) msg="Abort after dumping the clone and destroying it.";;
+	15) msg="Abort after taking the source off-line for the last time.";;
+	16) msg="Abort after doing the incremental dump and turning off ZAPME in the target.";;
+	18) msg="Abort after turning off BUSY and DELONSALVAGE in the target.";;
+	19) msg="Abort after swapping fileset IDs.";;
+	21) msg="Abort after clearing the target's parentId.";;
+	22) msg="Abort after deleting the source fileset.";;
+	23) msg="Normal move.";;
+esac
+if [ "$msg" = "" ]
+    then
+	msg="State $ix"
+    fi
+echo $msg
+
+# Do the possibly-sabotaged move operation.
+
+case $ix in
+1)
+# The initial state--no move.
+;;
+
+2)
+# Abort after making the source fileset busy.
+sleep 120
+$bombset 'clonevolume#3:exit=1:count=1+0' -command fts move $ft_1.$ix $SERVER_1 $SERV1_AGGR1 $SERVER_1 $SERV1_AGGR3 $cav_arg; rf=$?
+if test $rf -ne 1
+   then echo "- bombed fts move failed--not 1 (errno $rf) ($p: E$ix.1)"; rc=`expr $rc + 1`
+	echo 1 > $resfile
+	echo "BAILING OUT of this part"; continue
+   fi
+;;
+
+3 | 4 | 5 | 6 | 10)
+# State cannot be reached.
+echo "State $ix is internal to ftserver and CANNOT BE REACHED with fts alone."
+echo "--ABORTING state $ix--"
+;;
+
+7)
+# Abort after the clone is made and making it busy
+sleep 110
+$bombset 'clonevolume#7:exit=1:count=1+0' -command fts move $ft_1.$ix $SERVER_1 $SERV1_AGGR1 $SERVER_1 $SERV1_AGGR3 $cav_arg; rf=$?
+if test $rf -ne 1
+   then echo "- bombed fts move failed--not 1 (errno $rf) ($p: E$ix.2)"; rc=`expr $rc + 1`
+	echo 1 > $resfile
+	echo "BAILING OUT of this part"; continue
+   fi
+;;
+
+8)
+# Abort after the clone is made and no filesets are busy.
+$bombset 'movevolume#25:exit=1:count=1+0' -command fts move $ft_1.$ix $SERVER_1 $SERV1_AGGR1 $SERVER_1 $SERV1_AGGR3 $cav_arg; rf=$?
+if test $rf -ne 1
+   then echo "- bombed fts move failed--not 1 (errno $rf) ($p: E$ix.3)"; rc=`expr $rc + 1`
+	echo 1 > $resfile
+	echo "BAILING OUT of this part"; continue
+   fi
+;;
+
+9)
+# Abort after making the clone busy in preparing to dump it.
+$bombset 'copyclone#3:exit=1:count=1+0' -command fts move $ft_1.$ix $SERVER_1 $SERV1_AGGR1 $SERVER_1 $SERV1_AGGR3 $cav_arg; rf=$?
+if test $rf -ne 1
+   then echo "- bombed fts move failed--not 1 (errno $rf) ($p: E$ix.4)"; rc=`expr $rc + 1`
+	echo 1 > $resfile
+	echo "BAILING OUT of this part"; continue
+   fi
+;;
+
+11)
+sleep 110
+# Abort after first making the target busy.
+$bombset 'copyclone#5:exit=1:count=1+0' -command fts move $ft_1.$ix $SERVER_1 $SERV1_AGGR1 $SERVER_1 $SERV1_AGGR3 $cav_arg; rf=$?
+if test $rf -ne 1
+   then echo "- bombed fts move failed--not 1 (errno $rf) ($p: E$ix.5)"; rc=`expr $rc + 1`
+	echo 1 > $resfile
+	echo "BAILING OUT of this part"; continue
+   fi
+;;
+
+13)
+sleep 100
+# Abort after setting TARGET in the target.
+$bombset 'copyclone#8:exit=1:count=1+0' -command fts move $ft_1.$ix $SERVER_1 $SERV1_AGGR1 $SERVER_1 $SERV1_AGGR3 $cav_arg; rf=$?
+if test $rf -ne 1
+   then echo "- bombed fts move failed--not 1 (errno $rf) ($p: E$ix.7)"; rc=`expr $rc + 1`
+	echo 1 > $resfile
+	echo "BAILING OUT of this part"; continue
+   fi
+;;
+
+14)
+sleep 90
+# Abort after dumping the clone and destroying it.
+$bombset 'copyclone#12:exit=1:count=1+0' -command fts move $ft_1.$ix $SERVER_1 $SERV1_AGGR1 $SERVER_1 $SERV1_AGGR3 $cav_arg; rf=$?
+if test $rf -ne 1
+   then echo "- bombed fts move failed--not 1 (errno $rf) ($p: E$ix.8)"; rc=`expr $rc + 1`
+	echo 1 > $resfile
+	echo "BAILING OUT of this part"; continue
+   fi
+;;
+
+15)
+sleep 105
+# Abort after taking the source off-line for the last time.
+$bombset 'copyclone#14:exit=1:count=1+0' -command fts move $ft_1.$ix $SERVER_1 $SERV1_AGGR1 $SERVER_1 $SERV1_AGGR3 $cav_arg; rf=$?
+if test $rf -ne 1
+   then echo "- bombed fts move failed--not 1 (errno $rf) ($p: E$ix.9)"; rc=`expr $rc + 1`
+	echo 1 > $resfile
+	echo "BAILING OUT of this part"; continue
+   fi
+;;
+
+16)
+sleep 85
+# Abort after doing the incremental dump and turning off ZAPME in the target.
+$bombset 'movevolume#28:exit=1:count=1+0' -command fts move $ft_1.$ix $SERVER_1 $SERV1_AGGR1 $SERVER_1 $SERV1_AGGR3 $cav_arg; rf=$?
+if test $rf -ne 1
+   then echo "- bombed fts move failed--not 1 (errno $rf) ($p: E$ix.10)"; rc=`expr $rc + 1`
+	echo 1 > $resfile
+	echo "BAILING OUT of this part"; continue
+   fi
+;;
+
+18)
+sleep 115
+# Abort after turning off BUSY and DELONSALVAGE in the target.
+$bombset 'movevolume#53:exit=1:count=1+0' -command fts move $ft_1.$ix $SERVER_1 $SERV1_AGGR1 $SERVER_1 $SERV1_AGGR3 $cav_arg; rf=$?
+if test $rf -ne 1
+   then echo "- bombed fts move failed--not 1 (errno $rf) ($p: E$ix.12)"; rc=`expr $rc + 1`
+	echo 1 > $resfile
+	echo "BAILING OUT of this part"; continue
+   fi
+;;
+
+19)
+sleep 90
+# Abort after swapping fileset IDs.
+$bombset 'swapintoplace#3:exit=1:count=1+0' -command fts move $ft_1.$ix $SERVER_1 $SERV1_AGGR1 $SERVER_1 $SERV1_AGGR3 $cav_arg; rf=$?
+if test $rf -ne 1
+   then echo "- bombed fts move failed--not 1 (errno $rf) ($p: E$ix.13)"; rc=`expr $rc + 1`
+	echo 1 > $resfile
+	echo "BAILING OUT of this part"; continue
+   fi
+;;
+
+21)
+# Abort after clearing the target's parentId.
+$bombset 'swapintoplace#4:exit=1:count=1+0' -command fts move $ft_1.$ix $SERVER_1 $SERV1_AGGR1 $SERVER_1 $SERV1_AGGR3 $cav_arg; rf=$?
+if test $rf -ne 1
+   then echo "- bombed fts move failed--not 1 (errno $rf) ($p: E$ix.15)"; rc=`expr $rc + 1`
+	echo 1 > $resfile
+	echo "BAILING OUT of this part"; continue
+   fi
+;;
+
+22)
+# Abort after deleting the source fileset.
+$bombset 'movevolume#30:exit=1:count=1+0' -command fts move $ft_1.$ix $SERVER_1 $SERV1_AGGR1 $SERVER_1 $SERV1_AGGR3 $cav_arg; rf=$?
+if test $rf -ne 1
+   then echo "- bombed fts move failed--not 1 (errno $rf) ($p: E$ix.16)"; rc=`expr $rc + 1`
+	echo 1 > $resfile
+	echo "BAILING OUT of this part"; continue
+   fi
+;;
+
+23)
+# The normal operation.
+fts move $ft_1.$ix $SERVER_1 $SERV1_AGGR1 $SERVER_1 $SERV1_AGGR3 $cav_arg; rf=$?
+    if test $rf -ne 0
+	then echo "- fts move failed (errno $rf) ($p: E$ix.17)"; rc=`expr $rc + 1`
+	    echo 1 > $resfile
+	    echo "BAILING OUT of this part"; continue
+	fi
+;;
+
+esac
+echo "Case $ix is ready."
+
+# Now end the sub-shell
+) >> /tmp/$ty.$p.$$.$ix 2>&1 &
+
+echo "Forked sub-shell for case $ix at `date`"
+
+# Advance to the next case (setup phase)
+done
+
+echo "Finished forking move cases at `date`"
+
+# Now wait until all the shells are done.
+wait
+
+echo "Move cases finished at `date`"
+
+# Read the presence/absence on the disks as soon as possible.
+fts lshead $SERVER_1 $SERV1_AGGR1 -long -verbose $cav_arg > /tmp/src-list.$$; rf=$?
+if test $rf -ne 0
+   then echo "- source fts lshead failed (errno $rf) ($p: E$ix.25)"; rc=`expr $rc + 1`
+   fi
+fts lshead $SERVER_1 $SERV1_AGGR3 -long -verbose $cav_arg > /tmp/dst-list.$$; rf=$?
+if test $rf -ne 0
+   then echo "- source fts lshead failed (errno $rf) ($p: E$ix.26)"; rc=`expr $rc + 1`
+   fi
+
+for ix in $CASES; do
+    outfile=/tmp/$ty.$p.$$.$ix
+    resfile=/tmp/$ty.$p.$$.RES.$ix
+    res=`cat $resfile`; rm $resfile
+    rc=`expr $rc + $res`
+    cat $outfile; rm $outfile
+done
+
+########################################
+
+
+# VOL_RW	0x00001	/* R/W volume */
+# VOL_READONLY	0x00002	/* ReadOnly Volume */
+# VOL_BUSY	0x00004 /* Volume is Busy */
+# VOL_OFFLINE	0x00008 /* Volume is offline */
+# VOL_DELONSALVAGE	0x00010 /* Delete On Salvage */
+# VOL_OUTOFSERVICE	0x00020 /* Out Of service */
+# VOL_TYPEFIELD	0xf0000	/* what high-level type of volume this is */
+# VOL_TYPE_RW	0x10000	/* read-write (ordinary) */
+# VOL_TYPE_RO	0x20000
+# VOL_TYPE_TEMP	0x40000	/* temporary use, for dumps and moves etc. */
+# VOL_MOVE_TARGET	0x800000    /* this vol is a target for a move op */
+# VOL_MOVE_SOURCE	0x1000000   /* this vol is a source for a move op */
+# VOL_ZAPME	0x2000000   /* delete volume with extreme prejudice */
+# VOL_CLONEINPROG 0x4000000   /* this vol is partially cloned */
+# VOL_OPENDONE	0x10000000   /* back from VOL_OPEN procedure */
+
+for ix in $CASES; do
+
+########################################
+
+echo ""; echo "Initial analysis for case ${ix}:"
+
+# Check for fldb motion
+fts lsfldb $ft_1.$ix $cav_arg | grep RW > /tmp/fl-list.$ix.$$
+# Check where the CM thinks the fileset is.
+case $ix in
+1 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 22 | 23)
+cm whereis $dir_1.$ix/. > /tmp/cm-list.$ix.$$; rf=$?
+if test $rf -ne 0
+    then echo "- $ft_1.$ix 'cm whereis' fails (error $rf) ($p: E$ix.27)"; rc=`expr $rc + 1`
+    fi
+grep -s "fileset '$ft_1.$ix'" /tmp/cm-list.$ix.$$; rf=$?
+if test $rf -ne 0
+    then echo "- $ft_1.$ix CM does not point to fileset (status $rf) ($p: E$ix.28)"; rc=`expr $rc + 1`
+    fi
+;;
+esac
+
+
+
+# ----- INITIAL SOURCE CLONE STATUS CHECK -----
+# ----- INITIAL SOURCE CLONE STATUS CHECK -----
+# ----- INITIAL SOURCE CLONE STATUS CHECK -----
+case $ix in
+3 | 4 | 5 | 6 | 10)
+# State cannot be reached.
+;;
+3 | 7 | 8)
+grep "$ft_1.$ix.move-temp " /tmp/src-list.$$; rf=$?
+if test $rf -ne 0
+    then echo "- no source clone (status $rf) ($p: E$ix.29)"; rc=`expr $rc + 1`
+    fi
+cloneid=`grep "$ft_1.$ix.move-temp " /tmp/src-list.$$ | awk '{if ($5=="states") print $2}'`
+eval ftid_clone_$ix=$cloneid
+clonestatus=`grep "$ft_1.$ix.move-temp " /tmp/src-list.$$ | awk '{if ($5=="states") print $6}'`
+if test "$clonestatus" = ""
+    then echo "- source clone status unreadable (status $rf) ($p: E$ix.30)"; rc=`expr $rc + 1`
+    fi
+	case $ix in
+	3)	goodcstat="0x12040016";;
+	7 | 8)	goodcstat="0x10040006";;
+	esac
+if [ "$clonestatus" != "$goodcstat" ]
+    then echo "- source clone status wrong (status $clonestatus, not $goodcstat) ($p: E$ix.31)"; rc=`expr $rc + 1`
+    fi
+;;
+esac
+
+
+
+# ----- INITIAL SOURCE STATUS CHECK -----
+# ----- INITIAL SOURCE STATUS CHECK -----
+# ----- INITIAL SOURCE STATUS CHECK -----
+case $ix in
+3 | 4 | 5 | 6 | 10)
+# State cannot be reached.
+;;
+1 | 8 | 9 | 10 | 11 | 12 | 13 | 14)
+# Source should contain fileset, not busy.
+grep -s "$ft_1.$ix " /tmp/src-list.$$; rf=$?
+if test $rf -ne 0
+    then echo "- $ft_1.$ix not present on source (status $rf) ($p: E$ix.32)"; rc=`expr $rc + 1`
+    fi
+# Now, get the source's states field.
+srcstatus=`grep "$ft_1.$ix " /tmp/src-list.$$ | awk '{if ($5=="states") print $6}'`
+if test "$srcstatus" = ""
+    then echo "- source status unreadable (status $rf) ($p: E$ix.52)"; rc=`expr $rc + 1`
+    fi
+	case $ix in
+	1 | 8 | 9 | 10 | 11 | 12 | 13 | 14)	goodsstatus="0x10010005";;
+	esac
+if [ "$srcstatus" != "$goodsstatus" ]
+    then echo "- source status wrong (status $srcstatus, not $goodsstatus) ($p: E$ix.53)"; rc=`expr $rc + 1`
+    fi
+;;
+
+2 | 3 | 4 | 5 | 6 | 7 | 15 | 16 | 18)
+# Source should contain the fileset, but busy.
+ctrname=`echo "\$ ftid_$ix" | tr -d ' '`
+grep "Fileset `eval echo $ctrname` is busy" /tmp/src-list.$$ > /tmp/src-list2.$ix.$$; rf=$?
+if test $rf -ne 0
+    then echo "- $ft_1.$ix not busy on source (status $rf) ($p: E$ix.33)"; rc=`expr $rc + 1`
+    fi
+	case $ix in
+	2 | 3 | 4 | 5 | 6 | 7)	strstat="fileset being cloned";;
+	15 | 16 | 18)	strstat="fileset being moved";;
+	esac
+grep -s "$strstat" /tmp/src-list2.$ix.$$; rf=$?
+if test $rf -ne 0
+    then echo "- $ft_1.$ix not in state +${strstat}+ on source (status $rf) ($p: E$ix.34)"; rc=`expr $rc + 1`
+    fi
+grep -s "$ft_1.$ix " /tmp/src-list.$$; rf=$?
+if test $rf -ne 1
+    then echo "- $ft_1.$ix not busy on source (status $rf) ($p: E$ix.35)"; rc=`expr $rc + 1`
+    fi
+;;
+
+19 | 21)
+# Source contains the old fileset, but with a temp ID, so we can't find it.
+grep -s "$ft_1.$ix " /tmp/src-list.$$; rf=$?
+if test $rf -ne 1
+    then echo "- $ft_1.$ix is not busy on source (status $rf) ($p: E$ix.36)"; rc=`expr $rc + 1`
+    fi
+;;
+
+22 | 23)
+# Source should not contain the fileset.
+grep -s "$ft_1.$ix " /tmp/src-list.$$; rf=$?
+if test $rf -ne 1
+    then echo "- $ft_1.$ix is present on source (status $rf) ($p: E$ix.36)"; rc=`expr $rc + 1`
+    fi
+;;
+esac
+
+# ----- INITIAL TARGET STATUS CHECK -----
+# ----- INITIAL TARGET STATUS CHECK -----
+# ----- INITIAL TARGET STATUS CHECK -----
+# When the target isn't busy, check that the fileset is NOT there.
+case $ix in
+3 | 4 | 5 | 6 | 10)
+# State cannot be reached.
+;;
+1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9)
+# Target should not contain the fileset.
+grep -s "$ft_1.$ix " /tmp/dst-list.$$; rf=$?
+if test $rf -ne 1
+    then echo "- $ft_1.$ix is on target (status $rf) ($p: E$ix.37)"; rc=`expr $rc + 1`
+    fi
+;;
+
+11 | 12 | 13 | 14 | 15 | 16)
+# Target should contain the fileset, but busy.
+# But in the local-move case, we do not know the fileset ID of the target.
+;;
+21)
+ctrname=`echo "\$ ftid_$ix" | tr -d ' '`
+grep "Fileset `eval echo $ctrname` is busy" /tmp/dst-list.$$ > /tmp/dst-list2.$ix.$$; rf=$?
+if test $rf -ne 0
+    then echo "- $ft_1.$ix not busy on target (status $rf) ($p: E$ix.38)"; rc=`expr $rc + 1`
+    fi
+	case $ix in
+	11 | 12 | 13 | 14 | 15 | 16)	strstat="copy the clone to a new location";;
+	21)	strstat="fileset being moved";;
+	esac
+grep -s "$strstat" /tmp/dst-list2.$ix.$$; rf=$?
+if test $rf -ne 0
+    then echo "- $ft_1.$ix not in state +${strstat}+ on target (status $rf) ($p: E$ix.39)"; rc=`expr $rc + 1`
+    fi
+grep -s "$ft_1.$ix " /tmp/dst-list.$$; rf=$?
+if test $rf -ne 1
+    then echo "- $ft_1.$ix not busy on target (status $rf) ($p: E$ix.40)"; rc=`expr $rc + 1`
+    fi
+;;
+
+10 | 18 | 22 | 23)
+# When the target isn't busy, check that the fileset is there.
+destname="$ft_1.$ix"
+	case $ix in
+		18)	destname="$destname.move-dest";;
+	esac
+
+grep -s "$destname " /tmp/dst-list.$$; rf=$?
+if test $rf -ne 0
+    then echo "- $destname not on target (status $rf) ($p: E$ix.41)"; rc=`expr $rc + 1`
+    fi
+tgtstatus=`grep "$destname " /tmp/dst-list.$$ | awk '{if ($5=="states") print $6}'`
+if test "$tgtstatus" = ""
+    then echo "- target status unreadable (status $rf) ($p: E$ix.59)"; rc=`expr $rc + 1`
+    fi
+	case $ix in
+	10)	goodtstatus="0x10010015";;
+	18 | 22 | 23)	goodtstatus="0x10010005";;
+	esac
+if [ "$tgtstatus" != "$goodtstatus" ]
+    then echo "- target status wrong (status $tgtstatus, not $goodtstatus) ($p: E$ix.60)"; rc=`expr $rc + 1`
+    fi
+;;
+esac
+
+# ----- FLDB LOCATION CHECK -----
+# ----- FLDB LOCATION CHECK -----
+# ----- FLDB LOCATION CHECK -----
+# Check for fldb motion
+grep "^$SHORT_SERVER_1" /tmp/fl-list.$ix.$$ > /tmp/fl-list1.$ix.$$
+case $ix in
+3 | 4 | 5 | 6 | 10)
+# State cannot be reached.
+;;
+1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 18 | 19 | 21 | 22)
+# Check that the FLDB does not point to the target, but points to the source.
+grep -ws $SERV1_AGGR1 /tmp/fl-list1.$ix.$$; rf=$?
+if test $rf -ne 0
+    then echo "- $ft_1.$ix FLDB does not point to source (status $rf) ($p: E$ix.42)"; rc=`expr $rc + 1`
+    fi
+grep -w $SERV1_AGGR3 /tmp/fl-list1.$ix.$$; rf=$?
+if test $rf -ne 1
+    then echo "- $ft_1.$ix FLDB points to target (errno $rf) ($p: E$ix.43)"; rc=`expr $rc + 1`
+    fi
+;;
+23)
+# Check that the FLDB does not point to the source, but points to the target
+grep -ws $SERV1_AGGR1 /tmp/fl-list1.$ix.$$; rf=$?
+if test $rf -ne 1
+    then echo "- $ft_1.$ix FLDB points to source (status $rf) ($p: E$ix.44)"; rc=`expr $rc + 1`
+    fi
+grep -w $SERV1_AGGR3 /tmp/fl-list1.$ix.$$; rf=$?
+if test $rf -ne 0
+    then echo "- $ft_1.$ix FLDB does not point to target (errno $rf) ($p: E$ix.45)"; rc=`expr $rc + 1`
+    fi
+;;
+esac
+
+done
+
+for ix in $CASES; do
+# Now for cases that care, sleep until BUSY is off everywhere, and look again.
+case $ix in
+3 | 4 | 5 | 6 | 10)
+# State cannot be reached.
+;;
+2 | 3 | 4 | 5 | 6 | 7 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 18 | 19 | 21)
+echo ''; echo 'Sleeping ten minutes, until filesets are not busy.'
+date; sleep 600; date; break;;
+esac
+done
+
+for ix in $CASES; do
+# Get a refreshed copy of the status on the source aggregate.
+case $ix in
+3 | 4 | 5 | 6 | 10)
+# State cannot be reached.
+;;
+2 | 3 | 4 | 5 | 6 | 7 | 9 | 10 | 11 | 12 | 13 | 15 | 16 | 18 | 19 | 21)
+fts lshead $SERVER_1 $SERV1_AGGR1 -long -verbose $cav_arg > /tmp/src-list.$$; rf=$?
+if test $rf -ne 0
+   then echo "- second source fts lshead failed (errno $rf) ($p: E$ix.50)"; rc=`expr $rc + 1`
+   fi
+break;;
+esac
+done
+
+for ix in $CASES; do
+# Get a refreshed copy of the status on the target aggregate.
+case $ix in
+3 | 4 | 5 | 6 | 10)
+# State cannot be reached.
+;;
+11 | 12 | 13 | 14 | 15 | 16 | 21)
+fts lshead $SERVER_1 $SERV1_AGGR3 -long -verbose $cav_arg > /tmp/dst-list.$$; rf=$?
+if test $rf -ne 0
+   then echo "- second target fts lshead failed (errno $rf) ($p: E$ix.57)"; rc=`expr $rc + 1`
+   fi
+break;;
+esac
+done
+
+for ix in $CASES; do
+
+echo ""; echo "Follow-up analysis for case ${ix}:"
+
+# ----- TIMED-OUT SOURCE STATUS CHECK -----
+# ----- TIMED-OUT SOURCE STATUS CHECK -----
+# ----- TIMED-OUT SOURCE STATUS CHECK -----
+
+# Re-check source fileset state.
+case $ix in
+3 | 4 | 5 | 6 | 10)
+# State cannot be reached.
+;;
+2 | 3 | 4 | 5 | 6 | 7 | 15 | 16 | 18 | 19 | 21)
+# Source should contain fileset, not busy.
+srcname="$ft_1.$ix"
+
+	case $ix in
+	19 | 21)	srcname="$srcname.move-dest";;
+	esac
+
+grep -s "$srcname " /tmp/src-list.$$; rf=$?
+if test $rf -ne 0
+    then echo "- $srcname not present on source (status $rf) ($p: E$ix.51)"; rc=`expr $rc + 1`
+    fi
+# Now, get the source's states field.
+srcstatus=`grep "$srcname " /tmp/src-list.$$ | awk '{if ($5=="states") print $6}'`
+if test "$srcstatus" = ""
+    then echo "- source status unreadable (status $rf) ($p: E$ix.52)"; rc=`expr $rc + 1`
+    fi
+	case $ix in
+	2 | 3 | 4 | 6 | 7 | 15 | 16)	goodsstatus="0x10010005";;
+	5)	goodsstatus="0x14010005";;
+	18 | 19 | 21)	goodsstatus="0x10010005";;
+	esac
+if [ "$srcstatus" != "$goodsstatus" ]
+    then echo "- source status wrong (status $srcstatus, not $goodsstatus) ($p: E$ix.53)"; rc=`expr $rc + 1`
+    fi
+;;
+esac
+
+# ----- TIMED-OUT SOURCE CLONE STATUS CHECK -----
+# ----- TIMED-OUT SOURCE CLONE STATUS CHECK -----
+# ----- TIMED-OUT SOURCE CLONE STATUS CHECK -----
+# Check on the source clone now that it's not busy.
+case $ix in
+3 | 4 | 5 | 6 | 10)
+# State cannot be reached.
+;;
+4 | 5 | 6 | 9 | 10 | 11 | 12 | 13)
+grep "$ft_1.$ix.move-temp " /tmp/src-list.$$; rf=$?
+if test $rf -ne 0
+    then echo "- no source clone (status $rf) ($p: E$ix.54)"; rc=`expr $rc + 1`
+    fi
+cloneid=`grep "$ft_1.$ix.move-temp " /tmp/src-list.$$ | awk '{if ($5=="states") print $2}'`
+eval ftid_clone_$ix=$cloneid
+clonestatus=`grep "$ft_1.$ix.move-temp " /tmp/src-list.$$ | awk '{if ($5=="states") print $6}'`
+if test "$clonestatus" = ""
+    then echo "- source clone status unreadable (status $rf) ($p: E$ix.55)"; rc=`expr $rc + 1`
+    fi
+	case $ix in
+	4 | 5)	goodcstatus="0x12040016";;
+	6 | 9 | 10 | 11 | 12 | 13)	goodcstatus="0x10040006";;
+	esac
+if [ "$clonestatus" != "$goodcstatus" ]
+    then echo "- source clone status wrong (status $clonestatus, not $goodcstatus) ($p: E$ix.56)"; rc=`expr $rc + 1`
+    fi
+;;
+esac
+
+# ----- TIMED-OUT TARGET STATUS CHECK -----
+# ----- TIMED-OUT TARGET STATUS CHECK -----
+# ----- TIMED-OUT TARGET STATUS CHECK -----
+# Re-check the target state.
+case $ix in
+3 | 4 | 5 | 6 | 10)
+# State cannot be reached.
+;;
+11 | 12 | 13 | 14 | 15 | 16 | 21)
+# Target should contain fileset, not busy.
+
+destname="$ft_1.$ix"
+
+	case $ix in
+	11 | 13 | 14 | 15 | 16)	destname="$destname.move-dest";;
+	esac
+
+grep -s "$destname " /tmp/dst-list.$$; rf=$?
+if test $rf -ne 0
+    then echo "- $destname not present on target (status $rf) ($p: E$ix.58)"; rc=`expr $rc + 1`
+    fi
+tgtstatus=`grep "$destname " /tmp/dst-list.$$ | awk '{if ($5=="states") print $6}'`
+if test "$tgtstatus" = ""
+    then echo "- target status unreadable (status $rf) ($p: E$ix.59)"; rc=`expr $rc + 1`
+    fi
+	case $ix in
+	11)	goodtstatus="0x10010015";;
+	12)	goodtstatus="0x12010015";;
+	13 | 14 | 15)	goodtstatus="0x12010015";;
+	16)	goodtstatus="0x10010015";;
+	21)	goodtstatus="0x10010005";;
+	esac
+if [ "$tgtstatus" != "$goodtstatus" ]
+    then echo "- target status wrong (status $tgtstatus, not $goodtstatus) ($p: E$ix.60)"; rc=`expr $rc + 1`
+    fi
+;;
+esac
+
+# Clean up from one run
+
+rm -f /tmp/src-list.$ix.$$ /tmp/src-list2.$ix.$$
+rm -f /tmp/dst-list.$ix.$$ /tmp/dst-list2.$ix.$$
+rm -f /tmp/fl-list.$ix.$$ /tmp/fl-list1.$ix.$$ /tmp/fl-list2.$ix.$$
+rm -f /tmp/cm-list.$ix.$$
+
+########################################
+
+# Advance to the next case
+
+done
+
+# Clean up from all runs
+rm -f /tmp/src-list.$$ /tmp/dst-list.$$
+
+########################################
+
+echo ""; echo "Done with move tests"
+
+echo ""; echo "Cleaning up filesets with names starting with $ft_1 ...."
+cd /tmp
+for ix in $CASES; do
+    fts delmount $dir_1.$ix $CELL_ARG
+    fts unlock $ft_1.$ix $cav_arg
+    fts delfldb $ft_1.$ix
+    ctrname=`echo "\$ ftid_$ix" | tr -d ' '`
+    fts zap `eval echo $ctrname` $SERVER_1 $SERV1_AGGR1 $cav_arg
+    fts zap `eval echo $ctrname` $SERVER_1 $SERV1_AGGR3 $cav_arg
+    cctrname=`echo "\$ ftid_clone_$ix" | tr -d ' '`
+    if [ "`eval echo $cctrname`" != "" ]
+	then fts zap `eval echo $cctrname` $SERVER_1 $SERV1_AGGR1 $cav_arg
+    fi
+done
+
+###############################################################################
+
+echo ""; echo "All done with cases ${CASES} at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################

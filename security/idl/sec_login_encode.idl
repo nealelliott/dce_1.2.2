@@ -1,0 +1,199 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: sec_login_encode.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:29:17  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:44:40  marty]
+ *
+ * Revision 1.1.4.1  1995/12/08  17:37:59  root
+ * 	Submit OSF/DCE 1.2.1
+ * 
+ * 	HP revision /main/HPDCE02/1  1995/04/03  22:08 UTC  mullan_s
+ * 	Binary Compatibility Merge
+ * 
+ * 	HP revision /main/mullan_mothra_bin_compat/mullan_mothra_bin_compat2/3  1995/03/20  14:54 UTC  mullan_s
+ * 	Add gen_v1_pac flag to v1_1_info.
+ * 
+ * 	HP revision /main/mullan_mothra_bin_compat/mullan_mothra_bin_compat2/2  1995/03/08  19:57 UTC  mullan_s
+ * 	Change a few field names in db_authdata.
+ * 
+ * 	HP revision /main/mullan_mothra_bin_compat/mullan_mothra_bin_compat2/1  1995/01/26  21:03 UTC  mullan_s
+ * 	Add new db type for storing EPAC.
+ * 
+ * 	HP revision /main/mullan_mothra_bin_compat/3  1995/01/11  18:17 UTC  mullan_s
+ * 	Remove definition of sec__login_v1_1_info_encode.
+ * 
+ * 	HP revision /main/mullan_mothra_bin_compat/1  1995/01/04  15:40 UTC  mullan_s
+ * 	Binary Compatibility Work.
+ * 	[1995/12/08  16:56:11  root]
+ * 
+ * Revision 1.1.2.4  1994/09/16  21:51:42  sommerfeld
+ * 	[OT11915] add pag to info.
+ * 	[1994/09/16  21:48:43  sommerfeld]
+ * 
+ * Revision 1.1.2.3  1994/06/17  18:42:34  devsrc
+ * 	cr10872 - fix copyright
+ * 	[1994/06/17  18:10:39  devsrc]
+ * 
+ * Revision 1.1.2.2  1994/06/10  15:07:18  greg
+ * 	intercell fixes for DCE1.1 beta
+ * 	[1994/06/03  20:49:18  greg]
+ * 
+ * Revision 1.1.2.1  1994/05/11  19:14:06  ahop
+ * 	hp_sec_to_osf_2 drop
+ * 	internal login context IDL encoding interfaces
+ * 	[1994/04/29  21:09:30  ahop]
+ * 
+ * $EndLog$
+ */
+
+/* 
+** Copyright (c) Hewlett-Packard Company 1994
+** Unpublished work. All Rights Reserved.
+*/
+/*
+** login context encoding interface 
+**
+** !!! RULES FOR THIS INTERFACE:
+**
+** Any time new data fields are added to the login context
+** which are persistent (must be stored in the login context
+** data cache file), these data fields must be stored as
+** one or more arms of the union defined as sec_login_db_entry_t
+** below.
+**
+** The following steps should be done:
+**
+** 1) A new enum should be defined and added to the end of 
+**    sec_login_db_enum_t. The order should never change.
+**
+** 2) An arm should be added to the sec_login_db_entry_t union
+**    containing the new data fields in the login context.
+**
+** 3) A uuid must be generated which corresponds to the new enum.
+**    This uuid should be added to the END of the sec_db_uuid
+**    array in src/security/client/login/sec_login_db.c. Also
+**    increment NUM_DB_TYPES.
+**
+** 4) New code should be added to sec_login_db_copy_entries_from_lc()
+**    (src/security/client/login/sec_login_db.c) which copies the
+**    relevant data fields from the login context to the new union arm.
+**
+** 5) Related to step 4, new code should also be added to 
+**    sec_login_db_copy_entries_to_lc() (src/security/client/login/sec_login_db.c)
+**    which copies the data from the union arm to the relevant
+**    data fields in the login context. If the union arm does not
+**    exist, the login context data fields should be initialized
+**    appropriately.
+**
+** 6) New code should be added to sec_login_db_free_entry_contents()
+**    (src/security/client/login/sec_login_db.c) to free the
+**    contents of the new union arm.
+**
+** 7) New code should be added to sec_login_db_init_entry()
+**    (src/security/client/login/sec_login_db.c) to initialize the
+**    contents of the new union arm.
+**
+** YOU SHOULD NEVER!!!:
+**
+** 1) add new fields to a pre-existing arm of the sec_login_db_entry_t union,
+**        including any nested structures.
+** 2) never add a 'default' arm to the sec_login_db_entry_t union.
+** 3) change the order of enums in the sec_login_db_enum_t.
+** 4) change the order of uuids in sec_db_uuid[].
+*/
+
+[
+    uuid(14aff79a-4c02-11cd-8af0-0800097086bf), version(1)
+]
+
+interface sec_login_encode {
+
+    import "dce/id_epac.idl";
+    import "dce/prvnbase.idl";
+    import "dce/sec_login_base.idl";
+
+    typedef unsigned32  sec__login_dlg_req_type_t;
+    const  sec__login_dlg_req_type_t sec__login_c_dlg_req_none   = 0x0;
+    const  sec__login_dlg_req_type_t sec__login_c_dlg_req_init   = 0x1;
+    const  sec__login_dlg_req_type_t sec__login_c_dlg_req_traced = 0x2;
+    const  sec__login_dlg_req_type_t sec__login_c_dlg_req_imp    = 0x4;
+
+    typedef struct {
+        sec_bytes_t                 dlg_chain;
+        sec_dlg_token_set_t         dlg_token_set;
+        sec_id_delegation_type_t    dlg_type;
+        sec_id_restriction_set_t    dlg_rstrs;
+        sec_id_restriction_set_t    tgt_rstrs;
+        sec_id_opt_req_t            opt_rstrs;
+        sec_id_opt_req_t            req_rstrs;
+    } sec__login_dlg_req_info_t;
+
+    typedef struct {
+        sec_bytes_t                      epac_chain;
+        sec_id_compatibility_mode_t      compat_mode;
+        sec__login_dlg_req_type_t        dlg_req_type;
+	[switch_is(dlg_req_type), switch_type(sec__login_dlg_req_type_t)] 
+        union {
+            [case(sec__login_c_dlg_req_none, sec__login_c_dlg_req_init)]
+                /*
+                 * If delegation has not been enabled, no delgation request
+                 * info is needed.  If delegation has been enabled, but is
+                 * not actually in use (become_initiator()) then the required
+                 * delegation request info is encoded in the "epac_chain"
+                 * field.  In either case, that means an empty union arm.
+                 */
+                ; /* empty arm */
+            [case(sec__login_c_dlg_req_traced, sec__login_c_dlg_req_imp)]
+                sec__login_dlg_req_info_t info;
+        } dlg_req_info;
+	unsigned32  			 pag;
+        boolean32			 gen_v1_pac;
+    } sec_login__v1_1_info_t; 
+
+    typedef struct {
+        [string, ptr]
+        char            *cell;      /* TGS cell/server. There can be only one
+                                       array entry per cell! */
+        signed32	endtime;    /* expiration time of eptgt */
+	sec_bytes_t     epac_chain; /* If contents are NULL, this is a PTGT */
+        sec_bytes_t     authbytes;  /* The raw DCE Authorization data */
+    } sec_db_authdata_contents_t;
+
+    typedef struct {
+        unsigned32			num_ad;
+	[size_is(num_ad)]
+	sec_db_authdata_contents_t	ad[];
+    } sec_db_authdata_t;
+
+    /*
+     * Enumerated types for identifying union arms of sec_login_db_entry_t.
+     */
+    typedef enum {
+        generation_id_enum, 
+        v1_1_info_enum,
+        epac_enum
+    } sec_login_db_enum_t;
+
+    typedef union switch 
+        (sec_login_db_enum_t entry_type) contents {
+	    case generation_id_enum:
+                uuid_t			generation_id;
+            case v1_1_info_enum:
+		sec_login__v1_1_info_t  v1_1_info;
+            case epac_enum:
+		[ptr] sec_db_authdata_t	*v1_authdata;
+    } sec_login_db_entry_t;
+
+    void sec_login_db_entry_encode(
+        [in]	 handle_t		h,
+	[in,out] sec_login_db_entry_t	*entry
+    );
+}

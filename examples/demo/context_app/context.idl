@@ -1,0 +1,109 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ * 
+ */
+/*
+ * HISTORY
+ * $Log: context.idl,v $
+ * Revision 1.1.7.3  1996/03/09  23:15:11  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:32:28  marty]
+ *
+ * Revision 1.1.7.2  1995/12/08  20:54:18  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  20:49:29  root]
+ * 
+ * Revision 1.1.2.2  1994/10/27  20:06:22  rrizzo
+ * 	expand copyright
+ * 	[1994/10/27  19:38:45  rrizzo]
+ * 
+ * Revision 1.1.2.1  1994/10/21  19:09:14  weir
+ * 	Submit sample sources (CR 12635)
+ * 	[1994/10/21  19:08:07  weir]
+ * 
+ * $EndLog$
+ */
+/****************************************************************************/
+/* [27.VI.94]                                                               */
+/*                                                                          */
+/* context.idl --  A sample interface that demonstrates server-maintained   */
+/*                 context.                                                 */
+/*                                                                          */
+/*                                                                          */
+/*     The client requests temporary storage of a specified size, and the   */
+/*      server returns a handle that can be used to read and write to       */
+/*      storage.                                                            */
+/*                                                                          */
+/*                                                                          */
+/*                                                                          */
+/*                            -77 cols-                                     */
+/****************************************************************************/
+
+
+[
+uuid(0019b8c5-e8b5-1c84-9a41-0000c0d4de56),
+pointer_default(ref),
+version(1.0)
+]
+interface store
+{
+
+	/* A context handle used to access remote storage:                  */
+	typedef [context_handle] void* store_handle_t;
+
+	/* A storage object name string:                                    */
+	/*  typedef [string] char* store_name_t; */
+
+	/* A buffer type for data:                                          */
+	typedef byte store_buf_t[*];
+
+
+	/* Note that the context handle is an [out] parameter of the open   */
+	/*  routine, an [in, out] parameter of the close routine, and an    */
+	/*  [in] parameter of the other routines. If the context handle     */
+	/*  were treated as an [in] parameter of the close routine, the     */
+	/*  stubs would never learn that the context had been set to NULL,  */
+	/*  and would consider the context to still be live. This would     */
+	/*  result in the rundown routine's being called when the client    */
+	/*  terminated, even though there would be no context to run down.  */
+
+	void store_open(
+		[in] handle_t binding,
+		[in] unsigned32 store_size,
+		[out] store_handle_t *store_h,
+		[out] error_status_t *status
+	);
+
+	void store_close(
+		[in,out] store_handle_t *store_h,
+		[out] error_status_t *status
+	);
+
+	void store_set_ptr(
+		[in] store_handle_t store_h,
+		[in] unsigned32 offset,
+		[out] error_status_t *status
+	);
+
+	void store_read(
+		[in] store_handle_t store_h,
+		[in] unsigned32 buf_size,
+		[out, size_is(buf_size), length_is(*data_size)] store_buf_t buffer,
+		[out] unsigned32 *data_size,
+		[out] error_status_t *status
+	);
+
+	void store_write(
+		[in] store_handle_t store_h,
+		[in] unsigned32 buf_size,
+		[in, size_is(buf_size)] store_buf_t buffer,
+		[out] unsigned32 *data_size,
+		[out] error_status_t *status
+	);
+
+}
+

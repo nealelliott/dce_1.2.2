@@ -1,0 +1,462 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+# Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS exporting Episode.
+# The script tests the fts move and rename subcommands.
+
+###############################################################################
+
+# Usage:                test5 [-nomove] [-norename] [-moveonly] [-renameonly] 
+
+# Typically run via:    test5 >& test5.out
+# or via the fts/runtests script.
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode.
+# DFS server $SERVER_1 must export Episode aggregate $EPI_AGGRNAME_1, and
+# $SERVER_2 must export $EPI_AGGRNAME_3.
+# $SERVER_1 and $SERVER_2 can be the same machine.
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1 and $SERVER_2, in
+# order to run the fts commands contained in this script.
+
+# Highest error number is: 60.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname|cut -f1 -d"." 2>/dev/null`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${EPI_AGGRNAME_1=epi1}
+: ${EPI_AGGRNAME_2=epi2}
+: ${EPI_AGGRNAME_3=epi1}
+: ${SERVER_1=$hn}
+: ${SERVER_2=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name=/.../$CELL_NAME}
+: ${dns_server_prefix=/.:/hosts/}
+: ${export_root=/.../$CELL_NAME/fs}
+
+av_arg="$AUTH_ARG $VERB_ARG"
+ca_arg="$CELL_ARG $AUTH_ARG"
+
+base_name=Wilma.$$
+new_name=Betty.$$
+
+#
+# Source in code to analyze command results.  It handles verifying if
+# the tests are to work on LFS and UFS.
+#
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+if [ "$dfs_FileSysType" = "$DFS_WORKS_ON_LFS" ]
+then
+   do_move=TRUE
+   do_rename=TRUE
+   $bin_dir/fts lsaggr $dns_server_prefix$SERVER_1|grep $EPI_AGGRNAME_2; rf=$?
+   if [ $rf -ne 0 ] # we don't have epi2, so don't use it
+    then
+      do_within_server=FALSE
+    else
+      do_within_server=TRUE
+    fi
+   if [ "$EPI_AGGRNAME_3" = "" ]
+    then
+      do_across_server=FALSE
+    else
+     fts lsaggr $SERVER_2 | grep $EPI_AGGRNAME_3; rf=$?
+     if test $rf -ne 0
+      then
+ 	do_across_server=FALSE
+        aggr_3=""
+      else
+	do_across_server=TRUE
+      fi
+    fi
+else
+   do_move=FALSE
+   do_rename=TRUE
+fi
+ 
+alldone=0
+###############################################################################
+
+for a
+    do
+    if test $a = -nomove; then do_move=FALSE
+    elif test $a = -norename; then do_rename=FALSE
+    elif test $a = -moveonly
+       then do_rename=FALSE; do_move=TRUE
+    elif test $a = -renameonly
+       then do_move=FALSE; do_rename=TRUE
+    else echo "Argument '$a' is unknown"; exit 2
+    fi
+    done
+
+###############################################################################
+
+###############################################################################
+
+echo ""
+date
+echo "RUNNING fts MOVE/RENAME COMMANDS on SERVER $SERVER_1 in CELL $CELL_NAME."
+echo "========================================================================"
+echo ""
+
+###############################################################################
+
+echo ""
+echo "Running fts create"
+
+n=1
+while [ $n -le 23 ]
+do
+    fts create $base_name.$n $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E1 rc
+    n=`expr $n + 1`
+done
+
+echo ""
+echo "Running fts lsheader"
+    fts lsheader $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E1 rc
+echo ""
+
+if test $do_rename = TRUE; then for confidence in dfs; do
+sync; sync; sleep 2
+echo ""
+echo "Part 1: Running fts rename"
+    fts rename $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E22 rc
+
+    fts rename fubar_argument $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E23 rc
+
+    fts rename $base_name.1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E24 rc
+
+    fts rename fubar_fileset_name $new_name.1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E25 rc
+
+    fts rename $new_name.2 $base_name.2 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E26 rc
+
+    fts rename $base_name.3 $new_name.3 -cell $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E27 rc
+
+    fts rename $base_name.4 $new_name.4 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E28 rc
+
+    fts rename $base_name.5 $new_name.5 $dns_cell_name $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E29 rc
+
+    fts rename -newname $new_name.6 -cell $dns_cell_name -oldname \
+        $base_name.6 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E30 rc
+echo ""
+echo ""; echo "Done with rename."; done
+else echo ""; echo ">>> Skipping part 1 (rename) <<<"
+fi # $do_rename = TRUE
+
+echo ""
+echo "Running fts lsheader"
+    fts lsheader $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E31 rc
+
+if test $do_move = TRUE; then for confidence in dfs; do
+sync; sync; sleep 2
+echo ""
+echo "Part 2: Running fts move"
+    fts move $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E33 rc
+
+    fts move fubar_argument $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E34 rc
+
+    fts move $base_name.10 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E35 rc
+
+    fts move $base_name.11 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E36 rc
+
+    fts move $base_name.12 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E37 rc
+
+    if [ $do_within_server = TRUE ]
+     then
+      fts move $base_name.13 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+          $EPI_AGGRNAME_2 $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E38 rc
+   
+      fts move $base_name.14 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+          $EPI_AGGRNAME_2 $dns_cell_name $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E39 rc
+     fi
+    if [ $do_across_server = TRUE ]
+    then
+     fts move $base_name.15 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+         $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_3 -cell $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E40 rc
+
+     fts move $base_name.16 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+         $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_3 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E41 rc
+
+     fts move $base_name.17 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+         $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_3 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E42 rc
+
+     fts move $base_name.18 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+         $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_3 $dns_cell_name $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E43 rc
+
+     fts move -cell $dns_cell_name -toserver $dns_server_prefix$SERVER_2 \
+         -fromaggregate $EPI_AGGRNAME_1 -fileset $base_name.20 \
+         -fromserver $dns_server_prefix$SERVER_1 -toaggregate $EPI_AGGRNAME_3 \
+         $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E44 rc
+
+     id=`fts lsfldb $base_name.21 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+     fts move -fileset $id -fromaggregate $EPI_AGGRNAME_1 \
+        -fromserver $dns_server_prefix$SERVER_1 -toaggregate $EPI_AGGRNAME_3 \
+        -toserver $dns_server_prefix$SERVER_2 -cell $dns_cell_name $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E45 rc
+    elif [ $do_within_server = TRUE ]
+    then
+     fts move $base_name.15 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+         $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_2 -cell $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E40 rc
+
+     fts move $base_name.16 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+         $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_2 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E41 rc
+
+     fts move $base_name.17 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+         $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_2 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E42 rc
+
+     fts move $base_name.18 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+         $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_2 $dns_cell_name $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E43 rc
+
+     fts move -cell $dns_cell_name -toserver $dns_server_prefix$SERVER_2 \
+         -fromaggregate $EPI_AGGRNAME_1 -fileset $base_name.20 \
+         -fromserver $dns_server_prefix$SERVER_1 -toaggregate $EPI_AGGRNAME_2 \
+         $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E44 rc
+
+     id=`fts lsfldb $base_name.21 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+     fts move -fileset $id -fromaggregate $EPI_AGGRNAME_1 \
+        -fromserver $dns_server_prefix$SERVER_1 -toaggregate $EPI_AGGRNAME_2 \
+        -toserver $dns_server_prefix$SERVER_2 -cell $dns_cell_name $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E45 rc
+    fi
+echo ""; echo "Done with move."; done
+else echo ""; echo ">>> Skipping part 2 (move) <<<"
+fi # $do_move = TRUE
+
+echo ""
+echo "Running fts lsheader"
+    fts lsheader $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E46 rc
+
+
+if [ "$SERVER_1" != "$SERVER_2" ]
+then
+    fts lsheader $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E47 rc
+fi
+
+# 
+# cleaning up 
+#
+
+n=1
+while [ $n -le 3 ]
+do
+    fts delete $base_name.$n $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E48 rc
+    n=`expr $n + 1`
+done
+
+n=7
+while [ $n -le 15 ]
+do
+    fts delete $base_name.$n $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E49 rc
+    n=`expr $n + 1`
+done
+
+    fts delete $base_name.19 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E50 rc
+
+    fts delete $base_name.22 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E51 rc
+
+    fts delete $base_name.23 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E52 rc
+
+if test $do_rename = TRUE
+  then
+    fts delete $new_name.4 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E53 rc
+
+    fts delete $new_name.5 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E54 rc
+
+    fts delete $new_name.6 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E55 rc
+  else
+    fts delete $base_name.4 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E53 rc
+
+    fts delete $base_name.5 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E54 rc
+
+    fts delete $base_name.6 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E55 rc
+  fi
+
+if test $do_move = TRUE 
+  then
+    if [ $do_across_server = TRUE ]
+    then
+     fts delete $base_name.16 $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_3 \
+         $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E56 rc
+
+     fts delete $base_name.17 $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_3 \
+         $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E57 rc
+
+     fts delete $base_name.18 $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_3 \
+         $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E58 rc
+
+     fts delete $base_name.20 $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_3 \
+         $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E59 rc
+
+     fts delete $base_name.21 $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_3 \
+         $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E60 rc
+    elif [ $do_within_server = TRUE ]
+    then
+     fts delete $base_name.16 $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_2 \
+         $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E56 rc
+
+     fts delete $base_name.17 $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_2 \
+         $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E57 rc
+
+     fts delete $base_name.18 $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_2 \
+         $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E58 rc
+
+     fts delete $base_name.20 $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_2 \
+         $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E59 rc
+
+     fts delete $base_name.21 $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_2 \
+         $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E60 rc
+    else
+     fts delete $base_name.16 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+         $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E56 rc
+
+     fts delete $base_name.17 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+         $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E57 rc
+
+     fts delete $base_name.18 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+         $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E58 rc
+
+     fts delete $base_name.20 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+         $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E59 rc
+
+     fts delete $base_name.21 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+         $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E60 rc
+    fi
+  else
+    fts delete $base_name.16 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E56 rc
+
+    fts delete $base_name.17 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E57 rc
+
+    fts delete $base_name.18 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E58 rc
+
+    fts delete $base_name.20 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E59 rc
+
+    fts delete $base_name.21 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E60 rc
+  fi
+###############################################################################
+
+sync
+sync
+sleep 2
+
+echo ""
+echo "Done at `date`."
+echo ""
+if [ $rc -eq 0 ]
+then 
+    echo "$p PASSED"
+else 
+    echo "$p FAILED ($rc errors)"
+fi
+
+exit $rc
+
+###############################################################################

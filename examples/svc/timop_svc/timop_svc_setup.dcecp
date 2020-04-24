@@ -1,0 +1,96 @@
+#!/usr/bin/dcecp
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: timop_svc_setup.dcecp,v $
+# Revision 1.1.4.2  1996/03/09  23:15:37  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:32:51  marty]
+#
+# Revision 1.1.4.1  1995/12/08  20:55:19  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/08  20:50:19  root]
+# 
+# Revision 1.1.2.1  1994/06/14  19:57:47  weir
+# 	DCE 1.1 Beta check-in
+# 	[1994/06/14  16:15:22  weir]
+# 
+# $EndLog$
+# 
+#
+# FILE NAME: timop_svc_setup.dcecp
+#
+# COMPONENT NAME: timop_svc test installation script
+#
+# USAGE: timop_svc_setup.dcecp <cdsentry-1> [<cdsentry-2> ... <cdsentry-n>]
+#
+# DESCRIPTION:
+#	
+#
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+proc run_cmd {cmd} {
+
+   set sts  [catch {uplevel $cmd} answer]
+   
+   if {$sts == 0} {
+       return 0
+   } else {
+	puts "$answer"
+        return 1
+   }
+}
+
+# Check argument count and print the usage if necessary.
+
+   if { $argc == 0 } {
+      error "Usage: timop_svc_setup.dcecp <cdsentry-1> <cdsentry-2> ... <cdsentry-n>"
+   }
+
+# Steps:
+#       - Login as cell_admin 
+#	- Add server principal tsserver
+#	- Add client principal tsclient
+#	- Create server principal account
+#	- Create client principal account
+
+   run_cmd {login cell_admin -password -dce-}
+
+   puts "principal create {tsserver tsclient} "
+   run_cmd {principal create {tsserver tsclient}}
+ 
+   puts "group add none -member tsserver"
+   run_cmd  {group add none -member tsserver}
+   puts "group add none -member tsclient"
+   run_cmd  {group add none -member tsclient}
+
+   puts "organization add none -member tsserver"
+   run_cmd {organization add none -member tsserver}
+   puts "organization add none -member tsclient"
+   run_cmd {organization add none -member tsclient}
+
+   puts "account create tsserver -group none -organization none -password qwerty -mypwd -dce-"
+   run_cmd {account create tsserver -group none -organization none -password qwerty -mypwd -dce-}
+
+   puts "account create tsclient -group none -organization none -password xyzzy -mypwd -dce-"
+   run_cmd {account create tsclient -group none -organization none -password xyzzy -mypwd -dce-}
+
+# The following command is not currently implemented in dcecp; use rgy_edit to add the
+# keytab entry for now.
+#
+#   puts "keytab create timeop -storage /tmp/tskeyfile -data {tserver plain 1 qwerty}"
+#   run_cmd {keytab create timeop -storage /tmp/tskeyfile -data {tserver plain 1 qwerty}}
+
+   puts "Adding CDS entries."
+   run_cmd {rpcentry create "$argv"}
+   run_cmd {acl modify "$argv" -entry -add user:tsserver:rwdtc}
+   run_cmd {logout}
+   puts "Use rgy_edit to add the keytab entry:  ktadd -p tsserver -pw qwerty -f /tmp/tskeyfile"
+   puts "When that is done you will be ready to go!"
+
+

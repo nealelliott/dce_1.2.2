@@ -1,0 +1,211 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: tc_bm_restart,v $
+# Revision 1.1.2.2  1996/03/09  20:52:14  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:50  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:37  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:13 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  20:14 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/03  14:43 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/03  14:31 UTC  gordon_l
+# 	Fixes for change_master/b
+# 	ecome_master
+# 	[1995/12/11  22:22:33  root]
+# 
+# $EndLog$
+
+
+if [ -z "${TC_BM_RESTART_DEFINED}" ] ; then
+
+TC_BM_RESTART_DEFINED=1
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  DESCRIPTION: 
+#      This test case is part of the security replication system test.
+#      This tests become master functionality.
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+tet_startup="tc_bm_restart_init"
+tet_cleanup="tc_bm_restart_cleanup"
+tet_testlist="tc_bm_restart"
+
+iclist="ic1"
+ic1="tc_bm_restart"
+
+tc_bm_restart_init()
+{
+    typeset st
+
+    tc_common_init ; st=$?
+    if [ $st -ne 0 ] ; then
+        tet_delete $ic1 "tc_bm_restart_init(): Initialization failed"
+        return 
+    fi
+    if [ $SLV_CNT -lt 1 ] ; then
+        tet_delete $ic1 "tc_bm_restart_init(): Test requires at least 1 slave"
+        return 
+    fi
+}
+
+tc_bm_restart_cleanup()
+{
+    tc_common_cleanup
+}
+
+tc_bm_restart()
+{
+    typeset st  old_master_host old_master_name snm sh
+
+    testdesc="Become master - Old master restart with no security slaves in the cell"
+    replog_testhdr "$testdesc"
+ 
+    old_master_host=$MASTER_HOSTNAME ; old_master_name=$MASTER_NAME
+    sh=${SLV_HOSTNAMES[0]}    ; snm=${SLV_NAMES[0]}
+
+    #  Since become -slave is not implemented yet, stop the secd on the 
+    #  current  master. Otherwise become -master will fail with "duplicate
+    #  masters" error message.
+
+    secd_stop $MASTER_HOSTNAME $MASTER_NAME ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #   Make $snm the new master
+
+    sa_become_master $snm ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #  Become master should have succeeded. So verify
+    #  that $snm is the new master on all replica lists.
+    #  However, before verifying, wait for the "Number of outstanding
+    #  updates" to be 0 to every replica execept the old master
+    #  (which is down). This is required since until the become -master
+    #  is propagated the master on some replica lists may still be the
+    #  old master.
+
+    repdb_become_master $snm
+
+    sa_wait_prop_complete "${SLV_NAMES[*]}" ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    replist_verify_master "${REP_NAMES[*]}" $snm ; st=$?
+
+    #  Shut down the new master master and all the slaves as well.
+    #  Then bring up the old master again. The old master will come up
+    #  as a master. Since there is no other slave or master in the replica
+    #  the old master will continue to run.
+
+    secd_stop "${REP_HOSTNAMES[*]}" "${REP_NAMES[*]}" ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    secd_start $old_master_host $old_master_name ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #  Verify that the old master is listed as the master on the old
+    #  master's replica list. Other replicas are down so they can't be checked.
+
+    replist_verify_master $old_master_name $old_master_name ; st=$?
+
+    #  Next restart the new master . The old master will find out via 
+    #  propagation from the new master that it should not be the master.
+    #  ( More specifically, old master should receive an init message 
+    #    from the new master ; from this message the old master will 
+    #    notice that it is not the master and will error exit ).
+    #
+
+    secd_start $MASTER_HOSTNAME $MASTER_NAME ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #  Verify that secd on the old master exited.
+
+    secd_tst_wait $old_master_host $SECD_NOTEXIST ; st=$?
+
+    #  Restart the slaves stopped during the test. Note that this
+    #  must be done after it has been verified that the secd on the
+    #  old master exited. This is to gurantee that the old master
+    #  exited because of a message from the new master not a slave.
+
+    secd_start "${SLV_HOSTNAMES[*]}" "${SLV_NAMES[*]}"
+
+    #  Wait to make sure that the propagates updates to all the slaves.
+   
+    sa_wait_prop_complete "${SLV_NAMES[*]}" ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    replog_testresult "$testdesc" $st
+
+    #  Cleanup
+
+    #    Note that secd dumps core in the directory where it is started.
+    #    See secd_start() to see how secd is started to determine where 
+    #    this directory is.
+    #
+    #    The test purposely does not remove the core file so that it 
+    #    can be examined under the debugger if required.
+
+    #  Delete the old master from all the replica lists
+    #  and destroy the database on the old master's host.
+ 
+    sa_delete  $old_master_name $DELREP_FORCE ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_error "Error encountered in cleanup"
+    fi    
+    rgy_delete $old_master_host
+    #  Reconfigure the old master as a slave.
+
+    slv_config $old_master_host $old_master_host
+    repdb_config_print
+    return
+}
+
+. $TET_ROOT/profile.dcest
+. ./profile
+. $PHOME/replog
+. $PHOME/tc_common
+. $PHOME/secd
+. $PHOME/slv
+. $TCM
+#. $TET_ROOT/lib/xpg3sh/tcm.sh
+
+fi

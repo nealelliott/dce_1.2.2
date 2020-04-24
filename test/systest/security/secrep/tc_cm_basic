@@ -1,0 +1,129 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: tc_cm_basic,v $
+# Revision 1.1.2.2  1996/03/09  20:52:15  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:51  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:39  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:15 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  20:13 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/03  14:43 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/03  14:31 UTC  gordon_l
+# 	Fixes for change_master/b
+# 	ecome_master
+# 	[1995/12/11  22:22:34  root]
+# 
+# $EndLog$
+
+
+if [ -z "${TC_CM_BASIC_DEFINED}" ] ; then
+
+TC_CM_BASIC_DEFINED=1
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  DESCRIPTION:
+#      This test case is part of the security replication system test.
+#      This tests that a change master can be done successfully and that 
+#      updates can be done successfully on the new master.
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+tet_startup="tc_cm_basic_init"
+tet_cleanup="tc_cm_basic_cleanup"
+tet_testlist="tc_cm_basic"
+
+iclist="ic1"
+ic1="tc_cm_basic"
+
+tc_cm_basic_init()
+{
+    typeset st
+    tet_infoline "............... Test: tc_cm_basic"
+    tc_common_init ; st=$?
+    if [ $st -ne 0 ] ; then
+        tet_delete $ic1 "tc_cm_basic_init(): Initialization failed"
+        return 
+    fi
+    if [ $SLV_CNT -lt 1 ] ; then
+        tet_delete $ic1 "tc_cm_basic_init(): Test requires at least 1 slave"
+        return 
+    fi
+}
+
+tc_cm_basic_cleanup()
+{
+    tc_common_cleanup
+}
+
+
+tc_cm_basic()
+{
+    typeset st
+
+    testdesc="Change master - Basic test"
+    replog_testhdr "$testdesc"
+ 
+    slvhost_1=${SLV_HOSTNAMES[0]} ; slvnm_1=${SLV_NAMES[0]}
+
+    sa_change_master $slvnm_1 ; st=$?   # Change master
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #   Wait until the "Number of outstanding updates" is 0 for all
+    #   slaves.
+
+    sa_wait_prop_complete "${SLV_NAMES[*]}" ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #    Verify that the new master is the only master on all replica lists.
+
+    replist_verify_master "${REP_NAMES[*]}" $MASTER_NAME ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+    
+    #   Run the update test to all slaves to ensure that updates
+    #   can be successfully made to the new master .
+
+    tc_common_upd "${SLV_HOSTNAMES[*]}" $UPDATE_NPRINC ; st=$?
+    replog_testresult "$testdesc" $st
+    
+    #   Cleanup
+    sft_cleanup
+}
+
+. $TET_ROOT/profile.dcest
+. ./profile
+. $PHOME/replog
+. $PHOME/tc_common
+. $PHOME/secd
+. $PHOME/slv
+. $TCM
+#. $TET_ROOT/lib/xpg3sh/tcm.sh
+
+fi

@@ -1,0 +1,156 @@
+Details for Stress test
+
+    - test with the number and iteration of the test data being augmented.
+      Details are in ATTACH 1.
+
+    We will plan to do the testing bellow (see ATTACH 1), and these tests will
+    be written as scripts for automatic testing.
+
+    Basic test plan of this term is:
+    - verify adding and deleting remote principal as a group member in
+      combined operations for many times
+    - verify adding/deleting remote principal as a group member for consecutive
+      many times in each operation
+    - verify adding/deleting many of remote principals as a group member
+      consecutively
+    - addition to the above, verify each remote account can access to
+      the ACL entry as a member of the group
+
+
+------------------------------ ATTACH 1 ------------------------------
+
+GLOBALGROUP TEST SCENARIO (Stress testing)
+
+1. Prerequisites
+
+    We need two DCE cells in this test.
+
+	cL	local cell (cell on the local host)
+	cR	remote cell (cell on the remote host)
+
+
+2. Test Scenario
+2.1 Setting up test condition
+
+    Create groups and an account into the local cell like bellow;
+
+	dcecp> group create gG
+	dcecp> principal create pL
+	dcecp> account create pL -group none -organization none
+	dcecp> principal create pA
+
+	- gG means a group object which will include foreign principals
+	- pL means a principal object which belongs to the local cell
+	- pA means a principal object which is used for ACL testing
+
+    (note)
+	In the testing scenario bellow, you will see the principal `pA'.
+	This object will be used as the object to be accessed in the test.
+	The object will have various ACLs to be tested.
+
+    Create a group and two accounts into the remote cell like bellow;
+
+	dcecp> group create gR
+	dcecp> principal create pR
+	dcecp> account create pR -group gR -organization none
+	dcecp> principal create pR{i}
+	dcecp> account create pR{i} -group gR -organization none
+
+	- gR means a group object which belongs to the remote cell
+	- pR means a principal object which belongs to the remote cell
+	- pR{i} means a many of principal objects which belongs to the
+          remote cell.  {i} would have been 1, 2, ..., 100, ..., and so on.
+
+    NOTICE:
+    - After these operation, enable the cells to show each name space using
+      "dcecp cdscache create".
+      Next, connect to remote cell by using "dcecp registry connect".
+      These operations are done automatically in the script.
+
+
+2.2 Details for testing
+
+    The following shows how and what we verify in our globalgroup testing.
+
+    Before starting the test bellow, you must be logged in as a cell_admin.
+
+	dce_login cell_admin
+
+(1) Verify adding - deleting remote principal in combined operations for many times
+
+	for (i = 1; i < number_of_iteration; i++) {
+		group_add(gG, /.../cR/pR)	S	add principal as a member
+		group_list(gG)			S	principal exist as a member
+		group_remove(gG, /.../cR/pR)	S	delete from membership list
+		group_list(gG)			S	(no entries)
+	}
+
+	After iterations of combined operations, verify all the operations
+	would be successed.
+
+
+(2) Verify adding/deleting remote principal operation for consecutive many times in each
+
+	for (i = 1; i < number_of_iteration; i++) {
+		group_add(gG, /.../cR/pR)	S	add principal as a member
+	}
+
+	After iterations of the same operation, verify all the operations
+	wolud be successed.
+
+	for (i = 1; i < number_of_iteration; i++) {
+		group_list(gG)			S	principal exist as a member
+	}
+
+	After iterations of the same operation, verify all the operations
+	wolud be successed.
+
+	for (i = 1; i < number_of_iteration; i++) {
+		group_remove(gG, /.../cR/pR)	S	delete from membership list
+	}
+
+	After iterations of the same operation, verify all the operations
+	wolud be successed.
+
+	for (i = 1; i < number_of_iteration; i++) {
+		group_list(gG)			S	(no entries)
+	}
+
+	After iterations of the same operation, verify all the operations
+	wolud be successed.
+
+(3) Verify adding/deleting many of remote principals consecutively
+
+	for (i = 1; i < number_of_iteration; i++) {
+		group_add(gG, /.../cR/pR{i})	S	add principal as a member
+	}
+
+	After iterations of the many principal adding operations, verify
+	all the operations wolud be successed.
+
+	for (i = 1; i < number_of_iteration; i++) {
+		group_list(gG)			S	principal exist as a member
+	}
+
+	Verify all the members wolud be registered.
+
+	for (i = 1; i < number_of_iteration; i++) {
+		dce_login(/.../cR/pR{i})	login as pR{i}
+		acl_check(/.../cL/pA)	S	get current ACL (use group gG)
+	}
+
+	Verify all the members would be access to the ACL entry as a group member
+
+
+	dce_login cell_admin
+
+	for (i = 1; i < number_of_iteration; i++) {
+		group_remove(gG, /.../cR/pR{i})	S	delete from membership list
+	}
+
+	After iterations of the many principal deleting operations, verify
+	all the operations wolud be successed.
+
+	group_list(gG)			S	(no entries)
+
+	Verify all the members would be removed.

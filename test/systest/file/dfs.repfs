@@ -1,0 +1,991 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: dfs.repfs,v $
+# Revision 1.1.6.2  1996/03/11  02:44:08  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:07:25  marty]
+#
+# Revision 1.1.6.1  1995/12/11  21:59:37  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:58:52  root]
+# 
+# Revision 1.1.4.3  1994/07/19  13:20:17  rdl
+# 	Made command line interface uniform with the other automated DFS system tests.
+# 	[1994/07/19  13:18:35  rdl]
+# 
+# Revision 1.1.4.2  1994/07/13  22:33:15  devsrc
+# 	merged with bl-10
+# 	[1994/06/29  12:17:51  devsrc]
+# 
+# 	For CR 9832:
+# 	Added code for the following enhancements:
+# 	Report the number of iterations that passed/failed
+# 	same_machine_rep()
+# 	  Create replica on the same machine as the read/write fileset
+# 	switch_rep()
+# 	  Create a new replica, remove the old replica, and verifies access to a
+# 	  replica
+# 	wait_maxage()
+# 	  Used to verify MaxAge
+# 	verify_failage()
+# 	[1994/05/06  17:46:56  cmckeen]
+# 
+# Revision 1.1.4.1  1994/02/04  20:48:38  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:26:09  devsrc]
+# 
+# Revision 1.1.2.1  1994/01/27  21:04:21  cmckeen
+# 	Added HISTORY marker.
+# 	[1994/01/27  21:02:32  cmckeen]
+# 
+# $EndLog$
+############################################################################
+# TITLE: dfs.repfs
+# SYNTAX:
+#       dfs.repfs <datafile> <cho>
+# OBJECTIVE:
+# 	Test sheduled replication.
+# DESCRIPTION:
+#	Script utilizes the following individual tests:
+#        $TROOT/systest/file/filewnr
+#        $TROOT/systest/file/dirread
+#        $TROOT/systest/file/dirwrite.sh
+#
+#	to update a fileset and verify the update on the read-only replica.
+# NOTE:
+#	For each iteration (the number of iterations the test will execute is
+#       roughly the CHO time divided by the DEFAULTSITEAGE), 3 dce_logins will
+#       be done on each of the CLI_MACHINES.  Each dce_login creates creds 
+#	files in /opt/dcelocal/var/security/creds and is not deleted 
+#	by the test or DCE.  Make sure there is sufficient space to accomodate
+#	the creds files.
+#
+#	This is a known problem that will be addressed in a later version of
+#	the test.
+#
+#	
+# Global Variables used throughout the test:
+#
+# ERROR_CODE		return code from commands or procedures
+#			a non-zero ERROR_CODE indicates an error
+# ERROR_STRING		description of the error
+# FILESET		name of the fileset
+# FILESET_SERVER	name of the file server containing the FILESET
+# FILESET_AGGR 		name of the aggregate containing the FILESET
+# REP_SERVERS_LEFT	list of servers to put replicas on
+# REP_SERVERS		current list of servers containing replicas
+# REP_AGGRS_LEFT	list of aggregates to put replicas on
+# REP_AGGRS		current list of aggregates containing replicas
+
+#############################################################
+# add replication site and verify it was created
+#############################################################
+addsite()
+{
+# $1 - fileset name
+# $2 - server
+# $3 - aggregate
+
+# addsite() uses "fts addsite" to create a replica and checks the
+# target fileserver using "fts lsheader" to verify the replica has been
+# created within ADDSITE_WAIT time.
+
+ print "fts addsite -fileset $1 -server $2 -aggregate $3"
+ fts addsite -fileset $1 -server $2 -aggregate $3 || {
+   ERROR_CODE=$?
+   ERROR_STRING= "ERROR (addsite): fts addsite"
+   return $ERROR_CODE
+ }
+ ADDSITE_TIME=$SECONDS
+ DONE="FALSE"
+ FOUND="FALSE"
+ while [ "$DONE" = "FALSE" -a "$FOUND" = "FALSE" ]
+ do
+   SITE_CHECK=`fts lsheader -server $2 -aggregate $3 | grep $1 | grep On-line`
+   if [ "$SITE_CHECK" != "" ] ; then
+     FOUND="TRUE"
+   else
+     sleep $WAIT_BETWEEN_CHECKS
+   fi
+   let SECONDS_WAITED=SECONDS-ADDSITE_TIME
+   if [ $SECONDS_WAITED -ge $ADDSITE_WAIT ]; then
+     DONE="TRUE"
+   fi
+ done
+ if [ "$FOUND" = "FALSE" ] ; then
+   ERROR_STRING="ERROR (addsite): replication site not created on $2"
+   return $ERROR
+ else
+   return $NO_ERROR
+ fi
+}
+
+#############################################################
+# create fileset to be replicated
+#############################################################
+create_fileset()
+{
+# create_fileset() creates the fileset and sets the quota.
+
+ print "fts create -ftname ${FILESET} -server ${FILESET_SERVER} -aggregate ${FILESET_AGGR}"
+ fts create -ftname ${FILESET} -server ${FILESET_SERVER} -aggregate ${FILESET_AGGR}
+ ERROR_CODE=$?
+ if [ $ERROR_CODE != 0 ]; then
+   ERROR_STRING="ERROR (create_fileset): fts create"
+ else
+   # adjust fileset quota size
+   print "fts setquota ${FILESET} -size ${FILESET_SIZE}"
+   fts setquota -fileset ${FILESET} -size ${FILESET_SIZE}
+   ERROR_CODE=$?
+   (( $ERROR_CODE )) && ERROR_STRING="ERROR (create_fileset): fts setquota"
+ fi
+ return $ERROR_CODE
+}
+
+############################################################
+# setup replication
+############################################################
+setup_rep()
+{
+# setup_rep uses the "fts setrepinfo" command to set the scheduled replication
+# paramters.  MAXAGE, FAILAGE, RECLAIMWAIT, MINREPDELAY, and DEFAULTSITEAGE
+# are set in the datafile.
+
+ print "fts setrepinfo -fileset ${FILESET} -scheduled -maxage ${MAXAGE} -failage ${FAILAGE} -reclaimwait${RECLAIMWAIT} -minrepdelay ${MINREPDELAY} -defaultsiteage ${DEFAULTSITEAGE}"
+ fts setrepinfo -fileset ${FILESET} -scheduled -maxage ${MAXAGE} -failage ${FAILAGE} -reclaimwait ${RECLAIMWAIT} -minrepdelay ${MINREPDELAY} -defaultsiteage ${DEFAULTSITEAGE} || {
+   ERROR_CODE=$?
+   ERROR_STRING="ERROR (setup_rep): fts setrepinfo"
+   return $ERROR_CODE
+ }
+}
+
+#############################################################
+# add replication sites
+############################################################
+add_rep()
+{
+# create replica(s)
+# $1 - servers
+# $2 - aggrs
+
+# add_rep() creates the replicas from the list passed to it.  It updates
+# the REP_SERVERS, REP_AGGRS, REP_SERVERS_LEFT and REP_AGGRS_LEFT lists.
+
+ aggrs=$2
+ servers=$1
+ for S in $servers
+ do
+   A=`print ${aggrs} | sed 's/ .*$//'`
+   addsite ${FILESET} $S $A
+   ERROR_CODE=$?
+   (( $ERROR_CODE != 0 )) && { 
+     ERROR_STRING="ERROR (setup_rep): addsite" ; break 
+   }
+  # add new server and aggr to lists
+   REP_SERVERS="$S $REP_SERVERS"
+   REP_AGGRS="$A $REP_AGGRS"
+  # update the what's left lists
+   REP_AGGRS_LEFT=`print ${REP_AGGRS_LEFT} | sed 's/'$3'//'`
+   REP_SERVERS_LEFT=`print ${REP_SERVERS_LEFT} | sed 's/'$4'//'`
+   aggrs=`print ${aggrs} | sed 's/^[^ ]* *//'`
+ done
+ return $ERROR_CODE
+}
+
+#############################################################
+# create mountpoints for read-write and read-only filesets
+#############################################################
+create_mountpoints()
+{
+# create mount points
+
+ print "fts crmount -dir ${MOUNT_PATH}/${FILESET} -fileset ${FILESET}"
+ fts crmount -dir ${MOUNT_PATH}/${FILESET} -fileset ${FILESET} 
+ ERROR_CODE=$?
+ if [ $ERROR_CODE = 0 ]; then 
+   print "fts crmount -dir ${MOUNT_PATH}/${FILESET}_RO -fileset ${FILESET}.readonly"
+   fts crmount -dir ${MOUNT_PATH}/${FILESET}_RO -fileset ${FILESET}.readonly
+   ERROR_CODE=$?
+   if [ $ERROR_CODE = 0 ]; then
+     print "fts crmount -dir ${MOUNT_PATH}/${FILESET}_MA -fileset ${FILESET}.readonly"
+     fts crmount -dir ${MOUNT_PATH}/${FILESET}_MA -fileset ${FILESET}.readonly
+     ERROR_CODE=$?
+   fi
+ fi
+ (( $ERROR_CODE )) && ERROR_STRING="ERROR (create_mountpoints): fts crmount"
+ return $ERROR_CODE
+}
+
+############################################################
+# test replication on same machine as the read/write
+############################################################
+same_machine_rep()
+{
+# $1 - suffix
+
+# same_machine_rep() creates a replica on the same machine as the 
+# the read/write fileset. REP_SERVERS and REP_AGGRS are updated.
+
+# create replica
+ addsite ${FILESET} ${FILESET_SERVER} ${FILESET_AGGR} || {
+   ERROR_CODE=$?
+   print $ERROR_STRING
+   ERROR_STRING="ERROR (same_machine_rep): addsite"
+   return $ERROR_CODE
+ }
+
+ REP_SERVERS="$FILESET_SERVER $REP_SERVERS"
+ REP_AGGRS="$FILESET_AGGR $REP_AGGRS"
+# update the what's left lists 
+# Note: the FILESET_SERVER and FILESET_AGGR should not be in the lists, but
+#       they should be removed if they are
+ REP_AGGRS_LEFT=`print ${REP_AGGRS_LEFT} | sed 's/'$FILESET_AGGR'//'`
+ REP_SERVERS_LEFT=`print ${REP_SERVERS_LEFT} | sed 's/'$FILESET_SERVER'//'`
+
+ print " fts update -fileset ${FILESET} -all"
+ fts update -fileset ${FILESET} -all || {
+   ERROR_CODE=$?
+   print $ERROR_STRING
+   ERROR_STRING="ERROR (same_machine_rep): fts update"
+   return $ERROR_CODE
+ }
+
+ create_mountpoints || {
+   ERROR_CODE=$?
+   print $ERROR_STRING
+   ERROR_STRING="ERROR (same_machine_rep): create_mountpoints"
+   return $ERROR_CODE
+ }
+
+ update_fileset $1 || { 
+   ERROR_CODE=$?
+   print $ERROR_STRING
+   ERROR_STRING="ERROR (same_machine_rep): update_fileset"
+   return $ERROR_CODE
+ } 
+ calc_next_rep $DEFAULTSITEAGE $SECONDS
+ sleep_til_next_rep 
+
+ verify_rep_completed ${FILESET_SERVER} || {
+   ERROR_CODE=$?
+   print $ERROR_STRING
+   ERROR_STRING="ERROR (same_machine_rep): verify_rep_completed"
+   return $ERROR_CODE
+ } 
+
+ verify_rep_successful "${MOUNT_PATH}/${FILESET}_RO" $1 || {
+   ERROR_CODE=$?
+   print $ERROR_STRING
+   ERROR_STRING="ERROR (same_machine_rep): verify_rep_successful"
+   return $ERROR_CODE
+ } 
+ rm -r ${MOUNT_PATH}/${FILESET}/*.$1
+ return $ERROR_CODE
+}
+
+############################################################
+# move read-write fileset
+############################################################
+move_rw()
+{
+# $1 - From Server
+# $2 - From Aggregate
+# $3 - To Server
+# $4 - To Aggregate
+# $5 - Rep servers
+
+# move_rw() moves the read/write fileset from the FILESET_SERVER to the
+# server passed to it.  FILESET_SERVER and FILESET_AGGR are updated.
+
+fts move -fileset ${FILESET} -fromserver $1 -fromaggregate $2 -toserver $3 -toaggregate $4 || {
+  ERROR_CODE=$?
+   ERROR_STRING="ERROR (move_rw): fts move"
+   return $ERROR_CODE
+ } 
+
+ update_fileset "M" || { 
+   ERROR_CODE=$?
+   print $ERROR_STRING
+   ERROR_STRING="ERROR (move_rw): update_fileset"
+   return $ERROR_CODE
+ } 
+ calc_next_rep $DEFAULTSITEAGE $SECONDS
+ sleep_til_next_rep 
+ verify_rep_completed $5 || {
+   ERROR_CODE=$?
+   print $ERROR_STRING
+   ERROR_STRING="ERROR (move_rw): verify_rep_completed"
+   return $ERROR_CODE
+ } 
+ verify_rep_successful "${MOUNT_PATH}/${FILESET}_RO" "M" || {
+   ERROR_CODE=$?
+   print $ERROR_STRING
+   ERROR_STRING="ERROR (move_rw): verify_rep_successful"
+   return $ERROR_CODE
+ } 
+ FILESET_SERVER=$3
+ FILESET_AGGR=$4
+ rm -r ${MOUNT_PATH}/${FILESET}/*.M
+ return $ERROR_CODE
+
+}
+
+#############################################################
+# switch replication site 
+############################################################
+switch_rep()
+{
+# $1 - old server
+# $2 - old aggregate
+# $3 - new server
+# $4 - new aggregate
+# $5 - suffix
+
+# switch_rep() creates a new replica, removes the old replica, and verifies
+# that access to a replica has not been lost.  This procedure is only useful
+# if only one replica already existed.
+
+ addsite ${FILESET} $3 $4 || {
+   ERROR_CODE=$?
+   print $ERROR_STRING
+   ERROR_STRING="ERROR (switch_rep): addsite"
+   return $ERROR_CODE
+ }
+# add new server and aggr to lists
+ REP_SERVERS="$3 $REP_SERVERS"
+ REP_AGGRS="$4 $REP_AGGRS"
+# update the what's left lists
+ REP_AGGRS_LEFT=`print ${REP_AGGRS_LEFT} | sed 's/'$4'//'`
+ REP_SERVERS_LEFT=`print ${REP_SERVERS_LEFT} | sed 's/'$3'//'`
+ verify_rep_completed $3 || { 
+   ERROR_CODE=$?
+   print $ERROR_STRING
+   ERROR_STRING="ERROR (switch_rep): verify_rep_completed"
+   return $ERROR_CODE
+ } 
+ print "fts rmsite -fileset ${FILESET} -server $1 -aggregate $2"
+ fts rmsite -fileset ${FILESET} -server $1 -aggregate $2 || {
+   ERROR_CODE=$?
+   print $ERROR_STRING
+   ERROR_STRING="ERROR (switch_rep): fts rmsite"
+   return $ERROR_CODE
+ }
+# remove old server and aggr from lists
+ REP_SERVERS=`print ${REP_SERVERS} | sed 's/'$1'//'`
+ REP_AGGRS=`print ${REP_AGGRS} | sed 's/'$2'//'`
+ verify_rep_successful "${MOUNT_PATH}/${FILESET}_RO" $5 || {
+   ERROR_CODE=$?
+   print $ERROR_STRING
+   ERROR_STRING="ERROR (switch_rep): verify_rep_successful"
+   return $ERROR_CODE
+ }
+ update_fileset "N" || { 
+   ERROR_CODE=$?
+   print $ERROR_STRING
+   ERROR_STRING="ERROR (same_machine_rep): update_fileset"
+   return $ERROR_CODE
+ } 
+ UPDATE_TIME=$SECONDS
+ ls ${MOUNT_PATH}/${FILESET}_RO
+ wait_maxage $MAXAGE $DEFAULTSITEAGE $UPDATE_TIME
+ verify_rep_successful "${MOUNT_PATH}/${FILESET}_RO" "N" || {
+   ERROR_CODE=$?
+   print $ERROR_STRING
+   ERROR_STRING="ERROR (switch_rep): verify_rep_successful"
+   return $ERROR_CODE
+ }
+ echo "AGGRS_LEFT: $REP_AGGRS_LEFT    SERVERS_LEFT:$REP_SERVERS_LEFT"
+ rm -r ${MOUNT_PATH}/${FILESET}/*.N
+ return $ERROR_CODE
+}
+
+#############################################################
+# force replication before scheduled
+#############################################################
+force_rep()
+{
+#force replication
+
+ print "fts update -fileset ${FILESET} -all"
+ fts update -fileset ${FILESET} -all 
+ ERROR_CODE=$?
+ (( $ERROR_CODE )) && ERROR_STRING="ERROR (force_rep): fts update"
+ return $ERROR_CODE
+}
+
+#############################################################
+# verify replication completed using lsreplicas output
+#############################################################
+verify_rep_completed()
+{
+# $1 - Rep servers
+
+# verify_rep_completed verifies that the replication has been completed 
+# using the "fts lsreplicas" command.
+
+ DONE="FALSE"
+ REP_DONE="FALSE"
+ let SAVEVV=0
+ BEGIN_TIME=$SECONDS
+ SECONDS_EXECUTED=0
+ while [ "$DONE" = "FALSE" -a "$REP_DONE" = "FALSE" ]
+ do
+   REP_DONE="TRUE"
+   for S in $1
+   do
+     fts lsreplicas -fileset ${FILESET} -server ${S} > ${TMPDIR}/lsrep || {
+       REP_DONE="FALSE"
+       continue
+     }
+     let SRCVV=`awk -F";" '/srcVV/ {print $1}' $TMPDIR/lsrep |awk -F"," '{print $3}' -`
+     let CURVV=`awk -F";" '/curVV/ {print $2}' $TMPDIR/lsrep |awk -F"," '{print $3}' -`
+     print "$S:    SRCVV = $SRCVV    CURVV = $CURVV "
+     if (( $SAVEVV != 0 )); then
+       if (( $SAVEVV != $SRCVV)); then
+         print "Replica srcVV's don't match!"
+         REP_DONE="FALSE"
+	 continue;
+       fi
+     fi
+     if (( $SRCVV != 0 && $SRCVV == $CURVV )); then
+       let SAVEVV=$SRCVV
+     else
+       print "Replication not yet complete"
+       sleep $REP_COMPLETE_SLEEP
+       REP_DONE="FALSE"
+       continue;
+     fi
+   done
+   let SECONDS_EXECUTED=SECONDS-BEGIN_TIME
+   if [ $SECONDS_EXECUTED -ge $REP_WAIT ]; then
+     DONE="TRUE"
+   fi
+ done
+ if [ $REP_DONE = "FALSE" ]; then
+   ERROR_STRING="ERROR (verify_rep_completed): Replication did not complete"
+   ERROR_CODE=$ERROR
+ else
+   ERROR_CODE=$NO_ERROR
+ fi
+ return $ERROR_CODE
+}
+
+#############################################################
+# update the (replicated) fileset
+#############################################################
+update_fileset()
+{
+# update_fileset() writes to the fileset using filewnr and dirwrite from 
+# all the client machines
+
+ for M in $CLI_MACHINES
+ do
+   # remove old stuff
+   if [ -f ${MOUNT_PATH}/${FILESET}/$M.testfile.* ] ; then
+     rm ${MOUNT_PATH}/${FILESET}/$M.testfile.*
+   fi
+   if [ -d ${MOUNT_PATH}/${FILESET}/$M.testdir.* ] ; then
+     rm -r ${MOUNT_PATH}/${FILESET}/$M.testdir.*
+   fi
+   # add new file and directory
+   $RSH $M -n dce_login $DCE_PRIN $DCE_PRIN_PW -exec ksh -c "'${TROOT}/filewnr -n 100 -b 100 -p $M.test.$1 -f ${MOUNT_PATH}/${FILESET}/$M.testfile.$1'" 
+   ERROR_CODE=$?
+   (( $ERROR_CODE )) && { 
+     ERROR_STRING="ERROR (update_fileset): filewnr on $M"
+     return $ERROR_CODE 
+   }
+
+   $RSH $M -n dce_login $DCE_PRIN  $DCE_PRIN_PW -exec ksh -c "'${TROOT}/dirwrite.sh -p ${MOUNT_PATH}/${FILESET} -t $M.testdir.$1 -n 10 -l /etc/dce_config '"
+   ERROR_CODE=$?
+   (( $ERROR_CODE )) && { 
+     ERROR_STRING="ERROR (update_fileset): dirwrite.sh on $M"
+     return $ERROR_CODE 
+   }
+
+   # modify an existing file
+   $RSH $M -n dce_login $DCE_PRIN $DCE_PRIN_PW -exec ksh -c "'echo $M.$1 >> ${MOUNT_PATH}/${FILESET}/update-file '"
+   ERROR_CODE=$?
+   (( $ERROR_CODE )) && {
+     ERROR_STRING="ERROR (update_fileset): updating file on $M"
+     return $ERROR_CODE 
+   }
+ done
+ return $ERROR_CODE
+}
+
+#############################################################
+# caclulate when the next scheduled replication will occur
+#############################################################
+calc_next_rep()
+{
+# $1 - Scheduled Replication time interval
+# $2 - Time the fileset was updated
+
+# calc next scheduled update 
+
+ HRS=`print $1| cut -d: -f1`
+ MIN=`print $1| cut -d: -f2`
+ SEC=`print $1| cut -d: -f3`
+ let NEXT_REP=HRS*3600+MIN*60+SEC+$2-$SECONDS
+ print "Next Scheduled Replication: $NEXT_REP"
+}
+
+#############################################################
+# wait until maxage limit
+#############################################################
+wait_maxage()
+{
+# $1 - Maxage parameter
+# $2 - Scheduled Replicate time interval
+# $3 - Time the fileset was updated
+
+# wait_maxage() coverts the MAXAGE parameter into seconds and sleeps
+# for that amount of time.
+
+ HRS=`print $1| cut -d: -f1`
+ MIN=`print $1| cut -d: -f2`
+ SEC=`print $1| cut -d: -f3`
+ let MAXAGE_LIMIT=$HRS*3600+$MIN*60+$SEC
+ HRS=`print $2| cut -d: -f1`
+ MIN=`print $2| cut -d: -f2`
+ SEC=`print $2| cut -d: -f3`
+ let MAXAGE_LIMIT=$MAXAGE_LIMIT+$HRS*3600+$MIN*60+$SEC+$3-$SECONDS
+ if [ $MAXAGE_LIMIT -lt 0 ]; then
+   MAXAGE_LIMIT=0
+ fi
+ print "Maxage Limit: $MAXAGE_LIMIT seconds from `date`"
+ sleep $MAXAGE_LIMIT
+}
+
+#############################################################
+# calculate the number of seconds until the failage limit
+# and sleep for that long
+#############################################################
+wait_failage()
+{
+# $1 - Failage parameter
+# $2 - Maxage parameter
+
+# wait_failage() coverts the FAILAGE parameter into seconds and sleeps
+# for that amount of time.
+
+ print "Entering wait_failage..."
+ DAYS=`print $1| cut -dd -f1`
+ echo "days $DAYS"
+ HRS=`print $1| sed 's/^.*d//' | cut -d: -f1`
+ echo $HRS
+ MIN=`print $1| cut -d: -f2`
+ SEC=`print $1| cut -d: -f3`
+ let FAILAGE_LIMIT=$DAYS*86400+$HRS*3600+$MIN*60+$SEC
+ HRS=`print $2| cut -d: -f1`
+ MIN=`print $2| cut -d: -f2`
+ SEC=`print $2| cut -d: -f3`
+ let FAILAGE_LIMIT=$FAILAGE_LIMIT+$HRS*3600+$MIN*60+$SEC
+ print "FAILAGE Limit: $FAILAGE_LIMIT seconds from `date`"
+ sleep $FAILAGE_LIMIT
+}
+
+#############################################################
+# verify failage by accessing the fileset after the failage limit 
+# has passed
+#############################################################
+verify_failage()
+{
+# $1 - file and directory name suffix
+# $2 - repserver
+
+# verify_failage() uses "bos shutdown" to disable the repserver, waits until
+# the FAILAGE limit has passed, and verifies that access to the replica is
+# denied.  There should only be one replica of $FILESET.
+
+ print "**** Entering verify_failage..."
+ verify_rep_successful "${MOUNT_PATH}/${FILESET}_RO" $1 || {
+   ERROR_STRING="ERROR (verify_failage): verify_rep_successful"
+   exit $ERROR
+ }
+ bos shutdown -server /.:/hosts/$2 -process repserver -wait || {
+  ERROR_STRING="ERROR (verify_failage): bos shutdown"
+  exit $ERROR
+ }
+ bos status -server /.:/hosts/${SERVER} 
+ wait_failage $FAILAGE $MAXAGE 
+ verify_rep_successful "${MOUNT_PATH}/${FILESET}_RO" $1
+ ERROR_CODE=$?
+ if [ $ERROR_CODE = 0 ]; then
+   ERROR_STRING="ERROR (verify_failage): accessed fileset past the FAILAGE limit"
+   exit $ERROR
+ else
+   exit $NO_ERROR
+ fi
+}
+#############################################################
+# sleep until next scheduled replication
+#############################################################
+sleep_til_next_rep()
+{
+
+ print "Sleeping for $NEXT_REP seconds starting at `date`"
+ sleep $NEXT_REP
+}
+
+#############################################################
+# verify replication successful by reading what was written
+#############################################################
+verify_rep_successful()
+{
+# $1 - directory path
+# $2 - iteration number
+
+# verify_rep_successful() uses filewnr and dirread to check the contents of 
+# the replica.
+
+ for M in $CLI_MACHINES
+ do
+   ${TROOT}/filewnr -r -n 100 -b 100 -p $M.test.$2 -f $1/$M.testfile.$2
+   ERROR_CODE=$?
+   (( $ERROR_CODE )) && {
+     ERROR_STRING="ERROR (verify_rep_successful): filewnr reading  $1/$M.testfile.$2"
+     return $ERROR_CODE 
+   }
+
+   ${TROOT}/dirread -p $1 -t $M.testdir.$2 -n 10
+   ERROR_CODE=$?
+   (( $ERROR_CODE)) && { 
+     ERROR_STRING="ERROR (verify_rep_successful): dirread on $1"
+     return $ERROR_CODE 
+   }
+
+   grep $M.$2 $1/update-file
+   ERROR_CODE=$?
+   (( $ERROR_CODE )) && { 
+     ERROR_STRING="ERROR (verify_rep_successful): checking update-file on $M"
+     return $ERROR_CODE 
+   }
+ done
+ return $ERROR_CODE
+}
+
+#############################################################
+# cleanup
+#############################################################
+cleanup()
+{
+# cleanup() removes the mountpoints, replicas, and fileset.
+
+ if [ cleanup = 0 ] ; then
+   echo " Not cleaning up."
+   return 0
+ fi
+# delete mount points
+ if [ -d ${MOUNT_PATH}/${FILESET} ] ; then 
+   print "fts delmount ${MOUNT_PATH}/${FILESET}"
+   fts delmount ${MOUNT_PATH}/${FILESET} || { 
+     print "ERROR (cleanup): fts delmount"
+     ERROR_CODE=$ERROR 
+   }
+ fi
+
+ if [ -d ${MOUNT_PATH}/${FILESET}_RO ] ; then 
+   print "fts delmount ${MOUNT_PATH}/${FILESET}_RO"
+   fts delmount ${MOUNT_PATH}/${FILESET}_RO || { 
+     print "ERROR (cleanup): fts delmount"
+     ERROR_CODE=$ERROR 
+   }
+ fi
+
+ if [ -d ${MOUNT_PATH}/${FILESET}_MA ] ; then 
+   print "fts delmount ${MOUNT_PATH}/${FILESET}_MA"
+   fts delmount ${MOUNT_PATH}/${FILESET}_MA || { 
+     print "ERROR (cleanup): fts delmount"
+     ERROR_CODE=$ERROR 
+   }
+ fi
+
+ # remove replicas
+ aggrs=${REP_AGGRS}
+ for S in ${REP_SERVERS}
+ do
+   A=`print ${aggrs} | sed 's/ .*$//'`
+   print "fts rmsite -fileset ${FILESET} -server $S -aggregate $A"
+   fts rmsite -fileset ${FILESET} -server $S -aggregate $A || { 
+     print "ERROR ($0): fts rmsite"
+     ERROR_CODE=$ERROR 
+   }
+   aggrs=`print ${aggrs} | sed 's/^[^ ]* *//'`
+ done
+
+ # delete fileset
+ print "fts delete -fileset ${FILESET}"
+ fts delete -fileset ${FILESET} -server ${FILESET_SERVER} -aggregate ${FILESET_AGGR} || { 
+   print "ERROR ($0): fts delete"
+   ERROR_CODE=$ERROR 
+ }
+ (( $ERROR_CODE )) && ERROR_STRING="ERROR ($0):"
+ return $ERROR_CODE
+}
+
+#############################################################
+# loop until done
+#############################################################
+loop()
+{
+# calculate amount of time to run
+ HOURS_TO_EXECUTE=$1
+ SECONDS_TO_EXECUTE=`awk "BEGIN { print 3600 * $HOURS_TO_EXECUTE; exit; }"`
+ TIMER='eval echo `awk "BEGIN { printf \"%8d\", \`date +"%j"\`*86400 + \`date +"%H"\`*3600 + \`date +"%M"\`*60 + \`date +"%S"\`; exit}"`'z
+
+ # run 'til done
+ FINISHED_FLG="FALSE"
+ ITERATION=0
+ START_TIME=`$TIMER`
+ UPDATE_TIME=0
+ ITER_PASSED=0
+ ITER_FAILED=0
+
+ while [ "$FINISHED_FLG" = "FALSE" ]
+ do
+   if [ $ITERATION != 0 ]; then
+     if [ $ERROR_CODE = 0 ]; then
+       ITER_PASSED=`expr $ITER_PASSED + 1`
+       echo "ITERATION $ITERATION: PASSED"
+     else 
+       ITER_FAILED=`expr $ITER_FAILED + 1`
+       echo $ERROR_STRING
+       echo "ITERATION $ITERATION: FAILED"
+     fi
+   fi
+   ERROR_CODE=0
+   ERROR_STRING=""
+   ITERATION=`expr $ITERATION + 1`
+   update_fileset $ITERATION || continue
+   UPDATE_TIME=$SECONDS
+   calc_next_rep $DEFAULTSITEAGE $UPDATE_TIME
+   sleep_til_next_rep 
+   verify_rep_completed "$REP_SERVERS"|| continue
+   cm flushfileset ${MOUNT_PATH}/${FILESET}_RO
+   verify_rep_successful "${MOUNT_PATH}/${FILESET}_RO" $ITERATION || continue
+   wait_maxage $MAXAGE $DEFAULTSITEAGE $UPDATE_TIME
+   verify_rep_successful "${MOUNT_PATH}/${FILESET}_MA" $ITERATION || continue
+   CURRENT_TIME=`$TIMER`
+   SECONDS_EXECUTED=$SECONDS
+   echo "ITERATION $ITERATION COMPLETED AT `date`"
+   if [ "$SECONDS_EXECUTED" -gt "$SECONDS_TO_EXECUTE" ]; then
+     FINISHED_FLG="TRUE"
+     if [ $ERROR_CODE = 0 ]; then
+       ITER_PASSED=`expr $ITER_PASSED + 1`
+       echo "ITERATION $ITERATION: PASSED"
+     else 
+       ITER_FAILED=`expr $ITER_FAILED + 1`
+       echo $ERROR_STRING
+       echo "ITERATION $ITERATION: FAILED"
+     fi
+   fi
+ done
+ echo "------------------------------"
+ echo "PASSED $ITER_PASSED Iterations"
+ echo "FAILED $ITER_FAILED Iterations"
+ echo "COMPLETED $ITERATION ITERATIONS!"
+}
+
+#############################################################
+# initialize variables
+#############################################################
+init()
+{
+# Global Variables
+ ERROR_CODE=0
+ ERROR_STRING=""
+
+ ERROR=1
+ NO_ERROR=0
+ HOSTTYPE=`uname`
+ if [[ $HOSTTYPE = HP-UX ]] ; then
+   RSH="remsh"
+ else
+   RSH="rsh"
+ fi
+ FILESET_SERVER=$FILESET_SERVER_NAME
+ FILESET_AGGR=$FILESET_AGGR_NAME
+ REP_SERVERS=""
+ REP_AGGRS=""
+ REP_SERVERS_LEFT=$REP_SERVERS_LIST
+ REP_AGGRS_LEFT=$REP_AGGRS_LIST
+}
+
+#############################################################
+#	MAIN
+#############################################################
+USAGE="Usage: `basename $0` [-f] data_file [-t] hours_to_execute"
+
+DATAFILE=
+while getopts :f:t: ARG
+do
+	case ${ARG} in
+		f)	if [ -n "$DATAFILE" ]	# multiple -f's?
+		then
+			echo $USAGE
+			exit 1
+		fi
+		DATAFILE=$OPTARG;;
+
+		t)	if [ -n "$HOURS" ]	# multiple -t's?
+		then
+			echo $USAGE
+			exit 1
+		fi
+		HOURS=$OPTARG;;
+
+		*)	echo $USAGE
+			exit 1;;
+	esac
+done
+shift $(($OPTIND - 1))
+
+if [ -n "$DATAFILE" -a -n "$HOURS" ]	# DATAFILE and HOURS defined yet?
+then
+	if [ $# -gt 0 ]
+	then
+		echo $USAGE
+		exit 1
+	fi
+elif [ $# -eq 2 ]			# DATAFILE and HOURS without -f & -t
+then
+	DATAFILE=$1
+	HOURS=$2
+else
+	echo $USAGE
+	exit 1
+fi
+
+if [ ! -r $DATAFILE ]		# DATAFILE exist and have read permission?
+then
+	echo "`basename $0`: Cannot open $DATAFILE for reading"
+	exit 2
+fi
+
+echo "Data file: $DATAFILE"
+echo "Running for $HOURS hours."
+
+  . ${DATAFILE}
+
+# source in check_RC routine
+if [ ! -f ${TROOT}/check_RC.ksh ] ; then
+  print "check_RC.ksh not found"
+  print "dfs.repfs exiting"
+  exit 1
+else
+  . ${TROOT}/check_RC.ksh
+fi
+
+print "**** Running dfs.repfs ****"
+
+print "**** Setting Up ****"
+
+# set up work
+init
+create_fileset  || { 
+  echo $ERROR_STRING; exit 1 
+}
+
+setup_rep  || { 
+  echo $ERROR_STRING
+  cleanup
+  exit 1 
+}
+print "**** Starting Same Machine Replication Section****"
+
+same_machine_rep "S" || {
+  echo $ERROR_STRING
+  cleanup
+  exit 1
+}
+print "**** Same Machine Replication Section Done ****"
+
+print "**** Starting Switch Replica Location Section****"
+print "**** Create new replica and remove old replica ****"
+NEW_AGGR=`print ${REP_AGGRS_LEFT} | sed 's/ .*$//'`
+NEW_SERVER=`print ${REP_SERVERS_LEFT} | sed 's/ .*$//'`
+switch_rep ${FILESET_SERVER} ${FILESET_AGGR} ${NEW_SERVER} ${NEW_AGGR} "S" || {
+  echo $ERROR_STRING
+  cleanup
+  exit 1
+}
+print "**** Switch Replica Location Section Done ****"
+
+if [ "$MOVE_RW" = "1" ] ; then
+  print "**** Starting Move Read-Write Fileset Location Section****"
+  move_rw ${FILESET_SERVER} ${FILESET_AGGR} ${NEW_SERVER} ${NEW_AGGR} ${NEW_SERVER} || {
+    echo $ERROR_STRING
+    cleanup
+    exit 1
+  } 
+  print "**** Move Read-Write Fileset Location Section Done****"
+fi
+if [ "$VERIFY_FAILAGE" = "1" ] ; then 
+  print "**** Verify FailAge Section ****"
+  update_fileset "S"
+  fts update repfs.test -all
+  sleep 30
+  # There should only be ONE replica to accurately verify the failage using
+  # verify_failage().
+  verify_failage "S" ${REP_SERVERS}|| {
+    echo $ERROR_STRING
+    cleanup
+    exit 1
+  }
+  print "**** Verify FailAge Section Done****"
+fi
+print "**** Add Remaining Replicas ****"
+add_rep  ${SERVERS_LEFT} ${AGGRS_LEFT} || {
+  echo $ERROR_STRING
+  cleanup
+  exit 1 
+}
+print "**** Add Remaining Replicas Done****"
+
+# test forced replication
+print "**** Starting Forced Replication Section ****"
+update_fileset 0 || { 
+  echo $ERROR_STRING; cleanup; exit 1 
+}
+force_rep  || { 
+  echo $ERROR_STRING; cleanup; exit 1 
+}
+verify_rep_completed "$REP_SERVERS" || { 
+  echo $ERROR_STRING; cleanup; exit 1 
+}
+verify_rep_successful "${MOUNT_PATH}/${FILESET}_RO" 0 || { 
+  echo $ERROR_STRING
+  cleanup
+  exit 1 
+}
+verify_rep_successful "${MOUNT_PATH}/${FILESET}_MA" 0 || { 
+  echo $ERROR_STRING
+  cleanup
+  exit 1 
+}
+
+print "**** Forced Replication Section Done ****"
+
+
+print "**** Starting Scheduled Replication Section ****"
+# loop - checking replication
+START_DATE=`date`
+echo "START DATE AND TIME IS $START_DATE"
+
+loop ${HOURS}
+
+print "**** Scheduled Replication Section Done ****"
+# clean up
+print "**** Cleaning Up ****"
+cleanup && echo $ERROR_STRING
+
+echo "END DATE AND TIME IS `date`"
+

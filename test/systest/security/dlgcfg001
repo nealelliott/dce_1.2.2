@@ -1,0 +1,787 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+#
+# HISTORY
+# $Log: dlgcfg001,v $
+# Revision 1.1.4.2  1996/03/11  02:47:49  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:08:54  marty]
+#
+# Revision 1.1.4.1  1995/12/11  22:44:55  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/jrr_1.2_mothra/1  1995/11/30  20:33 UTC  bell_d
+# 	Rewritten, cleaned up, debugged
+# 	[1995/12/11  22:21:19  root]
+# 
+# Revision 1.1.2.2  1994/10/06  20:39:04  agd
+# 	expand copyright
+# 	[1994/10/06  14:30:56  agd]
+# 
+# Revision 1.1.2.1  1994/08/22  17:56:34  bhaim
+# 	submit dlgcfg001
+# 	[1994/08/22  17:55:39  bhaim]
+# 
+# $EndLog$
+#
+#set -x
+#
+
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="run_test"
+#
+
+setup_machine_list()
+{
+ tet_infoline "..........................function $0"
+# Auto-configure the client and delegate machines. 
+# Get a list of machines on this cell ( $SEC_MACHINES ) 
+  set -A SEC_MACHINES `(cdscp list dir "/.:/hosts/*" | awk 'BEGIN {for (i=0;i<3;i++) getline;} {print $1}')`
+
+# set the number of machines on this cell ( $num_machines )
+  typeset -i num_machines
+  num_machines=0
+  for mach in ${SEC_MACHINES[*]} ; do
+    num_machines=num_machines+1
+  done
+
+# Set the client and delegate appropriately given the number of machines 
+# in this cell.  If this is a one machine cell then client and delegate 
+# are both that machine.  If this is a two machine cell then 
+# client is the first, and delegate is the second.  If this is a three 
+# or more machine cell then client is the second and delegate is the 
+# third listed.  The first one listed is always the local hostname. 
+ 
+  case $num_machines in
+        0) 
+          tet_infoline "ERROR: $0 no machines found"
+	  fail=fail+1 
+	  return 1 ;;
+        1)
+          CLIENT=${SEC_MACHINES[0]}
+          DELEGATE=${SEC_MACHINES[0]} ;;
+        2)
+          CLIENT=${SEC_MACHINES[0]}
+          DELEGATE=${SEC_MACHINES[1]} ;;
+        *)
+          CLIENT=${SEC_MACHINES[1]}
+          DELEGATE=${SEC_MACHINES[2]} ;;
+  esac
+
+
+  tet_infoline "*** CONFIG INFORMATION ***"
+  tet_infoline "  CLIENT   = $CLIENT"
+  tet_infoline "  DELEGATE = $DELEGATE"
+
+
+  tet_infoline "Leave setup_machine_list"
+} # end of setup_machine_list()
+
+
+stop_local_intermediary()
+{
+ tet_infoline "..........................function $0"
+ inter_pid=`env COLUMNS=160 ps -ae | grep -v grep | grep dlg_inter | awk '{print $1}'`
+ if [ -n "$inter_pid" ]
+ then
+        tet_infoline "dlg_intermediary already running on $HOSTNAME"
+        tet_infoline "inter_pid = $inter_pid"
+        tet_infoline "Stopping dlg_intermediary on $HOSTNAME"
+        kill -9 $inter_pid
+        sleep 3
+        nr_of_acls=$(env COLUMNS=160 ps -ae | grep -v grep | grep -c dlg_inter)
+        if ((nr_of_acls == 0))
+        then
+                tet_infoline "Successfully stopped dlg_intermediary on $HOSTNAME"
+		return 0
+        else
+                tet_infoline "ERROR: dlg_intermediary DID NOT stop on $HOSTNAME"
+		fail=fail+1
+		return 1
+        fi
+ else
+        tet_infoline "No dlg_intermediary running on $HOSTNAME"
+	return 0
+ fi
+
+}
+
+verify_local_intermediary()
+{
+ tet_infoline "..........................function $0"
+#verify dlg_intermediary started
+ inter_pid=`env COLUMNS=160 ps -ae | grep -v grep | grep dlg_inter | awk '{print $1}'`
+ if [ -n "$inter_pid" ]
+ then
+        echo "dlg_intermediary started successfully on $HOSTNAME"
+        tet_infoline "dlg_intermediary started successfully on $HOSTNAME"
+	return 0
+ else
+        tet_infoline "ERROR: dlg_intermediary failed to start on $HOSTNAME"
+	fail=fail+1
+	return 1
+ fi
+}
+
+verify_remote_intermediary()
+{
+ tet_infoline "..........................function $0"
+#set -x
+#verify dlg_intermediary started
+ inter_pid=`${RSH_COMM} ${1} env COLUMNS=160 ps -ae | grep -v grep | grep dlg_inter | awk '{print $1}'`
+ if [ -n "$inter_pid" ]
+ then
+        echo 	"dlg_intermediary started successfully on ${1}"
+        tet_infoline "dlg_intermediary started successfully on ${1}"
+	return 0
+ else
+        tet_infoline "ERROR: dlg_intermediary failed to start on ${1}"
+	fail=fail+1
+	return 1
+ fi
+}
+
+stop_remote_intermediary()
+{
+ tet_infoline "..........................function $0"
+
+ tet_infoline "remote node = ${1}"
+ inter_pid=`${RSH_COMM} ${1} env COLUMNS=160 ps -ae | grep -v grep | grep dlg_inter | awk '{print $1}'`
+ if [ -n "$inter_pid" ]
+ then
+        tet_infoline "dlg_intermediary running on ${1}"
+        tet_infoline "inter_pid = $inter_pid"
+        tet_infoline "Stopping dlg_intermediary"
+        ${RSH_COMM} ${1} kill -9 $inter_pid
+        sleep 3
+        nr_of_acls=$(${RSH_COMM} ${1} env COLUMNS=160 ps -ae | grep -v grep | grep -c dlg_inter)
+        if ((nr_of_acls == 0))
+        then
+                tet_infoline "Successfully stopped dlg_intermediary on ${1}"
+		return 0
+        else
+                tet_infoline "ERROR: dlg_intermediary DID NOT stop on ${1}"
+		fail=fail+1
+		return 1
+        fi
+ else
+        tet_infoline "No dlg_intermediary running on ${1}"
+	return 0
+ fi
+
+}
+
+
+start_servers()
+{
+ tet_infoline "..........................function $0"
+
+#Create dce_login_noexec
+
+ if [ ! -h /usr/bin/dce_login_noexec ] ; then
+    ln -fs /opt/dcelocal/bin/dce_login /usr/bin/dce_login_noexec
+ fi
+
+ acl_pid=`env COLUMNS=160 ps -ae | grep -v grep | grep acl_server | awk '{print $1}'`
+ if [ -n "$acl_pid" ]
+ then
+        tet_infoline "acl_server already running on $HOSTNAME"
+        tet_infoline "acl_pid = $acl_pid"
+        tet_infoline "Stopping acl_server on $HOSTNAME"
+        kill -9 $acl_pid
+        sleep 3
+        nr_of_acls=$(env COLUMNS=160 ps -ae | grep -v grep | grep -c acl_server)
+        if ((nr_of_acls == 0))
+        then
+                tet_infoline "Successfully stopped acl_server on $HOSTNAME"
+        else
+                tet_infoline "ERROR: DID NOT kill acl_server on $HOSTNAME"
+		fail=fail+1
+        fi
+ else
+        tet_infoline "No acl_servers running on $HOSTNAME"
+ fi
+
+#start acl_server
+ tet_infoline "Start acl_server on $HOSTNAME"
+ ./acl_server -d -e&
+ sleep 25 
+
+#verify acl_server started
+ acl_pid=`env COLUMNS=160 ps -ae | grep -v grep | grep acl_server | awk '{print $1}'`
+ if [ -n "$acl_pid" ]
+ then
+        tet_infoline "acl_server started successfully on $HOSTNAME"
+ else
+        tet_infoline "ERROR: acl_server failed to start on $HOSTNAME"
+	fail=fail+1
+ fi
+
+#check if old intermediaries are running, if so kill them
+ if [ ${DELEGATE} != $HOSTNAME ];  then
+ 	stop_remote_intermediary $DELEGATE
+ else
+	stop_local_intermediary
+ fi
+#D# there is no checking here for successful dlg_kta
+#Must add a keytab if starting a remote server
+ if [ ${DELEGATE} != $HOSTNAME ];  then
+	tet_infoline "Start to add the keytab"
+ 	rshsp $DELEGATE ${EXEC_PATH}/dlg_kta
+	tet_infoline "Succesfully added the keytab on ${DELEGATE}"
+	sleep 5
+ fi
+
+# Now do the rshsp if starting the intermediary on a remote system
+# Then run verify_remote_intermediary or verify_local_intermediary 
+# to insure that it has started
+ tet_infoline "Start dlg_intermediary"
+ if [ ${DELEGATE} != $HOSTNAME ];  then
+	tet_infoline "Starting the remote intermediary on $DELEGATE "
+	rshsp $DELEGATE ${EXEC_PATH}/dlg_start_intermediary &
+ 	sleep 10
+ 	verify_remote_intermediary $DELEGATE
+ else
+	tet_infoline "Starting the local intermediary on $HOSTNAME"
+	./dlg_intermediary -dbg&
+	sleep 5
+	verify_local_intermediary
+ fi
+
+} # end of start_servers
+
+
+stop_servers()
+{
+ tet_infoline "..........................function $0"
+ acl_pid=`env COLUMNS=160 ps -ae | grep -v grep | grep acl_server | awk '{print $1}'`
+ if [ -n "$acl_pid" ]
+ then
+        tet_infoline "acl_server already running on $HOSTNAME"
+        tet_infoline "acl_pid = $acl_pid"
+        tet_infoline "Stopping acl_server on $HOSTNAME"
+        kill -9 $acl_pid
+        sleep 5
+        nr_of_svrs=$(env COLUMNS=160 ps -ae | grep -v grep | grep -c acl_server)
+        if ((nr_of_svrs == 0))
+        then
+                tet_infoline "Successfully stopped acl_server on $HOSTNAME"
+        else
+                tet_infoline "ERROR: acl_server DID NOT stop on $HOSTNAME"
+		fail=fail+1
+        fi
+ else
+        tet_infoline "No acl_servers running on $HOSTNAME"
+ fi
+
+
+ if [ ${DELEGATE} != $HOSTNAME ];  then
+ 	stop_remote_intermediary $DELEGATE
+ else
+	stop_local_intermediary
+ fi
+
+#Must add a keytab if starting a remote server
+ if [ ${DELEGATE} != $HOSTNAME ];  then
+	tet_infoline "Delete the keytab"
+ 	rshsp $DELEGATE ${EXEC_PATH}/dlg_ktd
+        sleep 5
+	tet_infoline "After deleting the keytab"
+ fi
+
+
+}
+
+do_login() {
+        tet_infoline "Doing dce_login_noexec cell_admin -dce-"
+        KRB5CCNAME=`dce_login_noexec cell_admin -dce-`  1>/dev/null 2>&1
+        check_return "$?" "ERROR: Unable to authenticate cell by $PRINCIPAL in do_login" \
+                        "The cell is now authenticated by do_login"
+
+        export KRB5CCNAME
+}
+
+#===============================================================================
+# Function:     check_return <Integer value(Return Code)> <Error Statement>
+# Purpose:      Check return code and exit if value is other than 0.
+#
+#===============================================================================
+check_return() {
+        if [ "${1}" != "0" ]
+        then
+                tet_infoline "${2}"
+                fail=fail+1
+                test_fail=test_fail+1
+        else
+                if [ "${3}" != "" ]
+                then
+                        tet_infoline "${3}"
+                fi
+        fi
+} # End of function check_return
+
+#===============================================================================
+# Function:     check_stderr <Integer value(Return Code)> <Error Statement>
+# Purpose:      Check return code, then stderr for PASS 
+#		otherwise print error message
+#
+#===============================================================================
+check_stderr() {
+
+#check for non-zero return code
+        if [ "${1}" != "0" ]
+        then
+                tet_infoline "${2}"
+		tet_infoline "non zero return code"
+		if [ $4 = test_fail ]
+		then
+		  test_fail=test_fail+1
+#		  tet_infoline "DCE_ERROR encountered"
+		else
+		  fail=fail+1
+		  tet_infoline "FAILURE encountered"
+		fi  
+		return
+	fi
+
+#check for PASS in stderr
+##D# outfile used to be hard-coded to:
+##D# TET_ROOT/system/security/ts/dlgcfg001/out.stderr
+        grep 'PASS' $OUTFILE
+        CODE=$?
+        if [ "${CODE}" != "0" ]
+        then
+                tet_infoline "${2}"
+                if [ $4 = test_fail ]
+                then
+                  test_fail=test_fail+1
+                  tet_infoline "No PASS found in log"
+                  tet_infoline "DCE_ERROR encountered"
+                else
+                  fail=fail+1
+                  tet_infoline "No PASS found in log"
+                  tet_infoline "FAILURE encountered"
+                fi
+		return
+	fi
+
+#print out message to TET journal
+       if [ "${3}" != "" ]
+       then
+                tet_infoline "${3}"
+       fi
+
+#       rm $TET_ROOT/system/security/ts/dlgcfg001/out.stderr
+} # End of function check_stderr
+
+#===============================================================================
+# Function:     check_fail <Integer value(Return Code)> <Error Statement>
+# Purpose:      Check stderr for FAIL
+#		otherwise print error message
+#
+#===============================================================================
+check_fail() {
+
+#check for PASS in stderr
+##D# OUTFILE  used to be hard-coded to:
+##D# $TET_ROOT/system/security/ts/dlgcfg001/out.stderr
+        grep 'FAIL' $OUTFILE 
+        CODE=$?
+        if [ "${CODE}" != "0" ]
+        then
+                 tet_infoline "${2}"
+                 tet_infoline "did not find FAIL in output stream"
+                 fail=1
+                 test_fail=1
+		 return
+	fi
+
+#print out message to TET journal
+       if [ "${3}" != "" ]
+       then
+                tet_infoline "${3}"
+       fi
+
+#       rm $TET_ROOT/system/security/ts/dlgcfg001/out.stderr
+} # End of function check_fail
+
+#===============================================================================
+# Function:     verify_principal principal
+# Purpose:      Checks the output of rgy_edit view command to verify that
+#               a principal exists in the registry
+#===============================================================================
+verify_principal()
+{
+  tet_infoline "..........................function $0"
+#verify the registry
+        cat << EOF > ${RGY_INPUT}
+do p
+v
+EOF
+        # Execute file using the rgy_edit command.  Send the output to file
+        #       ${RGY_OUTPUT}
+        execute_rgy
+        if [ "$?" != 0 ]
+        then
+                tet_infoline "ERROR: Couldn't execute_rgy in verify_principals"
+                fail=fail+1
+                return 1
+        fi
+        cat ${RGY_OUTPUT} | verify_existence "${1}" > /dev/null
+        if [ "$?" != 0 ]
+        then
+                tet_infoline "ERROR: Couldn't verify existence of ${1} principal"
+                fail=fail+1
+                return 1
+	fi
+        tet_infoline "${1} added as a principal and verified"
+	return 0
+
+}
+
+#===============================================================================
+# Function:     verify_account account
+# Purpose:      Checks the output of rgy_edit view command to verify that
+#               a account exists in the registry
+#===============================================================================
+verify_account()
+{
+  tet_infoline "..........................function $0"
+#verify the registry
+        cat << EOF > ${RGY_INPUT}
+do a
+v
+EOF
+        # Execute file using the rgy_edit command.  Send the output to file
+        #       ${RGY_OUTPUT}
+        execute_rgy
+        if [ "$?" != 0 ]
+        then
+                tet_infoline "ERROR: Couldn't execute_rgy in verify_accounts"
+                fail=fail+1
+                return 1
+        fi
+        cat ${RGY_OUTPUT} | verify_existence "${1}" > /dev/null
+        if [ "$?" != 0 ]
+        then
+                tet_infoline "ERROR: Couldn't verify existence of ${1} accounts"
+                fail=fail+1
+                return 1
+	fi
+        tet_infoline "${1} added as a account and verified"
+
+}
+
+#===============================================================================
+# Function:     verify_keytab keytab
+# Purpose:      Checks the output of rgy_edit view command to verify that
+#               a keytab exists in the registry
+#===============================================================================
+verify_keytab()
+{
+  tet_infoline "..........................function $0"
+#verify the registry
+        cat << EOF > ${RGY_INPUT}
+ktl
+EOF
+        # Execute file using the rgy_edit command.  Send the output to file
+        #       ${RGY_OUTPUT}
+        execute_rgy
+        if [ "$?" != 0 ]
+        then
+                tet_infoline "ERROR: Couldn't execute_rgy in verify_keytab"
+                fail=1
+                return 1
+        fi
+        cat ${RGY_OUTPUT} | verify_existence "${1}" > /dev/null
+        if [ "$?" != 0 ]
+        then
+                tet_infoline "ERROR: Couldn't verify existence of ${1} keytab"
+                fail=1
+                return 1
+	fi
+        tet_infoline "${1} added as a keytab and verified"
+
+}
+
+add_rgy()
+{
+tet_infoline "..........................function $0 add to registry"
+rgy_edit <<EOF
+do p
+add aclmgr
+add dlg_test
+add dlg_svr
+do a
+add aclmgr -g none -o none -mp -dce- -pw aclmgr
+add dlg_test -g none -o none -mp -dce- -pw dlg_test
+add dlg_svr -g none -o none -mp -dce- -pw dlg_svr
+kta -p aclmgr -pw aclmgr
+kta -p dlg_svr -pw dlg_svr
+kta -p dlg_test -pw dlg_test
+quit
+EOF
+if [ $? -ne 0 ] ; then
+  tet_infoline "ERROR: rgy_edit returned failure status" 
+  fail=fail+1
+else
+  tet_infoline "Completed adding to registry"
+fi
+
+##D# These came commented out from OSF. I wonder why.
+#tet_infoline "Verify registry entries - may take a few minutes"
+#verify_principal "aclmgr"
+#verify_principal "dlg_test"
+#verify_principal "dlg_svr"
+#verify_account "aclmgr"
+#verify_account "dlg_test"
+#verify_account "dlg_svr"
+#verify_keytab "aclmgr"
+#verify_keytab "dlg_test"
+#verify_keytab "dlg_svr"
+
+}
+
+##D# There is no error checking or status checking on this command
+delete_rgy()
+{
+tet_infoline "..........................function $0 Delete from registry"
+rgy_edit <<EOF
+do a
+ktd -p aclmgr -v 1
+ktd -p dlg_test -v 1
+ktd -p dlg_svr -v 1
+do p
+del aclmgr
+del dlg_test
+del dlg_svr
+quit
+EOF
+if [ $? -ne 0 ] ; then
+  tet_infoline "ERROR: rgy_edit returned failure status" 
+  fail=fail+1
+else
+  tet_infoline "Completed deleting from registry"
+fi
+
+}
+
+
+################################################################################
+#
+# Startup
+#
+################################################################################
+
+startup()
+{
+tet_infoline "..........................function $0"
+export HOSTNAME=`hostname`
+#Reset failure flags
+typeset -i test_fail fail
+fail=0
+test_fail=0
+
+#do a DCE login with no_exec
+
+        do_login
+        if [ $fail -ne 0 ] ; then
+		tet_infoline "do_login() FAILED"
+		del_test_purp
+                return
+        fi
+
+	setup_machine_list
+        if [ $fail -ne 0 ] ; then
+		tet_infoline "setup_machine_list() FAILED"
+		del_test_purp
+                return
+        fi
+
+	add_rgy
+        if [ $fail -ne 0 ] ; then
+		tet_infoline "add_rgy() FAILED"
+		del_test_purp
+                return
+        fi
+
+
+	start_servers
+        if [ $fail -ne 0 ] ; then
+		tet_infoline "start_servers() $fail FAILURES encountered"
+		del_test_purp
+                return
+        fi
+
+##D#!!! WHAT IS THIS hard coded relative path passed to acl_edit!!!
+        acl_edit /.:/myfilesystem/mike -m user:dlg_test:rwx -m user_delegate:dlg_svr:rwx
+        check_return "$?" "ERROR: Unable to acl_edit /.:/myfilesyste/mike" \
+		     "Able to acl_edit /.:/myfilesyste/mike"
+	if [ $fail -ne 0 ] ; then
+		del_test_purp
+                return
+        fi
+
+        acl_edit /.:/sec/principal/dlg_test -m user_obj:rmfug
+        check_return "$?" "ERROR: Unable to acl_edit /.:/sec/principal/dlg_test" \
+		     "Able to acl_edit /.:/sec/principal/dlg_test"
+	if [ $fail -ne 0 ] ; then
+		del_test_purp
+                return
+        fi
+
+}
+
+run_test()
+{
+tet_infoline "..........................function $0"
+
+	if [ ${CLIENT} != $HOSTNAME ];  then
+		${RSH_COMM} $CLIENT $CLIENT_PATH -c 2> $OUTFILE 
+	else
+		$CLIENT_PATH -c 2> $OUTFILE
+ 	fi
+        check_stderr "$?" "ERROR: client side test FAILED" \
+                     "client side test PASSED" test_fail 
+
+	if [ ${CLIENT} != $HOSTNAME ];  then
+		${RSH_COMM} $CLIENT $CLIENT_PATH -la 2> $OUTFILE
+	else
+		$CLIENT_PATH -la 2> $OUTFILE
+ 	fi
+        check_stderr "$?" "ERROR: local attribute test FAILED" \
+                     "local attribute test PASSED" test_fail
+
+	if [ ${CLIENT} != $HOSTNAME ];  then
+		${RSH_COMM} $CLIENT $CLIENT_PATH -ra 2> $OUTFILE
+	else
+		$CLIENT_PATH -ra 2> $OUTFILE
+ 	fi
+        check_stderr "$?" "ERROR: remote attribute test FAILED" \
+                     "remote attribute test PASSED" test_fail
+
+
+	if [ ${CLIENT} != $HOSTNAME ];  then
+		${RSH_COMM} $CLIENT $CLIENT_PATH -nbi 2> $OUTFILE
+	else
+		$CLIENT_PATH -nbi 2> $OUTFILE
+ 	fi
+        check_stderr "$?" "ERROR: no initiator test FAILED" \
+                     "no initiator test PASSED" test_fail
+
+
+	if [ ${CLIENT} != $HOSTNAME ];  then
+		${RSH_COMM} $CLIENT $CLIENT_PATH 2> $OUTFILE
+	else
+		$CLIENT_PATH 2> $OUTFILE
+ 	fi
+        check_stderr "$?" "ERROR: standard test FAILED" \
+                     "standard test PASSED" test_fail
+
+
+	if [ ${CLIENT} != $HOSTNAME ];  then
+		${RSH_COMM} $CLIENT $CLIENT_PATH -dis 2> $OUTFILE
+	else
+		$CLIENT_PATH -dis 2> $OUTFILE
+ 	fi
+        check_stderr "$?" "ERROR: disable delegation test FAILED" \
+                     "disable delegation test PASSED" test_fail
+
+	if [ ${CLIENT} != $HOSTNAME ];  then 
+		${RSH_COMM} $CLIENT $CLIENT_PATH -name 2> $OUTFILE
+	else
+		$CLIENT_PATH -name 2> $OUTFILE
+ 	fi
+        check_stderr "$?" "ERROR: name authentication FAILED" \
+                     "name authentication PASSED" test_fail
+
+
+	if [ ${CLIENT} != $HOSTNAME ];  then
+		${RSH_COMM} $CLIENT $CLIENT_PATH -cdt i -sdt i 2> $OUTFILE 
+	else
+		$CLIENT_PATH -cdt i -sdt i 2> $OUTFILE 
+ 	fi
+        check_stderr "$?" "ERROR: Positive impersonation test FAILED" \
+                     "Positive impersonation test PASSED" test_fail
+
+
+#Negative tests
+        acl_edit /.:/myfilesystem/mike -m user:dlg_test: -m user_delegate:dlg_svr:rwx
+        check_return "$?" "ERROR: Unable to negative acl_edit" \
+		     "Able to negative acl_edit"
+
+	if [ ${CLIENT} != $HOSTNAME ];  then
+		${RSH_COMM} $CLIENT $CLIENT_PATH -neg 2> $OUTFILE
+	else
+		$CLIENT_PATH -neg 2> $OUTFILE
+ 	fi
+        check_stderr "$?" "ERROR: Negative delegation test FAILED" \
+                     "Negative delegation test PASSED" test_fail
+
+
+        if [ $test_fail -ne 0 ] ; then
+		tet_infoline "$test_fail DCE FAILURES ENCOUNTERED"
+                tet_result DCE_ERROR 
+        else
+                tet_result PASS
+        fi
+
+} #end of run_test
+
+
+
+cleanup()
+{
+typeset -i fail
+fail=0
+tet_infoline "..........................function $0"
+        tet_infoline "Stopping the servers"
+	stop_servers
+	if [ $? -ne 0 ]
+	then
+	   tet_infoline "$fail failure(s) stopping servers"
+	else
+           tet_infoline "Finished stopping the servers"
+	fi
+	
+
+        tet_infoline "Removing the principals created"
+	delete_rgy
+	if [ $? -ne 0 ]
+	then
+	   tet_infoline "failure in delete_rgy removing principals created"
+	else
+           tet_infoline "Finished removing the principals created"
+	fi
+
+	if [ $fail -ne 0 ]
+	then
+  	  tet_infoline "$fail failures in cleanup()"
+	fi
+
+
+} #end of cleanup
+
+
+. $TET_ROOT/profile.dcest
+
+#. $TET_ROOT/security/ts/dlgcfg001/dlgcfg001.data
+ 
+
+. ./dlgcfg001.data
+
+. $TET_ROOT/security/ts/sec.functions
+#typeset -i test_fail fail
+#fail=0
+#test_fail=0
+
+. $TCM
+
+

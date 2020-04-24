@@ -1,0 +1,91 @@
+#!/bin/ksh
+# set -x
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: run.aud,v $
+# Revision 1.1.4.2  1996/03/11  02:37:34  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:05:00  marty]
+#
+# Revision 1.1.4.1  1995/12/11  21:54:27  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:54:55  root]
+# 
+# Revision 1.1.2.1  1994/04/04  20:06:18  pellis
+# 	Created.
+# 	[1994/04/04  20:05:52  pellis]
+# 
+# $EndLog$
+#
+# Driver for tet audit system tests
+#
+LOOPS_TO_EXECUTE=""
+HOURS_TO_EXECUTE=""
+KEEP_ALL_JOURNALS=""
+callwas="$*"
+if [[ -z $TET_ROOT ]]
+then
+        echo TET_ROOT not defined.
+        exit 1
+fi
+MODE=client
+
+myname=${0##*/}
+
+Usage() {
+	print -u2 -- "Usage: $myname {-l loops | -t hours} test_name"
+	print -u2 -- "Options:"
+	print -u2 -- "	-l	Number of loops or passes to run."
+	print -u2 -- "	-t	Time in hours.  May include decimal point, eg .5 = 30 minutes."
+	print -u2 -- "	-c	Keep the log files from successful iterations."
+	print -u2 -- "	-e	Max failures-in-a-row allowed before punting test (default=50)."
+	print -u2 -- "	-E	Max total failures allowed before punting test (default=500)."
+	exit 2
+}
+
+havmopt=0
+while getopts :l:t:e:E:cMm: arguments
+do
+	case $arguments in
+
+		l)      LOOPS_TO_EXECUTE=$OPTARG;;
+
+		t)      HOURS_TO_EXECUTE=$OPTARG;;
+
+		c)	KEEP_ALL_JOURNALS="YES";;
+
+		e)	MaxErrsInARow=$OPTARG;;
+
+		E)	MaxErrors=$OPTARG;;
+
+		:)	echo "ERROR: -$OPTARG requires an argument"
+			exit 1;;
+
+		\?)	echo "ERROR: -$OPTARG is not a valid switch"			
+                        exit 1;;
+         esac
+done
+
+if [ $# -lt 3 ]; then
+	Usage
+	exit 1
+fi
+
+j=$OPTIND
+eval test_name=\$$j
+
+if [[ -z $test_name ]]; then
+	test_name=all
+	callwas="$callwas all"
+fi
+
+#
+# Now run the main loops.
+#
+. $TET_ROOT/system/tools/run_loops.ksh audit "run.aud $callwas"

@@ -1,0 +1,87 @@
+#
+#      SCCS:  @(#)makefile	1.2 (92/09/30) 
+#
+#	UniSoft Ltd., London, England
+#
+# (C) Copyright 1992 X/Open Company Limited
+#
+# All rights reserved.  No part of this source code may be reproduced,
+# stored in a retrieval system, or transmitted, in any form or by any
+# means, electronic, mechanical, photocopying, recording or otherwise,
+# except as stated in the end-user licence agreement, without the prior
+# permission of the copyright owners.
+#
+# X/Open and the 'X' symbol are trademarks of X/Open Company Limited in
+# the UK and other countries.
+#
+#
+# ************************************************************************
+#
+# SCCS:   	@(#)makefile	1.2 92/09/30
+# NAME:		makefile
+# PRODUCT:	DTET (Distributed Test Environment Toolkit) release 1.0b
+# AUTHOR:		Andrew Dingwall, UniSoft Ltd.
+# DATE CREATED:	June 1992
+#
+# DESCRIPTION:
+#	tcc makefile
+# 
+# MODIFICATIONS:
+# 
+# ************************************************************************
+
+include ../defines.mk
+include ../common.mk
+
+# generic tcc .o files
+# these get compiled with TET_CDEFS in tet.mk
+# if you change this list, you must also change the list in tet.mk
+T_OFILES_GN = again.o bld_cln.o config.o dconfig.o dist.o error.o exec.o \
+	generic.o group.o journal.o lock.o misc.o modes.o remote.o rescode.o \
+	resfile.o save.o scenario.o spawn.o store.o syntax.o tcc.o \
+	testcase.o util.o
+
+# these get compiled with DTET_CDEFS in dtet.mk
+# if you change this list, you must also change the list in dtet.mk
+DT_OFILES_GN = d_fake.o d_tccfuncs.o 
+
+OFILES_GN = $(T_OFILES_GN) $(DT_OFILES_GN)
+
+# INET-specific tcc .o files; these get compiled with DTET_CDEFS in dtet.mk
+# if you change this list, you must also change the list in dtet.mk
+OFILES_IN = d_tcc_in.o d_tcc_bs.o d_fake_in.o
+
+OFILES = $(OFILES_GN) $(OFILES_IN)
+
+ALL = dtcc
+
+TARGETS = $(BIN)/dtcc
+
+all: all1 all2
+
+all1:
+	$(MAKE) -f tet.mk all
+	$(MAKE) -f dtet.mk all
+
+all2: $(ALL)
+
+install: all $(TARGETS)
+
+$(TARGETS): $$(@F)
+	cp $(@F) $@
+
+dtcc: $P $(OFILES) $(LIBDAPI)
+	$(CC) $(LDFLAGS) -o $@ $(OFILES) $(LIBDAPI) $(SYSLIBS)
+	$(MCS) -c $@
+
+CLEAN clean:
+	$(MAKE) -f tet.mk $@
+	$(MAKE) -f dtet.mk $@
+	rm -f $(ALL)
+
+CLOBBER clobber: clean
+	rm -f $(TARGETS)
+
+FORCE FRC: clobber all
+
+

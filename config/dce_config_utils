@@ -1,0 +1,288 @@
+#!/bin/sh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY 
+# $Log: dce_config_utils,v $
+# Revision 1.1.13.3  1996/03/09  23:10:04  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:28:07  marty]
+#
+# Revision 1.1.13.2  1996/02/07  17:47:54  parul
+# 	DCE 1.2.1 final drop from HP
+# 	[1996/02/07  16:13:41  parul]
+# 
+# 	DCE 1.2.1 final drop from HP
+# 
+# Revision 1.1.11.1  1994/06/21  16:55:41  tom
+# 	Change dce.clean to dce_shutdown.
+# 	[1994/06/21  16:44:55  tom]
+# 
+# Revision 1.1.9.2  1993/09/17  21:27:17  tom
+# 	Automation:
+# 	  Add remove_install()
+# 	  Add prompt code to clean_and_remove (controlled by argument).
+# 	  Don't do clean_and_remove if we have called remove_install already.
+# 	Clean up use of ETC.
+# 	[1993/09/17  21:26:29  tom]
+# 
+# Revision 1.1.9.1  1993/09/13  14:19:01  tom
+# 	Bug 8584 - HP-UX doesn't do backslash-t for tabs.
+# 	[1993/09/10  22:29:12  tom]
+# 
+# Revision 1.1.6.4  1993/08/26  22:33:13  tom
+# 	Fix log_env_vars routine to print variables on a list
+# 	which gets set in dce_config_env.  So we can add to the
+# 	list and not have to change this routine every time.
+# 	[1993/08/26  22:29:48  tom]
+# 
+# Revision 1.1.6.3  1993/07/20  22:46:38  tom
+# 	Print out FILESYSTEM, MEDIA, CP_OR_SYMLINK, DTS_CONFIG,
+# 	USE_DEF_MSG_PATH, for OSF1: DO_LIB_ADMIN, USE_ETHER_FILE.
+# 	[1993/07/20  22:32:02  tom]
+# 
+# Revision 1.1.6.2  1993/07/19  19:26:58  zeliff
+# 	HP port of DFS
+# 	[1993/07/19  18:20:38  zeliff]
+# 
+# Revision 1.1.4.6  1993/07/16  22:40:21  kissel
+# 	Ref Port Changes
+# 	[1993/07/09  18:05:23  jake]
+# 
+# 	Changed invocation to ETC for install stuff...
+# 	[1993/07/06  15:16:26  jake]
+# 
+# 	changed CHECK_TIME reference to check_time
+# 	[1993/06/28  13:58:48  jake]
+# 
+# 	Commented out all of the Environment Variable null-ations at the end of the
+# 	file
+# 	[1993/05/05  19:11:07  jake]
+# 
+# 	Removed gross bottom line
+# 	[1993/04/27  22:32:09  jake]
+# 
+# 	Checkin for first Bsubmit
+# 	[1993/04/27  22:22:42  jake]
+# 
+# 	Fixes for GAMERA
+# 	[1993/04/22  20:54:28  jake]
+# 
+# 	new and tasty dce_config_utils
+# 	[1993/04/22  15:40:09  jake]
+# 
+# 	*** empty log message ***
+# 	[1993/06/21  14:17:08  kissel]
+# 
+# Revision 1.1.2.4  1993/06/17  14:58:30  jake
+# 	Removing Heinous extra } at end of file
+# 	[1993/06/17  14:57:49  jake]
+# 
+# Revision 1.1.2.3  1993/06/16  21:29:05  jake
+# 	HP Reference Port dce_config_utils first offering
+# 	[1993/06/16  21:28:28  jake]
+# 
+# Revision 1.1.2.2  1993/06/04  01:11:16  kissel
+# 	Initial HPUX RP version.
+# 	[1993/06/03  20:21:13  kissel]
+# 
+# $EndLog$
+if [ "$D" = "D" ]
+then
+	set -x
+fi
+
+: ${DCE_ETC:="/etc"}
+export DCE_ETC
+
+SOURCE_CONFIG_UTILS=1
+
+# If the variable SOURCE_CONFIG_ENV is of length zero, then it has not
+# been set and we need to source the file dce_config_env. Sourcing this
+# file will set and export this variable.
+if [ -z "$SOURCE_CONFIG_ENV" ]
+then
+	if [ -f ${DCE_ETC}/dce_config_env ]
+	then
+		. ${DCE_ETC}/dce_config_env
+	else
+		echo Cannot source "${DCE_ETC}/dce_config_env"
+		exit 1
+	fi
+fi
+
+# If the variable SOURCE_COM_UTILS is of length zero, then it has not
+# been set and we need to source the file dce_com_utils. Sourcing this
+# file will set and export this variable.
+if [ -z "$SOURCE_COM_UTILS" ]
+then
+	if [ -f ${DCE_ETC}/dce_com_utils ]
+	then
+		. ${DCE_ETC}/dce_com_utils
+	else
+		echo Cannot source "${DCE_ETC}/dce_com_utils"
+		exit 1
+	fi
+fi
+
+#------------------------------------------------------
+# clean_and_remove()
+#
+# Stop all DCE daemons, then remove all data files
+# created by them.  Returns 0 if successful, 1 if
+# failure.
+# If argument = "prompt", ask first.
+#------------------------------------------------------
+clean_and_remove()
+{
+    arg=$1
+    log_msg DEBUG "Executing: clean_and_remove($arg)"
+
+    if [ $arg = "prompt" ]
+    then
+	# Don't do this if we have already removed $DCELOCAL
+    	if [ "${remove_install_done}" = "Done" -o \
+	     "${clean_and_remove_done}" = "Done" ]
+    	then
+		return
+    	fi
+
+	answer=${REMOVE_PREV_CONFIG:="NULL"}
+	while [ "${answer:="NULL"}" = "NULL" ]
+	do
+		log_msg VERBOSE "User query: Do you wish to first remove all remnants of
+previous DCE configurations for all components (y/n)?
+You should do so only if you plan on re-configuring
+as a client of a different cell: (n) "
+		echo "\n\tDo you wish to first remove all remnants of"
+		echo "\tprevious DCE configurations for all components (y/n)?"
+		echo "\tYou should do so only if you plan on re-configuring"
+		echon "\tas a client of a different cell: (n) "
+		get_string
+		answer=${string:-"n"}
+		log_msg VERBOSE "User entry: $answer"
+	done
+	case $answer in
+		n|no) 	clean_and_remove_done="Done"
+			export clean_and_remove_done
+			return;;
+		*) ;;
+	esac;
+    fi
+
+    log_msg SUMMARY "Attempting to stop all running DCE daemons..."
+    if [ ! -x ${DCE_ETC}/dce_shutdown ]
+    then
+        err_exit "DCE must be installed and configured prior to stopping \
+running DCE daemons.  Continuing will return to the Main Menu."
+	menu0
+    else
+	log_msg DEBUG "Executing: ${DCE_ETC}/dce_shutdown"
+        ${DCE_ETC}/dce_shutdown -f
+	if [ $? -eq 0 ]
+	then
+	    log_msg SUMMARY "Successfully stopped all running DCE daemons."
+	else
+            if [ "$do_checks" = "y" ]; then
+		log_msg WARNING "dce_config_utils: Failed to stop all running DCE daemons."
+		x_exit
+            fi
+	fi
+    fi
+
+    if [ ! -x $DCELOCAL/etc/dce.rm ]
+    then
+        err_exit "DCE must be installed and configured prior to removing \
+previous DCE configurations.  Continuing will return to the Main Menu."
+	menu0
+    else
+	log_msg SUMMARY "Attempting to remove all remnants of previous DCE configurations..."
+	log_msg DEBUG "Executing: ${DCE_ETC}/dce.rm"
+        ${DCE_ETC}/dce.rm
+	if [ $? -eq 0 ]
+	then
+	    log_msg SUMMARY "Successfully removed all remnants of \
+previous DCE configurations for all components."
+	else
+	    err_exit "Failed to remove all remnants of previous \
+DCE configurations for all components.  Continuing will return to the Main Menu."
+		menu0
+	fi
+    fi
+    clean_and_remove_done="Done"
+    export clean_and_remove_done
+}
+
+#------------------------------------------------------
+# remove_install()
+#
+# Remove the remains of a previous install
+#------------------------------------------------------
+remove_install()
+{
+	log_msg DEBUG "Executing: remove_install()"
+	if [ "${remove_install_done}" = "Done" ]
+	then
+		return
+	fi
+
+	answer=${REMOVE_PREV_INSTALL:-"NULL"}
+	while [ "${answer:-"NULL"}" = "NULL" ]
+	do
+		log_msg VERBOSE "User query: Do you wish to first remove all remnants of previous DCE installations for all components (y/n)? You should do so if you plan on re-installing all existing DCE components now: (n)"
+		echo "\n\tDo you wish to first remove all remnants of"
+		echo "\tprevious DCE installations for all components?"
+		echo "\tYou should do so if you plan on re-installing"
+		echon "\tall existing DCE components now (n): "
+		get_string
+		answer=${string:-"n"}
+		log_msg VERBOSE "User entry: $answer"
+	done
+		case $answer in
+			y|yes) log_msg SUMMARY "Attempting to remove all remnants of \
+previous DCE installations for all components...";
+				log_msg DEBUG "Executing: ${DCE_ETC}/dce.rm install"
+				${DCE_ETC}/dce.rm install;
+				if [ $? -eq 0 ]
+				then
+					log_msg SUMMARY "Successfully removed all remnants of previous DCE installations for all components."
+				else
+					err_exit "Failed to remove all remnants of previous DCE installations for all components."
+				fi
+				;;
+			*) ;;
+		esac
+	remove_install_done="Done"
+	export remove_install_done
+}
+
+#------------------------------------------------------
+# log_env_values()
+#
+# Print the value of the DCE system environment variables
+# to the configuration log file.
+#------------------------------------------------------
+log_env_values()
+{
+	for var in $DCE_VAR_LIST
+	do
+		value=`eval echo $"$var"`
+		value=${value:-"<not-set>"}
+		log_msg VERBOSE "$var			$value"
+	done
+	for var in $DCE_PASS_LIST
+	do
+		value=`eval echo $"$var"`
+		if [ -z "$value" ]
+		then
+			value="<not-set>"
+		else
+			value="<not-shown>"
+		fi
+		log_msg VERBOSE "$var			$value"
+	done
+
+}

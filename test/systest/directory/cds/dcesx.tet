@@ -1,0 +1,315 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dcesx.tet,v $
+# Revision 1.1.2.2  1996/03/09  20:50:44  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:28:47  marty]
+#
+# 	Initial GAMERA branch
+# 	[1993/03/31  12:21:07  mgm]
+#
+# Revision 1.1.2.1  1995/12/11  21:57:04  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/02  20:34 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/04/01  17:45 UTC  truitt
+# 
+# 	HP revision /main/truitt_junk/1  1994/04/01  16:58 UTC  truitt
+# 	move file to cds directory
+# 	[1995/12/11  20:56:51  root]
+# 
+# Revision 1.1.5.2  1993/07/09  11:28:37  root
+# 	Initial King Kong branch
+# 	[1993/07/09  11:28:08  root]
+# 
+# Revision 1.1.2.2  1993/02/01  20:24:53  mgm
+# 	Tet systest script for dcesx (really a functional test)
+# 	[1993/02/01  20:20:58  mgm]
+# 
+# $EndLog$
+# (c) Copyright 1990, 1991, 1992 OPEN SOFTWARE FOUNDATION, INC.
+# ALL RIGHTS RESERVED
+#
+# OSF DCE Version 1.0, UPDATE 1.0.1
+#
+
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="run_test"
+
+startup ()
+{
+	# Create dce_login_noexec symbolic link if there isn't one
+
+	if [ ! -f /usr/bin/dce_login_noexec ]
+	then
+	        tet_infoline "Creating dce_login_noexec symbolic link"
+	        ln -s /usr/bin/dce_login /usr/bin/dce_login_noexec
+	fi
+
+        KRB5CCNAME=`dce_login_noexec cell_admin -dce- 2> /dev/null` 
+
+	if [ $? -ne 0 ]
+	then
+		tet_infoline "ERROR: Unable to authenticate cell"
+		tet_delete run_test "FAILURE...run_test() deleted."
+		return
+	else
+		tet_infoline "The cell is now authenticated by $PRINCIPAL"
+		export KRB5CCNAME
+	fi
+
+	export DONE="FALSE"
+
+	#-----------------------------------------------------------------------
+	# TIMER: called like [T=`$TIMER`].  T equals seconds since beg. of year
+	# TIME_DATE: called like [T=`$TIME_DATE`].  T = 11:44:50-03/16
+	#-----------------------------------------------------------------------
+
+        TIMER='eval echo `awk "BEGIN { printf (\"%d\", \`date +"%j"\`*86400 + \`date +"%H"\`*3600 + \`date +"%M"\`*60 + \`date +"%S"\`); exit}"`'
+	START_TIME=`$TIMER`
+
+	myname=`basename $0`
+	myhome=`pwd`
+
+        WORKDIR=`pwd`/logdir
+        test -d "$WORKDIR" || mkdir $WORKDIR
+
+	export logfile=$WORKDIR/${myname}${pid}.log
+
+	# Initialize our status variables
+
+	status_dcesx=0
+
+	# Initialize our logfile
+
+	tet_infoline "${prefix}Initializing logfile ..."
+	tet_infoline "# Invocation: $0 $*" 
+	tet_infoline "# Date:       `date`" 
+	echo "" >> ${logfile}
+
+	# Note: we default this to the abbreviation for the local cell
+
+	if [ -f /opt/dcelocal/dce_cf.db ]
+	then 
+		cellname=${cellname_arg=`awk '/cellname/ {print $2}' /opt/dcelocal/dce_cf.db`}
+	else 
+		cellname=${cellname_arg="/.:"}
+	fi
+
+	tet_infoline "${prefix}cellname       : ${cellname}" 
+
+	# Determine the toplevel test directory (ie. the testspace)
+
+	toptestdir=${toptestdir_arg="`whoami`${pid}"}
+	tet_infoline "${prefix}toptestdir     : ${toptestdir}" 
+
+	testspace=" ${cellname}/${toptestdir}"
+	tet_infoline "${prefix}testspace      :${testspace}" 
+
+	# Determine our internet address
+	# Note: this is gross but it does the trick.  If perchance this should
+	#       cause problems on some systems, the workaround is to simply
+	#       comment this mess out and use the -inet x.y.x switch
+	#
+	ourhostname="`hostname`"
+	tet_infoline "${prefix}hostname       : ${ourhostname}" 
+
+	ourhostname_prefix="`hostname | cut -f1 -d.`"
+	tet_infoline "${prefix}hostname prefix: ${ourhostname_prefix}" 
+
+	ouraddress=`arp $ourhostname | sed 's/.*(\(.*\)).*/\1/'`
+	inetaddr=${inetaddr_arg="${ouraddress}"}
+	tet_infoline "${prefix}internet_addr  : ${inetaddr}" 
+
+	# define some directories
+
+	dce_topdir="/opt/dcelocal"
+	dce_bindir="/opt/dcelocal/bin"
+	dce_etcdir="/opt/dcelocal/etc"
+	dce_nlsdir="/opt/dcelocal/nls"
+	dce_admdir="/opt/dcelocal/var/adm/directory/cds"
+	dce_vardir="/opt/dcelocal/var/directory/cds"
+	dce_rpcdir="/opt/dcelocal/var/rpc"
+	dce_catdir="/opt/dcelocal/nls/msg/en_US.ASCII"
+
+	# define some file lists
+
+	test_executables="\
+	        ${dce_bindir}/cdsadv \
+	        ${dce_bindir}/cdscp \
+	        ${dce_bindir}/cdsd \
+	        ${dce_bindir}/rpcd \
+	        "
+
+	test_testfiles="\
+	        ${dce_tstdir}/dcesx \
+	        "
+	dcecheck="/tet/tools/chkproc"
+	dcesx="${dce_tstdir}/dcesx"
+
+	# determine our cellname prefix
+
+	ourcellname_prefix="`cat ${dce_topdir}/dce_cf.db | grep cellname | cut -f3 -d\/`"
+	tet_infoline "${prefix}our cellname prefix     : ${ourcellname_prefix}" 
+
+
+}
+
+cleanup ()
+{
+	remove_KRB5CCNAME $KRB5CCNAME
+	if [ $? -eq 0 ]
+	then
+		tet_infoline "Successfully removed ticket"
+	else
+		tet_infoline "Unable to remove ticket"
+	fi
+}
+
+run_test ()
+{
+	tet_infoline "Starting run_test -system exerciser"
+
+	test_fail=0
+	while [ "$DONE" = "FALSE" ]
+	do
+
+	        # Capture some statistics
+
+	        echo "${prefix}Capturing starting statistics ..." >> ${logfile}
+	        echo "# `date` - Starting statistics"     >> ${logfile} 
+	        echo ""                                                 >> ${logfile}
+	        df                                                      >> ${logfile}
+	        echo ""                                                 >> ${logfile}
+	        vmstat -s                                               >> ${logfile}
+	        echo ""                                                 >> ${logfile}
+	        ipcs                                                    >> ${logfile}
+	        echo ""                                                 >> ${logfile}
+	        ps -ef | head -1                                        >> ${logfile}
+	        ps -ef |grep -v grep |grep 'cds'                        >> ${logfile}
+	        echo " done."						>> ${logfile}
+
+
+		# This program writes the log entries to standard error, not standard out
+		#./${dcesx} -i 10 -p 10 -r 3 -t 10 -K -V -L | tee -a ${logfile}
+		./${dcesx} -i 10 -p 1 -r 3 -t 10 -K -V -L 2>> $logfile
+
+		status_dcesx=$?
+		(echo "*** System Exerciser Testing (dcesx) completed - ") >> ${logfile}
+
+		if [ ${status_dcesx} -eq 0 ];
+		then 
+			echo "no errors" >> ${logfile}
+		else 
+			echo "errors were detected!!!" >> ${logfile}
+		fi
+
+		# Capture some more statistics
+
+		echo "${prefix}Capturing ending statistics ..."         >> ${logfile}
+		echo ""                                                 >> ${logfile}
+		echo "#"                                                >> ${logfile}
+		echo "# `date` - Ending statistics"                     >> ${logfile}
+		echo "#"                                                >> ${logfile}
+		echo ""                                                 >> ${logfile}
+		df                                                      >> ${logfile}
+		echo ""                                                 >> ${logfile}
+		vmstat -s                                               >> ${logfile}
+		echo ""                                                 >> ${logfile}
+		ipcs                                                    >> ${logfile}
+		echo ""                                                 >> ${logfile}
+		ps -ef | head -1                                        >> ${logfile}
+		ps -ef | grep -v grep | grep 'cds'                      >> ${logfile}
+		echo " done."                                           >> ${logfile}
+	
+		# Give a test result summary
+
+		echo ""                                                    >> ${logfile}
+		echo "=============================================="      >> ${logfile}
+		echo "          Test Results Summary"                      >> ${logfile}
+		echo "=============================================="      >> ${logfile}
+		echo "Test Description                     : Result"       >> ${logfile}
+		echo "----------------------------------------------"      >> ${logfile}
+
+		if [ ${status_dcesx} -eq 0 ];
+		then 
+			echo "DCE System Excerciser tests          :  PASS" >> ${logfile}
+			tet_infoline "DCE System Excerciser tests          :  PASS" 
+			echo "Test passed!!!"  >> ${logfile}
+		else 
+			echo "DCE System Excerciser tests          :  FAIL" >> ${logfile}
+			tet_infoline "DCE System Excerciser tests          :  FAIL" 
+			echo "Errors were detected!!!"  >> ${logfile}
+			tet_infoline "Errors were detected!!!"  
+			test_fail=1
+		fi
+
+		echo "" >> ${logfile}
+
+		CURRENT_TIME=`$TIMER`
+		SECONDS_EXECUTED=`expr $CURRENT_TIME - $START_TIME`
+
+		if [ $SECONDS_EXECUTED -ge $SECONDS_TO_EXECUTE ]
+		then
+			DONE=TRUE
+		fi
+	done
+
+	# check results
+	# remove the logfile if all runs passed
+
+	if [ $test_fail -ne 0 ]
+	then
+		tet_infoline "There were errors in the run"
+		tet_result DCE_ERROR
+	else
+		rm ${logfile}
+		tet_infoline "Test passed"
+		tet_result PASS
+	fi
+}
+
+#===============================================================================
+# Function:     check_return <Integer value(Return Code)> <Error Statement>
+# Purpose:      Check return code and exit if value is other than 0.
+#
+#===============================================================================
+check_return () 
+{
+        if [ "${1}" != "0" ]
+        then
+                tet_infoline "${2}"
+                fail=1
+        else
+                if [ "${3}" != "" ]
+                then
+                        tet_infoline "${3}"
+                fi
+        fi
+} # End of function check_return
+
+#===============================================================================
+# Function:     remove_KRB5CCNAME
+# Purpose:      To remove files that were created when authenticated the cell
+#===============================================================================
+
+remove_KRB5CCNAME () 
+{
+	KRB5=$1
+        tet_infoline "Attempting to remove authenticated ticket"
+        FILE=`echo ${KRB5} | \
+                awk '{split ($1,word,":"); print word[2]}'`
+        rm $FILE*
+        return "$?"
+} # End of remove_KRB5CCNAME
+. $TCM

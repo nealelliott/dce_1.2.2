@@ -1,0 +1,781 @@
+#!/bin/sh 
+
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+# Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS exporting Episode (not exported UFS, and
+# not local Episode). The script performs fts operations like clone, dump,
+# and move; the intention is that another process (say,
+# fs/test2) should be run in the fileset while this is going on, in order
+# to test fileset availability during these fts operations.
+#
+# The variable $secs_per_op determines how many seconds to spend on each
+# fts operation, and $iter is the number of iterations of each command to
+# run before checking the time. The setting of $iter (to 5) is probably OK,
+# but as the stability of DFS improves, you may want to set $secs_per_op
+# higher.
+
+###############################################################################
+
+# Usage:  test14 [-noclone] [-nomove] [-norename] [-nodump] [-noquota] \
+#                [-nosync] [-cloneonly] [-moveonly] \
+#		 [-renameonly] [-dumponly] [-quotaonly] \
+#		 [-synconly] [-nt <iterations>]
+
+# The -norename argument specifies that 'fts rename' is not to be run; this
+# would be desirable if you wanted to run a filesystem test in the fileset
+# while this script is running (any DFS mount points to the fileset would
+# cease to work after a rename, so depending on how files are named in your
+# filesystem test, the filesystem test could fail after a rename even if
+# DFS were working perfectly).
+
+# Typically run via:    test14 >& test14.out or via runtests
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode. DFS server $SERVER_1
+# must export Episode aggregate $EPI_AGGRNAME_1, and $SERVER_2 must export
+# $EPI_AGGRNAME_2. $SERVER_1 and $SERVER_2 can be the same machine. A mount
+# point will be created in $testdir.
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1 and $SERVER_2, in
+# order to run the fts commands contained in this script. You must also
+# be able to create, modify, and delete $testdir.
+
+# Highest error number is: 55.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${EPI_AGGRNAME_1=epi1}
+: ${EPI_AGGRNAME_2=epi2}
+: ${EPI_AGGRNAME_3=epi1}
+: ${SERVER_1=$hn}
+: ${SERVER_2=$hn}
+: ${VERB_ARG=""}
+
+if test "$CELL_NAME" = ""
+   then 
+	echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting."
+        exit 2
+   fi
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_server_prefix=/.:/hosts/}
+: ${export_root=/.../$CELL_NAME/fs}
+
+cav_arg="$CELL_ARG $AUTH_ARG $VERB_ARG"
+
+ft=$ty.$p.$$
+dumpfile=/tmp/dump.$$
+iter=1
+secs_per_op=60
+testdir=$export_root/test/tdir.$$
+
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+if [ "$dfs_FileSysType" = "$DFS_WORKS_ON_LFS" ]
+then
+   iter_flag=FALSE
+   do_clone=TRUE
+   do_dump=TRUE
+   do_move=TRUE
+   do_quota=TRUE
+   do_rename=TRUE
+   do_sync=TRUE
+else
+   iter_flag=FALSE
+   do_clone=FALSE
+   do_dump=TRUE
+   do_move=FALSE
+   do_quota=FALSE
+   do_rename=TRUE
+   do_sync=TRUE
+fi
+alldone=0
+
+# For now, we don't execute this test on exported UFS, because of all the
+# LFS specific operations it does. We might be able to get this to work on
+# UFS later on.
+if [ "$dfs_FileSysType" = "$DFS_WORKS_ON_UFS" ]
+then
+  echo ""; echo "$p not applicable to DFS exporting UFS"; echo ""
+  echo ""; echo "All done at `date`."; echo ""
+  if test $rc -eq 0
+     then 
+	echo "$p PASSED"
+     else 
+	echo "$p FAILED ($rc errors)"
+     fi
+  exit $rc
+  fi
+
+cleanup()
+{
+
+sync; sync; sleep 2
+echo ""; date; echo "Part 7: cleanup"
+
+echo ""; echo "Running cm lsstores..."
+cm lsstores; rf=$?
+if test $rf -ne 0
+   then echo "- cm lsstores failed (errno $rf) ($p: E46)"; rc=`expr $rc + 1`
+   fi
+
+echo ""
+echo "==============================================================================="
+
+echo ""
+fts lsft -fileset $ft $cav_arg; rf=$?
+if test $alldone -ne 1 -a $rf -ne 0
+   then echo "- fts lsft failed (errno $rf) ($p: E47)"; rc=`expr $rc + 1`
+   fi
+
+cm whereis $testdir; rf=$?
+if test $alldone -ne 1 -a $rf -ne 0
+   then echo "- cm whereis failed (errno $rf) ($p: E48)"; rc=`expr $rc + 1`
+   fi
+
+sync; sync
+
+echo ""; echo "Removing mount points and filesets..."
+
+fts delmount -dir $testdir/$ft; rf=$?
+if test $alldone -ne 1 -a $rf -ne 0
+   then echo "- fts delmount failed (errno $rf) ($p: E49)"; rc=`expr $rc + 1`
+   fi
+
+fts delete $ft $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg; rf=$?
+if test $alldone -ne 1 -a $rf -ne 0
+   then echo "- fts delete failed (errno $rf) ($p: E51)"; rc=`expr $rc + 1`
+   fi
+
+rm -rf $testdir
+echo ""; echo "Done with cleanup."
+
+sync; sync; sleep 2
+
+echo ""; echo "All done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+}
+
+###############################################################################
+# check if EPI_AGGRNAME_1 and EPI_AGGRNAME_2 are exported and known to ftserver
+
+echo ""; echo Checking $EPI_AGGRNAME_1 and $EPI_AGGRNAME_2
+
+fts lsaggr $SERVER_1 | grep $EPI_AGGRNAME_1; rf=$?
+if test $rf -ne 0
+	then echo "- aggregate $EPI_AGGRNAME_1 not exported by $SERVER_1; $p ABORTING"
+	     rc=`expr $rc + 1`; cleanup
+        fi
+fts lsaggr $SERVER_2 | grep $EPI_AGGRNAME_2; rf=$?
+if test $rf -ne 0
+   then
+	do_within_server=FALSE
+        aggr_2=""
+   else
+	do_within_server=TRUE
+        fi
+if [ "$EPI_AGGRNAME_3" = "" ]
+then
+  do_across_server=FALSE
+else
+  fts lsaggr $SERVER_2 | grep $EPI_AGGRNAME_3; rf=$?
+  if test $rf -ne 0
+     then
+ 	do_across_server=FALSE
+        aggr_3=""
+     else
+	do_across_server=TRUE
+        fi
+fi
+
+###############################################################################
+
+for a
+    do
+    if test $iter_flag = TRUE; then iter=$a; iter_flag=FALSE
+    elif test $a = -nt; then iter_flag=TRUE
+    elif test $a = -noclone; then do_clone=FALSE
+    elif test $a = -nomove; then do_move=FALSE
+    elif test $a = -norename; then do_rename=FALSE
+    elif test $a = -nodump; then do_dump=FALSE
+    elif test $a = -noquota; then do_quota=FALSE
+    elif test $a = -nosync; then do_sync=FALSE
+    elif test $a = -cloneonly
+       then do_move=FALSE; do_rename=FALSE; do_dump=FALSE; do_quota=FALSE; do_sync=FALSE
+    elif test $a = -moveonly
+       then do_clone=FALSE; do_rename=FALSE; do_dump=FALSE; do_quota=FALSE; do_sync=FALSE
+    elif test $a = -renameonly
+       then do_clone=FALSE; do_move=FALSE; do_dump=FALSE; do_quota=FALSE; do_sync=FALSE
+    elif test $a = -dumponly
+       then do_clone=FALSE; do_move=FALSE; do_rename=FALSE; do_quota=FALSE; do_sync=FALSE
+    elif test $a = -quotaonly
+       then do_clone=FALSE; do_move=FALSE; do_rename=FALSE; do_dump=FALSE; do_sync=FALSE
+    elif test $a = -synconly
+       then do_clone=FALSE; do_move=FALSE; do_rename=FALSE; do_dump=FALSE; do_quota=FALSE
+
+    else echo "Argument '$a' is unknown"; exit 2
+    fi
+    done
+
+###############################################################################
+
+echo ""
+echo "$ty/$p starting at `date` on $hn"
+echo "   in cell $CELL_NAME."
+echo "Export root is $export_root, mount point $testdir."
+echo "Aggregates are $EPI_AGGRNAME_1 on $SERVER_1 and $EPI_AGGRNAME_3 on $SERVER_2."
+echo ""
+echo "Will spend at least $secs_per_op seconds on each fts operation."
+echo "Do rename: $do_rename."
+
+if test "$CELL_NAME" = ""
+   then echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting."
+        exit 2
+   fi
+
+###############################################################################
+
+sync; sync; sleep 2
+echo ""; date; echo "Part 0: preliminaries"; echo "====================="
+
+echo ""; echo "Creating test directory..."
+
+rm -rf $dumpfile $testdir; rf=$?
+if test $rf -ne 0
+   then echo "- rm -rf failed; $p ABORTING ($p: E1)"; rc=`expr $rc + 1`; cleanup
+   fi
+
+mkdir $testdir; rf=$?
+if test $rf -ne 0
+   then echo "- mkdir failed; $p ABORTING ($p: E2)"; rc=`expr $rc + 1`; cleanup
+   fi
+
+cd /tmp; cd $testdir; rf=$?
+if test $rf -ne 0 -o `pwd` != $testdir
+   then echo "- cd failed; $p ABORTING ($p: E3)"; rc=`expr $rc + 1`; cleanup
+   fi
+
+echo ""; echo "Creating fileset $ft..."; echo ""
+fts create $ft $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts create failed (errno $rf); $p ABORTING ($p: E4)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+ftid=`fts lsfldb $ft $cav_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+echo "Fileset $ft ID is $ftid."
+if test $ftid -le 0
+   then echo "- fileset ID is unreasonable ($ftid); $p ABORTING ($p: E5)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+echo ""; echo "Creating mount point $testdir for $ft..."
+
+fts crmount $testdir/$ft $ft; rf=$?
+if test $rf -ne 0
+   then echo "- fts crmount failed (errno $rf); $p ABORTING ($p: E6)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+setFsetRootProt $testdir/$ft $testuid "E100"
+
+cd /tmp; cd $testdir/$ft; rf=$?
+if test $rf -ne 0 -o `pwd` != $testdir/$ft
+   then echo "- cd failed; $p ABORTING ($p: E7)"; rc=`expr $rc + 1`; cleanup
+   fi
+
+echo ""; echo "Putting stuff in $testdir/$ft..."
+
+echo "This is a test of the emergency broadcast system. This is only a test." > f.71; rf=$?
+if test $rf -ne 0
+   then echo "- echo failed (errno $rf); $p ABORTING ($p: E8)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+cat f.71 f.71 f.71 f.71 f.71 f.71 > f.1420; rf=$?
+if test $rf -ne 0
+   then echo "- cat failed (errno $rf); $p ABORTING ($p: E9)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+#cat f.1420 f.1420 f.1420 f.1420 f.1420 f.1420 f.1420 f.1420 > f.11360; rf=$?
+cat f.1420 > f.11360; rf=$?
+if test $rf -ne 0
+   then echo "- cat failed (errno $rf); $p ABORTING ($p: E10)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+#cat f.11360 f.11360 f.11360 f.11360 f.11360 f.11360 f.11360 f.11360 > f.90880; rf=$?
+#cat f.11360 > f.90880; rf=$?
+if test $rf -ne 0
+   then echo "- cat failed (errno $rf); $p ABORTING ($p: E11)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+#cat f.90880 f.90880 f.90880 f.90880 f.90880 f.90880 f.90880 f.90880 > f.727040; rf=$?
+#cat f.90880 > f.727040; rf=$?
+if test $rf -ne 0
+   then echo "- cat failed (errno $rf); $p ABORTING ($p: E12)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+mkdir d1 d2; rf=$?
+if test $rf -ne 0
+   then echo "- mkdir failed (errno $rf); $p ABORTING ($p: E13)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+cp f.* d1; rf=$?
+if test $rf -ne 0
+   then echo "- cp failed (errno $rf); $p ABORTING ($p: E14)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+cp f.* d2; rf=$?
+if test $rf -ne 0
+   then echo "- cp failed (errno $rf); $p ABORTING ($p: E15)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+echo ""
+echo "==============================================================================="
+
+echo ""
+
+fts lsft -fileset $ft $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts lsft failed (errno $rf) ($p: E16)"; rc=`expr $rc + 1`
+   fi
+
+ls -lAR $testdir; rf=$?
+if test $rf -ne 0
+   then echo "- ls failed (errno $rf) ($p: E52)"; rc=`expr $rc + 1`
+   fi
+
+cm whereis $testdir; rf=$?
+if test $rf -ne 0
+   then echo "- cm whereis failed (errno $rf) ($p: E17)"; rc=`expr $rc + 1`
+   fi
+
+echo ""
+echo "Will start fts operations in $secs_per_op seconds."
+echo "Start some other filesystem exerciser in fileset $ft (id $ftid) now."
+echo "You can run the other test in $testdir."
+echo ""
+
+echo ""
+echo "==============================================================================="
+
+echo ""; echo "Done with part 0."
+sleep $secs_per_op
+
+###############################################################################
+
+if test $do_clone = TRUE; then for confidence in dfs; do
+sync; sync; sleep 2
+echo ""; date; echo "Part 1: clone"; echo "============="
+
+echo ""; echo "Running cm lsstores..."
+cm lsstores; rf=$?
+if test $rf -ne 0
+   then echo "- cm lsstores failed (errno $rf) ($p: E18)"; rc=`expr $rc + 1`
+   fi
+
+d1=`date`; t=1
+
+while
+
+   d2=`date`
+   h1=`echo "$d1" | sed 's/^... ... .. \(..\).*/\1/'`
+   m1=`echo "$d1" | sed 's/^... ... .. ..:\(..\).*/\1/'`
+   s1=`echo "$d1" | sed 's/^... ... .. ..:..:\(..\).*/\1/'`
+   h2=`echo "$d2" | sed 's/^... ... .. \(..\).*/\1/'`
+   m2=`echo "$d2" | sed 's/^... ... .. ..:\(..\).*/\1/'`
+   s2=`echo "$d2" | sed 's/^... ... .. ..:..:\(..\).*/\1/'`
+   if test $s2 -lt $s1; then s2=`expr $s2 + 60`; m2=`expr $m2 - 1`; fi
+   if test $m2 -lt $m1; then m2=`expr $m2 + 60`; h2=`expr $h2 - 1`; fi
+   if test $h2 -lt 0; then h2=$h1; fi
+   es=`expr $s2 - $s1`; em=`expr $m2 - $m1`; et=`expr $es + $em \* 60`
+   test $et -lt $secs_per_op
+   
+   do
+      echo ""; echo $d2
+      i=1; until test $i -gt $iter; do
+
+         echo "Iteration $t.$i of clone..."
+
+         fts clone $ft $cav_arg; rf=$?
+         if test $rf -ne 0
+            then echo "- fts clone failed (errno $rf) ($p: E19)"
+                 rc=`expr $rc + 1`
+            fi
+
+         i=`expr $i + 1`
+      done
+      t=`expr $t + 1`
+   done
+
+echo ""; echo "Done with part 1."; done
+else echo ""; echo ">>> Skipping part 1 (clone) <<<"
+fi
+
+###############################################################################
+
+if test $do_dump = TRUE; then for confidence in dfs; do
+sync; sync; sleep 2
+echo ""; date; echo "Part 2: dump"; echo "============"
+
+echo ""; echo "Running cm lsstores..."
+cm lsstores; rf=$?
+if test $rf -ne 0
+   then echo "- cm lsstores failed (errno $rf) ($p: E20)"; rc=`expr $rc + 1`
+   fi
+
+d1=`date`; t=1
+
+while
+
+   d2=`date`
+   h1=`echo "$d1" | sed 's/^... ... .. \(..\).*/\1/'`
+   m1=`echo "$d1" | sed 's/^... ... .. ..:\(..\).*/\1/'`
+   s1=`echo "$d1" | sed 's/^... ... .. ..:..:\(..\).*/\1/'`
+   h2=`echo "$d2" | sed 's/^... ... .. \(..\).*/\1/'`
+   m2=`echo "$d2" | sed 's/^... ... .. ..:\(..\).*/\1/'`
+   s2=`echo "$d2" | sed 's/^... ... .. ..:..:\(..\).*/\1/'`
+   if test $s2 -lt $s1; then s2=`expr $s2 + 60`; m2=`expr $m2 - 1`; fi
+   if test $m2 -lt $m1; then m2=`expr $m2 + 60`; h2=`expr $h2 - 1`; fi
+   if test $h2 -lt 0; then h2=$h1; fi
+   es=`expr $s2 - $s1`; em=`expr $m2 - $m1`; et=`expr $es + $em \* 60`
+   test $et -lt $secs_per_op
+   
+   do
+      echo ""; echo $d2
+      i=1; until test $i -gt $iter; do
+
+         echo "Iteration $t.$i of dump..."
+
+         fts dump -fileset $ft -time 0 -file $dumpfile $cav_arg; rf=$?
+         if test $rf -ne 0
+            then echo "- fts dump failed (errno $rf) ($p: E21)"
+                 rc=`expr $rc + 1`
+            fi
+         ls -l $dumpfile; rm $dumpfile
+
+         i=`expr $i + 1`
+      done
+      t=`expr $t + 1`
+
+   done
+
+echo ""; echo "Done with part 2."; done
+else echo ""; echo ">>> Skipping part 2 (dump) <<<"
+fi
+
+###############################################################################
+
+if test $do_move = TRUE; then for confidence in dfs; do
+sync; sync; sleep 2
+echo ""; date; echo "Part 3: move"; echo "============"
+
+echo ""; echo "Running cm lsstores..."
+cm lsstores; rf=$?
+if test $rf -ne 0
+   then echo "- cm lsstores failed (errno $rf) ($p: E22)"; rc=`expr $rc + 1`
+   fi
+
+d1=`date`; t=1
+
+while
+
+   d2=`date`
+   h1=`echo "$d1" | sed 's/^... ... .. \(..\).*/\1/'`
+   m1=`echo "$d1" | sed 's/^... ... .. ..:\(..\).*/\1/'`
+   s1=`echo "$d1" | sed 's/^... ... .. ..:..:\(..\).*/\1/'`
+   h2=`echo "$d2" | sed 's/^... ... .. \(..\).*/\1/'`
+   m2=`echo "$d2" | sed 's/^... ... .. ..:\(..\).*/\1/'`
+   s2=`echo "$d2" | sed 's/^... ... .. ..:..:\(..\).*/\1/'`
+   if test $s2 -lt $s1; then s2=`expr $s2 + 60`; m2=`expr $m2 - 1`; fi
+   if test $m2 -lt $m1; then m2=`expr $m2 + 60`; h2=`expr $h2 - 1`; fi
+   if test $h2 -lt 0; then h2=$h1; fi
+   es=`expr $s2 - $s1`; em=`expr $m2 - $m1`; et=`expr $es + $em \* 60`
+   test $et -lt $secs_per_op
+   
+   do
+      echo ""; echo $d2
+      i=1; until test $i -gt $iter; do
+
+         echo "Iteration $t.$i of move..."
+
+	if [ $do_across_server = TRUE ]
+        then
+         fts move $ft $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+             $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_3 $cav_arg; rf=$?
+	elif [ $do_within_server = TRUE ]
+	then
+         fts move $ft $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+             $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_2 $cav_arg; rf=$?
+	fi
+         if test $rf -ne 0
+            then echo "- fts move failed (errno $rf) ($p: E23)"
+                 rc=`expr $rc + 1`
+            fi
+
+	if [ $do_across_server = TRUE ]
+        then
+         fts move $ft $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_3 \
+             $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg; rf=$?
+	elif [ $do_within_server = TRUE ]
+	then
+         fts move $ft $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_2 \
+             $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg; rf=$?
+	fi
+         if test $rf -ne 0
+            then echo "- fts move failed (errno $rf) ($p: E24)"
+                 rc=`expr $rc + 1`
+            fi
+
+         i=`expr $i + 1`
+      done
+      t=`expr $t + 1`
+   done
+
+echo ""; echo "Done with part 3."; done
+else echo ""; echo ">>> Skipping part 3 (move) <<<"
+fi
+
+###############################################################################
+
+if test $do_quota = TRUE; then for confidence in dfs; do
+sync; sync; sleep 2
+echo ""; date; echo "Part 4: quotas"; echo "=============="
+
+echo ""; echo "Running cm lsstores..."
+cm lsstores; rf=$?
+if test $rf -ne 0
+   then echo "- cm lsstores failed (errno $rf) ($p: E36)"; rc=`expr $rc + 1`
+   fi
+
+d1=`date`; t=1
+
+while
+
+   d2=`date`
+   h1=`echo "$d1" | sed 's/^... ... .. \(..\).*/\1/'`
+   m1=`echo "$d1" | sed 's/^... ... .. ..:\(..\).*/\1/'`
+   s1=`echo "$d1" | sed 's/^... ... .. ..:..:\(..\).*/\1/'`
+   h2=`echo "$d2" | sed 's/^... ... .. \(..\).*/\1/'`
+   m2=`echo "$d2" | sed 's/^... ... .. ..:\(..\).*/\1/'`
+   s2=`echo "$d2" | sed 's/^... ... .. ..:..:\(..\).*/\1/'`
+   if test $s2 -lt $s1; then s2=`expr $s2 + 60`; m2=`expr $m2 - 1`; fi
+   if test $m2 -lt $m1; then m2=`expr $m2 + 60`; h2=`expr $h2 - 1`; fi
+   if test $h2 -lt 0; then h2=$h1; fi
+   es=`expr $s2 - $s1`; em=`expr $m2 - $m1`; et=`expr $es + $em \* 60`
+   test $et -lt $secs_per_op
+
+   do
+      echo ""; echo $d2
+      i=1; until test $i -gt $iter; do
+
+         echo "Iteration $t.$i of setquota..."
+
+         q1=`expr 10000 + $t`
+         fts setquota -fileset $ft -size $q1 $cav_arg; rf=$?
+         if test $rf -ne 0
+            then echo "- fts setquota failed (errno $rf) ($p: E37)"
+                 rc=`expr $rc + 1`
+            fi
+
+         q2=`fts lsquota -fileset $ft | tail -1 | awk '{print $2}'`
+         if test $q2 -ne $q1
+            then echo "- wrong quota ($q2, not $q1) ($p: E53)"
+                 rc=`expr $rc + 1`
+            fi
+
+         q1=`expr 20000 + $t`
+         fts setquota -fileset $ftid -size $q1 $cav_arg; rf=$?
+         if test $rf -ne 0
+            then echo "- fts setquota failed (errno $rf) ($p: E38)"
+                 rc=`expr $rc + 1`
+            fi
+
+         q2=`fts lsquota -fileset $ft | tail -1 | awk '{print $2}'`
+         if test $q2 -ne $q1
+            then echo "- wrong quota ($q2, not $q1) ($p: E54)"
+                 rc=`expr $rc + 1`
+            fi
+
+         q1=`expr 30000 + $t`
+         fts setquota -path $testdir/$ft -size $q1 $cav_arg; rf=$?
+         if test $rf -ne 0
+            then echo "- fts setquota failed (errno $rf) ($p: E39)"
+                 rc=`expr $rc + 1`
+            fi
+
+         q2=`fts lsquota -fileset $ft | tail -1 | awk '{print $2}'`
+         if test $q2 -ne $q1
+            then echo "- wrong quota ($q2, not $q1) ($p: E55)"
+                 rc=`expr $rc + 1`
+            fi
+
+         i=`expr $i + 1`
+      done
+      t=`expr $t + 1`
+   done
+
+echo ""; echo "Done with part 4."; done
+else echo ""; echo ">>> Skipping part 4 (quota) <<<"
+fi
+
+###############################################################################
+
+if test $do_rename = TRUE; then for confidence in dfs; do
+
+   sync; sync; sleep 2
+   echo ""; date; echo "Part 5: rename"; echo "=============="
+
+   echo ""; echo "Running cm lsstores..."
+   cm lsstores; rf=$?
+   if test $rf -ne 0
+      then echo "- cm lsstores failed (errno $rf) ($p: E40)"; rc=`expr $rc + 1`
+      fi
+
+   d1=`date`; t=1
+
+   while
+
+      d2=`date`
+      h1=`echo "$d1" | sed 's/^... ... .. \(..\).*/\1/'`
+      m1=`echo "$d1" | sed 's/^... ... .. ..:\(..\).*/\1/'`
+      s1=`echo "$d1" | sed 's/^... ... .. ..:..:\(..\).*/\1/'`
+      h2=`echo "$d2" | sed 's/^... ... .. \(..\).*/\1/'`
+      m2=`echo "$d2" | sed 's/^... ... .. ..:\(..\).*/\1/'`
+      s2=`echo "$d2" | sed 's/^... ... .. ..:..:\(..\).*/\1/'`
+      if test $s2 -lt $s1; then s2=`expr $s2 + 60`; m2=`expr $m2 - 1`; fi
+      if test $m2 -lt $m1; then m2=`expr $m2 + 60`; h2=`expr $h2 - 1`; fi
+      if test $h2 -lt 0; then h2=$h1; fi
+      es=`expr $s2 - $s1`; em=`expr $m2 - $m1`; et=`expr $es + $em \* 60`
+      test $et -lt $secs_per_op
+   
+      do
+         echo ""; echo $d2
+         i=1; until test $i -gt $iter; do
+
+            echo "Iteration $t.$i of rename..."
+
+            fts rename $ft $ft.new $cav_arg; rf=$?
+            if test $rf -ne 0
+               then echo "- fts rename failed (errno $rf) ($p: E41)"
+                    rc=`expr $rc + 1`
+               fi
+
+            fts rename $ft.new $ft $cav_arg; rf=$?
+            if test $rf -ne 0
+               then echo "- fts rename failed (errno $rf) ($p: E42)"
+                    rc=`expr $rc + 1`
+               fi
+
+            i=`expr $i + 1`
+         done
+         t=`expr $t + 1`
+      done
+
+   echo ""; echo "Done with part 5."; done
+else echo ""; echo ">>> Skipping part 5 (rename) <<<"
+fi # $do_rename
+
+###############################################################################
+
+if test $do_sync = TRUE; then for confidence in dfs; do
+sync; sync; sleep 2
+echo ""; date; echo "Part 6: syncserv and syncfldb"
+   echo "============================="
+
+echo ""; echo "Running cm lsstores..."
+cm lsstores; rf=$?
+if test $rf -ne 0
+   then echo "- cm lsstores failed (errno $rf) ($p: E43)"; rc=`expr $rc + 1`
+   fi
+
+d1=`date`; t=1
+
+while
+
+   d2=`date`
+   h1=`echo "$d1" | sed 's/^... ... .. \(..\).*/\1/'`
+   m1=`echo "$d1" | sed 's/^... ... .. ..:\(..\).*/\1/'`
+   s1=`echo "$d1" | sed 's/^... ... .. ..:..:\(..\).*/\1/'`
+   h2=`echo "$d2" | sed 's/^... ... .. \(..\).*/\1/'`
+   m2=`echo "$d2" | sed 's/^... ... .. ..:\(..\).*/\1/'`
+   s2=`echo "$d2" | sed 's/^... ... .. ..:..:\(..\).*/\1/'`
+   if test $s2 -lt $s1; then s2=`expr $s2 + 60`; m2=`expr $m2 - 1`; fi
+   if test $m2 -lt $m1; then m2=`expr $m2 + 60`; h2=`expr $h2 - 1`; fi
+   if test $h2 -lt 0; then h2=$h1; fi
+   es=`expr $s2 - $s1`; em=`expr $m2 - $m1`; et=`expr $es + $em \* 60`
+   test $et -lt $secs_per_op
+   
+   do
+      echo ""; echo $d2
+      i=1; until test $i -gt $iter; do
+
+         echo "Iteration $t.$i of syncserv/syncfldb..."
+
+         fts syncserv $dns_server_prefix$SERVER_1 $cav_arg; rf=$?
+         if test $rf -ne 0
+            then echo "- fts syncserv failed (errno $rf) ($p: E44)";
+                 rc=`expr $rc + 1`
+            fi
+
+         fts syncfldb $dns_server_prefix$SERVER_1 $cav_arg; rf=$?
+         if test $rf -ne 0
+            then echo "- fts syncfldb failed (errno $rf) ($p: E45)";
+                 rc=`expr $rc + 1`
+            fi
+
+         i=`expr $i + 1`
+      done
+      t=`expr $t + 1`
+
+   done
+
+echo ""; echo "Done with part 6."; done
+else echo ""; echo ">>> Skipping part 6 (sync) <<<"
+fi
+
+###############################################################################
+
+cd /tmp
+alldone=1
+cleanup
+
+###############################################################################

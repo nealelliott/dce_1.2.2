@@ -1,0 +1,915 @@
+#!/bin/ksh
+# 
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: dcegdsh1,v $
+# Revision 1.1.4.2  1996/03/11  02:41:19  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:06:23  marty]
+#
+# Revision 1.1.4.1  1995/12/11  21:57:41  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/1  1994/06/29  19:09 UTC  bissen
+# 	Merge hpdce02 (DCE 1.1 beta) and HPDCE01 into HPDCE02
+# 
+# 	HP revision /main/HPDCE01/1  1994/03/18  15:39 UTC  truitt
+# 	update gds test to latest tet version
+# 
+# 	HP revision /main/truitt_systest_work/1  1994/03/18  15:05 UTC  truitt
+# 	Update test to latest tet version
+# 	[1995/12/11  20:57:24  root]
+# 
+# Revision 1.1.2.2  1993/09/29  21:55:01  pellis
+# 	Ported to DCE 1.0.3.
+# 	[1993/09/29  21:53:01  pellis]
+# 
+# Revision 1.1.2.1  1993/09/20  22:40:39  pellis
+# 	Moved from ./systest/directory/gds/*.
+# 	[1993/09/20  22:17:27  pellis]
+# 
+# Revision 1.1.2.4  1993/04/09  20:46:41  mhickey
+# 	Cleaned up cleanup and exit.
+# 
+# 	defect 7071
+# 	[1993/04/09  20:45:15  mhickey]
+# 
+# Revision 1.1.2.2  1993/03/31  21:57:01  mhickey
+# 	Initial checkin for defect 7071.
+# 	[1993/03/31  21:52:40  mhickey]
+# 
+# Revision 1.1.6.2  1993/02/05  15:19:58  cjd
+# 	Embedded copyright notice
+# 	[1993/02/05  14:40:05  cjd]
+# 
+# Revision 1.1.4.2  1993/02/04  21:49:07  cjd
+# 	Embedded copyright notice
+# 
+# Revision 1.1.2.3  1992/08/18  20:43:26  mhickey
+# 	Fixed the saving of state between loops and added better comments.
+# 
+# 	Defect 4817.
+# 	[1992/08/18  20:43:09  mhickey]
+# 
+# Revision 1.1.2.2  1992/07/27  18:57:49  mhickey
+# 	This did nothing as of dce1.0.  Now it tests GDS shadowing.
+# 	See the long comment at the top of the file for complete details.
+# 
+# 	Defect 4817
+# 	[1992/07/27  18:03:27  mhickey]
+# 
+# $EndLog$
+#
+#	FILE_NAME:  dcegdsh1
+#
+#	COMPONENT_NAME:  dce.systest
+#
+#	FUNCTIONS:  create_object
+#		    alter_object
+#		    view_object
+#		    remove_oject
+#		    create_shadow
+#		    delete_shadow
+#
+#	ORIGINS:  27
+#
+#	(C) COPYRIGHT International Business Machines Corp. 1991
+#	All Rights Reserved
+#
+#	FOR_TEST:  dcedgshd
+#
+#	USAGE:  dcegdsh1
+#
+#	Overview:
+#		This test exercises the ability of GDS to "shadow" objects from
+#		a master DSA in subordinate DSA's.  The test functions as fol-
+#		lows:
+#                 1. an object is created that represents a person.  The object 
+#                    contains a single attribute; the phone number.
+#            
+#                 2. the master DSA is checked to make sure that the object was
+#                    succdeddgilly created.
+#
+#                 3. A shadow of the object is created in each DSA specified
+#                    by the environmental variable List_of_DSAs.  Each shadow is
+#                    created with a different update interval, unless the number
+#                    of DSA's exceed the number of legal update intervals (4), in
+#                    which case the possible update times are reused; ie: there
+#                    will be more than one DSA updated for some of the update 
+#                    intervals.
+#                 
+#                 4. Each of the DSA's is checked to make sure that the shadow
+#                    was created successfully.
+#
+#                 5. the object is altered in the master DSA, and then the
+#                    process sleeps to allow the updates to occur.
+#
+#                 6. when the process awakens, the update interval of each DSA
+#                    is checked against the total elapsed time slept so far,
+#                    and the starting time of the test to determine which DSA's
+#                    should have been updated.  All DSA's that should have been
+#                    updated are checked determine if the update occurred.
+#                 
+#                 7. If, while checking the update intervals, an update interval
+#                    is encountered that is greater than the total elapsed time
+#                    slept so far, the next sleep value is set the differece
+#                    between the elapsed time and the update interval.
+#
+#                 8. When enough time has elapsed sleeping so that all of the
+#                    DSA's should have been updated at least once, the loop
+#                    exits.
+#       
+#                 9. The shadows and the object are removed from all DSA's.
+#
+#                10. Statistics are written to the log on the number of times
+#                    each DSA was checked and the number of successes/failures.
+# 
+#                11. The program exits, returning 1 for failure and 0 for suc-
+#                    cess.  The test is considered to have failed if any check
+#                    of a DSA failed.
+#                    
+#                    
+#	Design:
+#		This file will take as input (via the environmental variable
+#               MASTER_DSA) the DSA name where master object will be created,
+#               the DSA name(s) (via the environmental variable List_of_DSAs)
+#		where the shadow entry(ies) will exists and (via the environ-
+#               mental variable UPDATE_TIME) the update time of the first DSA
+#               in the List_of_DSAs.  This file will edit a series of batch
+#               files (using sed) with all/some of the above information 
+#		and input that batch file into the gdsditadm tool.  A log 
+#		file will contain the output from the commands sent to 
+#		gdsadm (via the batch file).  This log file will be 
+#		checked to verify that the commands executed error-free.
+#
+#    		The master object will be created under the same tree
+#		that contains the master dsa.  This object will be present as 
+#               part of GDS configuration (to be done by system test personnel).
+#
+#
+#		The following files will be used to emulate the commands a user 
+#		would enter at the console:
+#
+#				1)  Create_object
+#				2)  Remove_object
+#				3)  Alter_object
+#				4)  Create_shadow
+#				5)  Delete_shadow
+#				
+#               In addition, a 'C'-language program; view_obj; is used to 
+#               access the DSA's to check the shadows.
+#		Their design will not be shown in this review.  These
+#		batch files do what their names imply.  Refer to the
+#		GDS documentation for the commands required.
+#
+#         DEBUGGING:
+#               If you set the environmental variable DEBUG to 1 before running
+#               the test, then you will get additional prints on the status
+#               of the test.  If you set DEBUG to 2 before running
+#               the test, then the view_obj program will print informational 
+#               messages describing it's progress in getting the object, and the
+#               object and shadows will not be deleted after the program is 
+#               finished. 
+#
+#	Change History:
+#	4/03/91			Gerald Cantor 		Initial Design
+#       7/22/92                 Mark Hickey     Added program logic, rewrote 
+#                                               comments, fixed programming
+#                                               errors.
+#       8/18/92                 Mark Hickey     Fixed saving of state between
+#                                               loops
+#
+
+create_object() {
+	dsa_name=$1
+	common_name=$2
+	surname=$3
+	phone_number=$4
+	dsa_country=`echo $dsa_name | awk -F/ '{print $2}'`
+	dsa_org=`echo $dsa_name | awk -F/ '{print $3}'`
+	dsa_org_unit=`echo $dsa_name | awk -F/ '{print $4}'`
+	dsa_rdn_dsa=`echo $dsa_name | awk -F/ '{print $5}'`
+
+
+	sed "s/dummy_dsa_country/$dsa_country/g
+	     s/dummy_dsa_org_unit/$dsa_org_unit/g
+	     s/dummy_dsa_org/$dsa_org/g
+	     s/dummy_dsa_name/$dsa_rdn_dsa/g
+	     s/dummy_object_name/$common_name/g
+	     s/dummy_surname/$surname/g
+	     s;dummy_tele_number;$phone_number;g" Create_object.sv > \
+	     Create_object
+
+	gdsditadm create.log < Create_object > /dev/null
+	grep -i "error" $GDSH1LOGDIR/create.log > /dev/null 2>&1
+	if [ $? -ne 1 ]
+	then
+		xx_severe "Unable to create object $common_name"
+                cleanup no_shadows 1
+	fi
+}
+
+alter_object() {
+	dsa_name=$1
+	object_name=$2
+	old_phone=$3
+	phone=$4
+        nupdate=$5
+	dsa_country=`echo $dsa_name | awk -F/ '{print $2}'`
+	dsa_org=`echo $dsa_name | awk -F/ '{print $3}'`
+	dsa_org_unit=`echo $dsa_name | awk -F/ '{print $4}'`
+
+	sed "s/dummy_dsa_country/$dsa_country/g
+	     s/dummy_dsa_org_unit/$dsa_org_unit/g
+	     s/dummy_dsa_org/$dsa_org/g
+	     s/dummy_object_name/$object_name/g
+	     s;dummy_old_phone;$old_phone;g
+	     s;dummy_new_phone;$phone;g" Alter_object.sv > Alter_object
+	gdsditadm update$nupdate.log < Alter_object > /dev/null
+	grep -i "error" $GDSH1LOGDIR/update$nupdate.log > /dev/null 2>&1
+	if [ $? -ne 1 ]
+	then
+		xx_severe "Unable to modify attributes of object $common_name"
+                cleanup shadows 1
+	fi
+}
+
+
+view_object()  {
+	dsa_name=$1
+	common_name=$2
+        surname=$3
+	phone_number=$4
+        name=`echo $dsa_name | awk -F/ '{printf("/%s/%s/%s/",$2,$3,$4)}'`$common_name/$surname
+
+	view_obj $DEBUG_VIEW -d $GDSHD_DIR_ID -D $dsa_name -N $name -p "$phone_number"
+
+	if [ $? != 0 ]
+	then
+		xx_severe "Value read for attribute Telephone-Number does not \
+                           match input ($phone_number),"
+                xx_severe "or not present in $common_name."
+		return 1
+        else 
+                return 0
+	fi
+}
+
+remove_object() {
+	dsa_name=$1
+	object_name=$2
+	dsa_country=`echo $dsa_name | awk -F/ '{print $2}'`
+	dsa_org=`echo $dsa_name | awk -F/ '{print $3}'`
+	dsa_org_unit=`echo $dsa_name | awk -F/ '{print $4}'`
+
+
+	sed "s/dummy_dsa_country/$dsa_country/g
+	     s/dummy_dsa_org_unit/$dsa_org_unit/g
+	     s/dummy_dsa_org/$dsa_org/g
+	     s/dummy_object_name/$object_name/g" Remove_object.sv > \
+	Remove_object
+
+	gdsditadm remove.log < Remove_object > /dev/null
+	grep -i "error" $GDSH1LOGDIR/remove.log > /dev/null 2>&1
+	if [ $? -ne 1 ]
+	then
+		xx_error "Unable to remove object $common_name"
+                return 1
+        else
+                return 0
+        fi
+}
+
+create_shadow() {
+        mstr_dsa_name=$1
+	object_name=$2
+	dsa_name=$3
+	u_time=$4
+	mstr_dsa_country=`echo $mstr_dsa_name | awk -F/ '{print $2}'`
+	mstr_dsa_org=`echo $mstr_dsa_name | awk -F/ '{print $3}'`
+	mstr_dsa_org_unit=`echo $mstr_dsa_name | awk -F/ '{print $4}'`
+	dsa_country=`echo $dsa_name | awk -F/ '{print $2}'`
+	dsa_org=`echo $dsa_name | awk -F/ '{print $3}'`
+	dsa_org_unit=`echo $dsa_name | awk -F/ '{print $4}'`
+	dsa_common_name=`echo $dsa_name | awk -F/ '{print $5}'`
+	dsa_rdn_dsa=`echo $dsa_name | awk -F/ '{print $6}'`
+
+	sed "s/dummy_mstr_dsa_country/$mstr_dsa_country/g
+	     s/dummy_mstr_dsa_org_unit/$mstr_dsa_org_unit/g
+	     s/dummy_mstr_dsa_org/$mstr_dsa_org/g
+             s/dummy_object_name/$object_name/g
+	     s/dummy_dsa_country/$dsa_country/g
+	     s/dummy_dsa_org_unit/$dsa_org_unit/g
+	     s/dummy_dsa_org/$dsa_org/g
+	     s/dummy_dsa_com_name/$dsa_common_name/g
+	     s/dummy_dsa_name/$dsa_rdn_dsa/g
+	     s/dummy_update_time/$u_time/g" Create_shadow.sv > Create_shadow
+	
+	gdsditadm create_sh_$dsa_rdn_dsa.log < Create_shadow > /dev/null
+	grep -i "error" $GDSH1LOGDIR/create_sh_$dsa_rdn_dsa.log > /dev/null 2>&1
+	if [ $? -ne 1 ]
+        then
+		xx_severe "Unable to shadow $object_name in $dsa_name"
+                cleanup shadows 1
+	fi
+}
+
+delete_shadow() {
+        mstr_dsa_name=$1
+	object_name=$2
+        dsa_name=$3
+	mstr_dsa_country=`echo $mstr_dsa_name | awk -F/ '{print $2}'`
+	mstr_dsa_org=`echo $mstr_dsa_name | awk -F/ '{print $3}'`
+	mstr_dsa_org_unit=`echo $mstr_dsa_name | awk -F/ '{print $4}'`
+        dsa_country=`echo $dsa_name | awk -F/ '{print $2}'`
+        dsa_org=`echo $dsa_name | awk -F/ '{print $3}'`
+        dsa_org_unit=`echo $dsa_name | awk -F/ '{print $4}'`
+        dsa_common_name=`echo $dsa_name | awk -F/ '{print $5}'`
+        dsa_rdn_dsa=`echo $dsa_name | awk -F/ '{print $6}'`
+
+        sed "s/dummy_mstr_dsa_country/$mstr_dsa_country/g
+	     s/dummy_mstr_dsa_org_unit/$mstr_dsa_org_unit/g
+	     s/dummy_mstr_dsa_org/$mstr_dsa_org/g
+             s/dummy_object_name/$object_name/g
+             s/dummy_dsa_country/$dsa_country/g
+             s/dummy_dsa_org_unit/$dsa_org_unit/g
+             s/dummy_dsa_org/$dsa_org/g
+             s/dummy_dsa_com_name/$dsa_common_name/g
+             s/dummy_dsa_name/$dsa_rdn_dsa/g" Delete_shadow.sv > Delete_shadow
+
+	gdsditadm delete_sh_$dsa_rdn_dsa.log < Delete_shadow > /dev/null
+	grep -i "error" $GDSH1LOGDIR/delete_sh_$dsa_rdn_dsa.log > /dev/null 2>&1
+	if [ $? -ne 1 ]
+	then
+		xx_severe "Unable to delete shadow $object_name in $dsa_name"
+                return 1
+        else
+                return 0
+       	fi
+}
+
+
+cleanup() {
+   #
+   # Cleanup the DSA.  If $1 = "shadows" then the shadows need cleanup 
+   # as well. We exit with value $2. If no args, we assume shadows and exit 
+   # value of 1.
+   #
+   do_shadows=0
+   exit_val=0
+
+   if [ $# -ne 2 ]
+   then
+      do_shadows=1
+      exit_val=1
+   else
+      if [ "$1" = "shadows" ]
+      then
+         do_shadows=1
+      fi
+      exit_val=$2
+   fi
+   
+   if [ $do_shadows -eq 1 ]
+   then
+      #
+      # Get rid of the shadows in the remote databases
+      #
+      for sh_dsa in $have_shadows
+      do
+         if [ $DEBUG_PRINTS -eq 1 ]
+         then
+           xx_log "Deleting shadow of $common_name from $sh_dsa"
+         fi
+         delete_shadow $MASTER_DSA $common_name $sh_dsa
+      done
+   fi
+
+   #
+   # Remove the object from the local DSA
+   #
+   xx_log "Removing the object $common_name"
+   remove_object $MASTER_DSA $common_name
+
+   #
+   # This loop removes the links that get the logs into the log directory
+   # for this iteration of the test.
+   #
+   for i in create.log remove.log update1.log update2.log update3.log update4.log $cr_sh_logs $del_sh_logs
+   do
+      rm -f $GDSH1LOGDIR/$i
+   done
+
+
+   #
+   # If we got anywhere, get the amount of time slept and the number of times
+   # the object was altered from the state record in the temp file.
+   #
+   if [ -f /tmp/dcegdsh1.$$ ]
+   then
+      slept=`grep "^0:" /tmp/dcegdsh1.$$ | awk -F: '{print $4}'`
+      count=`grep "^0:" /tmp/dcegdsh1.$$ | awk -F: '{print $5}'`
+
+      #
+      # print the statistic on the test run
+      #
+      xx_log "TOTAL MINUTES SLEPT: $slept"
+      xx_log "TOTAL TIMES OBJECT ALTERED: $count"
+
+      xx_log "" 
+      xx_log "DSA                          UPDATE    CHECKS   SUCCESS   FAIL"
+      xx_log "--------------------------------------------------------------"
+      ILOOP=1
+      while ( [ $ILOOP -eq 1 ] )
+      do
+         read next
+         if [ ! -n "$next" ]
+         then
+            ILOOP=0
+            continue
+         fi
+
+         #
+         # if this is our state record; ie: the record with the number of times         # slept, etc.; then continue.
+         #
+         upint=`echo $next | awk -F: '{print $1}'`
+         if [ $upint -eq 0 ]
+         then
+            continue
+         fi
+ 
+         outline=`echo $next| awk -F: '{printf("%-26s     %2s      %3s      %3s      %3s\n",$2,$1,$3,$4,$5); }'`
+         xx_log "$outline"
+      done < /tmp/dcegdsh1.$$
+
+      #
+      # cleanup
+      #
+      rm /tmp/dcegdsh1.$$
+   fi
+
+   exit $exit_val
+}
+
+#
+# Interrupt handling
+# 
+xx_log "Setting up signal handling..."
+
+trap   cleanup  1 2 3 15
+
+#
+# Main program
+#
+   common_name="Jimbo"
+   surname="Dribble"
+   phone_number="`date +%D,%H.%M` Creation"
+   new_phone='`date +%D,%H.%M` Update'
+   TEST_FAILED=0
+   DCEBASE=${DCELOCAL:-/opt/dcelocal}
+   xx_log "Using $DCEBASE as base of dce installed tree..."
+   xx_log "Directory Id is $GDSHD_DIR_ID"
+
+   GDSH1LOGDIR=$DCEBASE/var/adm/directory/gds/adm
+
+   DEBUG=${DEBUG:-0}
+   DEBUG_PRINTS=${DEBUG_PRINTS:-0}
+
+   if [ $DEBUG -ge 1 ]
+   then
+      DEBUG_PRINTS=1
+   fi
+   if [ $DEBUG -ge 2 ]
+   then
+      DEBUG_VIEW=-v
+   fi
+
+   ###########################################################################
+   # 0. Set up links so that the info from the gdsditadm sessions is saved.  #
+   ###########################################################################
+   cr_sh_logs=""
+   del_sh_logs=""
+   
+   #
+   # This loop builds the list of shadow creation and deletion logs from the 
+   # dsa list.
+   #
+   for i in $List_of_DSAs
+   do
+      dsa_name=`echo $i | awk -F '/' '{print $6}'`
+      cr_sh_logs="$cr_sh_logs create_sh_$dsa_name.log"
+      del_sh_logs="$del_sh_logs delete_sh_$dsa_name.log"
+   done
+ 
+   #
+   # This loop creates the links that will get the logs into the log directory
+   # for this iteration of the test.
+   #
+   for i in create.log remove.log update1.log update2.log update3.log update4.log $cr_sh_logs $del_sh_logs
+   do
+      ln -s $WSLOGDIR/$i $GDSH1LOGDIR/$i
+   done
+  
+   #######################################################################
+   # I.                                                                  #
+   # Create the object to be shadowed.  This object assumes the presence #
+   # of the MASTER_DSA object in the dsa (created by gdsSetup) which     #
+   # provides the context (ie: the superior objects) for the object.     #
+   #######################################################################
+   xx_log "Create object $common_name"
+   create_object $MASTER_DSA $common_name $surname "$phone_number"
+
+   #
+	   # Check to make sure that the object got created
+   # 
+   xx_log "Check $common_name in $MASTER_DSA: phone = $phone_number"
+   view_object $MASTER_DSA $common_name $surname "$phone_number"
+   if [ $? -ne 0 ] 
+   then
+      xx_severe "Unable to find object $common_name in $MASTER_DSA!!"
+      xx_severe "Cannot bind to `echo $MASTER_DSA | awk -F/ '{print $6}'`"
+      TEST_FAILED=1
+   fi
+
+   ###########################################################################
+   # II.                                                                     #
+   # create shadows in all shadow DSA's                                      #
+   #                                                                         #
+   # update time for first job is specified by UPDATE_TIME                   #
+   #                                                                         #
+   # The UPDT_TMES list contains the possible UPDATE_TIMES for the shadows   #
+   # (limited by the allowed input to the GDS mask for shadow creation       #
+   # since we use UPDATE_FREQUENCY of HIGH in our batch file for gdsditadm). #
+   #                                                                         #
+   # AVAIL_TMES is the list of times not yet used during this cycle through  #
+   # the UPDT_TMES list.  The values from the UPDT_TMES list are used one    #
+   # at a time for shadow creation till the list is exhausted, or shadows    #
+   # for all of the DSA's have been created.  If the list AVAIL_TMES is      #
+   # exhausted, it is reset to UPDT_TMES.                                    #
+   ###########################################################################
+   UPDT_TMES="5 10 15 30"
+   AVAIL_TMES=$UPDT_TMES
+
+   #
+   # initialize the list of the DSA's with shadows successfully created.
+   # This is used by the cleanuop routine.
+   #
+   have_shadows=""
+   
+   # 
+   # loop through the list of DSA's
+   #
+   for DSA in $List_of_DSAs
+   do
+      #
+      # Create the shadow
+      #
+      xx_log "Creating shadow in $DSA for $common_name, update=$UPDATE_TIME"
+      create_shadow $MASTER_DSA $common_name $DSA $UPDATE_TIME
+              
+      #
+      # Check to make sure that the shadow got created
+      # 
+      xx_log "Check $common_name in $DSA: phone = $phone_number"
+      view_object $DSA $common_name $surname "$phone_number"
+      if [ $? -ne 0 ] 
+      then
+         xx_severe "Unable to find object $common_name in $DSA!!"
+         TEST_FAILED=1
+      fi
+
+      have_shadows="$have_shadows $DSA"
+
+      #
+      # log information about the shadow we just created 
+      # Format is 
+      echo "$UPDATE_TIME:$DSA:0:0:0" >> /tmp/dcegdsh1.$$
+                
+      #
+      # Calculate update time of next job, and remove the UPDATE_TIME
+      # we just used from the AVAIL_TMES list.
+      #
+      AVAIL_TMES=`echo $AVAIL_TMES | \
+      sed -e "s/^$UPDATE_TIME //" -e "s/ $UPDATE_TIME$//" -e "s/ $UPDATE_TIME / /" -e "s/^$UPDATE_TIME$//"`
+       
+      #
+      # if all the update times have been used, then reload the list of 
+      # available times.
+      #
+      if [ "$AVAIL_TMES" = "" ]
+      then
+         AVAIL_TMES=$UPDT_TMES
+      fi
+   
+      UPDATE_TIME=`echo $AVAIL_TMES | awk '{print $1}'`
+
+   done  # for DSA in List_of_DSA
+
+   #
+   # sort the DSA info by update time
+   #
+   sort -o /tmp/dcegdsh1.$$ -t: -n /tmp/dcegdsh1.$$
+
+   if [ $TEST_FAILED -ne 1 ]
+   then
+   ############################################################################
+   # III.                                                                     #
+   # loop through all the dsa's. On the first loop ever executed for this     #
+   # program, we sleep long enough to align the remaining sleeps on smallest  #
+   # update interval defined; eg: if we start at 3 minutes past the hour, and #
+   # our smallest update interval is 10 minutes, we will sleep 7 minutes to   #
+   # get the rest of the sleeps lined up on 10 minute intervals relative to   #
+   # the beginning of the hour.  This is necessary because regardless of when #
+   # a shadow is created, the cron job that is started is run every UPDATE    #
+   # TIME minutes relative to 0, NOT the time when the shadow was created;    #
+   # eg: if I create a shadow at 5 past the hour, and specify a 15 minute     #
+   # update interval, the cron job will update the shadow at 15, 30, 45 and 0 #
+   # minutes past the hour, not 20, 35, 50 and 5 past the hour.  We also save #
+   # the offset from the beginning of the hour on the first ever loop, since  #
+   # we need this info to calculate which of the dsa's should have been       #
+   # updated after each sleep.                                                #
+   #
+   # Each time we begin processing the DSA list again, alter the object to
+   # contain a new phone number, then sleep the proper amount of time.
+   # When we wake up, we want to determine which DSA's should have been 
+   # updated, so we know which one's to check.  The formula is:
+   #  ((offset-from-zero-min + total_slept)/update_intvl >= times_checked)
+   # If theis expression is true, then we have crossed more update intervals
+   # fro this shadow then we have done checks for, so this shadow should be
+   # checked.  If we come across a DSA data record with an update 
+   # time greater than the amount we just slept, then set the next update
+   # time to the new update time.  If the DSA is not ripe for checking, then
+   # just write the input line to the output.  After we check a DSA we update
+   # number-of-checks, failures, and successes,  and
+   # write a new DSA data record to a tmp date file.  After the loop is 
+   # exited, we move the tmp data file to the real data file name.  If 
+   # set_sleep was not set while going through the loop, then we have 
+   # processed all of the update times for all of the DSA's, so we exit the
+   # outer loop.
+   ############################################################################
+   #
+   # VARIABLES
+   #
+   slept=0         # - Total amount slept - used to determine which DSA's to
+                   #   check
+   did_sleep=0     # - Indicates sleep already done for current pass through
+                   #   DSA list
+   retval=0        # - for saving return value
+   set_sleep=0     # - Semaphore protecting setting of value for next sleep.
+   next_sleep=0    # - Value for next sleep
+   zalign=0        # - offset from 0 minutes.
+   count=0         # - Uniquifier for altering object - appended to phone no.
+   OLOOP=1         # - Loop flag for Outer loop
+   ILOOP=1         # - Loop flag for Inner loop
+ 
+   #
+   # This loop runs until a sleep has been done for each of the various update
+   # intervals associated with all of the DSA's.
+   #
+   while ( [ $OLOOP -eq 1 ] )
+   do 
+      #
+      # reset the sleep indicator before processing the list of DSA data
+      #
+      did_sleep=0
+      
+      #
+      # Reset the inner loop flag
+      #
+      ILOOP=1
+
+      #
+      # this loop reads from the file containing the DSA data records until
+      # EOF is encountered.
+      #
+      while ( [ $ILOOP -eq 1 ] )
+      do 
+         # get the next DSA data record
+         #
+         read next
+      
+         #
+         # check for end of list; if found, set termination condition and continue
+         #
+         if [ ! -n "$next" ]
+         then 
+           ILOOP=0
+           echo "0:$set_sleep:$next_sleep:$slept:$count" >> /tmp/dcegdsh1.tmp$$
+           sort -o /tmp/dcegdsh1.tmp$$ -t: -n  /tmp/dcegdsh1.tmp$$
+           continue
+         fi
+      
+        # 
+        # assign the DSA data record fields to variables
+        #
+        set `echo $next | sed -e 's/:/ /g'`
+        upint=$1
+        dsa=$2
+        checks=$3
+        successes=$4
+        failures=$5
+
+        #
+        # I have encountered some problems with the variables in the shell losing
+        # their values outside of the loop in which they are defined.  This 
+        # causes the test to terminate after only one modification of the object.
+        # SOOOOOO... we add chunks of code to get the values that need to span
+        # iterations of the outer loop from the temp file, to store them between
+        # loops, and to get the variable that gate termination of the outer loop
+        # from the file.
+        #
+        # CHUNK 1 - get the variables from the file, it they are there.
+        #           they are there if the upint = 0 (which otherwise is 
+        #           impossible, barring malicious human intervention, et al.)
+        if [ $upint -eq 0 ]
+        then
+           set_sleep=$dsa
+           next_sleep=$checks
+           slept=$successes
+           count=$failures
+        fi
+
+        #
+        # Check to see if we have done the sleep for this run through the list
+        # of DSA data records.
+        #
+        if [ $did_sleep -eq 0 ]
+        then
+           #
+           # Get our sleeps lined up on an update time the first time we loop
+           # 
+           if [ $count -eq 0 ] 
+           then
+              mins=`date +%M`
+              minstowaste=`echo "(($mins/$upint) + 1) * $upint - $mins" | bc`
+              xx_log "sleeping to align sleeps"
+              sleep `expr $minstowaste \* 60`
+              zalign=`expr $mins + $minstowaste`
+           fi
+           #
+           # increment count to make phone numbers unique
+           #
+           count=`expr $count + 1`
+          
+           #
+           # if we have an interval to sleep, use it, else take the interval
+           # from the current DSA data record.
+           #
+           [ $set_sleep -ne 0 ] && { sleep_val=$next_sleep; set_sleep=0; } || \
+                                     sleep_val=$upint
+      
+           #
+           # create a unique phone number from the new_phone base and count
+           #
+           use_phone=`eval echo ${new_phone}$count`
+   
+           #
+           # modify the object to contain the new phone number
+           #
+           xx_log "Update $count..."
+           xx_log "Alter object $common_name, old phone = $phone_number, new phone = $use_phone"
+           alter_object $MASTER_DSA $common_name "$phone_number" "$use_phone" $count
+          
+           #
+           # set the phone_number to the one we just wrote into the database
+           #
+           phone_number=$use_phone
+           if [ $DEBUG_PRINTS -eq 1 ]
+           then
+              xx_log "Setting phone_number to $phone_number..."
+           fi
+
+           #
+           # sleep to allow time for updates to happen
+           #
+           xx_log "sleeping to allow updates to happen"
+           sleep `expr $sleep_val \* 60`
+ 
+           #
+           # Add amount we slept to the total
+           # 
+           slept=`expr $slept + $sleep_val`
+ 
+           #
+           # set did_sleep so we don't sleep again this time through
+           #
+           did_sleep=$sleep_val
+        
+        #
+        # if did_sleep is set, and the current record has a higher update time,
+        # then this new time is the amount to sleep on the next pass, so 
+        # set set_sleep
+        #
+        elif [ $slept -lt $upint ]
+        then
+           [ $set_sleep -eq 0 ] && { next_sleep=`expr $upint - $slept`; \
+                                                 set_sleep=1; \
+                                      xx_log "Next sleep set to $next_sleep"; }
+        fi
+        
+        #
+        # if the record just read was the state record; ie: we are loading values 
+        # for the loop; just continue.
+        #
+        if [ $upint -eq 0 ]
+        then
+           continue
+        fi
+
+        #
+        # determining if the shadow should be checked takes a certain
+        # amount of time.  It might be neccessary to artificially shorten the 
+        # sleep intervals periodically to keep the sleeps aligned on the
+        # correct intervals relative to 0 minutes.  In order to collect data
+        # as to whether this is neccesary, print the date to the log so we can
+        # an idea of how much time we lose per loop.
+        #
+        xx_log "TIME starting loop - `date`"
+        
+        #
+        # Check to see if we should check this DSA
+        #
+        xx_log "Checking if we should check shadow in $dsa (slept $slept)"
+        if [ `echo "(($slept + $zalign)/$upint) - $zalign/$upint" | bc` -gt $checks ]
+        then 
+           #
+           # Check this one
+           #
+           xx_log "Check shadow of $common_name in $dsa: phone = $phone_number"
+           view_object $dsa $common_name $surname "$phone_number"
+           retval=$?   
+           #
+           # Check return value and update success and fail counts
+           #
+           xx_log "Update success/failure count"
+           if [ $retval -ne 0 ]
+           then 
+              if [ $DEBUG_PRINTS -eq 1 ]
+              then
+                 xx_log "Update to $dsa failed..."
+              fi
+              failures=`expr $failures + 1`
+              TEST_FAILED=1
+           else
+              if [ $DEBUG_PRINTS -eq 1 ]
+              then
+                 xx_log "Update to $dsa succeeded..."
+              fi
+              successes=`expr $successes + 1`
+           fi
+      
+           #
+           # update count of times checked
+           #
+           checks=`expr $checks + 1`
+           xx_log "Increment check count($checks)"
+           
+           # 
+           # Generate new DSA data record
+           # 
+           if [ $DEBUG_PRINTS -eq 1 ]
+           then
+             xx_log "Generating new data record: $upint:$dsa:$checks:$successes:$failures"
+           fi
+           echo "$upint:$dsa:$checks:$successes:$failures" >> /tmp/dcegdsh1.tmp$$
+        else
+           echo $next >> /tmp/dcegdsh1.tmp$$ 
+        fi
+
+        #
+        # Log the time we finished the loop
+        #
+        xx_log "TIME finished the loop - `date`"
+
+      done < /tmp/dcegdsh1.$$
+     
+      #
+      # replace the old file of DSA data records
+      #
+      mv /tmp/dcegdsh1.tmp$$ /tmp/dcegdsh1.$$ 
+
+      #
+      # See if we are all done
+      #
+      set_sleep=`grep "^0:" /tmp/dcegdsh1.$$ | awk -F: '{print $2}'`
+      if [ $set_sleep -eq 0 ]
+      then
+         OLOOP=0
+      fi
+   done   
+   fi
+  
+   if [ $DEBUG_PRINTS -eq 1 ]
+   then
+      echo "TEST_FAILED = $TEST_FAILED"
+   fi
+
+   #
+   # we always try to remove the shadows since we can't tell which
+   # DSA's may or may not have gotten them created by this point.
+   cleanup shadows $TEST_FAILED

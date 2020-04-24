@@ -1,0 +1,527 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: shfuncs,v $
+# Revision 1.1.4.2  1996/03/11  01:37:04  marty
+# 	Update copyright years
+# 	[1996/03/10  19:39:46  marty]
+#
+# Revision 1.1.4.1  1995/12/11  16:53:49  root
+# 	Submit
+# 	[1995/12/11  16:38:39  root]
+# 
+# Revision 1.1.2.9  1994/08/19  15:11:29  keutel
+# 	OT 11527: checking of exit code for invalid testcases
+# 	[1994/08/19  14:44:09  keutel]
+# 
+# Revision 1.1.2.8  1994/07/20  14:06:32  marrek
+# 	Checking of exit codes introduced in check_ERROR_* routines
+# 	[1994/07/20  13:27:18  marrek]
+# 
+# Revision 1.1.2.7  1994/07/06  15:12:05  marrek
+# 	July 1994 code drop.
+# 	[1994/07/06  13:06:42  marrek]
+# 
+# Revision 1.1.2.6  1994/06/21  14:29:32  marrek
+# 	June 1994 code submission.
+# 	[1994/06/17  13:44:11  marrek]
+# 
+# Revision 1.1.2.5  1994/06/10  20:23:57  devsrc
+# 	cr10872 - fixed copyright
+# 	[1994/06/10  17:00:33  devsrc]
+# 
+# Revision 1.1.2.4  1994/06/02  16:26:48  zeliff
+# 	ot10763: change path of XT_TEST_PATH
+# 	[1994/06/02  15:52:32  zeliff]
+# 
+# Revision 1.1.2.3  1994/05/27  13:13:10  keutel
+# 	OT 10736
+# 	[1994/05/27  13:09:10  keutel]
+# 
+# Revision 1.1.2.2  1994/05/18  22:09:52  zeliff
+# 	Fix typo
+# 	[1994/05/16  23:20:54  zeliff]
+# 
+# 	ot10648: fix problem with error checking
+# 	[1994/05/16  19:14:55  zeliff]
+# 
+# 	ot10647: added export_paths function
+# 	[1994/05/15  20:39:40  zeliff]
+# 
+# Revision 1.1.2.1  1994/05/10  14:37:00  marrek
+# 	Add shell interpreter in first line.
+# 	[1994/05/09  09:13:14  marrek]
+# 
+# 	Created in April 1994 submission.
+# 	[1994/05/03  12:17:07  marrek]
+# 
+# $EndLog$
+#
+# $RCSfile: shfuncs,v $ $Revision: 1.1.4.2 $ $Date: 1996/03/11 01:37:04 $
+#
+#
+check_exit() {
+	#$1 is command, $2 is expected exit code (0 or "N" for non-zero)
+	eval "$1" >out.stdout 2>out.stderr
+	CODE=$?
+	if [ $2 = 0 -a $CODE -ne 0 ]
+	then
+	   tet_infoline "Command ($1) gave exit code $CODE, expected 0"
+	   tet_result=FAIL
+	elif [ $2 != 0 -a $CODE -eq 0 ]
+	then
+	   tet_infoline "Command ($1) gave exit code $CODE, expected non-zero"
+	   tet_result=FAIL
+	fi
+}
+
+execute_cmd() {
+	eval "$1" >out.stdout 2>out.stderr
+	CODE=$?
+	tet_infoline "Command ($1) gave exit code $CODE"
+}
+
+check_nostdout() {
+	if [ -s out.stdout ]
+	then
+	   tet_infoline "Unexpected output in stdout: "
+	   infofile out.stdout stdout:
+           tet_result=FAIL
+	fi
+	rm -f out.stdout
+}
+
+check_nostderr() {
+	if [ -s out.stderr ]
+	then
+	   tet_infoline "Unexpected output in stderr: "
+	   infofile out.stderr stderr:
+	   tet_result=FAIL
+	fi
+	rm -f out.stderr
+}
+
+
+check_ERROR_gds_sec()
+{
+#  $1 ... name of log file generated while running gdscp tool
+#  $2 ... exit code of <dce_login / gdscp> command
+
+   if [[ $2 -ne 0 ]]
+   then
+#      Look for any core file in directory of execution
+#      In case of a core file -> mv core core.last
+       ls $TET_EXECUTE/gds_sec/core > /dev/null 2>&1
+       if [[ $? -ne 0 ]]
+       then
+         tet_infoline "<dce_login> gave exit code: $2"
+       else
+         tet_infoline "<dce_login> gave exit code: $2 (core.last was dumped)"
+         mv $TET_EXECUTE/gds_sec/core $TET_EXECUTE/gds_sec/core.last
+       fi
+       tet_infoline "FAILED "
+   else
+       grep UNEXPECTED "$1" > /dev/null
+       rc1=$?
+       if [[ "$rc1" -gt 0 ]]
+       then
+           tet_infoline "PASSED "
+           tet_result=PASS
+       else
+           tet_infoline "FAILED "
+           tet_result=FAIL
+       fi
+   fi
+}
+
+
+check_ERROR_gdssetup()
+{
+#  $1 ... name of log file generated while running gdscp_test script
+#  $2 ... expected exit code of command $4
+#  $3 ... actual   exit code of command $4
+#  $4 ... Name of script or tool linked to exit code $3 
+
+   if [[ $3 != $2 ]]
+   then
+#    Look for any core file in directory of execution
+#    In case of a core file -> mv core core.$1
+     ls $TET_EXECUTE/gdssetup/core > /dev/null 2>&1
+     if [[ $? -ne 0 ]]
+     then
+       tet_infoline "<$4> gave exit code: $3 (expected was: $2)"
+       tet_infoline "FAILED "
+     else
+       tet_infoline "<$4> gave exit code: $3 (core.last was dumped)"
+       mv $TET_EXECUTE/gdssetup/core $TET_EXECUTE/gdssetup/core.last
+       tet_infoline "FAILED "
+     fi
+   else
+     tet_infoline "PASSED "
+   fi
+}
+
+
+verify_CDS()
+{ 
+   cdscp show cell /.: > /tmp/cdstst
+   if test $? -ne 0
+   then
+      tet_infoline "Verify_CDS - Couldn't execute <cdscp> properly - STOP"
+      tet_result=UNINITIATED
+      exit 1
+   else
+      if [ `grep -c 'c=ie/o=digital' /tmp/cdstst` -gt 0 ]
+      then 
+         cdscp show dir /.:/sales > /tmp/cdstst_sales
+         if test $? -ne 0
+         then
+            tet_infoline "Verify_CDS - cdscp show dir /.:/sales failed -> STOP"
+            tet_result=UNINITIATED
+            exit 1
+         fi 
+         cdscp show dir /.:/sales/admin
+         if test $? -ne 0
+         then
+            tet_infoline "Verify_CDS - cdscp show dir /.:/sales/admin failed -> STOP"
+            tet_result=UNINITIATED
+            exit 1
+         fi 
+      else
+         tet_infoline "Verify_CDS - Invalid CDS cellname specified --> STOP"
+         tet_result=UNINITIATED
+         exit 1
+      fi
+   fi
+}
+
+check_ERROR_gdscp()
+{
+#  $1 ... name of log file generated while running gdscp_test script
+
+   exec < $1
+   while read line
+   do
+     tet_infoline "$line"
+   done
+
+   if [ `grep -c "fail" $1` -eq 0 ]
+   then
+     tet_result PASS
+   else
+     tet_result FAIL 
+   fi
+
+   rm -f $1
+}
+
+
+check_ERROR_xds()
+{
+#  $1 ... name of log file generated while running TEST
+#  $2 ... valid count after "fail" item (given in each line) of file $1
+#  $3 ... valid count after "pass" item (given in each line) of file $1
+
+   grep pass $1 > /tmp/x123.res
+   exec < /tmp/x123.res
+   while read line
+   do
+     tet_infoline "$line"
+   done
+     
+#  threads_up handling ... ( pass 0, fail 0 ) tuples indicate errors
+
+   if [[ $2 -eq 0 && $3 -eq 0 ]]
+   then
+     grep "pass 0" /tmp/x123.res | grep "fail 0"
+     rc=$?
+     if [ "$rc" -gt 0 ]
+     then
+       tet_result PASS
+     else
+       tet_result FAIL
+     fi
+     return
+   fi
+
+#  threads_os handling ... ( fails > 0, pass 3 )  are valid tuples
+
+   if [ $2 -gt 0 ]
+   then
+     if [ `grep -c "pass $3" /tmp/x123.res` -eq `wc -l /tmp/x123.res | awk '{print $1}'` ]
+     then
+       tet_result PASS
+     else
+       tet_result FAIL
+     fi
+
+#  otherwise ... fail 0 has to appear everywhere, if so, (pass 0,fail 0)
+#                tuples aren't allowed, however.
+
+   else
+     if [ `grep -c "fail $2" /tmp/x123.res` -eq `wc -l /tmp/x123.res | awk '{print $1}'` ]
+     then
+       if [ `grep -c "pass 0" /tmp/x123.res` -lt 1 ] 
+       then
+         tet_result PASS
+       else
+         tet_result FAIL 
+       fi
+     else
+       tet_result FAIL
+     fi
+   fi
+   rm -f /tmp/x123.res
+}
+
+check_ERROR()
+{
+if [ -r $ADM/test_trace ]
+then
+  awk ' BEGIN { FS="%"} { if ($0 ~ /EXPECTED ERROR/) print $2}' $ADM/test_trace > expected.err
+  awk ' { if ($1 == "ERROR:") { getline; print $0}}' $ADM/test_trace > received.err
+  cmp -s expected.err received.err
+  if  [ $?  -ne  0 ]
+  then 
+     infofile expected.err 'EXPECTED ERROR: '
+     infofile received.err 'RECEIVED ERROR: '
+     tet_infoline "TEST FAILED"
+     tet_result FAIL
+  else
+     infofile expected.err 'EXPECTED ERROR: '
+     infofile received.err 'RECEIVED ERROR: '
+     tet_infoline "TEST PASSED"
+     tet_result PASS
+  fi
+  cat $ADM/test_trace >> $TET_EXECUTE/tet.log
+  rm -f $ADM/test_trace
+  rm -f expected.err
+  rm -f received.err
+else
+  tet_infoline "Can't find test_trace file"
+  tet_result UNRESOLVED
+fi
+}
+
+check_MSG()
+{
+if [ -r $ADM/test_trace ]
+then
+  awk 'BEGIN { FS="%"} { if ($0 ~ /EXPECTED MESSAGE/) print $2}' $ADM/test_trace > expected.msg
+  awk ' { if ($1 == "ERROR:") { getline; print $0}}' $ADM/test_trace > received.msg
+  cmp -s expected.msg received.msg
+  if  [ $?  -ne  0 ]
+  then 
+     infofile expected.msg 'EXPECTED MESSAGE: '
+     infofile received.msg 'RECEIVED MESSAGE: '
+     tet_infoline "MESSAGE NOT RECEIVED"
+     tet_result PASS
+  else
+     infofile expected.msg 'EXPECTED MESSAGE: '
+     infofile received.msg 'RECEIVED MESSAGE: '
+     tet_infoline "MESSAGE RECEIVED"
+     tet_result PASS
+  fi
+  cat $ADM/test_trace >> $TET_EXECUTE/tet.log
+  rm -f $ADM/test_trace
+  rm -f expected.msg
+  rm -f received.msg
+else
+  tet_infoline "Can't find test_trace file"
+  tet_result UNRESOLVED
+fi
+}
+
+infofile() {
+	#$1 is file name, $2 is prefix for tet_infoline
+
+	prefix=$2
+	while read line
+	do
+		tet_infoline "$prefix$line"
+	done <$1
+}
+###
+###
+disable()
+{
+    gdssysadm -fd < /dev/null > /dev/null 2>&1
+
+}
+
+#
+#  Delete all of the directory information from the GDS
+#
+cleanup()
+{
+rm -f $TET_EXECUTE/tet.log
+gdssysadm -fc  << DEL >/dev/null 2>&1
+  
+1
+DEL
+}
+
+config()
+{
+#
+# Configure the GDS.
+#
+gdssysadm -fc <<CONFIG > /dev/null 2>&1
+
+1
+ 
+1
+1
+
+CONFIG
+}
+
+enable()
+{
+#
+# Start up the GDS.
+#
+gdssysadm  <<START > /dev/null 2>&1
+b
+START
+}
+
+check_result()
+{
+  if [ -r ${ADM}/test_trace ]
+  then
+     case $expected_result in
+     "ERROR") 
+        echo $expected_condition > expected.err
+        awk ' { if ($1 == "ERROR:") { getline; print $0}}' $ADM/test_trace > received.err
+        infofile expected.err 'EXPECTED ERROR: '
+        infofile received.err 'RECEIVED ERROR: '
+        cmp -s expected.err received.err 
+        if [ $? -eq 0 ]
+        then
+          tet_result PASS
+        else
+          tet_result FAIL
+        fi
+       ;;
+     "PASS")
+        grep "ERROR" ${ADM}/test_trace > /dev/null 2>&1
+        if [ $? -eq 0 ]
+        then
+          tet_result FAIL
+        else
+          tet_result PASS
+        fi
+      ;;
+     esac
+     cat $ADM/test_trace >> $TET_EXECUTE/tet.log
+     rm -f $ADM/test_trace
+     rm -f expected.msg
+     rm -f received.msg
+  else 
+     tet_infoline "Can't find test_trace file"
+     tet_result UNRESOLVED
+  fi
+}
+
+save_dit()
+{
+gdssysadm -fs <<SAVE > /dev/null 2>&1
+1
+ 
+
+
+
+
+SAVE
+}
+
+restore_dit()
+{
+
+# Restore DIT state from tape
+
+gdssysadm -fr <<RESTORE > /dev/null 2>&1
+1
+ 
+
+
+
+
+RESTORE
+}
+
+
+init_empty()
+{
+  echo "init empty" >>  /dev/null 2>&1
+  gdsditadm test_trace < step.1s.b > init/step.1s.b
+  gdsditadm test_trace < step.2s.b > init/step.2s.b
+  sleep 60
+  gdsditadm test_trace < step.8s.b > init/step.8s.b
+  gdsditadm test_trace < gen.0.b   > init/gen.0.b
+  gdsditadm test_trace < gen.1.b   > init/gen.1.b
+  save_dit
+}
+
+init_subtrees()
+{
+  echo "init subtrees" >>  /dev/null 2>&1
+
+  # The following gen batches generate a fairly complex tree. The saves
+  # save various parts of it in pieces that may be used to construct
+  # all or part of the larger tree as the test dictates.
+  # A part of the larger tree is saved to tape and restored at the 
+  # start of each test.
+  gdsditadm test_trace < gen.1.b  > init/gen.1.b
+  gdsditadm test_trace < gen.2.b  > init/gen.2.b
+  gdsditadm test_trace < gen.3.b  > init/gen.3.b
+  gdsditadm test_trace < save.1.b > init/save.1.b
+  gdsditadm test_trace < save.2.b > init/save.2.b
+  gdsditadm test_trace < save.3.b > init/save.3.b
+  gdsditadm test_trace < save.4.b > init/save.4.b
+  gdsditadm test_trace < save.5.b > init/save.5.b
+}
+
+restore_empty()
+{
+  echo "restor empty" >> /dev/null 2>&1
+  restore_dit > /dev/null 2>&1
+  sleep 60   
+  disable     > /dev/null 2>&1
+  enable      > /dev/null 2>&1
+}
+
+startup()
+# Running Startup
+{
+
+  echo "**************** LOG FILE ****************" >> $TET_EXECUTE/tet.log
+  echo `date`                                       >> $TET_EXECUTE/tet.log
+  echo "******************************************" >> $TET_EXECUTE/tet.log
+  echo ""                                           >> $TET_EXECUTE/tet.log
+  disable > /dev/null 2>&1
+  cleanup > /dev/null 2>&1
+  config  > /dev/null 2>&1
+  enable  > /dev/null 2>&1
+  init_empty
+  init_subtrees
+}
+
+reset_dit()
+{
+  restore_empty
+}
+
+export_paths()
+{
+	export API_SCRIPTS=$TET_ROOT/functional/directory/xds/ts/scripts
+	export XT_TEST_PATH=$TET_ROOT/functional/directory/xds/tools
+	export ADM=/opt/dcelocal/var/adm/directory/gds/adm
+}

@@ -1,0 +1,117 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ * 
+ */
+/*
+ * HISTORY
+ * $Log: llb.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:07:00  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:25:47  marty]
+ *
+ * Revision 1.1.4.1  1995/12/08  21:27:30  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  17:59:40  root]
+ * 
+ * Revision 1.1.2.1  1994/07/15  17:22:17  rsalz
+ * 	Created from rpc/sys_idl/{glb.idl,llb.idl,sockbase.idl}
+ * 	Update LLB support; remove sources from src/rpc (OT CR 7435).
+ * 	[1994/07/15  17:20:13  rsalz]
+ * 
+ * $EndLog$
+ */
+
+/*
+**  Copyright (c) 1989 by
+**	Hewlett-Packard Company, Palo Alto, Ca. and
+**	Digital Equipment Corporation, Maynard, Mass.
+*/
+
+/*
+**  This module contains the data definitions and remote procedures of
+**  the NCS 1.5.1 Local Location Broker (LLB).  This is an internal
+**  interface for the DCE 1.1 endpoint mapper (dced) so that it can serve
+**  as an LLB; it is not intended for public use.
+*/
+[
+    uuid(333B33C3-0000-0000-0D00-008784000000),
+    version(4),
+    endpoint("ip:[135]", "dds:[12]")
+]
+interface llb_
+{
+    const long	lb_database_invalid		= 0x1C020001;
+    const long	lb_database_busy		= 0x1C020002;
+    const long	lb_not_registered		= 0x1C020003;
+    const long	lb_update_failed		= 0x1C020004;
+    const long	lb_cant_access			= 0x1C020005;
+    const long	lb_server_unavailable		= 0x1C020006;
+    const long	lb_bad_entry			= 0x1C020007;
+    const long	lb_default_lookup_handle	= 0;
+    const long	llb_max_lookup_results		= 6;
+
+    typedef unsigned32	lb_server_flag_t;
+
+    typedef unsigned32	lb_lookup_handle_t;
+
+    typedef [v1_struct] struct {
+		signed16		family;
+	[v1_array]
+		byte			data[14];
+    } socket_addr_t;
+
+    typedef [v1_struct] struct {
+		uuid_old_t		object;
+		uuid_old_t		obj_type;
+		uuid_old_t		obj_interface;
+		lb_server_flag_t	flags;
+	[v1_array]
+		char			annotation[64];
+		unsigned long		saddr_len;
+		socket_addr_t		saddr;
+    } lb_entry_t;
+
+    /*
+    **  Add the specified entry to the database.
+    */
+    void
+    llb_insert(
+	[in]	handle_t		h,
+	[in]	lb_entry_t		*xentry,
+	[out]	error_status_t		*status
+    );
+
+    /*
+    **  Delete the specified entry from the database.
+    */
+    void
+    llb_delete(
+	[in]	handle_t		h,
+	[in]	lb_entry_t		*xentry,
+	[out]	error_status_t		*status
+    );
+
+    /*
+    **  Perform a lookup operation on the database.
+    */
+
+    [idempotent]
+    void
+    llb_lookup(
+	[in]	handle_t		h,
+	[in]	uuid_t			*object,
+	[in]	uuid_t			*obj_type,
+	[in]	uuid_t			*obj_interface,
+	[in, out]
+		lb_lookup_handle_t	*entry_handle,
+	[in]	unsigned long		max_num_results,
+	[out]	unsigned long		*num_results,
+	[out, v1_array, length_is(*num_results)]
+		lb_entry_t		result_entries[llb_max_lookup_results],
+	[out]	error_status_t		*status
+    );
+}

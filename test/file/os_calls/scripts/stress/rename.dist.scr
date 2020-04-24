@@ -1,0 +1,505 @@
+
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* Operation should be atomic at the server, even though client may not
+* see atomicity if rename is happening during stat or open calls.  So,
+* have a bunch of test processes do renames: a1-->b, a2-->b, a3-->b,
+* a4-->b, etc., and ensure that exactly one of the renames succeeds,
+* (exactly one must succeed to fit the -1 --> no changes POSIX rule),
+* and that the file "b" is accessible and contains the right info for
+* one of the files, and that of the files has disappeared.  Check both
+* dir listing cache and name lookup cache.
+*
+* Check basic race conditions.  Have both test and stress processes
+* referencing old and new names.  Issue rename, and then verify via test
+* process that old name gone from dir listing and name cache, and new
+* name present in dir listing and name cache.
+*
+* Same test as above, except that test and stress process are
+* *creating and deleting* names *other* than the old and new names.
+* Generates many revokes on dir handling the rename.  Check same
+* conditions as above test.
+*
+
+*
+* Note: Try this test on both single machin cell and multi-machine cell.
+*       Try this from both DFS and local path so that it will also test 
+*       xvnode layer. This test realy needs to be run from the combination
+*       of DFS and local path (unlink a file via CM or unlink a file
+*       form local path.
+*
+
+* 
+* USAGE: ./file_test -l {HUBNAME} -I {this_script} ; For HUB
+*        ./file_test -c {HUBNAME} : For other spokes
+*
+
+* Include config file.
+include config
+
+set commName changeme
+set testFile1 testfile1
+set testFile2 testfile2
+set testFile3 testfile3
+set testFile4 testfile4
+set loopTimes 10
+
+
+set test_Proc proc END_PROC
+  echo 
+  echo Test if rename successed.
+
+  getwd workDir
+  chdir $testDir
+  sync_join "begin_sync" $timeout
+  sync_join "check_rename" $timeout
+  stat $commName statVar
+  open $commName @O_RDONLY 0777 fileId
+  read @fileId 10 junk
+  close @fileId
+  echo @junk -- should be one of Test file(1,2,3,4) .
+  
+  sync_join "create_file" $timeout
+
+  sync_join "rename_files" $timeout
+  sync_join "check_rename_files" $timeout
+  loop x 1 1 $loopTimes
+    set fileName1 ("test4dir/test3File"+@x)
+    set fileName2 ("test3dir/test4File"+@x)
+    stat @fileName1 statVar1
+    stat @fileName2 statVar2
+    verifyStatus false
+    set fileName1 ("test3dir/test3File"+@x)
+    set fileName2 ("test4dir/test4File"+@x)
+    stat @fileName1 statVar1
+    if ( @ITL_Status == 0 ) {
+      echo FAILED: the old name exists .
+    }
+    stat @fileName2 statVar2
+    if ( @ITL_Status == 0 ) {
+      echo FAILED: the old name exists .
+    }
+    verifyStatus true
+  endloop
+
+  sync_join "delete_file" $timeout
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo Test done
+  echo 
+END_PROC
+
+*
+* This procedure does rename calls.
+*
+set test1_Proc proc END_PROC
+  echo
+  echo rename call test1.
+
+  getwd workDir
+  chdir $testDir
+
+  open $testFile1 ( @O_CREAT|@O_RDWR ) 0777 fileId
+  write @fileId "Test file1"
+  close @fileId
+
+  sync_join "begin_sync" $timeout
+  verifyStatus false
+  rename $testFile1 $commName
+  if ( @ITL_Status != 0 ) {
+    if ( @ITL_Status != @EEXIST ) {
+      echo FAILED: to rename $testFile1 .
+    }
+  }
+  verifyStatus true
+
+  sync_join "check_rename" $timeout
+  sync_join "create_file" $timeout
+
+  sync_join "rename_files" $timeout
+
+* This process refers to the old and new names .
+
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName1 ("test4dir/test3File"+@x)
+    set fileName2 ("test3dir/test4File"+@x)
+    set fileName1 ("test3dir/test3File"+@x)
+    set fileName2 ("test4dir/test4File"+@x)
+    stat @fileName1 statVar1
+    stat @fileName2 statVar2
+  endloop
+  verifyStatus true
+
+  sync_join "check_rename_files" $timeout
+
+  sync_join "delete_file" $timeout
+
+  loop x 1 1 $loopTimes
+    set oldName ( "surFile" + @x )
+    set newName ( "disFile" + @x )
+    open @newName @O_RDWR 0777 fileId[@x]
+    close @fileId[@x]
+    remove @newName
+  endloop
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo Test1 process done.
+  echo 
+END_PROC
+
+
+*
+* This procedure does rename calls.
+*
+
+set test2_Proc proc END_PROC
+
+  echo
+  echo rename call test2.
+
+  getwd workDir
+  chdir $testDir
+
+  open $testFile2 (@O_CREAT|@O_RDWR) 0777 fileId
+  write @fileId "Test file2"
+  close @fileId
+
+  sync_join "begin_sync" $timeout
+  verifyStatus false
+  rename $testFile2 $commName
+  if ( @ITL_Status != 0 ) {
+    if ( @ITL_Status != @EEXIST ) {
+      echo FAILED: to rename $testFile2 .
+    }
+  }
+  verifyStatus true
+
+  sync_join "check_rename" $timeout
+  loop x 1 1 $loopTimes
+    set oldName ( "surFile" + @x )
+    set newName ( "disFile" + @x )
+    open @oldName ( @O_CREAT|@O_RDWR ) 0777 fileId[@x]
+    write @fileId[@x] @oldName
+    close @fileId[@x]
+    open @newName ( @O_CREAT|@O_RDWR ) 0777 fileId[@x]
+    write @fileId[@x] @newName
+    close @fileId[@x]
+  endloop
+
+  sync_join "create_file" $timeout
+  loop x 1 1 $loopTimes
+    set oldName ( "surFile" + @x )
+    set newName ( "disFile" + @x )
+    rename @oldName @newName
+  endloop
+
+  sync_join "rename_files" $timeout
+
+* Just refer to those name and old names.
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName1 ("test4dir/test3File"+@x)
+    set fileName2 ("test3dir/test4File"+@x)
+    set fileName1 ("test3dir/test3File"+@x)
+    set fileName2 ("test4dir/test4File"+@x)
+    stat @fileName1 statVar1
+    stat @fileName2 statVar2
+  endloop
+  verifyStatus true
+
+  sync_join "check_rename_files" $timeout
+
+  sync_join "delete_file" $timeout
+
+* refer to those names .
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set oldName ( "surFile" + @x )
+    set newName ( "disFile" + @x )
+    stat @oldName statVar1
+    stat @newName statVar2
+  endloop
+  verifyStatus true
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+
+  echo Stress process done.
+  echo
+END_PROC
+
+*
+* Another procedure that joins the rename call tests.
+*
+set test3_Proc proc END_PROC
+
+  echo
+  echo rename call test 3.
+
+  getwd workDir
+  chdir $testDir
+
+  open $testFile3 ( @O_CREAT|@O_RDWR ) 0777 fileId
+  write @fileId "Test file3"
+  close @fileId
+
+  sync_join "begin_sync" $timeout
+
+  verifyStatus false
+  rename $testFile3 $commName
+  if ( @ITL_Status != 0 ) {
+    if ( @ITL_Status != @EEXIST ) {
+      echo FAILED: to rename $testFile3 .
+    }
+  }
+  verifyStatus true
+
+  sync_join "check_rename" $timeout
+
+  sync_join "create_file" $timeout
+
+  mkdir test3dir 0777
+  chdir test3dir
+  
+  loop x 1 1 $loopTimes
+    set fileName ( "test3File" + @x )
+    open @fileName ( @O_CREAT|@O_RDWR ) 0777 fileNameId[@x]
+    write @fileNameId[@x] @fileName
+    close @fileNameId[@x]
+  endloop
+
+  chdir ..
+
+  sync_join "rename_files" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( "test3File" + @x )
+    set sourceFile ("test3dir/" + @fileName)
+    set distFile ("test4dir/"+@fileName)
+    rename @sourceFile @distFile
+  endloop
+
+  sync_join "check_rename_files" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( "test4File" + @x )
+    set sourceFile ("test3dir/" + @fileName)
+    stat @sourceFile statVar
+  endloop
+
+  sync_join "delete_file" $timeout
+  loop x 1 1 $loopTimes
+    set fileName ( "test4File" + @x )
+    set sourceFile ("test3dir/" + @fileName)
+    set distFile ("test4dir/"+@fileName)
+    rename @sourceFile @distFile
+  endloop
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo Test 3 done.
+  echo
+
+END_PROC
+
+*
+* Another procedure that joins the rename call tests.
+*
+set test4_Proc proc END_PROC
+  echo
+  echo rename call test 4.
+
+  getwd workDir
+  chdir $testDir
+
+  open $testFile4 ( @O_CREAT|@O_RDWR ) 0777 fileId
+  write @fileId "Test file4"
+  close @fileId
+
+  sync_join "begin_sync" $timeout
+
+  verifyStatus false
+  rename $testFile4 $commName
+  if ( @ITL_Status != 0 ) {
+    if ( @ITL_Status != @EEXIST ) {
+      echo FAILED: to rename $testFile4 .
+    }
+  }
+  verifyStatus true
+
+  sync_join "check_rename" $timeout
+
+  mkdir test4dir 0777
+  chdir test4dir
+
+  sync_join "create_file" $timeout
+  loop x 1 1 $loopTimes
+    set fileName ( "test4File" + @x )
+    open @fileName ( @O_CREAT|@O_RDWR ) 0777 fileNameId[@x]
+    write @fileNameId[@x] @fileName
+    close @fileNameId[@x]
+  endloop
+   
+  chdir ..
+
+  sync_join "rename_files" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( "test4File" + @x )
+    set sourceFile ("test4dir/" + @fileName)
+    set distFile ("test3dir/"+@fileName)
+    rename @sourceFile @distFile
+  endloop
+
+  sync_join "check_rename_files" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( "test3File" + @x )
+    set sourceFile ("test4dir/" + @fileName)
+    stat @sourceFile statVar
+  endloop
+
+  sync_join "delete_file" $timeout
+  loop x 1 1 $loopTimes
+    set fileName ( "test3File" + @x )
+    set sourceFile ("test4dir/" + @fileName)
+    set distFile ("test3dir/"+@fileName)
+    rename @sourceFile @distFile
+  endloop
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo Test 4 done
+  echo
+END_PROC
+
+
+
+****************************************************************************
+* Check spokes.
+if ( $ITL_nspokes < 5 ) {
+  echo FAILED: You need 5 spokes to run the test.
+  quit
+}
+
+loop loopVar 1 1 $loopTimes
+
+chdir $testDir
+
+open $commName ($O_CREAT|$O_RDWR) 0777 fileId
+write $fileId "Test file0"
+close $fileId
+
+
+* Need to pass a parameter to exch procedure to have a good prog struct.
+!* Dispatch procedure among spokes.
+rexec_async $ITL_spoke[0] test1_Proc result[0] asyncVar[0]
+rexec_async $ITL_spoke[1] test2_Proc result[1] asyncVar[1]
+rexec_async $ITL_spoke[2] test3_Proc result[2] asyncVar[2]
+rexec_async $ITL_spoke[3] test4_Proc result[3] asyncVar[3]
+loop x 4 1 ($ITL_nspokes - 1)
+  rexec_async $ITL_spoke[$x] test_Proc result[$x] asyncVar[$x]
+endloop
+
+sync_create "begin_sync" $ITL_nspokes $timeout
+sync_release "begin_sync"
+
+sync_create "check_rename" $ITL_nspokes $timeout
+sync_release "check_rename"
+
+set junk ""
+open $commName $O_RDONLY 0777 fileId
+read $fileId 10 junk
+close $fileId
+
+* XXXX Better to know who is the last guy rename the file.
+if ( $junk == "Test file0" ) {
+  echo FAILED: Can not rename a file.
+}
+else {
+  if ($junk !="Test file1" ) {
+    if ( $junk != "Test file2" ) {
+      if ( $junk != "Test file3" ) {
+        if ( $junk != "Test file4" ) {
+          echo FAILED: File content has been changed after rename.
+        }
+        else { 
+          set whichFile 4
+        }
+      }
+      else {
+        set whichFile 3
+      }
+    } 
+    else {
+      set whichFile 2
+    }
+  }
+  else {
+    set whichFile 1
+  }
+}
+
+sync_create "create_file" $ITL_nspokes $timeout
+sync_release "create_file"
+
+sync_create "rename_files" $ITL_nspokes $timeout
+sync_release "rename_files"
+
+sync_create "check_rename_files" $ITL_nspokes $timeout
+sync_release "check_rename_files"
+
+sync_create "delete_file" $ITL_nspokes $timeout
+sync_release "delete_file"
+
+sync_create "finish_sync" $ITL_nspokes $timeout
+sync_release "finish_sync"
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+remove $commName
+exec clearDir_Proc test3dir
+exec clearDir_Proc test4dir
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+mkdir $testDir 0777
+
+endloop
+
+quit
+

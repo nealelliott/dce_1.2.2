@@ -1,0 +1,1518 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+#    Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This test is applicable to DFS exporting Episode (not exported UFS, and
+# not local Episode). The script tests many common fts functions (create,
+# delete, lsft, mount commands, quota commands, clone commands, move, rename,
+# dump, restore) by issuing the commands and then doing work in the directories
+# that contain the filesets being operated on.
+
+# This is a basic DFS fts correctness test.
+
+###############################################################################
+
+# Usage:  test12 [-noclone] [-nomove] [-norename] [-nodump] [-noquota] \
+#                [-cloneonly] [-moveonly] [-renameonly] [-dumponly] [-quotaonly]
+
+# Typically run via:    test12 >& test12.out or via runtests
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode. DFS server $SERVER_1
+# must export Episode aggregate $EPI_AGGRNAME_1, and $SERVER_2 must export
+# $EPI_AGGRNAME_2. $SERVER_1 and $SERVER_2 can be the same machine.
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1 and $SERVER_2, in
+# order to run the fts commands contained in this script. You must also be
+# able to create mount points in $export_root. Creating mount points does not
+# seem to work if $export_root is in exported UFS. A good idea would be to
+# create root.dfs in LFS.
+
+# Notes:
+#
+# This script should really use much larger test data files than it does.
+#
+# The major functionality tests (Part 1, Part 2, etc) are surrounded by
+# trivial "for" loops in order that "continue" can be used to bail out
+# of the middle of each part.
+
+# Highest error number is: 159.
+
+###############################################################################
+
+d=`pwd`
+hn=`uname -n`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${EPI_AGGRNAME_1=epi1}
+: ${EPI_AGGRNAME_2=epi2}
+: ${EPI_AGGRNAME_3=epi1}
+: ${EPI_FS_1=1024}
+: ${SERVER_1=$hn}
+: ${SERVER_2=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name="/.../$CELL_NAME"}
+: ${dns_server_prefix="/.:/hosts/"}
+: ${export_root=/.../$CELL_NAME/fs}
+
+cav_arg="$CELL_ARG $AUTH_ARG $VERB_ARG"
+
+server_1=$SERVER_1
+aggr_1=$EPI_AGGRNAME_1
+ft_1=ft1.$$
+dir_1=$export_root/test/ft1.$$
+dir_1a=$export_root/test/ft1a.$$
+
+server_2=$SERVER_2
+aggr_2=$EPI_AGGRNAME_2
+ft_2=ft2.$$
+dir_2=$export_root/test/ft2.$$
+
+# The _3 stuff is used only in the dump/restore testing.
+server_3=$SERVER_2
+aggr_3=$EPI_AGGRNAME_3
+ft_3=ft3.$$
+dir_3=$export_root/test/ft3.$$
+
+# test the quota stuff with its own fileset to see if the preceding ops on
+# ft_1 made a difference
+ft_4=ft4.$$
+dir_4=$export_root/test/ft4.$$
+
+dumpfile=/tmp/dump.$$
+quota_granularity=$EPI_FS_1 # MUST be a multiple of 64!
+
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+if [ "$dfs_FileSysType" = "$DFS_WORKS_ON_LFS" ]
+then
+   do_clone=TRUE
+   do_move=TRUE
+   do_rename=TRUE
+   do_dump=TRUE
+   do_restore=TRUE
+   do_quota=TRUE
+else
+   do_clone=FALSE
+   do_move=FALSE
+   do_rename=TRUE
+   do_dump=TRUE
+   do_restore=FALSE	# we need a new UFS aggregate to test this, later...
+   do_quota=FALSE
+fi
+
+# For now, we don't execute this test on exported UFS, because of all the
+# LFS specific operations it does. We might be able to get this to work on
+# UFS later on.
+if [ "$dfs_FileSysType" = "$DFS_WORKS_ON_UFS" ]
+then
+  echo ""; echo "$p not applicable to DFS exporting UFS"; echo ""
+  echo ""; echo "All done at `date`."; echo ""
+  if test $rc -eq 0
+     then echo "$p PASSED"
+     else echo "$p FAILED ($rc errors)"
+     fi
+  exit $rc
+fi
+ 
+alldone=0
+###############################################################################
+
+for a
+    do
+    if test $a = -noclone; then do_clone=FALSE
+    elif test $a = -nomove; then do_move=FALSE
+    elif test $a = -norename; then do_rename=FALSE
+    elif test $a = -nodump; then do_dump=FALSE
+    elif test $a = -noquota; then do_quota=FALSE
+    elif test $a = -cloneonly
+       then do_move=FALSE; do_rename=FALSE; do_dump=FALSE; do_quota=FALSE
+    elif test $a = -moveonly
+       then do_clone=FALSE; do_rename=FALSE; do_dump=FALSE; do_quota=FALSE
+    elif test $a = -renameonly
+       then do_clone=FALSE; do_move=FALSE; do_dump=FALSE; do_quota=FALSE
+    elif test $a = -dumponly
+       then do_clone=FALSE; do_move=FALSE; do_rename=FALSE; do_quota=FALSE
+    elif test $a = -quotaonly
+       then do_clone=FALSE; do_move=FALSE; do_rename=FALSE; do_dump=FALSE
+    else echo "Argument '$a' is unknown"; exit 2
+    fi
+    done
+
+###############################################################################
+
+echo ""
+echo "$ty/$p starting as PID $$ at `date` on $hn"
+echo "   in cell $CELL_NAME."
+echo "Servers $server_1, $server_2, and $server_3."
+echo "Do clone: $do_clone; move: $do_move; rename: $do_rename; dump: $do_dump; quota: $do_quota."
+
+if test "$CELL_NAME" = ""
+   then echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting."
+        exit 2
+   fi
+
+###############################################################################
+
+# check if EPI_AGGRNAME_1 and EPI_AGGRNAME_2 are exported and known to ftserver
+
+echo ""; echo Checking $EPI_AGGRNAME_1 and $EPI_AGGRNAME_2
+
+fts lsaggr $SERVER_1 | grep $EPI_AGGRNAME_1; rf=$?
+if test $rf -ne 0
+	then echo "- aggregate $EPI_AGGRNAME_1 not exported by $SERVER_1; $p ABORTING"
+	     rc=`expr $rc + 1`; cleanup
+        fi
+fts lsaggr $SERVER_2 | grep $EPI_AGGRNAME_2; rf=$?
+if test $rf -ne 0
+   then
+	do_within_server=FALSE
+        aggr_2=""
+   else
+	do_within_server=TRUE
+        fi
+if [ "$EPI_AGGRNAME_3" = "" ]
+then
+  do_across_server=FALSE
+else
+  fts lsaggr $SERVER_2 | grep $EPI_AGGRNAME_3; rf=$?
+  if test $rf -ne 0
+     then
+ 	do_across_server=FALSE
+        aggr_3=""
+     else
+	do_across_server=TRUE
+        fi
+fi
+
+###############################################################################
+
+
+cleanup()
+{
+
+sync; sync; sleep 2
+echo ""; echo "Part 7: cleanup"; echo "==============="; date
+cd /tmp
+
+echo ""; echo "Listing filesets in cell..."
+fts lsfldb
+
+echo ""; echo "Running cm lsstores..."
+cm lsstores; rf=$?
+if test $rf -ne 0
+   then echo "- cm lsstores failed (errno $rf) ($p: E115)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Removing mount points..."
+
+fts delmount -dir $dir_1; rf=$?
+if test $alldone -eq 1 -a $rf -ne 0
+   then echo "- fts delmount failed (errno $rf) ($p: E116)"; rc=`expr $rc + 1`
+   fi
+
+fts delmount -dir $dir_1a; rf=$?
+if test $alldone -eq 1 -a $rf -ne 0
+   then echo "- fts delmount failed (errno $rf) ($p: E117)"; rc=`expr $rc + 1`
+   fi
+
+fts delmount -dir $dir_2; rf=$?
+if test $alldone -eq 1 -a $rf -ne 0
+   then echo "- fts delmount failed (errno $rf) ($p: E118)"; rc=`expr $rc + 1`
+   fi
+
+if test $do_clone = TRUE
+   then fts delmount -dir $dir_1.backup; rf=$?
+        if test $alldone -eq 1 -a $rf -ne 0
+           then echo "- fts delmount failed (errno $rf) ($p: E119)"
+                rc=`expr $rc + 1`
+           fi
+   fi
+
+if test $do_rename = TRUE
+   then fts delmount -dir $dir_1.renamed; rf=$?
+        if test $alldone -eq 1 -a $rf -ne 0
+           then echo "- fts delmount failed (errno $rf) ($p: E120)"
+                rc=`expr $rc + 1`
+           fi
+   fi
+
+if test $do_restore = TRUE
+   then fts delmount -dir $dir_3; rf=$?
+        if test $alldone -eq 1 -a $rf -ne 0
+           then echo "- fts delmount failed (errno $rf) ($p: E121)"
+                rc=`expr $rc + 1`
+           fi
+   fi
+
+sync; sync; sleep 2
+
+echo ""; echo "Removing filesets..."
+fts delete $ft_1 $dns_server_prefix$server_1 $aggr_1 $cav_arg; rf=$?
+if test $alldone -eq 1 -a $rf -ne 0
+   then echo "- fts delete failed (errno $rf) ($p: E122)"; rc=`expr $rc + 1`
+   fi
+if [ $do_within_server = TRUE ]
+then
+  fts delete $ftid_2 $dns_server_prefix$server_2 $aggr_2 $cav_arg; rf=$?
+elif [ $do_across_server = TRUE ]
+then
+  fts delete $ftid_2 $dns_server_prefix$server_2 $aggr_3 $cav_arg; rf=$?
+else
+  fts delete $ftid_2 $dns_server_prefix$server_2 $aggr_1 $cav_arg; rf=$?
+fi
+if test $alldone -eq 1 -a $rf -ne 0
+   then echo "- fts delete failed (errno $rf) ($p: E123)"; rc=`expr $rc + 1`
+   fi
+
+if test $do_restore = TRUE
+   then 
+    if [ $do_across_server = TRUE ]
+    then
+     fts delete $ft_3 $dns_server_prefix$server_3 $aggr_3 $cav_arg; rf=$?
+    elif [ $do_within_server = TRUE ]
+    then
+     fts delete $ft_3 $dns_server_prefix$server_3 $aggr_2 $cav_arg; rf=$?
+    else
+     fts delete $ft_3 $dns_server_prefix$server_3 $aggr_1 $cav_arg; rf=$?
+    fi
+        if test $alldone -eq 1 -a $rf -ne 0
+           then echo "- fts delete failed (errno $rf) ($p: E124)"
+                rc=`expr $rc + 1`
+           fi
+   fi
+
+if test $do_quota = TRUE
+  then
+    fts delete $ft_4 $dns_server_prefix$server_1 $aggr_1 $cav_arg; rf=$?
+    if test $alldone -eq 1 -a $rf -ne 0
+     then echo "- fts delete failed (errno $rf) ($p: E125)"
+	rc=`expr $rc + 1`
+     fi
+    fts delmount $dir_4; rf=$?
+    if test $alldone -eq 1 -a $rf -ne 0
+     then echo "- fts delmount failed (errno $rf) ($p: E126)"
+	rc=`expr $rc + 1`
+     fi
+fi
+
+echo ""; echo "Done with part 7."
+
+echo ""; echo "Listing filesets in cell..."
+fts lsfldb
+
+sync; sync; sleep 2
+
+
+echo ""; echo "All done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+}
+
+sync; sync; sleep 2
+echo ""; echo "Part 1: basic fileset operations"
+echo "================================"
+date
+
+########################################
+
+echo ""; echo "Creating fileset $ft_1..."
+
+fts create $ft_1 $dns_server_prefix$server_1 $aggr_1 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts create failed (errno $rf); $p ABORTING ($p: E1)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+ftid_1=`fts lsfldb $ft_1 $cav_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+echo "Fileset $ft_1 ID is $ftid_1."
+if test "$ftid_1" -le 0
+   then echo "- fileset ID is unreasonable ($ftid_1); $p ABORTING ($p: E2)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+if test $do_quota = TRUE
+then 
+  fts setquota -fileset $ft_1 -size 1000 $cav_arg; rf=$?
+  if test $rf -ne 0
+     then echo "- fts setquota failed (errno $rf); $p ABORTING ($p: E3)"
+         rc=`expr $rc + 1`; cleanup
+     fi
+
+  sz=`fts lsquota -fileset $ft_1 | tail -1 | awk '{print $2}'`
+  if test $sz -ne 1000
+    then echo "- quota is wrong ($sz, not 1000); $p ABORTING ($p: E4)"
+          rc=`expr $rc + 1`; cleanup
+     fi
+fi
+
+########################################
+
+if [ "$dfs_FileSysType" = "$DFS_WORKS_ON_LFS" ]
+then
+  echo ""; echo "Creating fileset $ft_2..."
+
+   if [ $do_within_server = TRUE ]
+   then
+     fts create $ft_2 $dns_server_prefix$server_2 $aggr_2 $cav_arg; rf=$?
+   elif [ $do_across_server = TRUE ]
+   then
+     fts create $ft_2 $dns_server_prefix$server_2 $aggr_3 $cav_arg; rf=$?
+   else
+     fts create $ft_2 $dns_server_prefix$server_2 $aggr_1 $cav_arg; rf=$?
+   fi
+   if test $rf -ne 0
+      then echo "- fts create failed (errno $rf); $p ABORTING ($p: E6)"
+        rc=`expr $rc + 1`; cleanup
+      fi
+   ftid_2=`fts lsfldb $ft_2 $cav_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+   echo "Fileset $ft_2 ID is $ftid_2."
+   if test "$ftid_2" -le 0
+      then echo "- fileset ID is unreasonable ($ftid_2); $p ABORTING ($p: E7)"
+         rc=`expr $rc + 1`; cleanup
+      fi
+fi
+
+if test $do_quota = TRUE
+then 
+  fts setquota -fileset $ftid_2 -size 2000 $cav_arg; rf=$?
+  if test $rf -ne 0
+    then echo "- fts setquota failed (errno $rf); $p ABORTING ($p: E8)"
+          rc=`expr $rc + 1`; cleanup
+     fi
+
+  sz=`fts lsquota -fileset $ft_2 | tail -1 | awk '{print $2}'`
+  if test $sz -ne 2000
+     then echo "- quota is wrong ($sz, not 2000); $p ABORTING ($p: E9)"
+          rc=`expr $rc + 1`; cleanup
+     fi
+fi
+
+########################################
+
+echo ""; echo "Creating mount point $dir_1 for $ft_1..."
+fts crmount $dir_1 $ft_1; rf=$?
+if test $rf -ne 0
+   then echo "- fts crmount failed (errno $rf); $p ABORTING ($p: E11)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+setFsetRootProt $dir_1 $testuid "E180"
+
+echo ""; echo "Creating second mount point $dir_1a for $ft_1..."
+fts crmount $dir_1a $ft_1; rf=$?
+if test $rf -ne 0
+   then echo "- fts crmount failed (errno $rf); $p ABORTING ($p: E12)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+echo ""; echo "Creating mount point $dir_2 for $ft_2..."
+fts crmount $dir_2 $ft_2; rf=$?
+if test $rf -ne 0
+   then echo "- fts crmount failed (errno $rf); $p ABORTING ($p: E13)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+setFsetRootProt $dir_2 $testuid "E181"
+
+########################################
+
+echo ""; echo "Accessing $ft_1 thru $dir_1a (A1)..."
+
+cd /tmp; cm checkfilesets; cd $dir_1a; rf=$?
+if test `pwd` != $dir_1a -o $rf -ne 0
+   then echo "- cd $dir_1a failed (errno $rf, wd `pwd`); $p ABORTING ($p: E14)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+ex1a="This is fileset $ft_1, ID $ftid_1, in $dir_1a (X1).\n
+      We hold these truths to be self-evident, that all men are created equal,\n
+      that they are endowed by their creator with certain unalienable rights,\n
+      that among these are life, liberty, and the pursuit of happiness. That\n
+      to secure these rights, governments are instituted among men, deriving\n
+      their just powers from the consent of the goverened."
+
+echo $ex1a >> file
+if test $rf -ne 0
+   then echo "- echo failed (errno $rf) ($p: E15)"; rc=`expr $rc + 1`
+   fi
+
+mkdir dir
+if test $rf -ne 0
+   then echo "- mkdir failed (errno $rf) ($p: E16)"; rc=`expr $rc + 1`
+   fi
+
+cp file dir
+if test $rf -ne 0
+   then echo "- cp failed (errno $rf) ($p: E17)"; rc=`expr $rc + 1`
+   fi
+
+ln file hardlink
+if test $rf -ne 0
+   then echo "- ln -s failed (errno $rf) ($p: E140)"; rc=`expr $rc + 1`
+   fi
+
+ln -s file symlink
+if test $rf -ne 0
+   then echo "- ln -s failed (errno $rf) ($p: E18)"; rc=`expr $rc + 1`
+   fi
+
+cm flush . * dir/*; rf=$?
+if test $rf -ne 0
+   then echo "- cm flush failed (errno $rf) ($p: E127)"; rc=`expr $rc + 1`
+   fi
+
+echo $ex1a | diff - file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1a/file is wrong; $p ABORTING ($p: E19)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+echo $ex1a | diff - hardlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1a/hardlink is wrong; $p ABORTING ($p: E141)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+echo $ex1a | diff - symlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1a/symlink is wrong; $p ABORTING ($p: E20)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+echo $ex1a | diff - dir/file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1a/dir/file is wrong; $p ABORTING ($p: E21)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+########################################
+
+echo ""; echo "Accessing $ft_1 thru $dir_1 (A2)..."
+
+cd /tmp; cm checkfilesets; cd $dir_1; rf=$?
+if test \( `pwd` != $dir_1 -a `pwd` != $dir_1a \) -o $rf -ne 0
+   then echo "- cd $dir_1 failed (errno $rf, wd `pwd`); $p ABORTING ($p: E22)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+cm flush . * dir/*; rf=$?
+if test $rf -ne 0
+   then echo "- cm flush failed (errno $rf) ($p: E128)"; rc=`expr $rc + 1`
+   fi
+
+echo $ex1a | diff - file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/file is wrong; $p ABORTING ($p: E23)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+echo $ex1a | diff - hardlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/hardlink is wrong; $p ABORTING ($p: E142)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+echo $ex1a | diff - symlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/symlink is wrong; $p ABORTING ($p: E24)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+echo $ex1a | diff - dir/file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/dir/file is wrong; $p ABORTING ($p: E25)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+rm file; rf=$?
+if test $rf -ne 0
+   then echo "- rm failed (errno $rf); $p ABORTING ($p: E26)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+rm hardlink; rf=$?
+if test $rf -ne 0
+   then echo "- rm failed (errno $rf); $p ABORTING ($p: E143)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+rm symlink; rf=$?
+if test $rf -ne 0
+   then echo "- rm failed (errno $rf); $p ABORTING ($p: E27)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+rm -r dir; rf=$?
+if test $rf -ne 0
+   then echo "- rm failed (errno $rf); $p ABORTING ($p: E28)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+if test `ls -a $dir_1 | wc -l` -ne 2
+   then echo "- $dir_1 should be empty, but isn't; $p ABORTING ($p: E155)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+ex1="This is fileset $ft_1, ID $ftid_1, in $dir_1 (X2).\n
+     That whenever any form of government becomes destructive of these ends,\n
+     it is the right of the people to alter or abolish it, and to institute\n
+     new government, laying its foundations on such principles and organizing\n
+     its powers in such form, as to them shall seem most likely to effect\n
+     their safety and happiness."
+
+echo $ex1 >> file
+if test $rf -ne 0
+   then echo "- echo failed (errno $rf) ($p: E29)"; rc=`expr $rc + 1`
+   fi
+
+mkdir dir
+if test $rf -ne 0
+   then echo "- mkdir failed (errno $rf) ($p: E30)"; rc=`expr $rc + 1`
+   fi
+
+cp file dir
+if test $rf -ne 0
+   then echo "- cp failed (errno $rf) ($p: E31)"; rc=`expr $rc + 1`
+   fi
+
+ln file hardlink
+if test $rf -ne 0
+   then echo "- ln -s failed (errno $rf) ($p: E144)"; rc=`expr $rc + 1`
+   fi
+
+ln -s file symlink
+if test $rf -ne 0
+   then echo "- ln -s failed (errno $rf) ($p: E32)"; rc=`expr $rc + 1`
+   fi
+
+cm flush . * dir/*; rf=$?
+if test $rf -ne 0
+   then echo "- cm flush failed (errno $rf) ($p: E129)"; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/file is wrong; $p ABORTING ($p: E33)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+echo $ex1 | diff - hardlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/hardlink is wrong; $p ABORTING ($p: E145)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+echo $ex1 | diff - symlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/symlink is wrong; $p ABORTING ($p: E34)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+echo $ex1 | diff - dir/file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/dir/file is wrong; $p ABORTING ($p: E35)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+########################################
+
+echo ""; echo "Running cm lsstores..."
+cm lsstores; rf=$?
+if test $rf -ne 0
+   then echo "- cm lsstores failed (errno $rf); $p ABORTING ($p: E36)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+########################################
+
+echo ""; echo "Accessing $ft_2 thru $dir_2 (A3)..."
+
+cd /tmp; cm checkfilesets; cd $dir_2; rf=$?
+if test `pwd` != $dir_2 -o $rf -ne 0
+   then echo "- cd $dir_2 failed (errno $rf, wd `pwd`); $p ABORTING ($p: E37)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+ex2="This is fileset $ft_2, ID $ftid_2, in $dir_2 (X3).\n
+     Prudence, indeed, will dictate that governments long established should\n
+     not be changed for light and transient causes, and accordingly all\n
+     experience hath shown that mankind are more disposed to suffer, while\n
+     evils are sufferable, than to right themselves by abolishing the forms\n
+     to which they are long accustomed."
+
+echo $ex2 >> file
+if test $rf -ne 0
+   then echo "- echo failed (errno $rf) ($p: E38)"; rc=`expr $rc + 1`
+   fi
+
+mkdir dir
+if test $rf -ne 0
+   then echo "- mkdir failed (errno $rf) ($p: E39)"; rc=`expr $rc + 1`
+   fi
+
+cp file dir
+if test $rf -ne 0
+   then echo "- cp failed (errno $rf) ($p: E40)"; rc=`expr $rc + 1`
+   fi
+
+ln file hardlink
+if test $rf -ne 0
+   then echo "- ln -s failed (errno $rf) ($p: E146)"; rc=`expr $rc + 1`
+   fi
+
+ln -s file symlink
+if test $rf -ne 0
+   then echo "- ln -s failed (errno $rf) ($p: E41)"; rc=`expr $rc + 1`
+   fi
+
+cm flush . * dir/*; rf=$?
+if test $rf -ne 0
+   then echo "- cm flush failed (errno $rf) ($p: E130)"; rc=`expr $rc + 1`
+   fi
+
+echo $ex2 | diff - file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_2/file is wrong; $p ABORTING ($p: E42)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+echo $ex2 | diff - hardlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_2/hardlink is wrong; $p ABORTING ($p: E147)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+echo $ex2 | diff - symlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_2/symlink is wrong; $p ABORTING ($p: E43)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+echo $ex2 | diff - dir/file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_2/dir/file is wrong; $p ABORTING ($p: E44)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+########################################
+
+echo ""; echo "Here's what we have to work with:"
+
+echo ""
+ls -lAR $dir_1 $dir_1a $dir_2
+
+echo ""
+fts lsmount $dir_1 $dir_1a $dir_2
+if test $rf -ne 0
+   then echo "- fts lsmount failed (errno $rf); ($p: E125)"; rc=`expr $rc + 1`
+   fi
+
+echo ""
+cm whereis $dir_1 $dir_1a $dir_2
+if test $rf -ne 0
+   then echo "- cm whereis failed (errno $rf); ($p: E126)"; rc=`expr $rc + 1`
+   fi
+
+echo ""
+fts lsft -fileset $ftid_1 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts lsft failed (errno $rf); ($p: E5)"; rc=`expr $rc + 1`
+   fi
+
+echo ""
+fts lsft -fileset $ftid_2 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts lsft failed (errno $rf) ($p: E10)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Listing filesets in cell..."
+fts lsfldb
+
+echo ""; echo "Done with part 1."
+
+###############################################################################
+
+if test $do_clone = TRUE; then for confidence in dfs; do
+
+sync; sync; sleep 2
+echo ""; echo "Part 2: clone"; echo "============="; date
+
+echo ""; echo "Running cm lsstores..."
+cm lsstores; rf=$?
+if test $rf -ne 0
+   then echo "- cm lsstores failed (errno $rf) ($p: E45)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Cloning $ft_1..."
+fts clone $ft_1 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts clone failed (errno $rf) ($p: E46)"; rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+echo "Creating mount point for $ft_1.backup at $dir_1.backup..."
+fts crmount $dir_1.backup $ft_1.backup; rf=$?
+if test $rf -ne 0
+   then echo "- fts crmount failed (errno $rf) ($p: E47)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Accessing $ft_1.backup via $dir_1.backup (A4)..."
+
+cd /tmp; cm checkfilesets; cd $dir_1.backup; rf=$?
+if test `pwd` != $dir_1.backup -o $rf -ne 0
+   then echo "- cd $dir_1.backup failed (errno $rf, wd `pwd`) ($p: E48)"
+        rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+cm flush . * dir/*; rf=$?
+if test $rf -ne 0
+   then echo "- cm flush failed (errno $rf) ($p: E131)"; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.backup/file is wrong ($p: E49)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - hardlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.backup/hardlink is wrong ($p: E148)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - symlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.backup/symlink is wrong ($p: E50)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - dir/file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.backup/dir/file is wrong ($p: E51)."; rc=`expr $rc + 1`
+   fi
+
+diff -r $dir_1 $dir_1.backup > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.backup is wrong ($p: E52)."; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Accessing $ft_1 via $dir_1 (A5)..."
+
+cd /tmp; cm checkfilesets; cd $dir_1; rf=$?
+if test \( `pwd` != $dir_1 -a `pwd` != $dir_1a \) -o $rf -ne 0
+   then echo "- cd $dir_1 failed (errno $rf, wd `pwd`) ($p: E53)"
+        rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+nex1="This is fileset $ft_1, ID $ftid_1, in $dir_1 (X4).\n
+      But when a long train of abuses and usurpations, pursuing inevitably\n
+      the same object, evinces a desire to reduce them under absolute\n
+      despotism, it is their right, it is their duty, to throw off such\n
+      government, and to provide new guards for their future security."
+
+echo $nex1 >> newfile
+if test $rf -ne 0
+   then echo "- echo failed (errno $rf) ($p: E54)"; rc=`expr $rc + 1`
+   fi
+
+cm flush . * dir/*; rf=$?
+if test $rf -ne 0
+   then echo "- cm flush failed (errno $rf) ($p: E132)"; rc=`expr $rc + 1`
+   fi
+
+echo $nex1 | diff - newfile > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.backup/newfile is wrong ($p: E55)."; rc=`expr $rc + 1`
+   fi
+
+sync; sync; sleep 2
+
+echo ""; echo "Re-cloning using clonesys..."
+fts clonesys $ft_1 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts clonesys failed (errno $rf) ($p: E56)"; rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+echo ""; echo "Accessing $ft_1.backup via $dir_1.backup (A6)..."
+
+cd /tmp; cm checkfilesets; cd $dir_1.backup; rf=$?
+if test `pwd` != $dir_1.backup -o $rf -ne 0
+   then echo "- cd $dir_1.backup failed (errno $rf, wd `pwd`) ($p: E57)"
+        rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+cm flush . * dir/*; rf=$?
+if test $rf -ne 0
+   then echo "- cm flush failed (errno $rf) ($p: E133)"; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.backup/file is wrong ($p: E58)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - hardlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.backup/hardlink is wrong ($p: E149)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - symlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.backup/symlink is wrong ($p: E59)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - dir/file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.backup/dir/file is wrong ($p: E60)."; rc=`expr $rc + 1`
+   fi
+
+echo $nex1 | diff - newfile > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.backup/newfile is wrong ($p: E61)."; rc=`expr $rc + 1`
+   fi
+
+diff -r $dir_1 $dir_1.backup > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.backup is wrong ($p: E62)."; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Listing filesets in cell..."
+
+echo ""; echo "Done with part 2."; done
+else echo ""; echo ">>> Skipping part 2 (clone) <<<"
+fi # $do_clone = TRUE
+
+###############################################################################
+
+if test $do_move = TRUE; then for confidence in dfs; do
+
+sync; sync; sleep 2
+echo ""; echo "Part 3: move"; echo "============"; date
+
+echo ""; echo "Running cm lsstores..."
+cm lsstores; rf=$?
+if test $rf -ne 0
+   then echo "- cm lsstores failed (errno $rf) ($p: E63)"; rc=`expr $rc + 1`
+   fi
+
+if [ $do_within_server = TRUE ]
+then
+echo ""; echo "Moving $ft_1 from $aggr_1 to $aggr_2..."
+  fts move $ft_1 $dns_server_prefix$server_1 $aggr_1 \
+                 $dns_server_prefix$server_2 $aggr_2 $cav_arg
+elif [ $do_across_server = TRUE ]
+then
+echo ""; echo "Moving $ft_1 from $aggr_1 to $aggr_3..."
+  fts move $ft_1 $dns_server_prefix$server_1 $aggr_1 \
+                 $dns_server_prefix$server_2 $aggr_3 $cav_arg
+fi
+rf=$?
+if test $rf -ne 0
+   then echo "- fts move failed (errno $rf) ($p: E64)"; rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+echo ""; echo "Accessing $ft_1 via $dir_1 (A7)..."
+
+cd /tmp; cm checkfilesets; cd $dir_1; rf=$?
+if test \( `pwd` != $dir_1 -a `pwd` != $dir_1a \) -o $rf -ne 0
+   then echo "- cd $dir_1 failed (errno $rf, wd `pwd`) ($p: E65)"
+        rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+cm flush . * dir/*; rf=$?
+if test $rf -ne 0
+   then echo "- cm flush failed (errno $rf) ($p: E134)"; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - file > /dev/null 2> /dev/null
+   if test $? -ne 0
+   then echo "- $dir_1/file is wrong ($p: E66)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - hardlink > /dev/null 2> /dev/null
+   if test $? -ne 0
+   then echo "- $dir_1/hardlink is wrong ($p: E150)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - symlink > /dev/null 2> /dev/null
+   if test $? -ne 0
+   then echo "- $dir_1/symlink is wrong ($p: E67)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - dir/file > /dev/null 2> /dev/null
+   if test $? -ne 0
+   then echo "- $dir_1/dir/file is wrong ($p: E68)."; rc=`expr $rc + 1`
+   fi
+
+echo $nex1 | diff - newfile > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/newfile is wrong ($p: E69)."; rc=`expr $rc + 1`
+   fi
+
+nex1="This is fileset $ft_1, ID $ftid_1, in $dir_1 (X5).\n
+      And as we wind on down the road, our shadows taller than our souls,\n
+      there walks a lady we all know, who shines white light and wants to\n
+      show how everything still turns to gold; and if you listen very hard,\n
+      the tune will come to you at last, when all are one and one is all,\n
+      to be a rock and not to roll..."
+
+echo $nex1 > newfile
+if test $rf -ne 0
+   then echo "- echo failed (errno $rf) ($p: E70)"; rc=`expr $rc + 1`
+   fi
+
+sync; sync; sleep 2
+
+echo ""; echo "Moving $ft_1 from $aggr_2 back to $aggr_1..."
+if [ $do_within_server = TRUE ]
+then
+ fts move $ftid_1 $dns_server_prefix$server_2 $aggr_2 \
+                  $dns_server_prefix$server_1 $aggr_1 $cav_arg
+elif [ $do_across_server = TRUE ]
+then
+ fts move $ftid_1 $dns_server_prefix$server_2 $aggr_3 \
+                  $dns_server_prefix$server_1 $aggr_1 $cav_arg
+fi
+rf=$?
+if test $rf -ne 0
+   then echo "- fts move failed (errno $rf) ($p: E71)"; rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+cm checkfilesets
+
+if test `pwd` != $dir_1 -a `pwd` != $dir_1a
+   then echo "- current directory is not $dir_1 (wd `pwd`) ($p: E159)"
+        rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+cm flush . * dir/*; rf=$?
+if test $rf -ne 0
+   then echo "- cm flush failed (errno $rf) ($p: E135)"; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/file is wrong ($p: E72)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - hardlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/hardlink is wrong ($p: E151)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - symlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/symlink is wrong ($p: E73)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - dir/file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/dir/file is wrong ($p: E74)."; rc=`expr $rc + 1`
+   fi
+
+echo $nex1 | diff - newfile > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/newfile is wrong ($p: E75)."; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Done with part 3."; done
+else echo ""; echo ">>> Skipping part 3 (move) <<<"
+fi # $do_move = TRUE
+
+###############################################################################
+
+if test $do_rename = TRUE; then for confidence in dfs; do
+
+sync; sync; sleep 2
+echo ""; echo "Part 4: rename"; echo "=============="; date
+
+echo ""; echo "Running cm lsstores..."
+cm lsstores; rf=$?
+if test $rf -ne 0
+   then echo "- cm lsstores failed (errno $rf) ($p: E76)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Renaming $ft_1 to $ft_1.renamed..."
+fts rename $ft_1 $ft_1.renamed $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts rename failed (errno $rf) ($p: E77)"; rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+echo "Creating mount point for $ft_1.renamed at $dir_1.renamed..."
+fts crmount $dir_1.renamed $ft_1.renamed; rf=$?
+if test $rf -ne 0
+   then echo "- fts crmount failed (errno $rf) ($p: E78)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Accessing $ft_1.renamed via $dir_1.renamed (A8)..."
+
+cd /tmp; cm checkfilesets;  cd $dir_1.renamed; rf=$?
+if test `pwd` != $dir_1.renamed -o $rf -ne 0
+   then echo "- cd $dir_1 failed (errno $rf, wd `pwd`) ($p: E79)"
+        rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+cm flush . * dir/*; rf=$?
+if test $rf -ne 0
+   then echo "- cm flush failed (errno $rf) ($p: E136)"; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.renamed/file is wrong ($p: E80)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - hardlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.renamed/hardlink is wrong ($p: E152)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - symlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.renamed/symlink is wrong ($p: E81)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - dir/file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.renamed/dir/file is wrong ($p: E82)."; rc=`expr $rc + 1`
+   fi
+
+echo $nex1 | diff - newfile > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.renamed/newfile is wrong ($p: E83)."; rc=`expr $rc + 1`
+   fi
+
+nex1="This is fileset $ft_1.renamed, ID $ftid_1, in $dir_1.renamed (X6).\n
+      C is a general-purpose programming language which features economy of\n
+      expression, modern control flow and data structures, and a rich set of\n
+      operators. C is not a very 'high-level' language, nor a 'big' one, and\n
+      is not specialized to any particular area of application. But its\n
+      absence of restrictions and its generality make it more convenient and\n
+      effective for many tasks than supposedly more powerful lanuages.\n
+                        - K & R, Preface to the First Edition"
+
+echo $nex1 > newfile
+if test $rf -ne 0
+   then echo "- echo failed (errno $rf) ($p: E84)"; rc=`expr $rc + 1`
+   fi
+
+cm flush . * dir/*; rf=$?
+if test $rf -ne 0
+   then echo "- cm flush failed (errno $rf) ($p: E137)"; rc=`expr $rc + 1`
+   fi
+
+echo $nex1 | diff - newfile > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1.renamed/newfile is wrong ($p: E85)."; rc=`expr $rc + 1`
+   fi
+
+sync; sync; sleep 2
+
+echo ""; echo "Renaming $ft_1.renamed back to $ft_1..."
+fts rename $ft_1.renamed $ft_1 $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts rename failed (errno $rf) ($p: E86)"; rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+echo ""; echo "Accessing $ft_1 via $dir_1 (A9)..."
+
+cd /tmp; cm checkfilesets; cd $dir_1; rf=$?
+if test \( `pwd` != $dir_1 -a `pwd` != $dir_1a \) -o $rf -ne 0
+   then echo "- cd $dir_1 failed (errno $rf, wd `pwd`) ($p: E87)"
+        rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+cm flush . * dir/*; rf=$?
+if test $rf -ne 0
+   then echo "- cm flush failed (errno $rf) ($p: E138)"; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/file is wrong ($p: E88)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - hardlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/hardlink is wrong ($p: E153)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - symlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/symlink is wrong ($p: E89)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - dir/file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/dir/file is wrong ($p: E90)."; rc=`expr $rc + 1`
+   fi
+
+echo $nex1 | diff - newfile > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_1/newfile is wrong ($p: E91)."; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Done with part 4."; done
+else echo ""; echo ">>> Skipping part 4 (rename) <<<"
+fi # $do_rename = TRUE
+
+###############################################################################
+
+if test $do_dump = TRUE; then for confidence in dfs; do
+
+sync; sync; sleep 2
+echo ""; echo "Part 5.1: dump "; echo "========================"; date
+
+echo ""; echo "Running cm lsstores..."
+cm lsstores; rf=$?
+if test $rf -ne 0
+   then echo "- cm lsstores failed (errno $rf) ($p: E92)"; rc=`expr $rc + 1`
+   fi
+
+rm -rf $dumpfile
+
+echo ""; echo "Dumping $ft_1 to $dumpfile..."
+fts dump -fileset $ft_1 -time 0 -file $dumpfile $cav_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts dump failed (errno $rf) ($p: E93)"; rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+sync; sync; sleep 2
+
+if test $do_restore = TRUE; then for confidence in dfs; do
+
+sync; sync; sleep 2
+echo ""; echo "Part 5.2: restore "; echo "========================"; date
+
+echo ""; echo "Restoring (and creating) $ft_3 from $dumpfile..."
+if [ $do_across_server = TRUE ]
+then
+  fts restore $ft_3 $dns_server_prefix$server_3 $aggr_3 $dumpfile $cav_arg; rf=$?
+elif [ $do_within_server = TRUE ]
+then
+  fts restore $ft_3 $dns_server_prefix$server_3 $aggr_2 $dumpfile $cav_arg; rf=$?
+else
+  fts restore $ft_3 $dns_server_prefix$server_3 $aggr_1 $dumpfile $cav_arg; rf=$?
+fi
+if test $rf -ne 0
+   then echo "- fts restore failed (errno $rf) ($p: E94)"; rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+ftid_3=`fts lsfldb $ft_3 $cav_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+echo "Fileset $ft_3 ID is $ftid_3."
+if test "$ftid_3" -le 0
+   then echo "- fileset ID is unreasonable ($ftid_3) ($p: E95)"
+        rc=`expr $rc + 1`; cleanup
+        echo "BAILING OUT of this part"; continue
+   fi
+
+sync; sync; sleep 2
+
+if test $do_quota = TRUE
+then
+  fts setquota -fileset $ft_3 -size 4000 $cav_arg; rf=$?
+  if test $rf -ne 0
+     then echo "- fts setquota failed (errno $rf) ($p: E96)"; rc=`expr $rc + 1`
+     fi
+
+  sz=`fts lsquota -fileset $ft_3 | tail -1 | awk '{print $2}'`
+  if test $sz -ne 4000
+     then echo "- quota is wrong ($p: E97)"; rc=`expr $rc + 1`
+     fi
+fi
+
+echo ""; echo "Creating mount point for $ft_3 at $dir_3..."
+fts crmount $dir_3 $ft_3; rf=$?
+if test $rf -ne 0
+   then echo "- fts crmount failed (errno $rf) ($p: E98)"; rc=`expr $rc + 1`
+   fi
+
+setFsetRootProt $dir_3 $testuid "E182"
+
+echo ""; echo "Accessing $ft_3 via $dir_3 (A10)..."
+
+cd /tmp;  cm checkfilesets; cd $dir_3; rf=$?
+if test `pwd` != $dir_3 -o $rf -ne 0
+   then echo "- cd $dir_3 failed (errno $rf, wd `pwd`) ($p: E99)"
+        rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+cm flush . * dir/*; rf=$?
+if test $rf -ne 0
+   then echo "- cm flush failed (errno $rf) ($p: E139)"; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_3/file is wrong ($p: E100)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - hardlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_3/hardlink is wrong ($p: E154)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - symlink > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_3/symlink is wrong ($p: E101)."; rc=`expr $rc + 1`
+   fi
+
+echo $ex1 | diff - dir/file > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_3/dir/file is wrong ($p: E102)."; rc=`expr $rc + 1`
+   fi
+
+echo $nex1 | diff - newfile > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_3/newfile is wrong ($p: E103)."; rc=`expr $rc + 1`
+   fi
+
+diff -r $dir_1 $dir_3 > /dev/null 2> /dev/null
+if test $? -ne 0
+   then echo "- $dir_3 is wrong ($p: E104)."; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Done with part 5.2."; done
+else echo ""; echo ">>> Skipping part 5.2 (restore) <<<"
+fi # $do_restore = TRUE
+echo ""; echo "Done with part 5.1."; done
+else echo ""; echo ">>> Skipping part 5 (dump/restore) <<<"
+fi # $do_dump = TRUE
+
+rm -f $dumpfile
+
+###############################################################################
+
+if test $do_quota = TRUE; then for confidence in dfs; do
+
+for loop in 1 2
+do
+if [ $loop -eq 1 ]
+ then
+  echo ""; echo "testing fts quota on $ft_1 in the first loop"
+  ft_quota=$ft_1
+  dir_quota=$dir_1
+  dir_quota_a=$dir_1a
+  ftid_quota=$ftid_1
+ else
+  echo ""; echo "testing fts quota on $ft_4 in the second loop"
+  echo ""; echo "Creating fileset $ft_4..."
+  fts create $ft_4 $dns_server_prefix$server_1 $aggr_1 $cav_arg; rf=$?
+  if test $rf -ne 0
+    then echo "- fts create failed (errno $rf); $p ABORTING ($p: E1)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+  echo ""; echo "Creating mount point $dir_4 for $ft_4..."
+  fts crmount $dir_4 $ft_4; rf=$?
+  if test $rf -ne 0
+    then echo "- fts crmount failed (errno $rf); $p ABORTING ($p: E11)"
+        rc=`expr $rc + 1`; cleanup
+   fi
+
+  setFsetRootProt $dir_4 $testuid "E183"
+
+  ft_quota=$ft_4
+  dir_quota=$dir_4
+  dir_quota_a=$dir_4
+  ftid_quota=`fts lsfldb $ft_quota $cav_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+ fi
+
+sync; sync; sleep 2
+echo ""; echo "Part 6.$loop: quotas"; echo "==============="; date
+
+echo ""; echo "Running cm lsstores..."
+cm lsstores; rf=$?
+if test $rf -ne 0
+   then echo "- cm lsstores failed (errno $rf) ($p: E105)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "preparing the directory for quota testing"
+for dir_prepare in 1 2 3 4 5 6 7 8 9 10
+ do
+   touch $dir_quota/dir_prepare.$dir_prepare
+ done
+echo ""; echo "deleting files we no longer need..."
+rm -rf $dir_quota/*
+
+echo ""; echo "Creating tmp files..."
+
+one_g=one_g.$$
+four_g=four_g.$$
+eight_g=eight_g.$$
+
+cd /tmp;  cm checkfilesets; cp /dev/null $one_g
+while
+   z=`cat $one_g | wc -c`; z=`expr $z`
+   test $z -lt $quota_granularity
+   do
+   echo 123456789012345678901234567890123456789012345678901234567890123 >> $one_g
+   done
+
+cat $one_g $one_g $one_g $one_g > $four_g
+cat $four_g $four_g > $eight_g
+
+echo ""; echo "Accessing $ft_quota via $dir_quota (A11)..."
+
+cd /tmp; cm checkfilesets; cd $dir_quota; rf=$?
+if test \( `pwd` != $dir_quota -a `pwd` != $dir_quota_a \) -o $rf -ne 0
+   then echo "- cd $dir_quota failed (errno $rf, wd `pwd`) ($p: E108)"
+        rc=`expr $rc + 1`
+        echo "BAILING OUT of this part"; continue
+   fi
+
+for i in 1 2 3
+   do
+
+   orig_sz=`fts lsquota -fileset $ft_quota | tail -1 | awk '{print $3}'`
+   if test $orig_sz -le 0
+      then echo "- current quota is unreasonable ($orig_sz) ($p: E156)"
+           rc=`expr $rc + 1`; cleanup
+           echo "BAILING OUT of this loop"; break
+      fi
+
+   if test $i -eq 1
+      then
+      z=`expr $quota_granularity \* 7`; quota=`expr $orig_sz + $z / 1024`
+      times=8; file=$eight_g
+   elif test $i -eq 2
+      then
+      z=`expr $quota_granularity \* 3`; quota=`expr $orig_sz + $z / 1024`
+      times=4; file=$four_g
+   elif test $i -eq 3
+      then
+      z=`expr $quota_granularity \* 7`; quota=`expr $orig_sz + $z / 1024`
+      times=8; file=$eight_g
+   fi
+
+   echo ""; echo "Case $i: setting quota on $ft_quota to $quota KB..."
+   fts setquota -fileset $ftid_quota -size $quota $cav_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- fts setquota failed (errno $rf) ($p: E106)"
+           rc=`expr $rc + 1`
+      fi
+
+   z=`fts lsquota -fileset $ft_quota | tail -1 | awk '{print $2}'`
+   if test $z -ne $quota
+      then echo "- quota is wrong ($z, not $quota) ($p: E107)"
+           rc=`expr $rc + 1`
+           echo "BAILING OUT of this iteration"; continue
+      fi
+
+   echo ""; echo "Expect this copy ($file) to fail..."
+   cp /tmp/$file . # $? is meaningless, since the CM will keep trying in case
+                   # of a failed store, and cp will have a return code of zero.
+   diff /tmp/$file ./$file > /dev/null 2> /dev/null; rf=$?
+   if test $rf -eq 0
+      then echo "- copy worked unexpectedly ($p: E109)"; rc=`expr $rc + 1`
+      fi
+
+   rm -f $file
+
+   new_sz=`fts lsquota $dir_quota | tail -1 | awk '{print $3}'`
+   if test $new_sz -le 0
+      then echo "- current quota is unreasonable ($new_sz) ($p: E157)"
+           rc=`expr $rc + 1`; cleanup
+           echo "BAILING OUT of this iteration"; continue
+      fi
+
+   if test $new_sz -ne $orig_sz
+      then echo "- quota-used is wrong ($new_sz, not $orig_sz) ($p: E110)"
+           rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Expect the last copy (iteration $times) to fail..."
+   n=1
+   until test $n -gt $times
+       do
+       echo ""; echo "Iteration $n..."
+       ( cd /tmp; tar cf - $one_g ) | tar xf - ; mv $one_g one_g.$n
+       diff /tmp/$one_g ./one_g.$n > /dev/null 2> /dev/null; rf=$?
+       if test $n -lt $times -a $rf -ne 0
+          then echo "- copy failed unexpectedly ($p: E111)"; rc=`expr $rc + 1`
+          elif test $n -eq $times -a $rf -eq 0
+          then echo "- copy worked unexpectedly (errno $rf) ($p: E112)"
+               rc=`expr $rc + 1`
+          fi
+       n=`expr $n + 1`
+       done
+
+   echo ""; echo "Done with $times iterations."
+
+   z=`fts lsquota -fileset $ft_quota | tail -1 | awk '{print $3}'`
+   if test $z -ne $quota
+      then echo "- quota-used is wrong ($z, not $quota) ($p: E113)"
+           rc=`expr $rc + 1`
+      fi
+
+   rm -f one_g.*
+
+   z=`fts lsquota $dir_quota | tail -1 | awk '{print $3}'`
+   if test $z -ne $orig_sz
+      then echo "- quota-used is wrong ($z, not $orig_sz) ($p: E114)"
+           rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Running cm lsstores..."
+   cm lsstores; rf=$?
+   if test $rf -ne 0
+      then echo "- cm lsstores failed (errno $rf) ($p: E158)"; rc=`expr $rc + 1`
+      fi
+
+   done
+
+echo ""; echo "Done with part 6."; done; done
+else echo ""; echo ">>> Skipping part 6 (quotas) <<<"
+fi # $do_quota = TRUE
+
+rm -f /tmp/$one_g /tmp/$four_g /tmp/$eight_g
+
+###############################################################################
+
+alldone=1
+cleanup
+
+###############################################################################
+
+

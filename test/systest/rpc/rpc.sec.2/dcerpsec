@@ -1,0 +1,140 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: dcerpsec,v $
+# Revision 1.1.33.2  1996/02/17  23:28:04  marty
+# 	Update OSF copyright year
+# 	[1996/02/17  22:45:12  marty]
+#
+# Revision 1.1.33.1  1995/12/11  22:43:39  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/2  1994/08/03  20:46 UTC  bissen
+# 	merge from HPDCE01
+# 	[1995/12/11  22:20:28  root]
+# 
+# Revision 1.1.31.3  1993/10/27  14:53:28  cmckeen
+# 	Added the -update option to the rgy_edit commands
+# 	[1993/10/27  14:52:15  cmckeen]
+# 
+# Revision 1.1.31.2  1993/09/16  15:02:59  cmckeen
+# 	Changes made to reflect new install tree structure
+# 	[1993/09/16  15:02:34  cmckeen]
+# 
+# Revision 1.1.31.1  1993/09/09  19:12:40  cmckeen
+# 	 HP's TET'ized version
+# 	[1993/09/09  19:11:39  cmckeen]
+# 
+# Revision 1.1.2.2  1993/08/16  14:15:30  eheller
+# 	Initial release.
+# 	[1993/07/23  17:50:31  eheller]
+# 
+# 	    Loading drop DCE1_0_2FNL
+# 	[1993/05/04  22:23:05  mgm]
+# 
+# Revision 1.1.2.2  1993/03/25  19:19:09  eperkins
+# 	Sample test driver, initial version.
+# 	[1993/03/25  19:18:32  eperkins]
+# 
+# $EndLog$
+
+ iclist="ic1"
+ ic1="tp1"
+ tet_testlist="tp1"
+ tet_startup="startup"
+ tet_cleanup=""
+
+ startup()
+ {
+
+  #
+  # Cleanup any files which are hanging around
+  #
+
+  if [ -f $RPCSEC2_SRV_KEYTAB_DIRPATH/rpc.sec.2_srv.keytab ]
+   then
+    rm $RPCSEC2_SRV_KEYTAB_DIRPATH/rpc.sec.2_srv.keytab
+    myecho "Removed existing rpc.sec.2_srv.keytab"
+  fi
+  if [ -f $RPCSEC2_LOG_DIRPATH/rpc.sec.2_cli.keytab ]
+   then
+    rm $RPCSEC2_LOG_DIRPATH/rpc.sec.2_cli.keytab
+    myecho "Removed existing rpc.sec.2_cli.keytab"
+  fi
+
+  #
+  # Call the setup routine
+  #
+
+  tet_setblock
+  $RPCSEC2_BIN_DIRPATH/rpc.sec.2_setup.sh
+  tet_setblock
+
+  #
+  # change domain aspects for rpc.sec.2.cli
+  # and for rpc.sec.2.srv
+  #
+
+  rgy_edit -update < $RPCSEC2_BIN_DIRPATH/rpc.sec.2_rgy_edit.cli.sh
+  rgy_edit -update < $RPCSEC2_BIN_DIRPATH/rpc.sec.2_rgy_edit.srv.sh
+ }
+
+ myecho()
+ {
+  tet_infoline $1
+  echo $1
+ }
+
+ tp1()
+ {
+
+  INFINITE="false"
+  TOTAL_OPS=0
+
+  if [ "$HOURS" -gt 0 ]
+   then
+    START_DT=`date`
+    NOW=`current_tm`
+    HOURS=`expr $HOURS "*" 3600`
+    RUN_T=`expr $HOURS + $NOW`
+    DELTA=0
+   else
+    HOURS=0
+    RUN_T=0
+    DELTA=0
+  fi
+
+  tet_setblock
+  $RPCSEC2_BIN_DIRPATH/rpc.sec.2_runtest.sh
+  tet_setblock
+
+  if [ $? -eq 0 ]
+   then
+    tet_result PASS
+   else
+    tet_result FAIL
+  fi
+ }
+
+ cleanup()
+ {
+  rm $RPCSEC2_SRV_KEYTAB_DIRPATH/rpc.sec.2_srv.keytab
+  rm $RPCSEC2_LOG_DIRPATH/rpc.sec.2_cli.keytab
+ }
+	
+ myecho()
+ {
+  tet_infoline $1
+  echo $1
+ }
+
+
+. $TET_ROOT/rpc/ts/dcerpsec/rpc.sec.2.conf
+. $TET_ROOT/profile.dcest
+. $TET_ROOT/rpc/tetexec.cfg
+. $TET_ROOT/lib/xpg3sh/tcm.sh

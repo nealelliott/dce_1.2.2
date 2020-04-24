@@ -1,0 +1,92 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: clientwrapper,v $
+# Revision 1.1.9.2  1996/03/09  20:51:25  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:12  marty]
+#
+# Revision 1.1.9.1  1995/12/11  22:43:20  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/29  19:37 UTC  bell_d
+# 	Merge in changes done by others
+# 
+# 	HP revision /main/HPDCE01/2  1994/03/30  16:08 UTC  truitt
+# 
+# 	HP revision /main/HPDCE01/truitt_junk/1  1994/03/30  15:58 UTC  truitt
+# 	Update test to latest tet version
+# 
+# 	HP revision /main/HPDCE01/1  1994/02/01  18:05  giza
+# 	merge kk & hpdce01
+# 	[1995/12/11  22:33:30  root]
+# 
+# Revision 1.1.2.2  1993/08/24  18:48:58  giza
+# 	Initial version.
+# 	[1993/08/24  18:48:32  giza]
+# 
+# $EndLog$
+# client wrapper
+
+export HOST=$(uname -n)
+integer status=0 n=0
+WORKDIR=/tmp/dcerpcrun
+
+rm -f $WORKDIR/client.log
+chmod +x $WORKDIR/dcerpcrun_client
+
+case `uname -s` in
+
+    AIX   ) RSHELL=rsh
+            ;;
+
+    OSF1  ) RSHELL=rsh
+            ;;
+
+    SUNOS ) RSHELL=rsh
+            ;;
+
+    HP-UX ) RSHELL=remsh
+            ;;
+esac
+
+ps -eaf | grep clientwait | grep -v grep > $WORKDIR/ps.out
+(( $? )) &&
+{
+    print -u2 "Error: synchronization process not running, exiting..."
+    exit 1
+}
+
+exec 3< $WORKDIR/ps.out
+
+while (( ! $status ))
+do
+    read -u3 a b j
+    print "     "$a $b $j
+    ps -eaf | grep clientwait | grep -v grep > $WORKDIR/ps.out
+    status=$?
+    sleep 1
+done
+rm -f $WORKDIR/ps.out
+
+$RSHELL $SERVER -n "/bin/date \"+%M%S%n\" >$WORKDIR/client_$HOST.start" > $WORKDIR/foo
+ENDPOINT=$($RSHELL $SERVER -n cat $ENDPOINT)
+while (( $n < $CONCURRENT ))
+do
+    $WORKDIR/dcerpcrun_client $ENDPOINT $LOOPS &
+    pids="$pids $!"
+    n=n+1
+done
+
+print $pids >$WORKDIR/pids
+for pid in $pids
+do
+    wait $pid
+done
+rm -f $WORKDIR/clientwait.kill 
+exec 3<&-

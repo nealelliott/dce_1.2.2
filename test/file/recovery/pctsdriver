@@ -1,0 +1,182 @@
+#! /afs/tr/proj/tools/bin/perl 
+
+#
+# @OSF_COPYRIGHT@
+#
+# Copyright (C) 1992 Transarc Corporation - All rights reserved
+# 
+
+#
+# perldriver - driver to test episode recovery for various file systems
+# operations [ done by the PCTS tests ]
+#
+
+#
+# HISTORY
+# $Log: pctsdriver,v $
+# Revision 1.1.2.2  1993/01/28  19:47:02  shl
+# 	Transarc delta: rajesh-ot6686-pcts-recovery-test-driver 1.1
+# 	  Selected comments:
+# 	    Code and debug scripts to drive PCTS tests and checkaggr tool.
+# 	    The main driver script. A perl script
+# 	[1993/01/27  23:11:46  shl]
+#
+# $EndLog$
+#
+
+$AGGRBASE = "epi";
+
+$NUMSETS = $ENV{'NUMSETS'} || 1;
+$DRIVERDIR = $ENV{'DRIVERDIR'} || $ENV{'PWD'};
+$PCTSTESTDIR= $ENV{'PCTSTESTDIR'} || $ENV{'PWD'};
+
+$SRCAGGR = $ENV{'SRCDEV'} || "${AGGRBASE}a";
+$COPYAGGR = $ENV{'SCRATCHDEV1'} || "${AGGRBASE}b";
+$BACKUPAGGR = $ENV{'SCRATCHDEV2'} || "${AGGRBASE}c";
+$PTESTER = $ENV{'PTESTER'} || `whoami`;
+# not needed for standalone episode
+#$TESTER_DCEPASSWD = $ENV{'TESTER_DCEPASSWD'} || $TESTER;
+
+$REPEATCOUNT = $ENV{'NUMTIMES'} || -1 ;
+
+($ENV{'SINGLESTEP'}) ? 	($SINGLESTEP=1) : ();
+($ENV{'SINGLESTEP_ONERROR'}) ? ($SINGLESTEP_ONERROR=1) : () ;
+
+if ( $ENV{'PDEBUG'} eq "1" ) {
+	$debug=1;
+}
+
+$PCTSTESTDRIVER = "$DRIVERDIR/runpctstest";
+$CHECKAGGRTOOL="$DRIVERDIR/checkaggr";
+$PCTSLOGDIR = $ENV{'PCTSLOGDIR'} || "/opt/pcts";
+$BADAGGRDIR = $ENV{'BADAGGRDIR'} || "/tmp/pcts_badaggr";
+
+$minIOCount=1;
+($SINGLESTEP ) ? ($maxIOCount = 1) : ($maxIOCount = 100);
+
+if ( ! -d $BADAGGRDIR ) { 
+        mkdir($BADAGGRDIR,0755) ||
+	die("unable to create bad aggregate directory $BADAGGRDIR",
+		 __FILE__, __LINE__, $!	);
+}
+
+$date=sprintf("%s",join('-',(localtime())[5,4,3]));
+$BADAGGRDIR = "$BADAGGRDIR/$date";
+if ( ! -d $BADAGGRDIR ) { 
+        mkdir($BADAGGRDIR,0755) ||
+	die("unable to create bad aggregate directory $BADAGGRDIR",
+		 __FILE__, __LINE__, $!	);
+}
+
+$ENV{'NUMSETS'} = $NUMSETS;
+$ENV{'DRIVERDIR'} = $DRIVERDIR;
+$ENV{'PCTSTESTDIR'} = $PCTSTESTDIR;
+$ENV{'SRCDEV'} = $SRCAGGR;
+$ENV{'SCRATCHDEV1'} = $COPYAGGR;
+$ENV{'SCRATCHDEV2'} = $BACKUPAGGR;
+$ENV{'PCTSTESTDRIVER'} = $PCTSTESTDRIVER;
+### maybe deleted ? $ENV{'PCTSTEST'} = $PCTSTEST;
+$ENV{'PTESTER'} = $PTESTER;
+$ENV{'PCTSLOGDIR'} = $PCTSLOGDIR;
+
+# not needed for standalone episode
+# $ENV{'TESTER_DCEPASSWD'} = $TESTER_DCEPASSWD;
+
+$ENV{'NUMTIMES'} = $REPEATCOUNT;
+
+print "*** $0: ENV is \n";
+system("env"); 
+
+print "*** $0: Forking child 1 \n" if $debug;
+$id1=fork();
+if ( !$id1 ) {
+#	# child
+	&runpctstest();
+	exit;
+} else {
+	#parent
+	print "*** $0: Forking child 2 \n" if $debug;
+	$id2=fork();
+	if ( !$id2 ) {
+		# Give time for pcts tests to start.
+		sleep(60);
+		print "@@@ $0: checkaggr about to start \n";	
+		&checkaggr();
+		print "@@@ $0: checkaggr returned \n";
+		exit;
+	} else {
+	    print "*** $0: Checkaggr pid is $id2 \n" if $debug;
+		print "*** $0: Waiting for $id1 \n" if $debug;
+		$wait=waitpid($id1,0);
+	    print "*** $0: $id1 completed \n" if $debug;
+#		sleep(20);
+	    print "*** $0: Sending SIGUSR1 to $id2 \n" if $debug;
+		kill('SIGUSR1',$id2);
+		sleep(20);
+		waitpid($id2,0);
+	}
+}
+
+sub loop {
+	for($i=0;$i < 2;$i++) {
+	 	print "%%% $0: i is $i \n";
+		sleep(120);
+	}
+}
+
+sub checkaggr {
+	local($IOCount);
+
+	sub settermination {
+       local($sig)=@_;
+       print "@@@ $0: Caught SIG$sig. Will terminate after current cycle is over.\n";
+       #
+       # If checkaggr is waiting for aggregate to freeze after n i/o's
+       # it will wait forever, as the test causing i/o's has finished.
+       # Hence freeze aggregate now, so that checkaggr can continue
+       #
+	   print "@@@ $0: freeze aggregate $SRCAGGR \n";
+	   system("perl $CHECKAGGRTOOL -srcAggr $SRCAGGR -freezeOnly");
+       $terminate = 1;
+    }
+
+    $terminate = 0;
+    $SIG{'USR1'} = 'settermination';
+
+	if ( $ENV{'PDEBUG'} eq "1" ) {
+		$debug=1;
+	}
+	sleep(60);
+	print "@@@ $0: starting checkaggr" ;
+	srand(time());
+	for( $i = 1; $terminate != 1 ; $i++ ) {
+		print  "@@@ $0: checkaggr iteration $i \n"; # if $debug;
+		$IOCount = int( rand( $maxIOCount - $minIOCount + 1 ) ) + $minIOCount;
+	    print "@@@ $0: execute $CHECKAGGRTOOL -srcAggr $SRCAGGR -backupAggr $BACKUPAGGR -copyAggr $COPYAGGR -noSalvage -badAggrDir $BADAGGRDIR -badAggrNamePrefix pctstest  -log $BADAGGRDIR/checkaggr.log.$$-$i -numIOBeforeFreeze $IOCount -leaveFrozen\n";
+
+		$code=system("perl $CHECKAGGRTOOL -srcAggr $SRCAGGR -backupAggr $BACKUPAGGR -copyAggr $COPYAGGR -noSalvage -badAggrDir $BADAGGRDIR -badAggrNamePrefix pctstest.$$-$i -log $BADAGGRDIR/checkaggr.log.$$-$i -numIOBeforeFreeze $IOCount -leaveFrozen");
+		if ( $code != 0 ) {
+			if ( $SINGLESTEP_ONERROR ) {
+ 				print "@@@ $0: $CHECKAGGRTOOL iteration $i returned error ... \n";
+				print "switching to single step mode \n";
+				$maxIOCount = 1;
+			}		
+		}
+	}
+	print "@@@ $0: Unfreeze aggregate $SRCAGGR \n";
+	system("perl $CHECKAGGRTOOL -srcAggr $SRCAGGR -unfreezeOnly");
+    print "@@@ $0: terminating after checking aggregate $i times \n";
+}
+
+sub runpctstest  {
+	print "%%% $0: runpctstest starting \n" if $debug;
+	system("su $PTESTER -f -c $PCTSTESTDRIVER");
+}
+
+
+__END__
+
+# Emacs Variable settings.
+# Local Variables:
+# tab-width:4
+# End:

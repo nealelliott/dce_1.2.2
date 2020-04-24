@@ -1,0 +1,107 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: Makefile_hello_svc,v $
+# Revision 1.1.4.2  1996/02/18  18:26:20  marty
+# 	Update OSF copyright years
+# 	[1996/02/18  17:48:25  marty]
+#
+# Revision 1.1.4.1  1995/12/08  20:54:54  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/08  20:50:03  root]
+# 
+# Revision 1.1.2.1  1994/06/14  19:58:34  weir
+# 	DCE 1.1 Beta check-in
+# 	[1994/06/14  16:15:49  weir]
+# 
+# $EndLog$
+# 
+# 
+#******************************************************************************
+# Makefile for hello_svc
+# NOTE:  This Makefile is a generic one, suitable for a typical application
+# developer.  You should modify it to suit your particular environment.
+# 
+# 
+#******************************************************************************
+
+
+DCEROOT = /opt/dcelocal
+
+# SAMS reference
+SAMS = sams
+
+# libraries
+LIBS = -ldce
+# -lsvc 
+
+# include dirs (some compilers need -I. to pick up local header files)
+INC = -I. -I$(DCEROOT)/share/include
+
+#
+# NOTE: The following five lines are needed on HPUX...
+#
+# LDFLAGS =-Wl,-Bimmediate,-Bnonfatal
+# IDLCC=-cc_cmd 'c89 -c'
+# IDLCOPT=-cc_opt -D_HPUX_SOURCE
+# CDEFS = -D_HPUX_SOURCE
+# CC = c89
+#
+
+# CC flags
+#
+CFLAGS = $(CDEFS) $(INC)
+
+# Link flags
+# LFLAGS = -L<dce-root-dir>/dce/export/at386/usr/lib
+
+HELLO = hello_svc
+
+HELLO_MAIN = $(HELLO)
+HELLO_MAINC = $(HELLO_MAIN).c
+HELLO_MAINO = $(HELLO_MAIN).o
+
+# The following is for the objects that contain the serviceability table
+#  and messages, respectively.
+SVCMSGO = dcehelmsg.o
+SVCSVCO = dcehelsvc.o
+
+# "utils" module
+# UTILS = utils
+# UTILSC = $(UTILS).c
+# UTILSO = $(UTILS).o
+
+# all the objects to be linked
+HELLO_OBJ = $(HELLO_MAINO) $(SVCMSGO) $(SVCSVCO)
+
+# sams-generated files
+SVC_FILES = dcehelmsg.h dcehelmsg.c dcehelmac.h dcehelsvc.c dcehelsvc.h dcehel.cat \
+	dcehel.msg
+
+# targets & dependencies
+
+
+default: all
+
+all: $(HELLO_MAIN)
+
+$(HELLO_MAIN): $(HELLO_OBJ)
+	$(CC) $(CFLAGS) $(LFLAGS) $(LDFLAGS) -o $(HELLO) $(HELLO_OBJ) $(LIBS)
+
+$(HELLO_OBJ): $(SVC_FILES)
+
+$(SVC_FILES): hel.sams
+	$(SAMS) hel.sams
+
+clean:
+	rm -f $(HELLO_OBJ) $(SVC_FILES) dcehelmsg.idx
+
+rmtarget:
+	rm -f $(HELLO)
+
+clobber: clean rmtarget
+	rm -f dcehelmsg.man dcehelmsg.sgm dcehelmsg.idx

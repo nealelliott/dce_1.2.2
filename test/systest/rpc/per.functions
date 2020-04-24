@@ -1,0 +1,241 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: per.functions,v $
+# Revision 1.1.13.2  1996/03/11  02:45:22  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:07:55  marty]
+#
+# Revision 1.1.13.1  1995/12/11  22:01:01  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:59:55  root]
+# 
+# Revision 1.1.11.4  1994/07/08  18:17:59  petero
+# 	Add paramters to test #4, was failing with insufficient arguments
+# 	[1994/07/08  15:19:19  petero]
+# 
+# Revision 1.1.11.3  1994/03/08  21:23:26  pellis
+# 	Defect 10086, changed LOGNAME to LOGFILE since it is reserved on AIX.
+# 	[1994/03/08  21:23:04  pellis]
+# 
+# Revision 1.1.11.2  1994/02/22  18:39:00  ohara
+# 	use fgrep instead of grep, expand ps options
+# 	[1994/02/18  16:08:53  ohara]
+# 
+# Revision 1.1.11.1  1994/01/24  20:02:08  pellis
+# 	Created.
+# 	[1994/01/24  19:04:07  pellis]
+# 
+# $EndLog$
+
+###########################################################################
+#
+# Start server process in backround, saving its process id number.  Verify
+# that the process started correctly
+#
+###########################################################################
+
+start_server()
+{
+	./${SERVER_FILE} ${SERVER_PARMS} &
+
+	SERVER_PID=$!
+
+        BK_COUNT=0
+
+        until ( ps -ef | grep ${SERVER_FILE} > /dev/null )
+        do
+                sleep 1
+                BK_COUNT=`expr ${BK_COUNT} + 1`
+
+	        # Give it 30 seconds to start
+
+	        if [ ${BK_COUNT} -eq 30 ] ; then
+	                tet_infoline "Cannot start ${SERVER_FILE}"
+        	        return 1
+		fi
+        done
+
+	tet_infoline "Started ${SERVER_FILE} (PID = ${SERVER_PID})"
+
+	sleep 5
+}
+
+###########################################################################
+#
+# Check the testcase logs for any errors or severe errors.
+#
+###########################################################################
+
+check_results()
+{
+	error=0
+
+        for RHOST in ${HOSTLIST} ; do
+		LOGFILE="${STTMPDIR}/${CLIENT_FILE}.log.${RHOST}"
+		rm -f ${LOGFILE}
+		for TESTLOG in `ls ${LOGFILE}.*` ; do
+			cat ${TESTLOG} >> ${LOGFILE}
+			rm -f ${TESTLOG}
+		done
+		tet_infoline "Checking results in ${LOGFILE}"
+                if [ -f ${LOGFILE} ] ; then
+                        fgrep -e error -e severe -e gethostbyname -e usage -e Usage -e ksh: ${LOGFILE}
+                        if [ $? -eq 0 ] ; then
+				tet_infoline "ERROR: rpper_check_results: Test failure detected in ${LOGFILE}"
+				error=1
+                        fi
+                else
+                        tet_infoline "ERROR: rpper_check_results: Client file ${LOGFILE} not found"
+			error=1
+                fi
+        done
+
+        if [ ${error} -eq 1 ] ; then
+                return 1
+        else
+                return 0
+        fi
+}
+
+start_clients()
+{
+    export PIDS=""
+    for RHOST in ${CLIENT_MACHINES} ; do
+      tet_infoline "Starting ${CLIENT_FILE} on ${RHOST}"
+
+      rshsp ${RHOST} cp ${RPPER_EXEC}/${CLIENT_EXEC} ${STTMPDIR}/${CLIENT_FILE}
+
+      LOGFILE="${STTMPDIR}/${CLIENT_FILE}.log.${RHOST}"
+
+      for TNUM in 00 01 02 03 04 05 06 07 08 09 10 ; do
+        case ${TNUM} in
+
+         00) echo "rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} 3 400 y n" > ${LOGFILE}.${TNUM}a
+             rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} \
+                   3 400 y n >> ${LOGFILE}.${TNUM}a &
+	     NEWPID=$!
+             tet_infoline "Started test ${TNUM} - Null call (PID = ${NEWPID})"
+             PIDS="${PIDS}${NEWPID} "
+             sleep ${SLEEP_TIME}
+             echo "rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} 3 400 y y" > ${LOGFILE}.${TNUM}b
+             rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} \
+                   3 400 y y >> ${LOGFILE}.${TNUM}b &
+	     NEWPID=$!
+             tet_infoline "Started test ${TNUM} - Null idempotent call (PID = ${NEWPID})"
+             PIDS="${PIDS}${NEWPID} "
+             ;;
+
+         01) echo "rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} 3 50 y n 3000" > ${LOGFILE}.${TNUM}a
+             rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} \
+                   3 50 y n 3000 >> ${LOGFILE}.${TNUM}a &
+	     NEWPID=$!
+             tet_infoline "Started test ${TNUM} - Ins (PID = ${NEWPID})"
+             PIDS="${PIDS}${NEWPID} "
+             sleep ${SLEEP_TIME}
+             echo "rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} 3 50 y y 3000" > ${LOGFILE}.${TNUM}b
+             rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} \
+                   3 50 y y 3000 >> ${LOGFILE}.${TNUM}b &
+	     NEWPID=$!
+             tet_infoline "Started test ${TNUM} - Ins, idempotent (PID = ${NEWPID})"
+             PIDS="${PIDS}${NEWPID} "
+             ;;
+
+         02) echo "rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} 3 50 y n 3000" > ${LOGFILE}.${TNUM}a
+             rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} \
+                   3 50 y n 3000 >> ${LOGFILE}.${TNUM}a &
+	     NEWPID=$!
+             tet_infoline "Started test ${TNUM} - Outs (PID = ${NEWPID})"
+             PIDS="${PIDS}${NEWPID} "
+             sleep ${SLEEP_TIME}
+             echo "rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} 3 50 y y 3000" > ${LOGFILE}.${TNUM}b
+             rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} \
+                   3 50 y y 3000 >> ${LOGFILE}.${TNUM}b &
+	     NEWPID=$!
+             tet_infoline "Started test ${TNUM} - Outs, idempotent (PID = ${NEWPID})"
+             PIDS="${PIDS}${NEWPID} "
+             ;;
+
+          # Note: Test 3 only works with udp
+
+         03) echo "rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ncadg_ip_udp" > ${LOGFILE}.${TNUM}
+             rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ncadg_ip_udp >> \
+                   ${LOGFILE}.${TNUM} &
+	     NEWPID=$!
+             tet_infoline "Started test ${TNUM} - Broadcast (PID = ${NEWPID})"
+             PIDS="${PIDS}${NEWPID} "
+             ;;
+
+         04) echo "rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} 3 2" > ${LOGFILE}.${TNUM}
+             rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} \
+               3 2 >> ${LOGFILE}.${TNUM} &
+	     NEWPID=$!
+             tet_infoline "Started test ${TNUM} - Maybe (PID = ${NEWPID})"
+             PIDS="${PIDS}${NEWPID} "
+             ;;
+
+          # Note: Test 5 only works with udp
+
+         05) echo "rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ncadg_ip_udp" > ${LOGFILE}.${TNUM}
+             rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ncadg_ip_udp >> \
+                   ${LOGFILE}.${TNUM} &
+	     NEWPID=$!
+             tet_infoline "Started test ${TNUM} - Broadcast/maybe (PID = ${NEWPID})"
+             PIDS="${PIDS}${NEWPID} "
+             ;;
+
+         06) echo "rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} 3 100 y n" > ${LOGFILE}.${TNUM}
+             rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} \
+                   3 100 y n >> ${LOGFILE}.${TNUM} &
+	     NEWPID=$!
+             tet_infoline "Started test ${TNUM} - Floating point (PID = ${NEWPID})"
+             PIDS="${PIDS}${NEWPID} "
+             ;;
+
+         07) echo "rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS}" > ${LOGFILE}.${TNUM}
+             rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} \
+                   >> ${LOGFILE}.${TNUM} &
+	     NEWPID=$!
+             tet_infoline "Started test ${TNUM} - Unregistered interface (PID = ${NEWPID})"
+             PIDS="${PIDS}${NEWPID} "
+             ;;
+
+         08) echo "rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} n" > ${LOGFILE}.${TNUM}
+             rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} \
+                   n >> ${LOGFILE}.${TNUM} &
+	     NEWPID=$!
+             tet_infoline "Started test ${TNUM} - Forwarding (PID = ${NEWPID})"
+             PIDS="${PIDS}${NEWPID} "
+             ;;
+
+         09) echo "rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS}" > ${LOGFILE}.${TNUM}
+             rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} \
+                   >> ${LOGFILE}.${TNUM} &
+	     NEWPID=$!
+             tet_infoline "Started test ${TNUM} - Exception (PID = ${NEWPID})"
+             PIDS="${PIDS}${NEWPID} "
+             ;;
+
+         10) echo "rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} 2 2 y n 60" > ${LOGFILE}.${TNUM}a
+             rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} \
+                   2 2 y n 60 >> ${LOGFILE}.${TNUM}a &
+	     NEWPID=$!
+             tet_infoline "Started test ${TNUM} - Slow call (PID = ${NEWPID})"
+             PIDS="${PIDS}${NEWPID} "
+             echo "rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} 2 2 y y 60" > ${LOGFILE}.${TNUM}b
+             rshsp ${RHOST} ${STTMPDIR}/${CLIENT_FILE} ${TNUM} ${CLIENT_PARMS} \
+                   2 2 y y 60 >> ${LOGFILE}.${TNUM}b &
+	     NEWPID=$!
+             tet_infoline "Started test ${TNUM} - Slow idempotent call (PID = ${NEWPID})"
+             PIDS="${PIDS}${NEWPID} "
+             ;;
+	esac
+        sleep ${SLEEP_TIME}
+      done
+    done
+}

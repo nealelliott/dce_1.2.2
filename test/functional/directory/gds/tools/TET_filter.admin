@@ -1,0 +1,180 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: TET_filter.admin,v $
+# Revision 1.1.4.2  1996/03/11  02:33:32  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  19:39:09  marty]
+#
+# Revision 1.1.4.1  1995/12/11  15:23:27  root
+# 	Submit
+# 	[1995/12/11  14:35:14  root]
+# 
+# Revision 1.1.2.4  1994/07/06  15:53:52  marrek
+# 	Add version string in July 1994 code drop.
+# 	[1994/07/06  15:41:53  marrek]
+# 
+# Revision 1.1.2.3  1994/06/21  14:29:09  marrek
+# 	June 1994 code submission.
+# 	[1994/06/20  08:07:21  marrek]
+# 
+# Revision 1.1.2.2  1994/06/17  18:45:36  devsrc
+# 	cr10872 - fix copyright
+# 	[1994/06/17  18:35:00  devsrc]
+# 
+# Revision 1.1.2.1  1994/05/24  15:11:31  zeliff
+# 	First version
+# 	[1994/05/24  15:01:17  zeliff]
+# 
+# $EndLog$
+#
+# $RCSfile: TET_filter.admin,v $ $Revision: 1.1.4.2 $ $Date: 1996/03/11 02:33:32 $
+#
+
+#simple report filter
+
+vv ()
+{
+awk ' 
+BEGIN { 
+	FS="|"; 
+	flag=0; 
+	case="";
+	pass=0; 
+	fail=0; 
+	unresolved=0; 
+	uninitiated=0;
+	total_pass=0;
+	total_fail=0;
+	total_unres=0;
+	total_uninit=0;
+} 
+$3 ~ /TEST CASE/ {
+	line = $3
+	pos = match(line,"TEST CASE")
+	if ( pos == 0 ) {
+		case="<Name not found>"
+	}
+	else {
+		case=substr(line,pos+10,35)
+	}
+}
+$3 ~ /TEST START/ {
+	if ( $1 != "520" ) next;
+	if ( pass != 0 || fail != 0 || unresolved != 0 || uninitiated != 0 ) {
+		if ( fail != 0 ) {
+			print "Failing cases:"
+			for (item in fail_case) {
+				print "\t"fail_case[item]
+				fail_case[item]=""
+			}
+		}
+		if ( unresolved != 0 ) {
+			print "Unresolved cases:"
+			for (item in unres_case) {
+				print "\t"unres_case[item]
+				unres_case[item]=""
+			}
+		}
+		if ( uninitiated != 0 ) {
+			print "Uninitiated cases:"
+			for (item in uninit_case) {
+				print "\t"uninit_case[item]
+				uninit_case[item]=""
+			}
+		}
+		print "Pass: "pass;
+		print "Fail: "fail;
+		if ( unresolved != 0 ) print "Unresolved: "unresolved;
+		if ( uninitiated != 0 ) print "Uninitiated: "uninitiated;
+		print "";
+		pass=0; fail=0; unresolved=0; uninitiated=0;
+	}	
+	print $3
+}
+$1 ~ /0/ {
+	if ( $1 == 0 ) {
+		print $3;
+		print ""
+	}
+}
+$1 ~ /220/ {
+	if ($3 == "PASS" ) {
+		pass++;
+		total_pass++;
+	}
+	if ($3 == "FAIL" ) {
+		fail_case[fail]=case;
+		fail++;
+		total_fail++;
+	}
+	if ($3 == "UNRESOLVED" ) {
+		unres_case[unresolved]=case;
+		unresolved++;
+		total_unres++;
+	}
+	if ($3 == "UNINITIATED" ) {
+		uninit_case[uninitiated]=case;
+		uninitiated++;
+		total_uninit++;
+	}
+}
+END {
+	if ( fail != 0 ) {
+		print "Failing cases:"
+		for (item in fail_case) {
+			print "\t"fail_case[item]
+			fail_case[item]=""
+		}
+	}
+	if ( unresolved != 0 ) {
+		print "Unresolved cases:"
+		for (item in unres_case) {
+			print "\t"unres_case[item]
+			unres_case[item]=""
+		}
+	}
+	if ( uninitiated != 0 ) {
+		print "Uninitiated cases:"
+		for (item in uninit_case) {
+			print "\t"uninit_case[item]
+			uninit_case[item]=""
+		}
+	}
+	print "Pass: "pass;
+	print "Fail: "fail;
+	if ( unresolved != 0 ) print "Unresolved: "unresolved;
+	if ( uninitiated != 0 ) print "Uninitiated: "uninitiated;
+	print ""
+
+	print "--------------";
+	print " Grand Totals ";
+	print "--------------";
+	print "Total Passed: "total_pass;
+	print "Total Failed: "total_fail;
+	print "Total Unresolved: "total_unres;
+	print "Total Uninitiated: "total_uninit;
+	}
+' $1
+} 
+
+scriptname=`basename $0`
+
+if [ $# -lt 1 ]
+then
+  echo "\nUsage: $scriptname   <Name of TET journal file>  "
+  echo ""
+  exit
+fi
+
+echo "Results of GDS Admin Tests:  `date`" > $1.log
+echo "----------------------------------------------------\n" >> $1.log
+vv $1 >> $1.log
+
+echo "\n------------------------------\n" >> $1.log

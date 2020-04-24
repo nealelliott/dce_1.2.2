@@ -1,0 +1,280 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dfsacl_registry_setup.exec,v $
+# Revision 1.1.6.2  1996/02/17  23:26:58  marty
+# 	Update OSF copyright year
+# 	[1996/02/17  22:44:34  marty]
+#
+# Revision 1.1.6.1  1995/12/11  21:59:58  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:59:10  root]
+# 
+# Revision 1.1.4.2  1994/06/10  20:48:43  devsrc
+# 	cr10872 - fixed copyright
+# 	[1994/06/10  17:18:58  devsrc]
+# 
+# Revision 1.1.4.1  1994/06/03  16:22:52  annie
+# 	fixed incorrect comment leaders
+# 
+# 	 Revision 1.1.2.2  1993/02/27  00:29:06  ramb
+# 	 	Initial version
+# 	 	[1993/02/27  00:25:56  ramb]
+# 	[1994/06/03  15:44:25  annie]
+# 
+# $EndLog$
+# 
+DIRNAME=`dirname $0`
+cd $DIRNAME
+EDITOR=ex
+AWKFILE1=/tmp/$$.awkfile1
+RGYEDIT1=/tmp/$$.rgyedit1
+EXPWFILE1=/tmp/$$.expwfile1
+EXFILE1=/tmp/$$.exfile1
+NEW_GROUPS1=/tmp/$$.new_groups1
+NEW_PRINCIPALS1=/tmp/$$.new_principals1
+NEW_GROUPS2=/tmp/$$.new_groups2
+NEW_PRINCIPALS2=/tmp/$$.new_principals2
+
+#
+#
+make_exfile1()
+{
+	echo "#!/bin/ksh" >> $EXFILE1
+	echo "EDITOR=ex" >> $EXFILE1
+	echo "ex /etc/group <<==EOF==" >> $EXFILE1
+	for group in user_obj_group: user_group: group: other_group:
+	do
+		grep $group /etc/group > /dev/null 2> /dev/null
+		if [ $? -eq 0 ]
+		then
+			echo "1" >> $EXFILE1
+			echo "/$group" >> $EXFILE1
+			echo "d" >> $EXFILE1
+		fi
+	done
+	echo "\\\$r $NEW_GROUPS2" >> $EXFILE1
+	echo "x" >> $EXFILE1
+	echo "==EOF==" >> $EXFILE1
+}
+
+make_expwfile1()
+{
+	echo "#!/bin/ksh" >> $EXPWFILE1
+	echo "EDITOR=ex" >> $EXPWFILE1
+	echo "ex /etc/passwd <<==EOF==" >> $EXPWFILE1
+	for user in uo_dummy: uo_user: u_user: g_dummy: g_user: o_dummy: o_user:
+	do
+		grep $user /etc/passwd > /dev/null 2> /dev/null 
+		if [ $? -eq 0 ]
+		then
+			echo "1" >> $EXPWFILE1
+			echo "/$user" >> $EXPWFILE1
+			echo "d" >> $EXPWFILE1
+		fi
+	done
+	echo "\\\$r $NEW_PRINCIPALS2" >> $EXPWFILE1
+	echo "x" >> $EXPWFILE1
+	echo "==EOF==" >> $EXPWFILE1
+}
+
+make_awkfile1()
+{
+	cat > $AWKFILE1 <<==EOF==
+BEGIN	{
+	output1 = "$NEW_GROUPS2"
+	output2 = "$NEW_PRINCIPALS2"
+}
+
+	{
+	if ( FILENAME == "$NEW_GROUPS1" ) {
+		if (\$1 == "user_obj_group") {
+			printf("user_obj_group:*:%s:\n",\$2) >> output1
+			user_obj_group=\$2
+	        	next
+		}
+		if (\$1 == "user_group") {
+			printf("user_group:*:%s:\n",\$2) >> output1
+			user_group=\$2
+		        next
+		}
+		if (\$1 == "group") {
+			printf("group:*:%s:\n",\$2) >> output1
+			group=\$2
+	        	next
+		}
+		if (\$1 == "other_group") {
+			printf("other_group:*:%s:\n",\$2) >> output1
+			other_group=\$2
+		        next
+		}
+	}
+	if ( FILENAME == "$NEW_PRINCIPALS1" ) {
+		if (\$1 == "uo_dummy" ) {
+			if (user_obj_group == "") {
+				printf("Group numbers not available from $NEW_GROUPS1 file\n");
+				printf("Please check and reprocess...\n");
+				printf("Aborting...\n");
+				exit
+			}
+			printf("uo_dummy::%s:%s:DFS ACL account:/tmp:/bin/ksh\n",\$2,user_obj_group) >> output2
+			next
+		}
+
+		if (\$1 == "uo_user" ) {
+			if (user_obj_group == "") {
+				printf("Group numbers not available from $NEW_PRINCIPALS1 file\n");
+				printf("Please check and reprocess...\n");
+				printf("Aborting...\n");
+				exit
+			}
+			printf("uo_user::%s:%s:DFS ACL account:/tmp:/bin/ksh\n",\$2,user_obj_group) >> output2
+			next
+		}
+
+		if (\$1 == "u_user" ) {
+			if (user_group == "") {
+				printf("Group numbers not available from $NEW_GROUPS1 file\n");
+				printf("Please check and reprocess...\n");
+				printf("Aborting...\n");
+				exit
+			}
+			printf("u_user::%s:%s:DFS ACL account:/tmp:/bin/ksh\n",\$2,user_group) >> output2
+			next
+		}
+
+		if (\$1 == "g_dummy" ) {
+			if (group == "") {
+				printf("Group numbers not available from $NEW_PRINCIPALS1 file\n");
+				printf("Please check and reprocess...\n");
+				printf("Aborting...\n");
+				exit
+			}
+			printf("g_dummy::%s:%s:DFS ACL account:/tmp:/bin/ksh\n",\$2,group) >> output2
+			next
+		}
+
+		if (\$1 == "g_user" ) {
+			if (group == "") {
+				printf("Group numbers not available from $NEW_GROUPS1 file\n");
+				printf("Please check and reprocess...\n");
+				printf("Aborting...\n");
+				exit
+			}
+			printf("g_user::%s:%s:DFS ACL account:/tmp:/bin/ksh\n",\$2,group) >> output2
+			next
+		}
+
+		if (\$1 == "o_dummy" ) {
+			if (other_group == "") {
+				printf("Group numbers not available from $NEW_GROUPS1 file\n");
+				printf("Please check and reprocess...\n");
+				printf("Aborting...\n");
+				exit
+			}
+			printf("o_dummy::%s:%s:DFS ACL account:/tmp:/bin/ksh\n",\$2,other_group) >> output2
+			next
+		}
+
+		if (\$1 == "o_user" ) {
+			if (other_group == "") {
+				printf("Group numbers not available from $NEW_GROUPS1 file\n");
+				printf("Please check and reprocess...\n");
+				printf("Aborting...\n");
+				exit
+			}
+			printf("o_user::%s:%s:DFS ACL account:/tmp:/bin/ksh\n",\$2,other_group) >> output2
+			next
+		}
+	}
+}
+==EOF==
+}
+
+
+make_rgyedit1()
+{
+	cat > $RGYEDIT1 <<==EOF==
+domain group
+add user_obj_group
+add user_group
+add group
+add other_group
+domain principal
+add uo_dummy
+add uo_user
+add u_user
+add g_dummy
+add g_user
+add o_dummy
+add o_user
+domain account
+add uo_dummy -g user_obj_group -o none -pw -dfsacltst- -mp -dce- -h /tmp -s /bin/ksh   
+add uo_user -g user_obj_group -o none -pw -dfsacltst- -mp -dce-  -h /tmp -s /bin/ksh   
+add u_user -g user_group -o none -pw -dfsacltst- -mp -dce-  -h /tmp -s /bin/ksh   
+add g_dummy -g group -o none -pw -dfsacltst- -mp -dce-  -h /tmp -s /bin/ksh   
+add g_user -g group -o none -pw -dfsacltst- -mp -dce-  -h /tmp -s /bin/ksh   
+add o_dummy -g other_group -o none -pw -dfsacltst- -mp -dce-  -h /tmp -s /bin/ksh   
+add o_user -g other_group -o none -pw -dfsacltst- -mp -dce-  -h /tmp -s /bin/ksh   
+domain group
+member user_obj_group -a uo_dummy,uo_user
+member user_group -a u_user
+member group -a g_dummy,g_user
+member other_group -a o_user,o_dummy
+exit
+==EOF==
+}
+
+
+#--------------------------  MAIN -----------------------------------------
+#
+#	create a file to let know that dcelogin was successful..
+#
+myname=`basename $0`
+touch $myname.dcelogin
+#
+#
+#	Set up groups and principals in the registry and in the passwd file
+#
+rm -f $NEW_GROUPS2 $NEW_PRINCIPALS2 > /dev/null 2> /dev/null
+make_rgyedit1
+rgy_edit < $RGYEDIT1 > /dev/null 2> /dev/null
+#
+# extract the information from the registry
+#
+rgy_edit -p -v > $NEW_PRINCIPALS1
+rgy_edit -g -v > $NEW_GROUPS1
+#
+#
+# massage the information to be in the same format as /etc/passwd & /etc/group
+#
+make_awkfile1
+awk -f $AWKFILE1 $NEW_GROUPS1 $NEW_PRINCIPALS1
+#
+# remove the existing user records if any from passwd file and add the 
+# new records...
+#
+make_expwfile1
+chmod +x $EXPWFILE1
+$EXPWFILE1 > /dev/null 2> /dev/null
+rm -f /etc/passwd.dir /etc/passwd.pag > /dev/null 2> /dev/null
+mkpasswd /etc/passwd > /dev/null 2> /dev/null 
+#
+# remove the existing group records if any from the groups file and add the
+# new group records
+#
+make_exfile1
+chmod +x $EXFILE1
+$EXFILE1 > /dev/null 2> /dev/null
+#
+#  remove the temporary files
+#
+rm $AWKFILE1 $RGYEDIT1 $EXPWFILE1 $EXFILE1 $NEW_GROUPS2 $NEW_PRINCIPALS2 $NEW_GROUPS1 $NEW_PRINCIPALS1
+exit
+
+

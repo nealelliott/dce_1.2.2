@@ -1,0 +1,122 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: alias.idl,v $
+ * Revision 1.1.6.2  1996/03/11  02:08:26  marty
+ * 	Update OSF copyright years
+ * 	[1996/03/10  19:51:06  marty]
+ *
+ * Revision 1.1.6.1  1995/12/11  19:54:55  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/11  19:27:48  root]
+ * 
+ * Revision 1.1.4.2  1993/01/07  19:00:59  bbelch
+ * 	Embedding copyright notice
+ * 	[1993/01/06  13:24:31  bbelch]
+ * 
+ * Revision 1.1.2.2  1992/04/20  18:15:26  harrow
+ * 	Remove incorrect pointer attribute override.
+ * 	[1992/04/20  17:15:50  harrow]
+ * 
+ * Revision 1.1  1992/01/19  03:30:36  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+/*
+ * Basic tests of pointer aliasing.
+ */
+[
+uuid(68a8913a-c1ce-11c9-8b67-08002b1110fa),
+version(0.0),
+pointer_default(ptr)
+]
+interface alias
+{
+const long ARRAY_SIZE = 2000;
+const long NUM_NODES  =  100;
+const long LIST_SIZE  =    5;
+
+/*
+ * Define a long_t to check generated routines for pointed-to scalar type.
+ */
+typedef long long_t;
+
+typedef struct node_t
+{
+    long l;
+    [ptr] struct node_t *flink;
+    [ptr] struct node_t *blink;
+} node_t;
+
+typedef struct
+{
+    long l;
+} struct_t;
+typedef struct_t *struct_p;
+typedef struct struct_list_t
+{
+    [ptr] struct struct_list_t *next;
+    [ref] struct_t *struct_ref;
+    struct_p struct_ptr;
+} struct_list_t;
+
+/*
+ * Top-level pointers - pointers can't change but pointees can be aliased.
+ * op0 tests the pre-generated routines for pointed-to long that ships with RTL
+ * op1 tests the IDL-generated routines for pointed-to long from compiling this
+ */
+long op0
+(
+    [in] handle_t h,
+    [in,out,ptr] long *a,
+    [in,out,ptr] long *b,
+    [in,out,ptr] long *c
+);
+
+long op1
+(
+    [in] handle_t h,
+    [in,out,ptr] long_t *a,
+    [in,out,ptr] long_t *b,
+    [in,out,ptr] long_t *c
+);
+
+/*
+ * Top-level pointers to aliased conformant objects.
+ */
+long op2
+(
+    [in] handle_t h,
+    [in,out,ptr,size_is(s)] long_t *a,
+    [in,out,ptr,size_is(s)] long_t *b,
+    [in,out,ptr,size_is(s)] long_t *c,
+    [in] long s
+);
+
+/*
+ * A circular doubly-linked list.
+ */
+long op3
+(
+    [in] handle_t h,
+    [in,out] node_t **plist
+);
+
+/*
+ * Aliasing with mixed ref and ptr pointers to the same type.
+ */
+long op4
+(
+    [in] handle_t h,
+    [in,out,ptr] struct_list_t *list
+);
+}

@@ -1,0 +1,166 @@
+#!/bin/sh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: cu.functions,v $
+# Revision 1.1.7.2  1996/03/11  02:49:21  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:09:59  marty]
+#
+# Revision 1.1.7.1  1995/12/11  22:50:42  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  22:23:33  root]
+# 
+# Revision 1.1.3.2  1993/02/05  19:33:42  zeliff
+# 	Embedding copyrights
+# 	[1993/02/05  19:29:44  zeliff]
+# 
+# $EndLog$
+#FILE: 70		DATE: 92/01/04		VERSION: 1.3
+# This is a list of the functions used by CU, and must be executed in the
+# current environment when invoking cu.  Therefore, it is included in
+# ${CU_LOGIN_FILE}
+
+#===============================================================================
+# Function:  	new_passwd <old_passwd> <new_passwd>
+# Purpose:	Changes the password for the current user.  This is a machine
+#		specific function, and must be changed to accomodate different
+#		syntaxes.
+#===============================================================================
+new_passwd () {
+
+	echo "passwd"
+	check_for_prompt "Old password"
+	echo "${1}"
+	check_for_prompt "New password:"
+	echo "${2}"
+	check_for_prompt "new.*password"
+	echo "${2}"
+	check_for_prompt "\\$"
+	check_exit_code "ERROR: Unable to change password"
+
+} # End of function new_passwd
+
+#===============================================================================
+# Function: 	check_for_prompt <type_of_prompt>
+# Purpose:	Checks for proper prompt.  If the prompt doesn't appear 
+#		in a given time, an error message is printed and the program 
+#		is exited.
+#===============================================================================
+check_for_prompt () {
+	COUNT=1
+	while [ "${COUNT}" -le "${SEC_WAIT_TIME}" ]
+	do
+		sleep 1
+		tail -1 ${TESTDIR}/${CU_OUTPUT_FILE} | grep "$1" > /dev/null
+		if [ "$?" -ne 0 ] 
+		then
+			COUNT=`expr ${COUNT} + 1`
+		else
+			break 2
+		fi
+	done
+		
+	if [ "${COUNT}" -gt "${SEC_WAIT_TIME}" ]
+	then
+   		xx_error "ERROR in remote login: Check file ${CU_OUTPUT_FILE} for problems" > /dev/null
+   		xx_error "	in response time or execution problems" > /dev/null
+   		echo ~.
+   		exit 1
+	else
+		return 0
+	fi
+} # End of function check_for_prompt
+
+#===============================================================================
+# Function: 	enter_login <login_name>
+# Purpose:	Waits for specified amount of time and checks for proper
+#		login prompt.  If the prompt doesn't appear in the given time, 
+#		an error message is printed and the program is exited.
+#===============================================================================
+enter_login () {
+
+	check_for_prompt login
+	echo $1
+	check_for_prompt Password
+
+} # End of function enter_login
+
+#===============================================================================
+# Function: 	enter_command <command>
+# Purpose:	Executes a command on the remote machine, waits for specified
+#		time, and checks for proper prompt after execution.  If 
+#		the prompt hasn't returned in the specified time, an error
+#		is printed.  It DOES NOT check for proper execution of
+#		command.
+#===============================================================================
+enter_command () {
+
+	echo ${1}
+	check_for_prompt "\\$"
+
+} # End of function enter_command
+
+#===============================================================================
+# Function: 	check_exit_code <error_message>
+# Purpose:	Checks the exit code on the previously executed command,
+#		and verfies that it is 0.  If not, the error message 
+#		specified is printed and the execution is halted.
+#===============================================================================
+check_exit_code () {
+
+	COUNT=1	
+	echo 'echo $?'
+	while [ "${COUNT}" -le "${SEC_WAIT_TIME}" ]
+	do
+		sleep 1
+		tail -2 < ${TESTDIR}/${CU_OUTPUT_FILE} | grep 0 > /dev/null
+		if [ "$?" -ne 0 ]
+		then
+			COUNT=`expr ${COUNT} + 1`
+		else
+			break 2
+		fi
+	done
+
+	if [ "${COUNT}" -gt "${SEC_WAIT_TIME}" ]
+	then
+		xx_error "$1" > /dev/null
+		return 1
+	else
+		return 0
+	fi
+} # End of function check_exit_code
+
+#===============================================================================
+# Function: 	check_return_data <data string to match and store>
+# Purpose:	Stores the data returned from the execution of a command.
+#		It is assumed that the returned data is contained in
+#		one line and that the line is second from the bottom.
+#
+#===============================================================================
+check_return_data () {
+
+	# Tail the output file for the second line from the bottom
+	tail -2 < ${TESTDIR}/${CU_OUTPUT_FILE} | grep "${1}"
+	if [ "$?" = 0 ]
+	then
+		xx_log "Received correct return value of ${1}"
+		return 0
+	else
+		xx_error "Incorrect return value for command."
+		return 1
+	fi
+} # End of function store_return_data
+
+#===============================================================================
+# Function: 	wait_for_count 
+# Purpose:	Stores the data returned from the execution of a command.
+#		It is assumed that the returned data is contained in
+#		one line and that the line is second from the bottom.
+#
+#===============================================================================

@@ -1,0 +1,158 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: fs_GenerateFile,v $
+# Revision 1.1.12.1  1996/10/17  18:37:44  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:58:25  damon]
+#
+# Revision 1.1.4.4  1993/01/11  18:38:11  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:23:42  htf]
+# 
+# Revision 1.1.4.3  1992/10/28  18:16:24  jaffe
+# 	Transarc delta: rajesh-ot5367-salvage-recovery-authorization-check-tests 1.8
+# 	  Selected comments:
+# 	    To add authorization check tests for salvage/recovery. This is
+# 	    the initial checkpoint.
+# 	    Just a checkpoint.
+# 	    Another checkpoint.
+# 	    Checkpoint.
+# 	    This delta version has been tested.
+# 	    Changed permissions.
+# 	    Update makefiles.
+# 	    Fixed logical errors in the script pertaining to requiring read/write
+# 	    access to aggregate to perform salvage and/or recovery, handling
+# 	    of error counts generated in the AuthCheckTest.noroot script.
+# 	    Fix a build-time error.
+# 	[1992/10/28  15:11:13  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/28  18:42:32  jaffe
+# 	Transarc delta: mcinerny-ot4928-speed-up-fs-generatefile 1.2
+# 	  Selected comments:
+# 	    fs_GenerateFile is used by the test suites test/fil/{fs,low}.  It is
+# 	    unfortunately very, very slow at creating large (say, half-meg) files.
+# 	    Go from simple appending to doubling-til-close-then-append.  Thanks to
+# 	    Elliot.
+# 	    Elliot's even better duoble-all-you-can!
+# 	[1992/08/28  12:38:50  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/21  12:54:05  jaffe
+# 	Transarc delta: fred-remove-sys 1.1
+# 	  Selected comments:
+# 	    To remove dependency on the AFS sys command in the test scripts.
+# 	    Single script for test scripts to use to generate data files.
+# 	[1992/05/20  21:24:55  jaffe]
+# 
+# $EndLog$
+#
+###############################################################################
+#    Copyright (C) 1992 Transarc Corporation - All rights reserved            #
+###############################################################################
+
+#
+#  fs_GenerateFile -
+#	This script generates a file from a string, by repeatedly 
+#	echoing that string into the file.
+#
+#  Arguments:
+#	$1 - string to build file from, assumed not to include a newline.
+#	$2 - length of string in $1
+#	$3 - name of file to create.
+#	$4 - desired size of file (in bytes).
+#	[-nl] - optional argument.  If there each echo of the string in $1
+#		will include the newline character.  This must be the
+#		first argument to the command.
+#
+
+#
+#  Check that there are enough arguments.
+#
+if [ $# -lt 4 ]
+then
+    echo "$0: not enough arguments."
+    echo "Usage: $0 [-nl] <string> <string_len> <filename> <file_size>"
+    exit 1
+fi
+
+echoArg=""
+echoChar=""
+
+#
+#  Parse the command line.
+#
+if [ "$1" != "-nl" ]
+then
+    #
+    #  If no newlines are desired, then determine arguments to echo.  Some 
+    #  systems use -n to indicate not to print newlines, and other systems
+    #  use the \c in the echo text to indicate the same.
+    #
+    minusNResult=`echo -n "garbage"`
+    if [ "$minusNResult" = "garbage" ]
+    then
+	#
+	# System uses -n to indicate no newline to echo.
+	#
+	echoArg="-n"
+    else
+	#
+	# System uses \c to indicate no newline to echo.
+	#
+	echoChar="\c"
+    fi
+    stringLength=$2
+else
+    shift
+    #
+    #  Since we are echoing the newline, add it to the length of the string.
+    #
+    stringLength=`expr $2 + 1`
+fi
+
+#
+#  If the size of the file is not a multiple of the string length, 
+#  we call it a day.
+#
+if [ `expr $4 % $stringLength` -ne 0 ]
+then
+    echo "$0: Size of file must be evenly divisible by the length of"
+    echo "    the string."
+    exit 1
+fi
+
+#
+#  If the desired file already exists, then move it to an old version.
+#
+if [ -f $3 ]
+then
+    /bin/mv $3 old.$3
+fi
+
+echo $echoArg "$1${echoChar}" > init.$3.$$
+current=0
+while [ $current -ne $4 ]
+do
+    goal=`expr $4 - $current`
+
+    cp init.$3.$$ base.$3.$$
+    baseSize=$stringLength
+    while [ `expr $baseSize \* 2` -le $goal ]
+    do
+	mv base.$3.$$ tmp.$3.$$
+	cat tmp.$3.$$ tmp.$3.$$ > base.$3.$$
+	rm tmp.$3.$$
+	baseSize=`expr $baseSize + $baseSize`
+    done
+    cat base.$3.$$ >> $3
+    current=`expr $current + $baseSize`
+done
+rm base.$3.$$ init.$3.$$
+
+exit 0

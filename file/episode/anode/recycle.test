@@ -1,0 +1,112 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: recycle.test,v $
+# Revision 1.1.44.1  1996/10/02  17:18:45  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:28:39  damon]
+#
+# Revision 1.1.38.2  1994/06/09  13:58:42  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:33:54  annie]
+# 
+# Revision 1.1.38.1  1994/02/04  20:11:49  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:09:28  devsrc]
+# 
+# Revision 1.1.36.3  1994/01/20  18:42:57  annie
+# 	added copyright header
+# 	[1994/01/20  18:39:13  annie]
+# 
+# Revision 1.1.36.2  1994/01/20  17:53:40  annie
+# 	added copyright header
+# 	[1994/01/20  17:53:32  annie]
+# 
+# Revision 1.1.36.1  1993/12/07  17:17:29  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  13:45:13  jaffe]
+# 
+# $EndLog$
+# /* Copyright (C) 1994, 1992 Transarc Corporation - All rights reserved */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/recycle.test,v 1.1.44.1 1996/10/02 17:18:45 damon Exp $
+
+# recycle -- cause copious anode handle recycling while also encouraging the
+#     formation of very large ECs.  While this is going on write some data into
+#     a file.  Wait awhile until the anode handle is recycled but not so long
+#     that the transaction used to write the data can complete.  Then create a
+#     COW clone of that file.  This will not join the EC but will reference the
+#     blocks allocated by the write.  Use fsync to commit the transaction used
+#     for the COW create.  An abort will cause recovery to undo the writes.
+#     The salvager will detect errors because the COW file refers to
+#     unallocated blocks and related problems.
+#
+#     Because of large logs the freed block list can tie up a lot of disk
+#     space.  This script ran too close to the edge at 600 blocks and got
+#     intermittent aggregate full errors.  Increase to 700.  (db4810)
+
+recycle 1
+modify_afsdb anode on 31		# turn on code block counting
+modify_afsdb anode on 29		# turn on preempts
+
+open_device 1 8192 1024 700
+
+# big log => big ECs
+(var=0) create_aggregate 50
+(var=1) create_aggregate 100
+(var=2) create_aggregate 150
+(var=3) create_aggregate 200
+(var=4) create_aggregate 250
+
+create_vol separate 0,,0 1000
+create_vol foo 0,,0 10000
+
+create_file big
+write_file 0 10000
+
+# churn anode handles
+fork many_files.int.test
+fork many_files.int.test
+fork many_files.int.test
+
+# create large ECs
+create_file deep_and_wide
+create_file log_deep_and_wide
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+
+open_file separate.root
+create_file x
+write_file 2938742439 100000
+create_file y
+delete_file
+open_file x
+write_file 2948742439 100000
+create_file y
+delete_file
+open_file x
+write_file 2958742439 100000
+
+open_file big
+write_file 100000 100000
+write_file 200000 100000
+write_file 300000 100000
+write_file 400000 100000
+write_file 500000 100000
+write_file 600000 100000
+write_file 700000 100000
+write_file 800000 100000
+open_file big
+
+open_file separate.root
+create_file cow_x "" "" x		# touches both anodes but not bitmap 
+fsync
+abort
+end

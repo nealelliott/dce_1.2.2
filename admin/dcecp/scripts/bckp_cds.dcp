@@ -1,0 +1,108 @@
+#!/usr/bin/dcecp
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: bckp_cds.dcp,v $
+# Revision 1.1.7.2  1996/10/15  20:43:20  arvind
+# 	OSF DCE 1.2.2 Drop 4.5
+# 	[1996/10/15  20:06:51  arvind]
+#
+# Revision 1.1.7.1  1996/10/04  16:52:08  arvind
+# 	OSF DCE 1.2.2 Drop 4
+# 	[1996/10/04  16:51:56  arvind]
+# 
+# Revision /main/DCE_1.2.2/1  1996/10/03  15:43 UTC  truitt
+# 	Initial branch.
+# 
+# Revision /main/truitt_dcecp_pk6/1  1996/10/03  15:29 UTC  truitt
+# 	OT13103: Minor changes to 'cell backup'.
+# 
+# Revision 1.1.4.2  1996/03/09  23:06:26  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:25:18  marty]
+# 
+# Revision 1.1.4.1  1995/12/08  21:23:43  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/3  1995/10/10  15:00 UTC  truitt
+# 	Merge changes.
+# 
+# 	HP revision /main/HPDCE02/truitt_dcecp_chfts49/1  1995/10/05  15:08 UTC  truitt
+# 	CHFts16537: Change the cdsmisc command.
+# 
+# 	HP revision /main/HPDCE02/2  1995/07/26  19:20 UTC  truitt
+# 	Merge script changes.
+# 
+# 	HP revision /main/HPDCE02/truitt_dcecp_chfts43/1  1995/07/26  19:13 UTC  truitt
+# 	CHFts15849: Correct references to path for different operating system.
+# 
+# 	HP revision /main/HPDCE02/1  1995/03/10  20:20 UTC  dnguyen
+# 	Merge up
+# 	   "Remove setting of _h convenient variable.
+# 	   Add -xattrs to 'principal show' to get the ERA 'bckp_dest.'
+# 	   Move disabling server to before listing clearinghouse database files."
+# 
+# 	HP revision /main/dnguyen_mothra/1  1995/03/06  19:30 UTC  dnguyen
+# 	Remove setting of _h convenient variable.
+# 	Add -xattrs to 'principal show' to get the ERA 'bckp_dest.'
+# 	Move disabling server to before listing clearinghouse database files.
+# 	[1995/12/08  17:57:36  root]
+# 
+# Revision 1.1.2.1  1994/07/28  19:29:01  kevins
+# 	OT 9691 Cell task script first submission
+# 	[1994/07/28  18:39:28  kevins]
+# 
+# $EndLog$
+#
+# This script backups a the cds clearinghouse. This is called by the cell backup 
+# command via the server conf dced interface. It shuts down the cdsd on the 
+# node which is started up from and tars the appropriate files via tar to the 
+# destination specified by the principal hosts/{machine-name}/cds-server era
+# bckp_dest. It then restarts the cdsd server. 
+#
+#
+
+proc backup_cds {} {
+
+    global dcelocal_path _h
+
+    # Set up OS_NAME and OS_REV
+    set OS_NAME [exec uname]
+    set os_rev [exec uname -r]
+    if {$OS_NAME == "HP-UX"} {
+        regexp -- {.+\.(.+)\..+} $os_rev dummy OS_REV
+    } else {
+        set OS_REV $os_rev
+    }
+    unset os_rev
+
+    set host_princ $_h/cds-server
+    set bckp_dest [lindex [attrlist getvalues [principal show $host_princ -xattrs] -type bckp_dest] 0]
+    set var_dir ${dcelocal_path}/var/directory/cds
+    set version ${dcelocal_path}/var/adm/directory/cds/cds_cache.version
+    set files ${dcelocal_path}/var/directory/cds/cds_files
+    set attr ${dcelocal_path}/etc/cds_attributes
+    cds disable /.:/$_h/cds-server
+    set cache_files [exec ls $var_dir]
+    set cache_version [format "%s/%s" $var_dir \
+                              [_dcp_list_find $cache_files *.version]]
+    set cache_log [format "%s/%s" $var_dir \
+                          [_dcp_list_find $cache_files *tlog*]]
+    set cache_cp [format "%s/%s" $var_dir \
+                         [_dcp_list_find $cache_files *checkpoint*]]
+
+    catch {exec tar cf $bckp_dest $version $files $attr $cache_version $cache_log $cache_cp} msg
+
+    if {($OS_NAME == "HP-UX") && ($OS_REV < 10)} {
+        exec $dcelocal_path/bin/cdsd &
+    } else {
+        exec /opt/dce/sbin/cdsd &
+    }
+}
+
+backup_cds

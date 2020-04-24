@@ -1,0 +1,139 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: dfagwtp.mkf,v $
+# Revision 1.1.2.2  1996/03/11  14:11:27  marty
+# 	Update OSF copyright years.
+# 	[1996/03/11  13:59:33  marty]
+#
+# Revision 1.1.2.1  1996/02/29  09:59:36  takano
+# 	Submit DFAM-client test
+# 	[1996/02/29  09:56:23  takano]
+# 
+# Revision 1.1.2.1  1996/02/23  06:10:29  takano
+# 	First Submit
+# 	[1996/02/23  06:06:33  takano]
+# 
+# $EndLog$
+
+!ifdef %SILENT
+.silent
+!endif
+
+copyright = Copyright 1996 Hitachi, Ltd.  All Rights Reserved.  Derechos Reservados.
+
+pvmaj = 1
+pvmin = 00
+pvrev = 0
+
+
+!ifndef %qmkver
+!   define version d
+!else
+!   define version $(%qmkver)
+!endif
+!ifeq version d
+!   define lversion DEBUG
+!   define debug /dDEBUG
+!else
+!   define lversion PRODUCTION
+!   define debug
+!endif
+
+program = Distributed File Access Manager Gateway Testsuite
+fvt_screen  = Gateway Testsuite
+
+nlm_SYSTEM = system NETWARE
+nlm_TYPE = Form Novell NLM '$(program)'
+nlm_NAME = Name $^&
+nlm_SCREEN = Op ScreenName '$(fvt_screen)'
+nlm_THREAD = Op ThreadName 'DFA Test Suite'
+nlm_STACK = Op Stack = 8k
+nlm_NLMVER = Op Version = $(pvmaj).$(pvmin).$(pvrev)
+nlm_COPYRIGHT = Op Copyright '$(copyright)'
+linkop = $+$(linkop)$- Caseexact
+linkop = $+$(linkop)$- Map
+!ifeq version d
+!   define linkop $+$(linkop)$- Verbose
+!   define ldebug debug all debug novell
+!endif
+
+objlst = dfagwtp.obj
+objlst = $+$(objlst)$- dfagwini.obj
+objlst = $+$(objlst)$- dfagwenv.obj
+objlst = $+$(objlst)$- dfagwtst.obj
+objlst = $+$(objlst)$- $(startup)
+
+import = $(clibimp)
+
+module = CLib
+
+build_msg = Building a $(lversion) version of $(program)
+
+pgm_ver = /dvMAJ="$(pvmaj)" /dvMIN="$(pvmin)" /dvREV="$(pvrev)"
+
+!ifndef %ccf386
+!   define  d_wcc386opt /bt=NETWARE /bm /en /ms /w4 /e99 /zp1 /3s /ot /d2 $(debug)
+!   define  p_wcc386opt /bt=NETWARE /bm /en /ms /w4 /s /zp1 /3s /oaxt $(debug)
+!   define  x_wcc386opt $($(version)_wcc386opt) $(pgm_ver)
+!else
+!   define  x_wcc386opt $(%ccf386)
+!endif
+
+compiler_cmd = $(wcc386) $(x_wcc386opt) $[*.c
+
+.BEFORE
+    echo $(build_msg)
+    set inc386=$(inc_386)
+    set lib386=$(lib_386)
+    set wcg386=$(code_386)
+
+.c.obj:
+	$(compiler_cmd)
+
+dfagwtp.nlm : $(objlst) dfagwtp.LNK
+	$(linker) @dfagwtp
+
+dfagwtp.LNK : dfagwtp.mkf
+  if exist $^&.LNK del $^&.LNK
+  %append $^&.LNK $(nlm_TYPE)
+  %append $^&.LNK $(nlm_NAME)
+  %append $^&.LNK $(nlm_SCREEN)
+  %append $^&.LNK $(nlm_THREAD)
+  %append $^&.LNK $(nlm_STACK)
+  %append $^&.LNK $(nlm_NLMVER)
+!ifdef copyright
+  %append $^&.LNK $(nlm_COPYRIGHT)
+!endif
+!ifdef ldebug
+  %append $^&.LNK $(ldebug)
+!endif
+  for %i in ($(linkop)) do %append $^&.LNK Op %i
+  for %i in ($(objlst)) do %append $^&.LNK File %i
+  for %i in ($(import)) do %append $^&.LNK Import @%i
+  for %i in ($(export)) do %append $^&.LNK Export @%i
+  for %i in ($(module)) do %append $^&.LNK Module %i
+  for %i in ($(library)) do %append $^&.LNK Library %i
+
+clean : .symbolic
+    del *.MAP
+    del *.OBJ
+    del *.ERR
+    del *.LNK
+    del *.NLM
+    del *.bak
+
+zip : .symbolic
+    -pkzip -u dfagwtp dfagwtp.mkf *.c *.h
+
+unzip : .symbolic
+    -pkunzip -n -d dfagwtp
+
+save : .symbolic
+    %make zip
+    %make clean

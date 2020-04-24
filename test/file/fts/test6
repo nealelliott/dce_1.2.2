@@ -1,0 +1,270 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+# Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS exporting Episode.
+# The script tests the fts clone and clonesys subcommands.
+
+###############################################################################
+
+# Usage:                test6
+
+# Typically run via:    test6 >& test6.out
+# or via the fts/runtests script.
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode.
+# DFS server $SERVER_1 must export Episode aggregate $EPI_AGGRNAME_1.
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1 in order to
+# run the fts commands contained in this script.
+
+# Highest error number is: 62.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname|cut -f1 -d"." 2>/dev/null`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${EPI_AGGRNAME_1=epi1}
+: ${SERVER_1=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name=/.../$CELL_NAME}
+: ${dns_server_prefix=/.:/hosts/}
+
+av_arg="$AUTH_ARG $VERB_ARG"
+ca_arg="$CELL_ARG $AUTH_ARG"
+
+base_name=Barney.$$
+
+#
+# Source in code to analyze command results.  It handles verifying if
+# the tests are to work on LFS and UFS.
+#
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+###############################################################################
+
+echo ""
+date
+echo "RUNNING fts CLONE COMMANDS on SERVER $SERVER_1 in CELL $CELL_NAME."
+echo "========================================================================"
+echo ""
+
+###############################################################################
+
+echo ""
+echo "Running fts create"
+n=10
+while [ $n -le 19 ]
+do
+    fts create $base_name.$n $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E1 rc
+    n=`expr $n + 1`
+done
+
+echo ""
+echo "Running fts lsheader"
+    fts lsheader $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E11 rc
+
+
+echo ""
+echo "Running fts clone"
+    fts clone $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E12 rc
+
+    fts clone fubar_argument $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E13 rc
+
+    fts clone $base_name.11 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E14 rc
+
+    id=`fts lsfldb $base_name.12 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts clone $id $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E15 rc
+
+    fts clone $base_name.13 $dns_cell_name $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E16 rc
+
+    id=`fts lsfldb $base_name.14 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts clone $id $dns_cell_name $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E17 rc
+
+    fts clone $base_name.15 -cell $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E18 rc
+
+    fts clone -cell $dns_cell_name $base_name.16 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E19 rc
+
+    fts clone $dns_cell_name $base_name.17 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E20 rc
+
+    fts clone -cell $dns_cell_name -fileset $base_name.18 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E21 rc
+
+    id=`fts lsfldb $base_name.12 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts clone $id $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E22 rc
+
+    fts clone -cell fubar_cell -fileset $base_name.12 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E23 rc
+
+    fts clone -cell $dns_cell_name -fileset fubar_name $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E24 rc
+
+
+echo ""
+echo "Running fts lsheader"
+    fts lsheader $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E25 rc
+
+
+echo ""
+echo "Running fts create"
+for n in 100 101 110 111 120 121 130 131 140 141 150 151 160 161 170 171 \
+	  180 181 190 191
+do
+    fts create $base_name.$n $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E26 rc
+done
+
+echo ""
+echo "Running fts lsheader"
+    fts lsheader $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E28 rc
+
+
+echo ""
+echo "Running fts clonesys"
+    fts clonesys fubar_argument $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E30 rc
+
+
+echo ""
+echo "Running fts lsheader"
+    fts lsheader $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E49 rc
+
+
+echo ""
+echo "Running fts clonesys"
+    fts clonesys $base_name.11 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E50 rc
+
+    fts clonesys $base_name.12 $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E51 rc
+
+    fts clonesys $base_name.13 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E52 rc
+
+    fts clonesys $base_name.14 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$dns_cell_name $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E53 rc
+
+    fts clonesys $base_name.15 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$dns_cell_name $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E54 rc
+
+    fts clonesys $base_name.16 -cell $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E55 rc
+
+    fts clonesys -cell $dns_cell_name $base_name.17 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E56 rc
+
+    fts clonesys -aggregate $EPI_AGGRNAME_1 -prefix $base_name.18 \
+	-cell $dns_cell_name -server $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E57 rc
+
+    fts clonesys -aggregate fubar_aggr -prefix $base_name.18 \
+	-cell $dns_cell_name -server $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E58 rc
+
+    fts clonesys -aggregate $EPI_AGGRNAME_1 -prefix fubar_prefix \
+	-cell $dns_cell_name -server $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E59 rc
+
+    fts clonesys -aggregate $EPI_AGGRNAME_1 -prefix $base_name.18 \
+	-cell fubar_cell -server $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E60 rc
+
+    fts clonesys -aggregate $EPI_AGGRNAME_1 -prefix $base_name.18 \
+	-cell $dns_cell_name -server fubar_server $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E61 rc
+
+
+echo ""
+echo "Running fts lsheader"
+    fts lsheader $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E62 rc
+
+############################################################################
+
+#
+# cleaning up
+#
+
+n=10
+while [ $n -le 19 ]
+do
+    fts delete $base_name.$n $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E63 rc
+    n=`expr $n + 1`
+done
+
+for n in 100 101 110 111 120 121 130 131 140 141 150 151 160 161 170 171 \
+	  180 181 190 191
+do
+    fts delete $base_name.$n $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E64 rc
+done
+
+###############################################################################
+
+sync
+sync
+sleep 2
+
+echo ""
+echo "Done at `date`."
+echo ""
+if [ $rc -eq 0 ]
+then 
+    echo "$p PASSED"
+else 
+    echo "$p FAILED ($rc errors)"
+fi
+
+exit $rc
+
+###############################################################################

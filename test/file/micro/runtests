@@ -1,0 +1,242 @@
+#!/bin/sh
+###  Copyright (C) 1996 Transarc Corporation - All rights reserved  ###
+#
+#  runtests -
+#	This script begins to implement a single script to execute all
+#	the micro performance tests. 
+#
+#  Usage:
+#	runtests [-count #] [-cont] [-help]  [<output_file>]
+#
+#  Defaults:
+#	-count - (number of times to cycle through test scripts) = 1
+#	-cont - (continue on error) = false
+#	-help - print a help (usage) message
+#	<output_file> - overrides default for output,  runtests_OUT.$$
+#
+###############################################################################
+
+#
+#  Define script variables and their default values.
+#
+programName=`basename $0`
+outputFile="runtests_OUT.$$"
+onError="false"
+remHost=""
+remDir=""
+testTitle="Micro Performance Tests"
+totalCount=1
+
+successExit=0
+scriptErrExit=1
+testErrExit=2
+
+if [ -f /etc/pstat ]
+then
+    swapSpaceCmd="/etc/pstat -s"
+elif [ -f /etc/swap ]
+then
+    swapSpaceCmd="/etc/swap -s"
+elif [ -x /etc/swapinfo ]
+then
+    swapSpaceCmd="/etc/swapinfo"
+else
+    swapSpaceCmd="echo"
+fi
+
+#
+# PrintUsage() -
+#	Prints the usage message for this script.
+#
+PrintUsage()
+{
+    echo "Usage: $programName [-count #] [-cont] [-host <server> <dir>] [-help] [<output_file>]"
+    echo "\t-count        - number of iterations through the tests (default = 1)"
+    echo "\t-cont         - continue if an error occurs (default = false)"
+    echo "\t-host <server> <dir> - hostname and dir to remotely setup cold cache test"
+    echo "\t-help         - print this usage message."
+    echo "\t<output_file> - where to store output (default is runtests_OUT.\$\$)"
+}
+
+#
+# RunTestScript()
+#	Runs a single test script.
+#
+#  Arguments:
+#	$1 - test script to execute.
+#
+RunTestScript()
+{
+    echo "Running $1 $2 $3 $4 $5"
+    echo >> $outputFile
+    echo >> $outputFile
+    echo "Running $1 $2 $3 $4 $5" >> $outputFile
+    echo "Time is: `date`" >> $outputFile
+    echo "Current directory is: `pwd`" >> $outputFile
+    echo >> $outputFile
+    $1 $2 $3 $4 $5 >> $outputFile 2>&1
+    if [ $? -ne 0 ]
+    then
+	echo >> $outputFile
+	echo "${programName}: test $1, FAILED" >> $outputFile
+	#
+	#  Check to see if we continue on error.
+	#
+	if [ "$onError" = "false" ]
+	then
+	    echo >> $outputFile
+	    date >> $outputFile
+	    echo >> $outputFile
+	    echo "$testTitle - Completed UNSUCCESSFULLY." >> $outputFile
+	    exit $testErrExit
+	fi
+    fi		
+}
+
+#
+#  Parse the command line.
+#
+while [ "$1" != "" ] 
+do
+    case $1 in
+      -count)    shift;
+	         if [ "$1" != "" ]
+	         then
+	             totalCount=$1;
+	         else
+		     echo "${programName}: -count requires numeric parameter.";
+		     PrintUsage;
+		     exit $scriptErrExit
+	         fi
+                 ;;
+      -cont)     onError="true"
+                 ;;
+      -host)     shift;
+		 if [ "$1" != "" ]
+		 then
+		     remHost=$1;
+		 else
+		     echo "${programName}: -host requires a hostname.";
+		     PrintUsage;
+		     exit $scriptErrExit
+		 fi
+		 shift;
+		 if [ "$1" != "" ]
+		 then
+		     remDir=$1;
+		 else
+		     echo "${programName}: -host requires a directory.";
+		     PrintUsage;
+		     exit $scriptErrExit
+		 fi
+                 ;;
+      -help)     PrintUsage;
+                 exit $successExit
+                 ;;
+       -*)       echo "${programName}: Invalid option, $1." | tee -a $outputFile;
+	         PrintUsage;
+                 exit $scriptErrExit
+                 ;;
+      *)         outputFile=$1
+                 ;;
+      esac
+      shift
+done
+
+
+#
+#  If an output file already exist remove it.
+#
+if [ -f $outputFile ]
+then
+    /bin/rm -f $outputFile
+    if [ $? -ne 0 ]
+    then
+	echo "$programName: Could not remove existing file, $outputFile" | tee -a $outputFile
+	exit $scriptErrExit
+    fi
+fi
+
+#
+#  Now run the tests.
+#
+#
+ulimit -n 128
+runTests="true"
+loopCount=0
+
+echo "$testTitle - Starting" >> $outputFile
+echo >> $outputFile
+echo "Machine: `hostname`" >> $outputFile
+echo "UNIX User: $USER" >> $outputFile
+
+#
+#  If running under DFS print our principal id.
+#
+#pwd | fgrep "/..." > /dev/null 2>&1
+/bin/pwd | grep -s '^/\.\.\./' > /dev/null 2>&1
+if [ $? -eq 0 ]
+then
+     echo "DCE User: `klist | grep '	Principal' | cut -f 3 -d ' '`" >> $outputFile
+fi
+
+while [ "$runTests" = "true" ]
+do
+    #
+    #  Now run the tests
+    #
+    RunTestScript ./micro1 32
+    RunTestScript ./micro2 32
+    RunTestScript ./micro3 . 32
+
+    if [ "$remHost" != "" ]
+    then
+	echo >> $outputFile
+	echo "Cold Cache Performance" >> $outputFile
+	rsh $remHost $remDir/micro3pre $remDir 32 >>$outputFile 2>&1 </dev/null
+	RunTestScript ./micro3 -s . 32
+    fi
+
+    RunTestScript ./micro4 32 
+    RunTestScript ./micro5 32 10
+    RunTestScript ./micro6 32
+
+    echo "Medium file size IO" >> $outputFile
+    RunTestScript ./microio . 16 256 1
+    RunTestScript ./microio . 16 256 2
+    RunTestScript ./microio . 16 256 4
+    RunTestScript ./microio . 16 256 8
+    RunTestScript ./microio . 16 256 16
+    RunTestScript ./microio . 16 256 32
+    RunTestScript ./microio . 16 256 64
+
+    echo "Large file size IO" >> $outputFile
+    RunTestScript ./microio . 8 2048 8
+    RunTestScript ./microio . 8 2048 16
+    RunTestScript ./microio . 8 2048 32
+    RunTestScript ./microio . 8 2048 64
+    RunTestScript ./microio . 8 2048 128
+    RunTestScript ./microio . 8 2048 256
+
+    loopCount=`expr $loopCount + 1`
+    #
+    #  If totalCount is 0 (user passed in 0 as argument to -count) then
+    #  the script runs forever.
+    #
+    if [ $totalCount -ne 0 ]
+    then
+	if [ $loopCount -eq $totalCount ]
+	then
+	    runTests="false"
+	fi
+    fi
+done
+
+echo "Number of loops: $loopCount" >> $outputFile
+echo >> $outputFile
+$swapSpaceCmd >> $outputFile
+echo >> $outputFile
+date >> $outputFile
+echo >> $outputFile
+echo "$testTitle - Completed Successfuly." >> $outputFile
+exit $successExit

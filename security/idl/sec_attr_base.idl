@@ -1,0 +1,652 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: sec_attr_base.idl,v $
+ * Revision 1.1.9.3  1996/03/09  23:29:04  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:44:29  marty]
+ *
+ * Revision 1.1.9.2  1995/12/08  17:37:01  root
+ * 	Submit OSF/DCE 1.2.1
+ * 
+ * 	HP revision /main/HPDCE02/1  1995/04/28  19:44 UTC  mdf
+ * 	Resolve CHFts14561
+ * 	[1995/04/13  21:33 UTC  mdf  /main/mdf_mothra_defects_3/1]
+ * 
+ * Revision 1.1.5.1  1994/10/17  17:54:04  cuti
+ * 	OT12570: Add sec_attr_enc_trig_binding to sec_attr_val.
+ * 	[1994/10/14  16:15:46  cuti]
+ * 
+ * 	OT12570: Add sec_attr_enc_trig_binding to sec_attr_val.
+ * 
+ * Revision 1.1.3.2  1994/09/23  23:15:37  ahop
+ * 	elaborate on the schema entry update parts section
+ * 
+ * Revision 1.1.2.5  1994/08/04  16:13:00  mdf
+ * 	Hewlett Packard Security Code Drop
+ * 	[1994/07/26  19:10:00  mdf]
+ * 
+ * Revision 1.1.2.3  1994/06/17  18:42:29  devsrc
+ * 	cr10872 - fix copyright
+ * 	[1994/06/17  18:10:34  devsrc]
+ * 
+ * Revision 1.1.2.2  1994/03/02  17:55:24  hanfei
+ * 	Initial ERA drop
+ * 	[1994/02/18  19:32:46  hanfei]
+ * 
+ * $EndLog$
+ */
+/*
+** Copyright (c) Hewlett-Packard Company 1993, 1994
+** Unpublished work. All Rights Reserved.
+**
+**     Attributes base type definitions
+**
+*/
+[
+    uuid(825719e8-d1b9-11ca-8687-08001e01dc6c)
+]
+interface sec_attr_base {
+
+    import "dce/aclbase.idl";
+
+    /* s e c _ a t t r _ t w r _ r e f _ t
+     * s e c _ a t t r _ t w r _ s e t _ t
+     *
+     * These types enable the client to pass in an unallocated array
+     * of towers and have the server allocate/fill the correct
+     * amount.
+     */
+    typedef [ptr] twr_t *sec_attr_twr_ref_t;
+
+    typedef struct {
+	unsigned32				count;
+	[size_is(count)] sec_attr_twr_ref_t	towers[];
+    } sec_attr_twr_set_t;
+
+    typedef [ptr] sec_attr_twr_set_t *sec_attr_twr_set_p_t;
+
+    /* s e c _ a t t r _ b i n d _ t y p e _ t
+     *
+     *    Binding Types for Attribute interfaces
+     */
+    typedef unsigned32	sec_attr_bind_type_t;
+
+    /* DCE RPC string binding */
+    const unsigned32	sec_attr_bind_type_string	= 0;
+
+    /* DCE protocol tower representation of bindings */
+    const unsigned32	sec_attr_bind_type_twrs		= 1;
+
+    /* Name of trigger server for lookup in a directory
+     * service.
+     * For DCE 1.1, name is of the syntax rpc_c_ns_syntax_dce
+     * and identifies a CDS entry containing binding info.
+     */
+
+    const unsigned32	sec_attr_bind_type_svrname	= 2;
+
+    typedef struct {
+	unsigned32		name_syntax;
+	[string, ptr] char	*name;
+    } sec_attr_bind_svrname;
+
+    /* s e c _ a t t r _ b i n d i n g _ t
+     *
+     * Trigger Server Binding Union
+     */
+
+    typedef union 
+	switch (sec_attr_bind_type_t			bind_type)
+	tagged_union {
+		case sec_attr_bind_type_string:
+		    [string, ptr] char			*string_binding;
+
+		case sec_attr_bind_type_twrs:
+		    [ptr] sec_attr_twr_set_t		*twr_set;
+
+		case sec_attr_bind_type_svrname:
+		    [ptr] sec_attr_bind_svrname		*svrname;
+
+    } sec_attr_binding_t;
+
+    typedef [ptr] sec_attr_binding_t *sec_attr_binding_p_t;
+
+    /* s e c _ a t t r _ b i n d _ a u t h _ i n f o _ t
+     *
+     * Authentication and authorization information required
+     * for authenticated RPC binding setup.
+     */
+    typedef enum {
+	sec_attr_bind_auth_none,
+	sec_attr_bind_auth_dce
+    } sec_attr_bind_auth_info_type_t;
+
+    /*
+     * The valid values for svr_princ_name, protect_level,
+     * authn_svc, and authz_svc are those specified for the
+     * rpc_binding_set_auth_info call documented in
+     * the OSF DCE Application Development Reference for RPC.
+     */
+    typedef union
+	switch (sec_attr_bind_auth_info_type_t    info_type)
+	tagged_union {
+		case sec_attr_bind_auth_none:
+		    ;			  /* don't authenticate handle */
+		case sec_attr_bind_auth_dce:
+		    struct {
+			[string, ptr] char	*svr_princ_name;
+			unsigned32		protect_level;
+			unsigned32		authn_svc;
+			unsigned32		authz_svc;
+		    } dce_info;
+	} sec_attr_bind_auth_info_t;
+
+
+    /* s e c _ a t t r _ b i n d _ i n f o _ t
+     *
+     * Trigger Server Binding Info
+     */
+    typedef struct {
+	sec_attr_bind_auth_info_t			auth_info;
+	unsigned32					num_bindings;
+	[size_is(num_bindings)]	sec_attr_binding_t	bindings[];
+    } sec_attr_bind_info_t;
+
+    typedef [ptr] sec_attr_bind_info_t *sec_attr_bind_info_p_t;
+
+
+    /* s e c _ a t t r _ e n c o d i n g _ t
+     *
+     * Attribute encoding tags:
+     * Defines the encoding of the attribute.
+     *
+     *	any			Attribute can take on any encoding.
+     *		 		This is only legal in a schema
+     *				entry.  An attribute instance must
+     *				contain a concrete encoding type.
+     *
+     *	void			A marker without a value.
+     *	integer			A signed 32-bit integer.
+     *	printstring		A printable string.
+     *	printstring_array	An array of printstrings
+     *	bytes			A string of bytes (presumably a
+     *				pickle).
+     *	confidential_bytes	A string of bytes (presumably a
+     *				pickle) that have been encrypted in
+     *				the principal's key.  This type is
+     *				normally only supported by the
+     *				security service.
+     *	i18n_data		A byte string tagged with OSF codeset.
+     *	uuid			A DCE uuid_t.
+     *	attr_set		An array of attribute type uuids.
+     *	binding			DCE server auth and binding info.
+     *	trig_binding		Same as binding.  Not legal for
+     *				attribute updates.  This encoding type
+     *				is returned by rs_attr_lookup 
+     *				calls to inform the attr client agent
+     *				of the trigger binding info for an
+     *				attribute with a query trigger.
+     *	
+     */
+    typedef enum {
+	    sec_attr_enc_any,
+	    sec_attr_enc_void,
+	    sec_attr_enc_integer,
+	    sec_attr_enc_printstring,
+	    sec_attr_enc_printstring_array,
+	    sec_attr_enc_bytes,
+	    sec_attr_enc_confidential_bytes,
+	    sec_attr_enc_i18n_data,
+	    sec_attr_enc_uuid,
+	    sec_attr_enc_attr_set,
+	    sec_attr_enc_binding,
+	    sec_attr_enc_trig_binding,
+	    sec_attr_enc_type_status
+    } sec_attr_encoding_t;
+
+
+    /* s e c _ a t t r _ e n c  _ p r i n t s t r i n g _ t
+     * 
+     *	    Printstring encoding type structure.
+     */
+    typedef [string, ptr] unsigned char	*sec_attr_enc_printstring_p_t;
+
+    /* s e c _ a t t r _ e n c _ s t r _ a r r a y _ t
+     * 
+     *	    Printstring array encoding type structure.
+     */
+    typedef struct {
+	unsigned32			num_strings;
+	[size_is(num_strings)]
+	sec_attr_enc_printstring_p_t	strings[];
+    } sec_attr_enc_str_array_t;
+
+    /* s e c _ a t t r _ e n c _ b y t e s _ t
+     * 
+     *	    Bytes encoding type structure.
+     */
+    typedef struct {
+	unsigned32		length;
+	[size_is(length)] byte	data[];
+    } sec_attr_enc_bytes_t;
+
+    /* s e c _ a t t r _ i 1 8 n _ d a t a _ t
+     * 
+     * Internationalization data encoding type structure.
+     * The codeset must be a 32-bit codeset identifier 
+     * registered with the OSF (See DCE RFC 40.0.)
+     */
+    typedef struct {
+	unsigned32		codeset;
+	unsigned32		length;
+	[size_is(length)] byte	data[];
+    } sec_attr_i18n_data_t;
+
+    /* s e c _ a t t r _ e n c _ a t t r _ s e t _ t
+     *
+     *    Attribute set encoding structure.
+     */
+    typedef struct {
+	unsigned32			num_members;
+	[size_is(num_members)] uuid_t	members[];
+    } sec_attr_enc_attr_set_t;
+
+    /* s e c _ a t t r _ v a l u e _ t;
+     *
+     * An attribute value is a union of the various known
+     * encodings.
+     */
+    typedef union sec_attr_u
+	switch (sec_attr_encoding_t			attr_encoding)
+	tagged_union {
+		case sec_attr_enc_void:
+			;
+
+		case sec_attr_enc_integer:
+			signed32			signed_int;
+
+		case sec_attr_enc_printstring:
+			sec_attr_enc_printstring_p_t	printstring;
+
+		case sec_attr_enc_printstring_array:
+			[ptr] sec_attr_enc_str_array_t	*string_array;
+
+		case sec_attr_enc_bytes:
+		case sec_attr_enc_confidential_bytes:
+			[ptr] sec_attr_enc_bytes_t	*bytes;
+
+		case sec_attr_enc_i18n_data:
+			[ptr] sec_attr_i18n_data_t	*idata;
+
+		case sec_attr_enc_uuid:
+			uuid_t				uuid;
+
+		case sec_attr_enc_attr_set:
+			[ptr] sec_attr_enc_attr_set_t	*attr_set;
+
+		case sec_attr_enc_binding:
+                case sec_attr_enc_trig_binding:
+			[ptr] sec_attr_bind_info_t	*binding;
+
+		case sec_attr_enc_type_status:
+			error_status_t			status;
+
+    } sec_attr_value_t;
+
+
+    /* s e c _ a t t r _ t;
+     *
+     * An attribute is a structure containing the id and value for
+     * the attribute instance.
+     */
+    typedef struct {
+	uuid_t			attr_id;
+	sec_attr_value_t	attr_value;
+    } sec_attr_t;
+
+    typedef struct {
+	unsigned32		num_attrs;
+	[size_is(num_attrs), ptr] 
+	    sec_attr_t		*attrs;
+    } sec_attr_vec_t;
+
+    typedef [ptr] sec_attr_vec_t *sec_attr_vec_p_t;
+
+
+
+    /* s e c _ a t t r _ a c l _ m g r _ i n f o _ s e t _ t
+     *
+     * Attribute access control information defined in 
+     * a schema entry.
+     *
+     *    acl_mgr_type	Defines the acl manager for the
+     *			object that attribute is attached to.
+     *			This field will provide a
+     *			well-defined context for evaluating
+     *			the permission bits needed for
+     *			operating on the attribute.
+     *
+     *    query_permset	The permission bits needed to access
+     *			the attribute's value.
+     *
+     *    update_permset	The permission bits needed to update
+     *			the attribute's value.
+     *
+     *    test_permset	The permission bits needed to test
+     *			the attribute's value.
+     *
+     *    delete_permset  The permission bits needed to delete
+     *			  an attribute instance.
+     */
+    typedef struct {
+	uuid_t			acl_mgr_type;
+	sec_acl_permset_t	query_permset;
+	sec_acl_permset_t	update_permset;
+	sec_acl_permset_t	test_permset;
+	sec_acl_permset_t	delete_permset;
+    } sec_attr_acl_mgr_info_t;
+
+    typedef [ptr] sec_attr_acl_mgr_info_t *sec_attr_acl_mgr_info_p_t;
+
+    typedef struct {
+	unsigned32			num_acl_mgrs;
+	[size_is(num_acl_mgrs)]
+	sec_attr_acl_mgr_info_p_t	mgr_info[];
+    } sec_attr_acl_mgr_info_set_t;
+
+
+    /* s e c _ a t t r _ i n t e r c e l l _ a c t i o n _ t
+     *
+     * The intercell_action field of the schema entry specifies
+     * the action that should be taken by the Privilege Server
+     * when reading attributes from a foreign cell.
+     * More specifically, when the Priv Server is generating
+     * a PTGT for a foreign principal, it:
+     *    - retrieves the list of attributes from the foreign
+     *      principal's EPAC,
+     *    - passes the list to prv_attr_check_intercell_attrs 
+     *      which retains, discards, or maps the attributes in 
+     *      the list, producing an output list of attributes,
+     *    - includes the output list of "acceptable" attributes in
+     *      the PTGT for the foreign principal.
+     * The prv_attr_check_intercell_attrs operation performs
+     * the following for each attribute in the input list:
+     *    - Retrieve the schema entry for that attribute type.
+     *    - If an entry doesn't exist for that type, check the
+     *      "unknown_intercell_action" attribute on the policy
+     *      object.  If its value is "accept," keep the input
+     *      attribute; if its value is "reject," discard the 
+     *      attribute. 
+     *    - If a schema entry exists, process the input attribute
+     *      according to the value of the intercell_action flag:
+     *
+     *	sec_attr_intercell_act_accept: retain the input
+     *	attribute if the "unique" flag in the schema entry
+     *	is set to FALSE.  If the "unique" flag is TRUE,
+     *	retain the input attribute ONLY if its value is
+     *	unique among all attribute instances of the same
+     *	attribute type within this cell.
+     *
+     *	sec_attr_intercell_act_reject: unconditionally
+     *	discard the input attribute.
+     *
+     *	sec_attr_intercell_act_evaluate: use the binding
+     *	info in the trig_binding field of this schema entry
+     *	to make a sec_attr_trig_query RPC to a server that
+     *	will decide whether to retain, discard, or map this
+     *	attribute to another value(s).  The attrs[] list
+     *	returned by the sec_attr_trig_query call is retained
+     *	in the final output attributes list of the
+     *	prv_attr_check_intercell_attrs call.
+     *    -  Return the list of retained attributes to the caller.
+     *
+     *    NOTE: if the "unique" flag is set to TRUE *and*
+     *    a query trigger exists for a given attribute
+     *    type, the intercell_action flag cannot be set to "accept"
+     *    because, in this case, only the query trigger server can
+     *    reasonably perform a uniqueness check.
+     */
+    typedef enum {
+	sec_attr_intercell_act_accept,
+	sec_attr_intercell_act_reject,
+	sec_attr_intercell_act_evaluate
+    } sec_attr_intercell_action_t;
+
+    /* s e c _ a t t r _ t r i g _ t y p e _ t
+     *    
+     *    Trigger Type
+     */
+    typedef unsigned32	sec_attr_trig_type_flags_t;
+    const unsigned32	sec_attr_trig_type_none		= 0x00000000;
+    const unsigned32	sec_attr_trig_type_query	= 0x00000001;
+    const unsigned32	sec_attr_trig_type_update	= 0x00000002;
+
+    /* s e c _ a t t r _ s c h _ e n t r y _ f l a g s _ t
+     *    
+     * Schema Entry Flags
+     *	sec_attr_sch_entry_none
+     *	sec_attr_sch_entry_unique
+     *	sec_attr_sch_entry_multi_inst
+     *	sec_attr_sch_entry_reserved
+     *	sec_attr_sch_entry_use_defaults
+     */
+    typedef unsigned32	sec_attr_sch_entry_flags_t;
+    const unsigned32	sec_attr_sch_entry_none		= 0x00000000;
+
+    /* sec_attr_sch_entry_unique:
+     *		If SET, indicates that each instance
+     *		of this attribute type must have a
+     *		unique value.  (As a byproduct, an
+     *		index for fast lookups is created.)
+     */
+    const unsigned32	sec_attr_sch_entry_unique	= 0x00000001;
+
+    /* sec_attr_sch_entry_multi_inst:
+     *		If SET, indicates that this attribute
+     *		type may be multi_instanced. If NOT SET,
+     *		only one instance of this attribute
+     *		may be attached to a given object.
+     */
+    const unsigned32	sec_attr_sch_entry_multi_inst	= 0x00000002;
+
+    /* sec_attr_sch_entry_reserved:
+     *		If SET, indicates that this schema
+     *		entry may not be deleted.  If NOT SET,
+     *		the schema entry may be deleted by
+     *		an authorized user.
+     */
+    const unsigned32	sec_attr_sch_entry_reserved	= 0x00000004;
+
+    /* sec_attr_sch_entry_use_defaults:
+     *		If SET, the system defined default
+     *		value (if any) for this attribute will
+     *		be returned on a query if an instance
+     *		of this attribute doesn't exist on the
+     *		queried object.  If NOT SET, a query for
+     *		a non-existent attribute will not
+     *		result in a search for a system default.
+     */
+    const unsigned32	sec_attr_sch_entry_use_defaults	= 0x00000008;
+
+
+    /* s e c _ a t t r _ s c h e m a _ e n t r y _ t;
+     *
+     * Schema catalog entry
+     *
+     *  Attribute Type Definitions are:
+     *	Name <key>, Attribute UUID <key>,
+     *	attribute encoding, acl manager type,
+     *	query permset, update permset,
+     *	test_permset, delete permset,
+     *	schema entry flags,
+     *	intercell_action flag, trigger types flagset
+     *	trigger binding, scope, comment
+     *
+     *  Each attribute is named by both a string name and an
+     *  attribute uuid - either can be used as a retrieval key and
+     *  both must be unique.  The name should only be used for
+     *  interactive access to the attribute.  The attribute uuid
+     *  should be used for programmatic access.
+     *
+     *  The attribute uuid is used to identify the semantics of
+     *  the attribute type.
+     *
+     *  Fields:
+     *    attr_encoding	Defines the legal encodings for the
+     *	  		attribute. If a concrete encoding is 
+     *			specified, the attribute may only
+     *			exist with that encoding.  If the "any" 
+     *			encoding is specified, each instance of
+     *			the attribute may take on any concrete
+     *			encoding.
+     *
+     *    acl_mgr_set	Specifies the acl_managers that support
+     *			the object type(s) on which attributes
+     *			of this type can be created.  For each
+     *			acl_manager, the permission bits 
+     *			required for the query, update, test,
+     *			and delete operations are specified.
+     *
+     *    schema_entry_flags	Contains a bitset for the following
+     *			flags: unique, multi-instanced, reserved,
+     *			and use_defaults.
+     *
+     *    intercell_action    Specifies the action to be taken when
+     *			evaluating attributes created by 
+     *			foreign cells: "accept" to accept 
+     *			foreign attributes, "reject" to discard
+     *			foreign attributes of this type, or
+     *			"evaluate" to invoke a trigger to a
+     *			server that will decide whether the
+     *			attribute should be kept, rejected, or
+     *			mapped to another value.
+     *
+     *    trig_types	Specifies on which type of attribute
+     *			operation a trigger is executed:
+     *			Flag set may contain:
+     *			`query' for trigger on lookups,
+     *			`update' for trigger on writes.
+     *
+     *    trig_binding	Specifies the principal id, auth and
+     *			binding information for the trigger
+     *			server. This field is only evaluated
+     *			if trig_types specifies a trigger or if
+     *			intercell_action is set to "evaluate."
+     *
+     *    comment	A string for information about this
+     *			schema entry.
+     */
+    typedef struct {
+	[string, ptr] char			*attr_name;
+	uuid_t					attr_id;
+	sec_attr_encoding_t			attr_encoding;
+	[ptr] sec_attr_acl_mgr_info_set_t	*acl_mgr_set;
+	sec_attr_sch_entry_flags_t		schema_entry_flags;
+	sec_attr_intercell_action_t		intercell_action;
+	sec_attr_trig_type_flags_t		trig_types;
+	[ptr] sec_attr_bind_info_t		*trig_binding;
+	[string, ptr] char			*scope;
+	[string, ptr] char			*comment;
+    } sec_attr_schema_entry_t;
+
+    /* s e c _ a t t r _ s c h e m a _ e n t r y _ p a r t s _ t
+     *    
+     *    These flags identify which schema entry fields
+     *    should be modified on a schema_entry_update operation.
+     *    Not all fields that possess a flag are supported 
+     *    in an update operation.
+     */
+    typedef unsigned32	sec_attr_schema_entry_parts_t;
+
+    /* attribute name */
+    const unsigned32	sec_attr_schema_part_name	= 0x00000001;
+
+    /* acl_mgr_set 
+     * The acl_mgr_set field can only be modified to add new
+     * acl_mgr_types without deleting or changing the existing
+     * acl_mgr_types.  Deletion and modification of existing 
+     * acl_mgr_types is prevented to avoid leaving object ACLs
+     * and attribute instances in an inconsistent state.
+     */
+    const unsigned32	sec_attr_schema_part_acl_mgrs	= 0x00000002;
+
+    /* unique flag 
+     * The unique flag can only be modified from set to unset because
+     * the reverse change could render the database inconsistent
+     * if non-unique attribute instances already exist. 
+     */
+    const unsigned32	sec_attr_schema_part_unique	= 0x00000004;
+
+    /* reserved flag */
+    const unsigned32	sec_attr_schema_part_reserved	= 0x00000008;
+
+    /* apply_defaults flag */
+    const unsigned32	sec_attr_schema_part_defaults	= 0x00000010;
+
+    /* intercell_action flag set */
+    const unsigned32	sec_attr_schema_part_intercell	= 0x00000020;
+
+    /* trigger types flag set - NOT SUPPORTED FOR UPDATE */
+    const unsigned32	sec_attr_schema_part_trig_types	= 0x00000040;
+
+    /* trigger bindings */
+    const unsigned32	sec_attr_schema_part_trig_bind	= 0x00000080;
+
+    /* comment */
+    const unsigned32	sec_attr_schema_part_comment	= 0x00000100;
+
+    /* multi-instanced flag 
+     * The multi-instanced flag can only be modified from unset to set
+     * because the reverse change could render the database inconsistent
+     * if multi-instanced attributes already exist. 
+     */
+    const unsigned32	sec_attr_schema_part_multi_inst	= 0x00000200;
+
+    /* scope 
+     * The scope field can only be modifed to a higher level scope that
+     * at least includes all of the original scope.  Scope cannot
+     * be modified to be more restrictive. 
+     */
+    const unsigned32	sec_attr_schema_part_scope	= 0x00000400;
+
+
+    /* s e c _ a t t r _ c o m p o n e n t _ n a m e _ t
+     *
+     * A string for disambiguating operations on objects.  The
+     * component name further specifies the entity to which the
+     * attribute is attached.  This is analogous to a
+     * sec_acl_component_name_t in the acl interface.
+     */
+    typedef [string, ptr] unsigned char *sec_attr_component_name_t;
+
+
+    /* s e c _ a t t r _ c u r s o r _ t;
+     *
+     * Schema and Attribute scan cursor for interative
+     * database operations. This cursor must minimally
+     * represent the object indicated by "schema_name"
+     * in the schema interfaces, or "component_name" in
+     * the attribute interfaces.  The cursor may additionally
+     * represent an entry within that schema or an 
+     * attribute instance on that component.
+     */
+    typedef void * sec_attr_cursor_t;
+
+    /* s e c _ a t t r _ s r c h _ c u r s o r _ t;
+     *
+     * Attribute search cursor. The cursor must minimally represent
+     * the list of all objects managed by this server that
+     * possess the search attributes specified in the
+     * sec_attr_srch_cursor_init operation.  It may additionally
+     * represent a given object within this list as well as
+     * attribute instance(s) possessed by that object.
+     */
+    typedef void * sec_attr_srch_cursor_t;
+}

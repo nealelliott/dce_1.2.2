@@ -1,0 +1,167 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: utimes.test,v $
+# Revision 1.1.11.1  1996/10/02  17:45:21  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:36:30  damon]
+#
+# Revision 1.1.6.1  1994/06/09  14:06:23  annie
+# 	fixed copyright in src/file
+# 	[1994/06/09  13:21:49  annie]
+# 
+# Revision 1.1.4.3  1993/01/21  18:28:32  zeliff
+# 	Embedding copyright notices
+# 	[1993/01/19  16:52:40  zeliff]
+# 
+# Revision 1.1.4.2  1992/08/31  21:16:46  jaffe
+# 	Transarc delta: bwl-ot4882-misc-test-vnodeops-fixes 1.1
+# 	  Selected comments:
+# 	    Miscellaneous improvements to the vnops-layer out-of-kernel tests.
+# 	    Use new vn_times opcode.
+# 	[1992/08/30  03:44:50  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/06  14:17:20  jdp
+# 	Initial revision.
+# 	[1992/05/06  00:30:27  jdp]
+# 
+# $EndLog$
+utimes 1
+
+# [acm]times
+
+open_device 1 4096 1024 1000
+create_aggregate
+exist_vol yyy 777,,888 170
+
+echo times for root vnode at volume creation
+
+root_vnode
+vn_times
+
+echo create -- changes mtime and ctime of parent
+
+vn_create file1
+root_vnode
+vn_times
+
+echo times for created vnode at creation
+
+vn_lookup file1
+vn_times
+
+echo write -- changes mtime and ctime
+
+vn_write 0 100 1
+vn_times
+
+echo read -- changes atime
+
+vn_read 0 100 1
+vn_times
+
+echo append -- like write
+
+vn_append 200 2
+vn_times
+
+echo more write
+
+vn_write 0 100 3
+vn_times
+
+echo truncate -- changes mtime and ctime
+
+vn_trunc 50
+vn_times
+
+echo lookup -- should not change times of parent or child
+
+root_vnode
+vn_times
+vn_lookup file1
+vn_times
+root_vnode
+vn_times
+
+echo rename -- changes ctime of target; changes mtime and ctime of parent
+
+vn_rename file1 file2
+vn_lookup file2
+vn_times
+root_vnode
+vn_times
+
+echo chmod -- changes ctime
+
+vn_lookup file2
+vn_chmod 666
+vn_times
+root_vnode
+vn_times
+
+echo chown -- changes ctime
+
+vn_lookup file2
+set_uid 0
+vn_chown 123
+set_uid 100
+vn_times
+root_vnode
+vn_times
+
+echo link -- changes ctime of target; changes mtime and ctime of parent
+
+vn_link file2 file3
+vn_times
+root_vnode
+vn_times
+
+echo remove -- changes mtime and ctime of parent
+
+vn_remove file2
+vn_times
+
+echo utimes -- (also) changes ctime
+
+vn_utimes atime 1,2 ; mtime 3,4
+vn_times
+
+echo System V style utime -- set all three times to now
+
+vn_utime
+vn_times
+
+echo mkdir -- changes mtime and ctime of parent
+
+vn_mkdir dir1
+root_vnode
+vn_times
+
+echo rmdir -- changes mtime and ctime of parent
+
+vn_rmdir dir1
+vn_times
+
+echo symlink -- changes mtime and ctime of parent
+
+vn_symlink link1 follow/the/link
+vn_times
+
+echo readlink -- changes atime
+
+vn_lookup link1
+vn_times
+vn_readlink
+vn_times
+root_vnode
+vn_times
+
+release_vnode
+unmount_vol
+check_device
+end

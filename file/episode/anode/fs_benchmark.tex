@@ -1,0 +1,187 @@
+% @OSF_COPYRIGHT@
+% COPYRIGHT NOTICE
+% Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+% ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+% the full copyright text.
+% 
+% HISTORY
+% $Log: fs_benchmark.tex,v $
+% Revision 1.1.12.1  1996/10/02  17:17:47  damon
+% 	Newest DFS from Transarc
+% 	[1996/10/01  18:27:32  damon]
+%
+% Revision 1.1.6.1  1994/06/09  13:57:57  annie
+% 	fixed copyright in src/file
+% 	[1994/06/08  21:33:12  annie]
+% 
+% Revision 1.1.4.2  1993/01/18  22:04:57  cjd
+% 	embedded copyright notice
+% 	[1993/01/18  21:44:31  cjd]
+% 
+% Revision 1.1.2.2  1992/05/06  14:10:24  jdp
+% 	Initial revision.
+% 	[1992/05/05  23:19:33  jdp]
+% 
+% $EndLog$
+\documentstyle{trarticle}
+\begin{document}
+\title{File System Benchmark}
+\author{Owen T. Anderson \\ Transarc Corporation}
+
+% $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/fs_benchmark.tex,v 1.1.12.1 1996/10/02 17:17:47 damon Exp $
+
+\maketitle
+\section{Introduction}
+
+The program {\tt file_perf} runs a benchmark program that can be used to
+evaluate the performance of a file system.  Its operation is modeled
+after the performance statistics provided in the Berkeley Fast File
+System paper\cite{unix-ffs}.
+
+The benchmark has three basic phases: First create and write a large
+number of files in a small number of directories, then all the files in
+these directories are stat'ed, and finally, all the files are read and
+deleted.
+
+\section{Actions}
+
+The files are written to a range of sizes.  The total of all sizes is
+15.3 Mbytes, including one 10M file, three 1M files, 10 100K files, 300
+files of 1K and 100 files of 10K, 100, 10, one, and zero bytes each.
+The allocation of these files to each of five directories is random
+except that 50\% of the files are in the first directory, followed by
+25\%, 20\%, 4\%, and 1\% to each of the remaining four directories.  The
+files are also created and deleted in random order.
+
+All the directories and their contents are deleted at the beginning of
+the benchmark before timing starts to insure that left over files from an
+aborted run do not skew the results.  Files are created using the open
+system call with {\tt O_RDWR + O_CREAT + O_TRUNC}.  Then, they are grown
+to the desired size by a series of write system calls using a 50K buffer
+filled with $-1$s.
+
+After all the files, are created each directory is read using readdir and
+each file in it is checked using the stat system call.
+
+During the final phase, all the files are visited in a random order,
+different from that used during create.  Each is opened and read using
+the same buffer as for delete.  Then the file is removed using the
+unlink system call and closed.  This combination results in the file
+being deleted.
+
+\section{Measured Values}
+
+Each of the phases is timed in its entirety.  Each file at least 100K in
+size is timed individually for the write, read and delete operations.
+These operations which do not correspond directly to the phases.  The
+per file statistics are summed for all files of the same size.  The stat
+pass on each directory is also timed individually.
+
+The timing information includes wall clock elapsed time, cpu time (the
+user and system cpu time are combined) and a count of blocks read and
+written.  These last two numbers are somewhat difficult to interpret
+since they reflect the asynchronous behavior of the buffering system so,
+for instance, writes may occur during read-only operations as buffers
+are flushed.
+
+The results of these timing measurements are an overall reading for each
+phase and average readings for write, read, and delete for each of 100K,
+1M and 10M files, as well as timings for each directory.  The figures
+for the phases are reported in absolute terms.  The average times for
+each file size are expressed as rates in units of bytes per second.  The
+times for each directory are also expressed as rates but in units of
+files per second.  The I/O block operations for files are expressed as a
+fraction of the number of blocks actually read and should approach $1.0$
+(or, on Suns, $8.0$ if the basic file system block size and the buffer
+size are not the same).  The block figures for the stat operations are
+given in files per block since the blocks being read are (probably,
+mostly) inode blocks not data blocks.
+
+In addition to timing infomation, the program also tries to
+characterize the state of the machine as it might affect the
+measurements it makes.  To this end it prints out the time, and runs the
+{\tt uptime} program to display the load average.  It also uses the
+statfs system call to check the disk device's name and available space.  The
+disk space available during the benchmark is of interest since the block
+allocation algorithms need to work much harder and must sacrifice
+locality when the disk is almost full.  The device name also provides a
+way to determine the disk and controller types used for the test.
+
+This is what the output of the program looks like:
+\begin{verbatim}
+Mon Feb 19 09:00:58 1990
+  9:01am  up 16 days, 10:52,  9 users,  load average: 0.12, 0.02, 0.00
+  814 files totalling 15.3111 Mbytes
+  File system on /dev/rz0g was initially 69.3% free, min was 37.4%
+Creates 154 sec, 15.7 cpu sec, I/O = 77/4298 8192 byte blocks
+Stats 1.06 sec, 0.633 cpu sec, I/O = 16/0 8192 byte blocks
+Deletes 169 sec, 15.5 cpu sec, I/O = 2682/1717 8192 byte blocks
+  10 Files w/ 1e+05 bytes:
+    reads 186 Kb/sec, 3.2 Mb/cpuSec, I/O 0.872/0 bf
+    writes 106 Kb/sec, 2.42 Mb/cpuSec, I/O 0/0.798 bf
+    deletes 559 Kb/sec, 4.41 Mb/cpuSec, I/O 40.7/3.39 bf
+  3 Files w/ 1e+06 bytes:
+    reads 199 Kb/sec, 4.11 Mb/cpuSec, I/O 0.984/0 bf
+    writes 192 Kb/sec, 2.66 Mb/cpuSec, I/O 366/0.969 bf
+    deletes 3.61e+03 Kb/sec, 29.5 Mb/cpuSec, I/O 24.4/17.4 bf
+  1 Files w/ 1e+07 bytes:
+    reads 354 Kb/sec, 3.84 Mb/cpuSec, I/O 0.999/0 bf
+    writes 253 Kb/sec, 2.88 Mb/cpuSec, I/O 136/0.984 bf
+    deletes 1.52e+04 Kb/sec, 82.6 Mb/cpuSec, I/O 87.2/76.3 bf
+stat of /usr/vice/cache/a, 422 files 745 files/sec, 1.33e+03 f/cpu, I/O 38.4 f/blk 
+stat of /usr/vice/cache/b, 198 files 1.13e+03 files/sec, 1.45e+03 f/cpu, I/O 198 f/blk 
+stat of /usr/vice/cache/c, 162 files 1.12e+03 files/sec, 1.48e+03 f/cpu, I/O 162 f/blk 
+stat of /usr/vice/cache/d, 25 files 427 files/sec, 800 f/cpu, I/O 25 f/blk 
+stat of /usr/vice/cache/e, 7 files 68.9 files/sec, 256 f/cpu, I/O 3.5 f/blk 
+  9:06am  up 16 days, 10:58,  9 users,  load average: 1.49, 0.81, 0.09
+\end{verbatim}
+
+\section{Results}
+
+The following machines were examined.
+\begin{description}
+\item[galileo] A DECStation 2100 running Ultrix 3.1 with 12Meg of memory.  The disk was a ...
+\item[something] A DECStation 3100 ...
+\item[colby] A VaxStation [23]100 running Ultrix 3.0 ...
+\item[bigtime] An RT running AOS 4 rel 3.
+\item[decision] An RT running AIX 2.2.1.
+\item[dallas] A Motorola 68030(?) running SunOS 4.0.
+\item[frick] A Motorola 68030(?) running SunOS 3.5.
+\item[milkyway] A Sun4 Sparc running SunOS 4.0.
+\item[ernie] A Sun4 Sparc running SunOS 4.0.  It has fast disks...
+\item[laurel] An HP 9000 running HPUX (version?).
+\end{description}
+
+There are some potentially interesting comparisons to make between these
+related system types.  For example all the Digital system are running
+Ultrix which means the file system is their GFS system.  The DECStations
+should be very comparable since they run identical kernel binaries, yet
+differ in processing speed by XX\%.  A comparison between RT's running
+AOS and AIX 2.2.1 and the RIOS running AIX 3.0 would also be very
+interesting, if a 10M file could be created on an AIX 2.2.1 machine and
+if programs could be compiled on the RIOS.  The Sun systems provide a
+contrast between changes in single parameters: for instance, SunOS 3.5
+vs. 4.0, Motorola 68030 vs. Sun Sparc, and SparcStation disk vs Sun4/280
+disk.  The HP machine provides a System V derived machine that should
+make for an interesting contrast.
+
+\section{Data Reduction}
+
+Detailed examiniation of the data is still needed.
+
+An obvious conclusion obtained from this data is that the Sun4 Ernie
+with its complement of disks and controllers is much faster than the
+other machines.  Although its processor is only 30\%-40\% faster than
+the SparcStation processor, its performance is better by a wide margin.
+
+It seems that the total elapsed real time is the most consistent
+indicator of performance.  It is most constant between runs on the same
+machine and, of course, it is what the end user actual sees.
+
+\begin{thebibliography}{99}
+\bibitem{unix-ffs} Marshall Kirk McKusick, William N. Joy, Samuel
+  J. Leffler, Robert S. Fabry, ``A Fast File System for UNIX'', CSRG
+  Technical Report 83-147, University of California at Berkeley, 1983.
+\end{thebibliography}
+
+\end{document}

@@ -1,0 +1,170 @@
+
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: fstest,v $
+# Revision 1.1.16.1  1996/10/17  18:30:57  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:55:29  damon]
+#
+# Revision 1.1.11.2  1993/07/19  19:45:15  zeliff
+# 	HP port of DFS
+# 	[1993/07/19  18:33:52  zeliff]
+# 
+# Revision 1.1.9.3  1993/07/16  22:51:03  kissel
+# 	Put HP RP work on the 1.0.3i branch.
+# 	[1993/06/21  15:13:38  kissel]
+# 
+# Revision 1.1.7.2  1993/06/04  20:19:57  kissel
+# 	Initial HPUX RP version.
+# 	[1993/06/03  22:47:44  kissel]
+# 
+# Revision 1.1.5.2  1993/01/11  18:36:29  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:19:56  htf]
+# 
+# Revision 1.1.4.2  1993/03/29  21:35:16  maunsell_c
+# 	03/16/93	maunsell_c	remove hard coded TESTTOP path
+# 	[1993/03/29  21:07:20  maunsell_c]
+# 
+# Revision 1.1.2.2  1992/05/21  12:52:02  jaffe
+# 	Transarc delta: fred-merge-tests 1.1
+# 	  Selected comments:
+# 	    Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	    the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	    should be looking at the same test code.
+# 	    Changes to facilitate merge of local DFS test code with the OSF's.
+# 
+# 	$TALog: fstest,v $
+# 	Revision 4.5  1994/11/01  22:32:49  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r4.4 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	[1992/05/20  21:07:56  jaffe]
+# 
+# $EndLog$
+#
+###############################################################################
+#    Copyright (C) 1990, 1991 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+lf=/dev/null; export lf
+p=`basename $0`
+rc=0
+
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${OTHER_CELL=othercell.com}
+
+: ${TESTTOP:="$(pwd)"}
+
+testhome=$TESTTOP/fs
+
+dir_1=/.../$CELL_NAME/fs/tdir1
+dir_2=/.../$OTHER_CELL/fs/tdir2
+
+###############################################################################
+
+# Highest error number is: 10
+
+###############################################################################
+
+echo ""
+echo "Running intercell filesystem naming tests."
+echo "Using cells $CELL_NAME and $OTHER_CELL."
+echo "Using directories $dir_1 and $dir_2."
+
+###############################################################################
+
+if test ! -d $dir_1
+   then echo ""; echo "Making $dir_1..."; mkdir $dir_1; dir_1_flag=TRUE
+   else dir_1_flag=FALSE
+   fi
+
+if test ! -d $dir_2
+   then echo ""; echo "Making $dir_2..."; mkdir $dir_2; dir_2_flag=TRUE
+   else dir_2_flag=FALSE
+   fi
+
+echo ""; echo "Changing to $dir_2..."
+cd /tmp; old_dir=`pwd`; cd $dir_2
+if test `pwd` = $old_dir -o $? -ne 0
+   then echo "- $p: cd $dir_2 failed (got `pwd`) (E1)"; exit 1
+   fi
+
+echo ""; echo "Current directory is `pwd`."
+
+###############################################################################
+
+echo ""; echo "Running test2..."
+$testhome/test2 -np 2 -nt 25 -p $dir_2/; rf=$?
+if test $rf -ne 0; then echo "- test2 failed ($rf) (E2)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running test2b..."
+$testhome/test2b -np 2 -nt 5 -p $dir_2/; rf=$?
+if test $rf -ne 0
+   then echo "- test2b failed ($rf) (E10)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Running test3..."
+$testhome/test3 -small; rf=$?
+if test $rf -ne 0; then echo "- test3 failed ($rf) (E3)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running test4..."
+$testhome/test4 -np 2 -nt 10; rf=$?
+if test $rf -ne 0; then echo "- test4 failed ($rf) (E4)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running test7..."
+$testhome/test7 -nt 5 -nd 4 -nf 16; rf=$?
+if test $rf -ne 0; then echo "- test7 failed ($rf) (E5)"; rc=`expr $rc + 1`; fi
+
+i=1
+while test $i -le 5
+   do
+
+   echo ""; echo "Running test8 (iteration $i)..."
+   $testhome/test8 -from $dir_1 -to $dir_2 -nomvdir; rf=$?
+   if test $rf -ne 0
+      then echo "- test8 failed ($rf) (E6)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Running test8 again (iteration $i)..."
+   $testhome/test8 -from $dir_2 -to $dir_1 -nomvdir; rf=$?
+   if test $rf -ne 0
+      then echo "- test8 failed ($rf) (E7)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Running test9 (iteration $i)..."
+   $testhome/test9 -dir1 $dir_1 -dir2 $dir_2; rf=$?
+   if test $rf -ne 0
+      then echo "- test9 failed ($rf) (E8)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Running test9 again (iteration $i)..."
+   $testhome/test9 -dir1 $dir_2 -dir2 $dir_1; rf=$?
+   if test $rf -ne 0
+      then echo "- test9 failed ($rf) (E9)"; rc=`expr $rc + 1`
+      fi
+
+   i=`expr $i + 1`
+   done
+
+###############################################################################
+
+cd /tmp; cd $d
+if test $dir_1_flag = TRUE; then echo "Removing $dir_1..."; rm -rf $dir_1; fi
+if test $dir_2_flag = TRUE; then echo "Removing $dir_2..."; rm -rf $dir_2; fi
+
+###############################################################################
+
+echo ""; echo "$ty/$p returning $rc at `date`."
+exit $rc
+
+###############################################################################

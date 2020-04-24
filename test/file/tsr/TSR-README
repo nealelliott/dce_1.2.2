@@ -1,0 +1,357 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: TSR-README,v $
+# Revision 1.1.414.1  1996/10/17  18:36:47  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:58:05  damon]
+#
+# Revision 1.1.409.1  1994/02/04  20:47:30  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:25:34  devsrc]
+# 
+# Revision 1.1.407.1  1993/12/07  17:46:34  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  19:41:45  jaffe]
+# 
+# Revision 1.1.2.4  1993/01/11  18:37:22  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:22:10  htf]
+# 
+# Revision 1.1.2.3  1992/11/24  21:46:51  bolinger
+# 	Change include file install directory from .../afs to .../dcedfs.
+# 	[1992/11/22  19:47:08  bolinger]
+# 
+# Revision 1.1.2.2  1992/11/19  13:37:06  jaffe
+# 	New File
+# 	[1992/11/18  17:03:02  jaffe]
+# 
+# $EndLog$
+
+I. TSR TEST
+===========
+
+This note is to show you how to run test program "tsrtest" while testing the 
+TSR (ie., Token State Recovery) in the event of a server crash or after the 
+network partition gets repaired. 
+
+Since the automated test driver for the TSR test is still under development, 
+you may want to run "tsrtest" by hand, for the time being, based on the 
+scenarios listed below. 
+
+
+
+II. TEST PROGRAM --- TSRTEST 
+===============================
+
+This section explains how to build and run the test program, tsrtest.
+
+
+    o  The test program, tsrtest.c, is platform-independent. You can always 
+	compile/build it without any dependency. 
+
+    o  The test program should be stored in the dfs server.
+
+    o  Run the test program as such: 
+
+       tsrtest [-dir testdir] [-verbose] [-files num] [-flock] [-nopause]
+	
+	-dir    : specify where you create your test dir, defaut is /:
+
+
+	-verbose: prints out info about every operation.
+		  NOTE: Always turns the flag ON.
+
+	-files num:  Creates a specific number of files.
+	 	     The default is 5 and the upper limit is 50.
+
+	-flock:      Invokes the usage of SystemV record lock for every
+		     read and write.
+
+		     NOTE: This option is necessary only when you test
+			   the network partition case.
+
+	-nopause:    The test program does not pause. The test scenarios listed
+		     below show you an example of when to use it. 
+
+
+
+III. TEST PROGRAM -- INTERNALS
+==================================
+
+
+This section explains how the test program, tsrtest.c, works internally.
+
+    o TESTDIR is either the specified directory or "/:",
+      where /.../<cellname>/fs
+
+    o Create a directory, tsrDir under TESTDIR.
+
+      NOTE: Make sure that you have the write access to TESTDIR and you 
+	    have to dce_login as an authenticated user. 
+
+    o Enter the loop to create a specific number of files
+
+
+    o For each file created, write a 20,000-bytes string starting at the offset
+      I*20,000, where I is the I-th file created. 
+
+      NOTE: Before each write, a 'F_WRLCK' lock is requested, 
+	    if '-flock' is ON.
+
+
+    o the program pauses until you hit return or any key.
+
+
+    o For each file created/written before, read the data back from offset
+      I*20,000.
+
+      NOTE: Before each read, a 'F_RDLCK' lock is requested, 
+	    if '-flock' is ON.
+
+    o Rename TESTDIR/tsrDir to TESTDIR/tsrDir1 which contains files created 
+      during the test. 
+
+      NOTE: These files could be used as a base from which later test 
+	    results could compare.
+
+    o End.
+
+
+
+IV. RUNNING TSR TEST
+======================
+
+
+Configuration and Environment:
+
+	- A two-machine cell with machines denoted as M1 and M2 respectively.
+	- Machine M1, the primary machine exporting root.dfs, is configured
+	  as DCE servers and also DFS server/client.
+	- Machine M2, the secondary machine, is configured as a DCE client
+	  and also , at least, a DFS client. 
+	- You can put the test program, tsrtest, anywhere in Machine M2 (ie.,
+	  it does not matter whether it is in DFS or it is in the local disk).
+
+
+Scenarios:
+
+
+A) SERVER RESTART WITH NO CONTENTION FOR TOKENS:
+
+
+   That is, there is no other user accessing the same set of files that your
+   test program is accessing. Thus, there is no token revocation involved. 
+
+   Before you start, be sure to run the test program with a '-nopause'
+   option first, ie, 
+
+	tsrtest -dir TESTDIR -verbose -files 40 -nopause, 
+
+   This test will create/write 40 files in TESTDIR/tsrDir. These 40 files, 
+   stored in TESTDIR/tsrDir1 (renamed from tsrDir by the test program at the
+   end) will be used to validate the results of the TSR tests. 
+
+   Note that TESTDIR could be any dir under /: 
+
+
+
+  I. Server Crash
+  ================
+
+   NOTE: In the Server-Crash test scenario, you should NOT use the option, 
+         '-flock'. 
+
+	 The CM takes a very conservative approach in recovering the LOCK 
+         type token. The CM, in general,  could not tell whether there has 
+         been a network partition first before the server crash, therefore
+	 the CM would automatically mark a file STALE if the file has had 
+         the LOCK token prior to the server crash (or separation).
+
+	 However, you should use option '-flock' in a network-partition
+         test scenario. 
+
+
+
+   Server Failure I:
+   --------------------
+	
+	a) Run the test program from M2, and make sure you have the write 
+	   access to TESTDIR so that the test program can create a directory 
+	   in TESTDIR,
+
+	b) tsrtest -verbose -files 40 -dir TESTDIR
+
+	c) The test program pauses for further input,
+
+	d) Shut down the server and make sure the machine is really down 
+	   before you proceed.
+
+	e) Hit the return or any key,
+
+   	   The test program detects the communication failure and  prints 
+	   out the message indicating so. 
+
+	   The displayed message reads something like :
+
+		>  tsrtest: can't create test files file20, error=78
+		>  tsrtest: communication failure 
+
+	   Note that it depends on whether the CM in M2 already detects the
+	   server down (via one of the background daemons) or not. It may
+	   take the test program a while (~30 seconds) to respond. 
+
+           The test program in the meantime tries to CREATE a new file and
+	   WRITE/READ data to/from one of files created early. 
+
+	   Both of these operations SHOULD fail with a ETIMEDOUT error. 
+	   
+	   
+	f) The test program comes to pause again after reporting these errors,
+
+	g) You could hit return several times and you will see the same
+	   result,
+
+	h) Reboot machine M1 and start the fx server,
+
+
+	i) Hit the return to continue the test program, 
+
+	   Note that it may take one minute or so for the CM on Machine M1 to 
+	   detect that the server is up again. After that, the CM is starting
+	   the TSR (Token State Recovery) procedure to get tokens and 
+	   send dirty data back to the server, etc. 
+
+
+	j) The test program starts reading data from these files, 
+	   Note that these reads should succeed. Be sure that the test 
+	   program does not print out any failure messages. 
+	   
+
+	k) Ignore the failure message from "rename tsrDir to tsrDir1", since
+	   you already have tsrDir1 as a test result base.
+
+
+	l) Compare two sets of 40 files, by using 'diff', stored in tsrDir and 
+	   tsrDir1. The purpose is to make sure that all changes made prior to 
+	   the server crash would get written back to the server. So, these 
+	   files should have the same contents. 
+	   
+
+
+    Server Failure II:
+   ------------------------
+
+	Repeat the scenario mentioned above but without hitting the 
+	return or any key until the server comes back, ie., skip step e),
+	f), and g). 
+
+	This will test the situation where the test program itself is not 
+	aware of that the server had been down before. After you hit the 
+	return key (ie., step i), the test program should resume the operation 
+	as if there were nothing had happen.
+
+
+
+
+   II. Network Partition
+   =======================
+
+   Instead of rebooting the server machine, this time, we will test
+   the TSR in the case of a network partition. Note that the token state, in 
+   this scenario, maintained in the server is still intact. 
+
+   There are several ways to  make the network partition. We use 
+   /etc/ifconfig to shutdown the network. The only problem of using 'ifconfig'
+   is that you have to figure out what the network interface parameter that 
+   the machine is using. 
+	
+
+    Network Partition I:
+   --------------------------
+
+	Repeat the same steps mentioned in section 'Server Failure I' but 
+	with the following differences:
+
+
+	b) tsrtest -verbose -files 40 -dir TESTDIR -flock
+	
+	d) Shutdown the network by doing  
+
+	(on RIOS) /etc/ifconfig en0 down; sleep 200; /etc/ifconfig en0 up, Or
+
+	(on SPARC) /usr/sbin/ifconfig le0 down; sleep 200; /usr/sbin/ifconfig le0 up, Or
+
+	(on PMAX) sh /sbin/rc3.d/S00inet stop force; sleep;
+		  sh /sbin/rc3.d/S00inet start
+
+
+	Note that you have to do this in Machine M1. Instantly, you will not
+	get any response from the X-window to M1. 
+
+	You can proceed with steps e), f) and g) to verify that, the CM in M2,
+	indeed, thinks that the server is "down". 
+
+
+	After 5 minutes (or after you see some response from the X-window to 
+	M1), resume your test with step i). 
+
+
+
+    Network Partition II:
+   --------------------------
+
+  	Repeat the same test as Sever Failure II. except you shutdown the 
+	network not the server machine. 
+
+
+
+B) SERVER RESTART WITH CONTENTION FOR TOKENS:
+
+
+   This is the case where the server grants the same set of tokens (that
+   actually belong to CM1, at the time) to another client, CM2. This could 
+   happen if there is a network partition between CM1 and the server and the 
+   fx server thinks that CM1 is down. 
+
+   When the network partition between CM1 and the fx server gets repaired, the 
+   CM1 has to invalidate those files 
+
+	i) If those files have been modified by CM2 before CM1 has a chance
+	   to re-access them, OR
+	
+       ii) Both CM1 and CM2 use SystemV record lock for their read and
+	   write operations. 
+
+
+	
+   Repeat the test scenario described in 'Network Partition I' except with 
+   the following differences. 
+
+	d) - Do the network shutdown work in Machine M2 (where you are running 
+       	     the test program) instead of in M1. 
+	
+	     That is, the machine M2 will not be reachable. As far as 
+    	     the fx server is concerned, the M2 is down, since the server
+	     can not revoke tokens held by M2. 
+
+
+	   - Run the same test program in Machine M1 from DFS by doing
+
+		tsrtest -verbose -files 40 -flock -nopause
+
+	     NOTE: You may notice that the first open may take a while 
+	       	   (~ 2 mins). That is because that the fx server could not 
+	  	   revoke the token held in M2 and has to wait for some 
+		   graceful period of time (maximum is 2 mins) before it could
+		   grant the token to CM1.
+
+
+	When the network partition gets repaired on M2, resume the
+	test program by starting from step i). All the subsequent 
+	READ operations should fail with ESTALE errno. This indicates that 
+	the CM in machine M2 invalidates all files created in this test

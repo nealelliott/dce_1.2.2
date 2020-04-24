@@ -1,0 +1,766 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dcecdsrep,v $
+# Revision 1.1.2.2  1996/03/09  20:50:41  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:28:44  marty]
+#
+# Revision 1.1.2.1  1995/12/11  21:56:58  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:54 UTC  bell_d
+# 	Many changes by others
+# 	[1995/12/11  20:56:47  root]
+# 
+# Revision 1.1.4.3  1993/08/27  18:06:05  giza
+# 	bug fixes in authorization & timing
+# 	[1993/08/27  18:04:59  giza]
+# 
+# Revision 1.1.4.2  1993/07/09  11:24:28  root
+# 	Initial King Kong branch
+# 	[1993/07/09  11:23:56  root]
+# 
+# Revision 1.1.2.3  1993/04/29  15:06:42  giza
+# 	fix infinite loop in REPDIR test purpose. giza
+# 	[1993/04/29  15:06:09  giza]
+# 
+# Revision 1.1.2.2  1993/04/23  14:41:16  giza
+# 	Added new test dcecdsrep to systest area.
+# 	[1993/04/22  18:37:28  giza]
+# 
+# $EndLog$
+#########
+######### TESTNAME:             dcecdsrep
+#########
+######### COMPONENT_NAME:       dce.systest
+#########
+######### FILE:                 dcecdsrep.data
+#########                       dcecdsrep.functions
+#########
+######### DESCRIPTION:	o Create a replica clearinghouse, and skulk the root.
+#########		o Create a directory in the master clearinghouse, and skulk the root.
+#########		o Replicate the directory in the replica clearinghouse, and skulk the root.
+#########		o Disable the master clearinghouse to ensure that addition of
+#########		  an object to the replica clearinghouse is not possible.
+#########		o Enable the master clearinghouse and add the object to the
+#########		  directory, add it's attribute, and skulk the directory.
+#########		o Try to get the attribute of the object, this should succeed.
+#########		o Add a new attribute (Note: currently do NOT use the same attribute)
+#########		  to the object, and do NOT skulk the directory.
+#########		o Disable the replica clearinghouse and try to skulk. This should fail
+#########		  to propagate the attribute.
+#########		o Enable the replica clearinghouse
+#########		o Try to get the attribute, this should fail.
+#########		o Skulk the directory.
+#########		o Try to get the attributes again, this should succeed.
+#########		o Cleanup
+#########
+#########               o All functions will trap SIGINT SIGKILL SIGTERM SIGQUIT
+#########                 with exception to the cleanUp and related functions.
+#########                 cleanUp will ignore all but SIGQUIT, and the functions
+#########                 called by cleanUp will ignore all of the above.
+
+tet_startup="startUp"
+tet_cleanup="tetCleanUp"
+iclist="ic1"
+ic1="runcdsrep"
+test_purp_list="runcdsrep"
+
+# Function:	startUp()
+#               performs dce_login function
+startUp()
+{
+	(( $CDS_TRACE > 4 )) && {
+                infoLine "********************* $0 *********************"
+		set -x
+        }
+
+	TET_CAUGHTSIG=0
+
+        [[ ! -h /usr/bin/dce_login_noexec ]] &&
+                ln -s /usr/bin/dce_login /usr/bin/dce_login_noexec
+
+        dceAuth
+        (( $? )) && {
+                for testPurpose in $test_purp_list
+                do
+                        tet_delete $testPurpose "Error: Test purpose $testPurpose failed... Deleting."
+                done
+	}
+
+        rm $DATADIR/cdsAttrs 1>/dev/null 2>&1
+        rm $DATADIR/cdsDirs 1>/dev/null 2>&1
+        rm $DATADIR/cdsObjs 1>/dev/null 2>&1
+	rm $DATADIR/usersig 1>/dev/null 2>&1
+	rm $DATADIR/clean 1>/dev/null 2>&1
+        rm $DATADIR/*log 1>/dev/null 2>&1
+}
+
+
+# Function:	cleanAll()
+#
+tetCleanUp()
+{
+	(( $CDS_TRACE > 4 )) && {
+                infoLine "********************* $0 *********************"
+		set -x
+        }
+
+	[[ ! -f $DATADIR/usersig && ! -f $DATADIR/clean ]] && {
+        	(( $TET_CAUGHTSIG > 0 ))
+                	cleanUp $TET_CAUGHTSIG
+	}
+
+        rm $DATADIR/cdsAttrs 1>/dev/null 2>&1
+}
+
+# Function:	cleanUp( nerrs )
+#
+#		cleanup replicas, objects, and directories
+#               delete replica of the directory in the replica clearinghouse
+#               delete the clearinghouse, object and directory.
+cleanUp()
+{
+	(( $CDS_TRACE > 2 )) && {
+                infoLine "********************* $0 *********************"
+		set -x
+        }
+
+        trap '' INT KILL TERM
+
+        # Let's cleanup
+        #
+
+        [[ -r $DATADIR/cleared ]] && {
+                CLEARED=`while read -r line; do print $line; done < $DATADIR/cleared`
+                (( ! $? )) && {
+                        (( $VFLAG > 1 )) &&
+                                infoLine "re-creating cleared master clearinghouse $CLEARED"
+                        cdscp create clearinghouse $CLEARED 1>>$CDSCPLOG 2>&1
+                }
+        }
+
+        # Execute the functions that do the real work
+        #
+
+        for module in delRepCH delObj delDir
+        do
+                $module
+                (( $? )) &&
+                        break
+        done
+        cdscp set directory /.: to skulk 1>>$CDSCPLOG 2>&1
+
+        # Delete dynamic data files from previous run
+        #
+
+        rm $DATADIR/cdsDirs 1>/dev/null 2>&1
+        rm $DATADIR/cdsObjs 1>/dev/null 2>&1
+        rm $DATADIR/cleared 1>/dev/null 2>&1
+
+        # Pass/Fail
+	#
+
+	if (( $1 ))
+        then
+		infoLine "$2 out of 14 replication tests   F A I L E D   !"
+                (( $VFLAG )) &&
+        		banner FAILED!
+                infoLine "For detailed cdscp results see the file $CDSCPLOG"
+	else
+		infoLine "Replication tests   P A S S E D   !"
+                (( $VFLAG )) &&
+        		banner PASSED!
+                infoLine "For detailed cdscp results see the file $CDSCPLOG"
+	fi
+
+	/bin/date > $DATADIR/clean
+}
+
+
+runcdsrep()
+{
+        trap 'trapSig 40' INT KILL TERM QUIT
+
+        getServer
+
+        set -A DIR_BASENAME "test_dir"
+        set -A OBJ_BASENAME "test_obj"
+        typeset -l REPLICA_CH_BASE="/.:/test_ch"
+        typeset -l MASTER_CH="/.:/$CDSSERVER"_ch
+
+print  "1.11.12.13.14.15
+1122
+1.11.12.13.14.15
+2244" > $DATADIR/cdsAttrs
+
+        #
+        # Parse the command line and then initialize the test
+        #
+        parseCmdLine $*
+
+        (( $CDS_TRACE )) && {
+                infoLine "********************* $0 *********************"
+	        set -x
+        }
+
+        integer nerrs=0 icnt=1 iteration=$ITERATIONS status=0 fatal=0 testFail=0 Tt=0 Et=0 ISt=0 IEt=0
+        SECONDS=0
+        infoLine "#######################################################################################################"
+        infoLine "#######################################################################################################"
+        infoLine ""
+
+        if (( $NMIN ))
+        then
+                roundUp $(( $NMIN+($NMIN*10) ))
+                infoLine "        Running CDS replication tests on CDS client $CDSCLIENT and CDS server $CDSSERVER for ~$NMIN minutes."
+        else
+                infoLine "        Running CDS replication tests on CDS client $CDSCLIENT and CDS server $CDSSERVER $ITERATIONS time(s)."
+        fi
+
+        infoLine ""
+        infoLine "                                                RUN $$"
+        infoLine ""
+        infoLine "#######################################################################################################"
+        infoLine "#######################################################################################################"
+
+	# destroy auth ticket from cell validation
+	if [ "$KRB5CCNAME" != "" ];then
+                echo $KRB5CCNAME |grep dcecred >/dev/null
+                if [ $? -eq 0 ];then
+                        kdestroy
+                fi
+        fi
+
+        # Start it
+        #
+
+        while (( $iteration ))
+        do
+		ISt=$SECONDS
+                status=0 nerrs=0 fatal=0 started=0
+                typeset -u t_status=""
+                UNIQUE=$RANDOM
+                CLEAR_TEST=clear_$UNIQUE.obj
+                REPLICA_CH=$REPLICA_CH_BASE"_"$UNIQUE
+        
+                infoLine ""
+        
+                infoLine "                >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ITERATION $icnt <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
+        
+                infoLine ""
+                
+                for testPurpose in dceAuth repCH creatDir repDir add1 creatObj add2 getAttr1 getAttr2 add3 skulkTest getAttr3 upDate getAttr4 getAttr5
+                do
+                        $testPurpose
+                        status=$?
+                        if (( $status == 40 ))
+                        then
+                                infoLine "FATAL:$testPurpose failed with fatal error status $status"
+                                fatal=nerrs=nerrs+1
+                                break
+                        elif (( $status == 41 ))
+                        then
+                                nerrs=nerrs+1
+                        fi
+                done
+
+                # Cleanup we're done!        
+                infoLine "********************* Test Finished, Cleanup in Progress *********************"
+                cleanUp $nerrs
+
+                if (( $fatal ))
+                then
+                        t_status=DCE_FAIL
+                        break
+                elif (( $nerrs ))
+                then
+                        t_status=DCE_ERROR
+                        testFail=testFail+1
+                else
+                        t_status=PASS
+                fi
+        
+                # Print trailer
+                infoLine ""
+                infoLine "                                              END OF ITERATION $icnt"
+                infoLine ""
+
+        	if [ "$KRB5CCNAME" != "" ];then
+                	echo $KRB5CCNAME |grep dcecred >/dev/null
+                	if [ $? -eq 0 ];then
+                        	kdestroy
+                	fi
+        	fi
+
+
+        
+                # let's make efficient use of our time, if the time left is better than 50% of
+                # the last run, iterate again unless the estimated total time to run is over 10% of
+                # the requested total time to run.
+        
+                if (( $NMIN ))
+                then
+                        Tt=$Et
+                        Et=$(($SECONDS/60))
+
+                        if (( $(( ($Ot-$Et)/($Et-$Tt) )) ))
+                        then
+                                iteration=1
+                        else
+                                iteration=0
+                        fi
+                else
+                        iteration=iteration-1
+                fi
+        
+		IEt=$SECONDS
+		print "Iteration $icnt took $(( ($IEt-$ISt) )) seconds to execute." 1>>$CDSCPLOG 2>&1
+		infoLine "Iteration $icnt took $(( ($IEt-$ISt) )) seconds to execute."
+                icnt=icnt+1
+	
+        
+        done
+        
+        infoLine "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+        infoLine "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+        infoLine ""
+        infoLine "                                END OF RUN $$"
+        infoLine ""
+        infoLine "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+        infoLine "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+
+        tet_result $t_status
+
+	if [ "$KRB5CCNAME" != "" ];then
+		echo $KRB5CCNAME |grep dcecred >/dev/null
+		if [ $? -eq 0 ];then
+        		kdestroy
+		fi
+	fi
+} #end runcdsrep
+
+
+
+######
+###### The following are the actual tests.  These are laid out in specific order that they must run.
+######
+
+
+# Function:     dce_auth()
+#               performs dce_login_noexec
+dceAuth ()
+{
+        (( $CDS_TRACE > 1 )) && {
+                infoLine "********************* $0 *********************"
+                set -x
+        }
+
+        trap 'trapSig 40' INT KILL TERM QUIT
+
+	integer status=0
+
+	$DCELOCAL/bin/klist|grep Principal|egrep -v Global|grep cell_admin 1>/dev/null 2>&1
+        if (( $? ))
+        then
+                infoLine "********************* Authenticating DCE cell $(getcellname) with account $PRINCIPAL *********************"
+                KRB5CCNAME=`dce_login_noexec $PRINCIPAL $PASSWORD` 1>>$CDSCPLOG 2>&1
+		status=$?
+        	if (( $status ))
+        	then
+                	infoLine "ERROR: Unable to authenticate DCE cell $(getcellname) by $PRINCIPAL in dce_auth"
+			status=40
+		else
+			infoLine "********************* DCE cell $(getcellname) is now authenticated by $PRINCIPAL *********************"
+		fi
+        fi
+        export KRB5CCNAME
+        return $status
+}
+
+
+repCH()
+{
+# Test: REPCH
+#       Create replica clearinghouse then skulk the root
+
+        integer status=0 try=0 CSt=$SECONDS CEt=0
+
+        infoLine "********************* Create Replica Clearinghouse $REPLICA_CH *********************"
+
+	modCH create $REPLICA_CH replica
+        status=$?
+        while (( ( $status ) && ( $try < $RETRYS ) ))
+        do
+                infoLine "$status" "trying $try last operation $((RETRYS-$try)) more times."
+        	modCH create $REPLICA_CH replica
+                status=$?
+                (( $try == $(( RETRYS-1 )) )) &&
+                        checkCDS cell /.:
+                try=try+1
+        done
+	CEt=$SECONDS
+	print "Creation of replica clearinghouse took $(( ($CEt-$CSt) )) seconds." 1>>$CDSCPLOG 2>&1
+	infoLine "Creation of replica clearinghouse took $(( ($CEt-$CSt) )) seconds."
+	skulk /.:
+        return $status
+} #end tp1()
+
+
+creatDir()
+{
+# Test: CREATDIR
+#       Create directory(s) in master clearinghouse then skulk the root
+
+        integer UNIQUE=$RANDOM i=0 status=0 try=0
+
+        infoLine "********************* Create $NDIR CDS Directories *********************"
+
+        while (( $i < $NDIR && ! $status ))
+        do
+                CDS_DIRECTORY[$i]=/.:/$CDSCLIENT"_"$DIR_BASENAME"_"$UNIQUE
+                print ${CDS_DIRECTORY[$i]} >> $DATADIR/cdsDirs
+                modDir create ${CDS_DIRECTORY[$i]}
+                status=$?
+                try=0
+                while (( ( $status ) && ( $try < $RETRYS ) ))
+                do
+                        infoLine "$status" "trying $try last operation $((RETRYS-$try)) more times."
+                        modDir create ${CDS_DIRECTORY[$i]}
+                        status=$?
+                        (( $try == $(( RETRYS-1 )) )) &&
+                                checkCDS cell /.:
+                        try=try+1
+                done
+                UNIQUE=UNIQUE+1
+                i=i+1
+        done
+        skulk /.:
+        return $status
+} #end tp2()
+
+
+repDir()
+{
+# Test: REPDIR
+#       Replicate directory(s) in the replica clearinghouse then skulk the directory(s)
+
+        integer i=0 status=0 try=0
+
+        fillTables
+
+#        infoLine "********************* Replicate $NDIR CDS Directories in $REPLICA_CH, Skulk Each Directory *********************"
+        infoLine "********************* Replicate $NDIR CDS Directories in $REPLICA_CH *********************"
+
+        while (( ( $i < ${#CDS_DIRECTORY[*]} ) && ! $status ))
+        do
+                modRep create ${CDS_DIRECTORY[$i]} $REPLICA_CH
+                status=$?
+                try=0
+                while (( ( $status ) && ( $try < $RETRYS ) ))
+                do
+                        infoLine "$status" "trying $try last operation $((RETRYS-$try)) more times."
+                        modRep create ${CDS_DIRECTORY[$i]} $REPLICA_CH
+                        status=$?
+                        (( $try == $(( RETRYS-1 )) )) && {
+                                checkCDS directory ${CDS_DIRECTORY[$i]}
+                                (( $? )) &&
+                                        checkCDS cell /.:
+                        }
+                        try=try+1
+                done
+#                skulk ${CDS_DIRECTORY[$i]}
+                i=i+1
+        done
+        return $status
+} # end tp3()
+
+
+add1()
+{
+# Test: ADD1
+#       Disable master clearinghouse and attempt to add 1 object to the master namespace
+#       obviously this should fail.  Then enable the master clearinghouse and skulk the
+#       root
+
+        integer i=0 status=0
+
+        fillTables
+
+        infoLine "********************* Attempt to Add 1 Object to Cleared Clearinghouse $MASTER_CH *********************"
+
+	modCH clear $MASTER_CH master
+        (( $VFLAG > 1 )) &&
+        	infoLine "Attempting to create object ${CDS_DIRECTORY[$i]}/$CLEAR_TEST while the master clearinghouse has been cleared."
+	cdscp create object ${CDS_DIRECTORY[$i]}/$CLEAR_TEST 1>>$CDSCPLOG 2>&1
+	(( ! $? )) && {
+                status=41
+		infoLine "${CDS_DIRECTORY[$i]}/$CLEAR_TEST was successfully added to the namespace with master clearinghouse cleared."
+        }
+
+	modCH create $MASTER_CH master
+#	skulk /.:
+        return $status
+} #end tp4()
+
+
+creatObj()
+{
+# Test: CREATOBJ
+#       Create uniquely named object(s), skulk each container directory.
+
+        integer UNIQUE=$RANDOM i=0 j=0 status=0 try=0
+
+        fillTables
+
+        infoLine "********************* Create $NOBJ CDS Objects per Directory, Skulk it's Directory *********************"
+
+        while (( $i < $(( ${#CDS_DIRECTORY[*]} )) && ! $status ))
+        do
+                j=0
+                while (( $j < $NOBJ ))
+                do
+                        (( ${#CDS_OBJECT[*]} < $NOBJ && ! $status )) && {
+                                CDS_OBJECT[$j]=$OBJ_BASENAME"_"$UNIQUE
+                                print ${CDS_OBJECT[$j]} >> $DATADIR/cdsObjs
+                                UNIQUE=UNIQUE+1
+                        }
+                        modObj create ${CDS_DIRECTORY[$i]}/${CDS_OBJECT[$j]}
+                        status=$?
+                        try=0
+                        while (( ( $status ) && ( $try < $RETRYS ) ))
+                        do
+                                infoLine "$status" "trying $try last operation $((RETRYS-$try)) more times."
+                                modObj create ${CDS_DIRECTORY[$i]}/${CDS_OBJECT[$j]}
+                                status=$?
+                                (( $try == $(( RETRYS-1 )) )) && {
+                                        checkCDS directory ${CDS_DIRECTORY[$i]}
+                                        (( $? )) &&
+                                                checkCDS cell /.:
+                                }
+                                try=try+1
+                        done
+                        j=j+1
+                done
+                skulk ${CDS_DIRECTORY[$i]}
+                i=i+1
+                (( $VFLAG > 3 )) &&
+                        infoLine ""
+        done
+        return $status
+} #end tp5()
+
+
+add2()
+{
+# Test: ADD2
+#       Add one attribute/value pair to the object(s) in the namespace
+#       then skulk the respective directory(s).
+
+        integer i=0 j=0 status=0 try=0
+
+        fillTables
+
+        infoLine "********************* Add 1 Attribute/Value Pair to $NOBJ CDS Objects, Skulk it's Directory *********************"
+
+        while (( $i < ${#CDS_DIRECTORY[*]} && ! $status ))
+        do
+                j=0
+                while (( $j < ${#CDS_OBJECT[*]} && ! $status ))
+                do
+                        modObj add ${CDS_DIRECTORY[$i]}/${CDS_OBJECT[$j]} ${ATTR_NAME[$n]} ${ATTR_VALUE[$n]}
+                        status=$?
+                        try=0
+                        while (( ( $status ) && ( $try < $RETRYS ) ))
+                        do
+                                infoLine "$status" "trying $try last operation $((RETRYS-$try)) more times."
+                                modObj create ${CDS_DIRECTORY[$i]}/${CDS_OBJECT[$j]}
+                                status=$?
+                                (( $try == $(( RETRYS-1 )) )) && {
+                                        checkCDS directory ${CDS_DIRECTORY[$i]}
+                                        (( $? )) &&
+                                                checkCDS cell /.:
+                                }
+                                try=try+1
+                        done
+                        j=j+1
+                done
+                skulk ${CDS_DIRECTORY[$i]}
+                i=i+1
+        done
+        return $status
+} #end tp6()
+
+
+getAttr1()
+{
+# Test: GETATTR1
+#       Get one attribute/value pair from the newly created directory(s) and object(s) from
+#       the master clearinghouse.  This tests the assignement of the first attribute/value
+#       pairs to the objects in the master clearinghouse.
+
+        integer status=0
+
+        infoLine "********************* Get 1 Attribute/Value assigned to $NOBJ CDS Objects in $MASTER_CH *********************"
+
+        getObjAttr $MASTER_CH 0 1
+        return $?
+} #end tp7()
+
+
+getAttr2()
+{
+# Test: GETATTR2
+#       Get one attribute/value pair from the newly created directory(s) and object(s) from
+#       the replica clearinghouse.  This tests the propagation of the first attribute/value
+#       pairs added to the objects in the replica clearinghouse.
+
+        integer status=0
+
+        infoLine "********************* Get 1 Attribute/Value assigned to $NOBJ CDS Objects in $REPLICA_CH *********************"
+
+        getObjAttr $REPLICA_CH 0 1
+        return $?
+} #end tp8()
+
+
+add3()
+{
+# Test: ADD3
+#       Add more attributes to object(s) and do NOT skulk the directory.  The resulting
+#       additions made here will be used by GETATTRTEST3.
+
+        integer i=0 j=0 n=0 status=0 try=0
+
+        infoLine "********************* Add $(($NATTR-1)) New Attribute/Value Pairs to $NOBJ CDS Objects, Do Not Skulk *********************"
+
+        fillTables
+
+        while (( $i < ${#CDS_DIRECTORY[*]} && ! $status ))
+        do
+                j=0
+                while (( $j < ${#CDS_OBJECT[*]} && ! $status ))
+                do
+                        n=1
+                        while (( $n < $NATTR && ! $status ))
+                        do
+                                modObj add ${CDS_DIRECTORY[$i]}/${CDS_OBJECT[$j]} ${ATTR_NAME[$n]} ${ATTR_VALUE[$n]}
+                                status=$?
+                                try=0
+                                while (( ( $status ) && ( $try < $RETRYS ) ))
+                                do
+                                        infoLine "$status" "trying $try last operation $((RETRYS-$try)) more times."
+                                        modObj create ${CDS_DIRECTORY[$i]}/${CDS_OBJECT[$j]}
+                                        status=$?
+                                        (( $try == $(( RETRYS-1 )) )) && {
+                                                checkCDS directory ${CDS_DIRECTORY[$i]}
+                                                (( $? )) &&
+                                                        checkCDS cell /.:
+                                        }
+                                        try=try+1
+                                done
+                                n=n+1
+                        done
+                        j=j+1
+                done
+                i=i+1
+        done
+        return $status
+} #end tp9()
+
+
+skulkTest()
+{
+# Test: SKULKTEST
+#       Disable the replica clearinghouse and then skulk one directory.  Since the
+#       replica clearinghouse is down, this test should return a failure status since
+#       skulk won't be able to propogate updates.
+
+        integer i=0 status=0
+
+        fillTables
+
+        infoLine "********************* Attempt to Skulk 1 Directory in Cleared Clearinghouse $REPLICA_CH *********************"
+
+	modCH clear $REPLICA_CH replica
+        (( $VFLAG > 1 )) &&
+        	infoLine "Attempting to skulk directory ${CDS_DIRECTORY[$i]} to unavailable clearinghouse"
+	cdscp set directory ${CDS_DIRECTORY[$i]} to skulk 1>>$CDSCPLOG 2>&1
+	(( ! $? )) && {
+                status=41
+		infoLine "Skulk of ${CDS_DIRECTORY[$i]} completed successfully with $REPLICA_CH down"
+	}
+        return $status
+} #end tp10()
+
+
+getAttr3()
+{
+# Test: GETATTR3
+#       Get 1 attribute/value pair from 1 object from the replica clearinghouse
+#       this should fail.  We try only one of the new attributes added since
+#       this is sufficient and timeouts to do all would be insane.
+
+        infoLine "********************* Attempt to Get 1 Attribute/Value from 1 CDS Object in Cleared Clearinghouse $REPLICA_CH *********************"
+
+	getObjAttr $REPLICA_CH 1 1
+        return $?
+} #end tp11()
+
+
+upDate()
+{
+# Test: UPDATE
+#       Re-create the replica, skulk the root and directory(s) with newly created objects from ADDTEST3.
+
+        integer i=0 status=0
+
+        fillTables
+	modCH create $REPLICA_CH replica
+	skulk /.:
+
+        while (( $i < ${#CDS_DIRECTORY[*]} && ! $status ))
+        do
+	        skulk ${CDS_DIRECTORY[$i]}
+                status=$?
+                i=i+1
+        done
+        return $status
+} #end tp12()
+
+
+getAttr4()
+{
+# Test: GETATTR4
+#       Get all attribute/value pairs from the master clearinghouse.  This tests the
+#       assignment of additional attributes/values to the object(s).
+
+        infoLine "********************* Get $(($NATTR-1)) New Attributes/Values assigned to $NOBJ CDS Objects in Clearinghouse $MASTER_CH *********************"
+
+        getObjAttr $MASTER_CH 0 $NATTR
+        return $?
+} #end tp13()
+
+
+getAttr5()
+{
+# Test: GETATTR5
+#       Get all attribute/value pairs from the replica clearinghouse to ensure that the skulk
+#       propagated all changes from the writeable to the replica clearinghouse(s).
+
+        infoLine "********************* Get $(($NATTR-1)) New Attributes/Values assigned to $NOBJ CDS Objects in Clearinghouse $REPLICA_CH *********************"
+
+        getObjAttr $REPLICA_CH 0 $NATTR
+        return $?
+} #end tp14()
+
+. $TET_ROOT/profile.dcest
+. ./dcecdsrep.functions
+. ./dcecdsrep.data
+. $TET_ROOT/lib/ksh/tcm.ksh

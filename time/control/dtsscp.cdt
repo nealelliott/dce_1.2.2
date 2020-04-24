@@ -1,0 +1,950 @@
+
+! @OSF_COPYRIGHT@
+! COPYRIGHT NOTICE
+! Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+! ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+! src directory for the full copyright text.
+!
+! HISTORY
+! $Log: dtsscp.cdt,v $
+! Revision 1.1.12.2  1996/03/09  23:31:17  marty
+! 	Update OSF copyright year
+! 	[1996/03/09  22:46:28  marty]
+!
+! Revision 1.1.12.1  1995/12/08  18:09:33  root
+! 	Submit OSF/DCE 1.2.1
+! 
+! 	HP revision /main/HPDCE02/2  1994/08/18  16:56 UTC  pare
+! 	Merge changes from Hpdce02
+! 	[1995/12/08  17:24:22  root]
+! 
+! Revision 1.1.10.2  1994/07/20  21:19:37  cbrooks
+! 	CR9517 - dtscp accepts the command "set advertisement interval"
+! 	[1994/07/20  21:08:08  cbrooks]
+! 
+! 	HP revision /main/HPDCE02/1  1994/06/30  12:29 UTC  pare
+! 	Merge hpdce02 (DCE 1.1 beta)and HPDCE01 into HPDCE02
+! 
+! 	HP revision /main/HPDCE01/2  1994/03/08  23:20 UTC  pare
+! 	merge
+! 
+! 	HP revision /main/HPDCE01/pare_rodan/1  1994/03/08  21:34 UTC  pare
+! 	ELEMENT showTimeout declared twice -- remove one entry
+! 
+! Revision 1.1.3.5  1993/10/26  12:49:08  pare
+! 	Added OT DCE CR8877 -- recognize "?" as equivalent to "help"
+! 	[1993/10/26  12:48:31  pare]
+! 
+! Revision 1.1.3.4  1993/09/23  18:04:05  pare
+! 	DCE1_0_3b03 Merge
+! 	[1993/09/23  18:02:54  pare]
+! 
+! Revision 1.1.4.3  1993/09/15  17:47:06  root
+! 	    Loading drop DCE1_0_3b03
+! 	Revision 1.1.3.3  1993/07/15  17:39:31  truitt
+! 	OT7015: Make dtscp accept commas as decimal points.
+! 	[1993/07/15  17:39:12  truitt]
+! 
+! Revision 1.1.10.1  1994/04/21  22:05:36  cbrooks
+! 	CR 3231, 8353
+! 	[1994/04/21  19:52:23  cbrooks]
+! 
+! 	Checkpoint
+! 	[1994/03/28  20:23:06  cbrooks]
+! 
+! Revision 1.1.8.2  1993/07/14  20:39:21  tom
+! 	Change Too Many Servers Detected to Time Provider Timeouts Detected.
+! 	[1993/07/13  20:42:42  tom]
+! 
+! 	Bug 7015: dtscp didn't accept comma as decimal point.
+! 	[1993/04/30  14:36:58  tom]
+! 
+! 	Fighting bsubmit!!!
+! 	[1992/05/12  16:40:38  ko]
+! 
+! Revision 1.1.3.2  1993/07/15  16:06:10  truitt
+! 	OT7973: Remove support for the 'Too Many Server Detected' command.
+! 	        Add support for the 'Time Provider Timeout Detected' command.
+! 	[1993/07/15  16:05:08  truitt]
+! 
+! 	Fix ot 2813 - servers not responding replies properly.
+! 	[1992/05/12  16:04:50  ko]
+! 
+! Revision 1.1.1.11  1993/05/04  22:38:28  mgm
+! 	    Loading drop DCE1_0_2FNL
+! 
+! Revision 1.1.6.3  1993/02/02  15:09:15  tom
+! 	Bug 6883:
+! 	 Add syntax for 'show local servers not in group'.
+! 	 Add syntax for 'show server not in group'.
+! 	[1993/02/01  22:32:34  tom]
+! 
+! Revision 1.1.6.2  1992/12/30  16:35:07  htf
+! 	Embedding copyright notice
+! 	[1992/12/28  22:12:04  htf]
+! 
+! $EndLog$
+!
+! 	Source File DTSSCP.TXT
+!	Contains the input file for the parser generator utility, PRS.
+!
+!
+! Copyright (c) 1990 by
+! Digital Equipment Corporation, Maynard, Mass.
+! 
+! This software is furnished under a license and may be used and copied
+! only  in  accordance  with  the  terms  of such  license and with the
+! inclusion of the above copyright notice.  This software or any  other
+! copies thereof may not be provided or otherwise made available to any
+! other person.  No title to and ownership of the  software  is  hereby
+! transferred.
+!
+! The information in this software  is subject to change without notice
+! and  should  not be  construed  as a commitment by Digitial Equipment
+! Corporation.
+!
+! Digital assumes no responsibility for the use or  reliablity  of its
+! software on equipment which is not supplied by Digital.
+!
+! FACILITY:	Distributed Time Synchronization Service
+!
+! ABSTRACT:	Contains the parser table specification for the management
+!		interface.
+!
+!		A binary file of this module is processed by the Network 
+!		Management Parser facility.  This tool is not a layered 
+!		product and is  for internal use only.  It provides a 
+!		portable command line parser facility to use in both VMS 
+!		and ULTRIX environments.
+!	
+!		
+! ENVIRONMENT:	VMS V5.0
+!		ULTRIX V2.0
+!		
+! AUTHOR:	Ko Baryiames
+!		DTSS/DPE
+!		
+!
+
+!
+!			DTSS Entry Point
+!
+! See Chapter 5 of the parser document for information on the CHAR command.
+! It does not work as you might expect - for example CHAR e checks for EOL.
+!
+ELEMENT * -
+PROMPT "dtscp> "
+	CHAR e  						SUCCESS
+	CHAR !				CALL	actComment	SUCCESS
+	CHAR # 				CALL	actComment	SUCCESS
+	WORD DELETE	 MIN 3		GOTO    argDelete	
+	WORD ENABLE	 MIN 3		GOTO	argEnable
+	WORD DISABLE	 MIN 3		GOTO	argDisable	
+	WORD UPDATE	 MIN 3		GOTO	argUpdate
+	WORD SYNCHRONIZE MIN 3		GOTO	argSynch
+	WORD CHANGE	 MIN 3		GOTO	argChange
+	WORD ADVERTISE   MIN 3		GOTO	argAdvertise
+	WORD UNADVERTISE MIN 3		GOTO	argUnadvertise
+	WORD SET	 MIN 3		GOTO	argSet
+	WORD SHOW	 MIN 3		GOTO	argShow	
+	WORD EXIT	 MIN 3		CALL	actExit		GOTO checkEOL
+	WORD QUIT	 MIN 3		CALL    actExit		GOTO checkEOL
+	WORD CREATE	 MIN 3 		GOTO    argCreate
+	WORD HELP	 MIN 3					GOTO argHelp
+	CHAR ?		 MIN 3 					GOTO argHelp		     
+
+ELEMENT argHelp
+	WORD CREATE	MIN 3		CALL	actHelp:1	GOTO checkEOL
+	WORD DELETE	MIN 3		CALL	actHelp:2	GOTO checkEOL
+	WORD ENABLE	MIN 3		CALL	actHelp:3	GOTO checkEOL
+	WORD DISABLE	MIN 3		CALL	actHelp:4	GOTO checkEOL
+	WORD UPDATE	MIN 3		CALL	actHelp:5	GOTO checkEOL
+	WORD SYNCHRONIZE MIN 3		CALL	actHelp:6	GOTO checkEOL
+	WORD CHANGE	MIN 3		CALL	actHelp:7	GOTO checkEOL
+	WORD ADVERTISE  MIN 3		CALL	actHelp:8	GOTO checkEOL
+	WORD UNADVERTISE  MIN 3		CALL	actHelp:9	GOTO checkEOL
+	WORD SET	MIN 3		CALL	actHelp:10	GOTO checkEOL
+	WORD SHOW	MIN 3		CALL	actHelp:11	GOTO checkEOL
+	WORD ALL	MIN 3		CALL    actHelp:0	GOTO checkEOL
+	FORCE				CALL	actHelp:0	GOTO checkEOL
+
+!+
+!	Disable
+!+
+ELEMENT argDisable
+	FORCE				CALL actDisable		GOTO checkEOL
+
+!+
+! 	Delete
+!+
+ELEMENT argDelete
+	FORCE				CALL	actDelete	GOTO checkEOL
+!+
+!	Create Type [SERVER|CLERK]
+!+
+ELEMENT argCreate
+	WORD	TYPE	MIN 3					NEXT
+	FORCE				CALL	actCreate:1	GOTO checkEOL
+
+ELEMENT *
+	WORD	SERVER	MIN 3		CALL	actCreate:0	GOTO checkEOL
+	WORD	CLERK   MIN 3		CALL	actCreate:1	GOTO checkEOL
+	FORCE				CALL	actCreate:1	GOTO checkEOL
+
+!+
+!	Enable [Set Clock [TRUE|FALSE]]
+!+
+ELEMENT argEnable
+	WORD	SET	MIN 3					NEXT
+	FORCE				CALL actEnable:0	GOTO checkEOL
+ELEMENT *
+	WORD	CLOCK	MIN 3					NEXT
+	FORCE							NEXT
+
+ELEMENT *
+	WORD	TRUE	MIN 3		CALL actEnable:1	GOTO checkEOL
+	WORD	FALSE	MIN 3		CALL actEnable:0	GOTO checkEOL
+	FORCE				CALL actEnable:0	GOTO checkEOL
+
+!+
+!	Update Time {BinAbsTime}
+!+
+ELEMENT argUpdate
+	WORD	TIME	MIN 3					NEXT
+ELEMENT *  
+	GOSUB parseBAT			CALL actUpdate		GOTO checkEOL
+	
+!+
+!	Synchronize [SET CLOCK [TRUE|FALSE]]
+!+
+ELEMENT argSynch
+	WORD	SET	MIN 3					NEXT
+	FORCE				CALL actSynchronize:0	GOTO checkEOL
+ELEMENT *  
+	WORD	CLOCK	MIN 3					NEXT
+	FORCE							NEXT
+ELEMENT *  
+	WORD	TRUE	MIN 3		CALL actSynchronize:1	GOTO checkEOL
+	WORD	FALSE	MIN 3		CALL actSynchronize:0	GOTO checkEOL
+	FORCE				CALL actSynchronize:0	GOTO checkEOL
+
+!+
+!	Change command 
+!+
+ELEMENT argChange -
+PROMPT  "(EPOCH, HOST):"
+	WORD	EPOCH	MIN 3		GOTO argEpoch
+	WORD	HOST    MIN 3		GOTO setHost
+
+!+
+!	CHANGE EPOCH {#} [TIME {BAT}]
+!+
+ELEMENT argEpoch
+	FORCE				NEXT 
+ELEMENT *
+	DECIMAL				CALL actChangeEpoch:0   NEXT
+ELEMENT *
+	WORD	TIME	MIN 3					NEXT
+	FORCE				CALL actChangeEpoch:1	GOTO checkEOL
+ELEMENT *
+	GOSUB	parseBAT		CALL actChangeEpoch:2   GOTO checkEOL
+
+!+
+!	ADVERTISE SERVER
+!+
+ELEMENT argAdvertise
+	FORCE				CALL actAdvertise	GOTO checkEOL
+!+
+!	UNADVERTISE SERVER
+!+
+ELEMENT argUnadvertise
+	FORCE		 	 	CALL actUnadvertise	GOTO checkEOL
+!+
+!	SET {-}
+!+
+ELEMENT argSet -
+PROMPT "What: "
+!	WORD	ADVERTISEMENT	MIN 3	GOTO setAdver
+	WORD	CHECK		MIN 3   GOTO setCheck
+	WORD	ERROR		MIN 3   GOTO setError
+	WORD	MAXIMUM		MIN 3	GOTO setMaximum
+	WORD	SERVERS		MIN 3   GOTO setServer
+	WORD	QUERY		MIN 3   GOTO setQuery
+	WORD	LAN		MIN 3   GOTO setLSetTimOut
+	WORD	WAN		MIN 3	GOTO setGSetTimOut
+	WORD	SYNCHRONIZATIONS MIN 3  GOTO setSynch
+	WORD	COURIER		MIN 3	GOTO setCourier
+	WORD	SERVICE		MIN 3   GOTO setService
+	WORD	COMMUNICATION   MIN 3   GOTO setComm
+	WORD	ARITHMETIC	MIN 3   GOTO setArith
+	WORD	LOCAL		MIN 3	GOTO setLocal
+	WORD	GLOBAL		MIN 3   GOTO setGlobal
+
+!+
+!	SHOW {-}
+! 
+ELEMENT argShow -
+PROMPT "What: "
+!	WORD	ADVERTISEMENT	MIN 3	GOTO showAdver
+	WORD	AUTOMATIC       MIN 3   GOTO showAuto
+	WORD	CHECK		MIN 3   GOTO showCheck
+	WORD	EPOCH		MIN 3	GOTO showEpoch
+	WORD	ERROR		MIN 3   GOTO showError
+	WORD	TIME		MIN 3	GOTO showTime
+	WORD	MAXIMUM		MIN 3	GOTO showMax
+	WORD	SERVERS		MIN 3   GOTO showServer
+	WORD	QUERY		MIN 3   GOTO showQuery
+	WORD	LAN		MIN 3   GOTO showLAN
+	WORD	WAN		MIN 3	GOTO showWAN
+	WORD	SYNCHRONIZATIONS MIN 3   GOTO showSynch
+	WORD	TYPE		MIN 3	Call actShow:11		GOTO checkEOL
+	WORD	COURIER		MIN 3	GOTO showCourier
+	WORD	ACTING		MIN 3   GOTO showActing
+	WORD	CLOCK		MIN 3	GOTO showClock
+	WORD	DNA		MIN 3   GOTO showDNA
+	WORD	DTSS		MIN 3   GOTO showDTSS
+	WORD	SERVICE		MIN 3   GOTO showService
+	WORD	COMMUNICATION   MIN 3   GOTO showComm
+	WORD	ARITHMETIC	MIN 3   GOTO showArith
+	WORD	CURRENT		MIN 3   GOTO showCurrent
+	WORD	UID		MIN 3	CALL actShow:31		GOTO checkEOL
+	WORD	LAST		MIN 3	GOTO showLast
+	WORD	STATE		MIN 3	CALL actShow:33		GOTO checkEOL
+	WORD	CREATION	MIN 3   GOTO showCreat
+!	WORD	FAULTY		MIN 3	GOTO showFaulty
+	WORD	DIFFERENT	MIN 3   GOTO showDifferent
+	WORD 	TOO		MIN 3	GOTO showToo
+	WORD	PROTOCOL	MIN 3	GOTO showProtocol
+	WORD	INVALID		MIN 3	GOTO showInvalid
+	WORD	NO		MIN 3	GOTO showNo
+	WORD	SYSTEM		MIN 3	GOTO showSystem
+	WORD	UPDATES		MIN 3	GOTO showUpdate
+	WORD	ENABLE		MIN 3   GOTO showEnable
+	WORD	DISABLE		MIN 3	GOTO showDisable
+	WORD	INSUFFICIENT	MIN 3	GOTO ShowInsuff
+	WORD	ALL		MIN 3	GOTO showAll 	
+	WORD	LOCAL		MIN 3	GOTO showLocal
+	WORD	GLOBAL		MIN 3	GOTO showGlobal
+	WORD	NEXT		MIN 3	GOTO showNextTDF
+	
+
+!
+!++++
+!
+!	Begin Set Attributes
+!
+!
+ELEMENT setAdver  
+	WORD	INTERVAL	MIN 3					NEXT
+	FORCE			CALL actSet:0			GOTO checkEOL
+ELEMENT * 
+	GOSUB	parseBRT	CALL actSet:0			GOTO checkEOL
+!
+ELEMENT setAuto
+	WORD	TDF		MIN 3					NEXT
+	FORCE			CALL actSet:27			GOTO checkEOL
+ELEMENT *
+	WORD	CHANGE		MIN 3					NEXT
+	FORCE								NEXT
+ELEMENT *
+	GOSUB	parseBool	CALL actSet:27			GOTO checkEOL
+!	
+ELEMENT setCheck  
+	WORD	INTERVAL	MIN 3					NEXT
+	FORCE								NEXT
+ELEMENT *	
+	GOSUB	parseBRT	CALL actSet:1			GOTO checkEOL
+
+!
+!
+ELEMENT setError  
+	WORD	TOLERANCE	MIN 3					NEXT
+	FORCE								NEXT
+ELEMENT *
+	GOSUB parseBRT		CALL actSet:3			GOTO checkEOL
+
+!
+!
+ELEMENT setMaximum  
+	WORD	INACCURACY	MIN 3					NEXT
+	FORCE								NEXT
+ELEMENT *
+	GOSUB parseBRT		CALL actSet:5			GOTO checkEOL
+!
+!
+ELEMENT setServer -
+PROMPT "(PRINCIPAL, ENTRY, GROUP, REQUIRED):"
+	WORD	PRINCIPAL	MIN 3				GOTO setPrincName
+	WORD	ENTRY		MIN 3				GOTO setEntryName
+	WORD	GROUP		MIN 3				GOTO setGroupName
+	WORD	REQUIRED	MIN 3					NEXT
+ELEMENT *
+	GOSUB parseDecimal	CALL actSet:6			GOTO checkEOL
+
+ELEMENT setSname
+	GOSUB parseSimple	CALL actSet:12			GOTO checkEOL
+!
+!
+ELEMENT setQuery
+	WORD	ATTEMPTS	MIN 3					NEXT
+	FORCE								NEXT
+ELEMENT *
+	GOSUB  parseDecimal	CALL actSet:7			GOTO checkEOL
+!
+!
+ELEMENT setLSetTimOut
+	WORD	TIMEOUT		MIN 3					NEXT
+	FORCE								NEXT
+ELEMENT *
+	GOSUB parseBRT		CALL actSet:8			GOTO checkEOL
+
+!
+!
+ELEMENT setGSetTimOut
+	WORD	TIMEOUT		MIN 3					NEXT
+	FORCE								NEXT
+ELEMENT *
+	GOSUB parseBRT			CALL actSet:9		GOTO checkEOL
+!
+!
+ELEMENT setSynch
+	WORD	HOLD		MIN 3				GOTO setSync0
+	WORD	TRACE		MIN 3				GOTO setSync1
+	FORCE				CALL actSet:10		GOTO checkEOL
+ELEMENT setSync0
+	WORD	DOWN		MIN 3				NEXT
+	FORCE								NEXT
+ELEMENT *
+	GOSUB parseBRT			CALL actSet:10		GOTO checkEOL
+ELEMENT setSync1
+	GOSUB parseBool			CALL actSet:22		GOTO checkEOL
+!
+!
+ELEMENT setCourier
+	WORD	ROLE		MIN 3					NEXT
+	FORCE								NEXT
+ELEMENT *
+	WORD 	NONCOURIER	MIN 3	CALL actParseCourier:1	NEXT
+	WORD	COURIER		MIN 3	CALL actParseCourier:0	NEXT
+	WORD	BACKUP		MIN 3				GOTO setCour1
+	FORCE				CALL actSet:13		GOTO checkEOL
+ELEMENT *
+	FORCE				CALL actSet:13		GOTO checkEOL
+ELEMENT setCour1
+	WORD	COURIER		MIN 3	CALL actParseCourier:2	NEXT
+ELEMENT *
+	FORCE				CALL actSet:13		GOTO checkEOL
+!
+!
+ELEMENT setService 
+	WORD	TRACE		MIN 3				NEXT
+	FORCE								NEXT
+ELEMENT *
+	GOSUB	parseBool		CALL actSet:20		GOTO checkEOL
+!
+!
+ELEMENT setComm 
+	WORD	TRACE		MIN 3				NEXT
+	FORCE								NEXT
+ELEMENT *
+	GOSUB parseBool 		CALL actSet:21		GOTO checkEOL
+!
+ELEMENT setArith 
+	WORD	TRACE		MIN 3				NEXT
+	FORCE								NEXT
+ELEMENT *
+	GOSUB parseBool			CALL actSet:23		GOTO checkEOL
+
+!
+ELEMENT setPrincName
+	WORD	NAME		MIN 3				NEXT
+	FORCE							NEXT
+ELEMENT *
+	GOSUB parseString	CALL actSet:35		GOTO checkEOL
+
+!
+ELEMENT setEntryName
+	WORD	NAME		MIN 3				NEXT
+	FORCE							NEXT
+ELEMENT *
+	GOSUB parseString	CALL actSet:36		GOTO checkEOL
+
+!
+ELEMENT setGroupName
+	WORD	NAME		MIN 3				NEXT
+	FORCE							NEXT
+ELEMENT *
+	GOSUB parseString	CALL actSet:37		GOTO checkEOL
+
+
+!
+ELEMENT setLocal
+	WORD	SET		MIN 3			GOTO setLSetTimOut
+
+!	FORCE							NEXT
+!
+!ELEMENT *
+!	WORD	DIRECTORY	MIN 3				NEXT
+!	FORCE							NEXT
+!ELEMENT *
+!	GOSUB parseFull		CALL actSet:24		GOTO checkEOL
+!
+!
+!
+
+
+ELEMENT setGlobal
+	WORD	SET		MIN 3			GOTO setGSetTimOut
+
+!	FORCE								NEXT
+!ELEMENT *
+!	WORD	DIRECTORY	MIN 3				NEXT
+!	FORCE								NEXT
+!ELEMENT *
+!	GOSUB parseFull		CALL actSet:25		GOTO checkEOL
+!
+
+ELEMENT setHost 
+	WORD	TO		MIN 2				NEXT
+	FORCE							NEXT
+ELEMENT * 
+	GOSUB parseString	call actSetHost		GOTO checkEOL
+
+!+++
+!
+!+++
+!	BEGIN SHOW Attributes
+!
+!
+!
+!
+
+ELEMENT showServer  -
+PROMPT "(PRINCIPAL, ENTRY, GROUP, REQUIRED, NOT RESPONDING, TIMES NOT INTERSECTING, NOT IN GROUP): "
+	WORD	REQUIRED	MIN 3	CALL actShow:6		GOTO checkEOL
+	WORD	NOT		MIN 3				GOTO showNresp
+	WORD	TIMES		MIN 3   			GOTO showFaulty
+	WORD	PRINCIPAL	MIN 3   		GOTO showPrincName
+	WORD	ENTRY		MIN 3   		GOTO showEntryName
+	WORD	GROUP		MIN 3   		GOTO showGroupName
+!
+ELEMENT showAuto
+	WORD 	TDF		MIN 3					NEXT
+	FORCE								NEXT
+ELEMENT *
+	WORD	CHANGE		MIN 3	CALL actShow:27		GOTO checkEOL
+	FORCE				CALL actShow:27		GOTO checkEOL
+
+!
+ELEMENT showNextTDF  
+	WORD	TDF		MIN 3				NEXT
+	FORCE							NEXT
+ELEMENT *
+	WORD	CHANGE		MIN 3	CALL actShow:28		GOTO checkEOL
+	FORCE				CALL actShow:28		GOTO checkEOL
+!
+ELEMENT showPrincName
+	WORD	NAME		MIN 3	CALL actShow:35		GOTO checkEOL
+	FORCE				CALL actShow:35		GOTO checkEOL
+
+!
+ELEMENT showEntryName
+	WORD	NAME		MIN 3	CALL actShow:36		GOTO checkEOL
+	FORCE				CALL actShow:36		GOTO checkEOL
+!
+ELEMENT showGroupName
+	WORD	NAME		MIN 3	CALL actShow:37		GOTO checkEOL
+	FORCE				CALL actShow:37		GOTO checkEOL
+
+
+!
+ELEMENT showAdver
+	WORD	INTERVAL	MIN 3	CALL actShow:0		GOTO checkEOL
+	FORCE				CALL actShow:0		GOTO checkEOL
+
+
+!
+ELEMENT showCheck  
+	WORD	INTERVAL	MIN 3 	CALL actShow:1		GOTO checkEOL
+	FORCE				CALL actShow:1		GOTO checkEOL
+
+!
+ELEMENT showEpoch  -
+PROMPT  "(NUMBER,CHANGES COMPLETED): "
+	WORD	NUMBER		MIN 3	CALL actShow:2		GOTO checkEOL
+	WORD	CHANGES		MIN 3				NEXT
+ELEMENT *
+	WORD	COMPLETED	MIN 3	CALL actShow:61		GOTO checkEOL
+	FORCE				CALL actShow:61		GOTO checkEOL
+!
+ELEMENT showError  
+	WORD	TOLERANCE	MIN 3	CALL actShow:3		GOTO checkEOL
+	FORCE				CALL actShow:3		GOTO checkEOL
+!
+ELEMENT showTime  -
+PROMPT "(PROVIDER, REPRESENTATION): "
+	WORD	REPRESENTATION  MIN 3	GOTO showTimeRep
+	WORD	PROVIDER	MIN 3	GOTO showTimeTP
+!	WORD	DIFFERENTIAL	MIN 3	GOTO showTimeDif
+!
+!ELEMENT showTimeDif 
+!	WORD	FACTOR		MIN 3				NEXT
+!	FORCE							NEXT
+!ELEMENT *
+!	WORD	SETTINGS	MIN 3	CALL actShow:62		GOTO checkEOL
+! 	FORCE				CALL actShow:62		GOTO checkEOL
+!
+ELEMENT showTimeRep  -
+PROMPT "(MISMATCHES, VERSION): "
+	WORD	VERSION		MIN 3	CALL actShow:19		GOTO checkEOL
+	WORD 	MISMATCHES	MIN 3    				NEXT
+ELEMENT *  
+	WORD	DETECTED	MIN 3	CALL actShow:56 	GOTO checkEOL
+	FORCE				CALL actShow:56		GOTO checkEOL
+
+ELEMENT showTimeTP -
+PROMPT "(FAILURES, PRESENT, TIMEOUTS): "
+	WORD	FAILURES	MIN 3				NEXT
+	WORD	TIMEOUTS	MIN 3	GOTO showTimeout
+	WORD	PRESENT		MIN 3	CALL actShow:26		GOTO checkEOL
+	WORD	TIMEOUTS	MIN 3	GOTO showTimeout
+ELEMENT *  
+	WORD	DETECTED	MIN 3	CALL actShow:69		GOTO checkEOL
+	FORCE				CALL actShow:69		GOTO checkEOL
+ELEMENT showTimeout
+	WORD	DETECTED	MIN 3	CALL actShow:54		GOTO checkEOL
+	FORCE				CALL actShow:54		GOTO checkEOL
+!
+ELEMENT showMax  -
+PROMPT "(INACCURACY, CLOCK DRIFT RATE): "
+	WORD	INACCURACY	MIN 3	CALL actShow:5		GOTO checkEOL
+	WORD	CLOCK		MIN 3				NEXT
+ELEMENT *  
+	WORD	DRIFT		MIN 3				NEXT
+	FORCE				CALL actShow:16		GOTO checkEOL
+ELEMENT *  
+	WORD	RATE		MIN 3	CALL actShow:16		GOTO checkEOL
+	FORCE				CALL actShow:16		GOTO checkEOL
+!
+ELEMENT showQuery  
+	WORD	ATTEMPTS	MIN 3 	CALL actShow:7		GOTO checkEOL
+	FORCE				CALL actShow:7		GOTO checkEOL
+!
+ELEMENT showLAN  
+	WORD	TIMEOUT		MIN 3	CALL actShow:8		GOTO checkEOL
+	FORCE				CALL actShow:8		GOTO checkEOL
+!
+ELEMENT showWAN  
+	WORD	TIMEOUT		MIN 3	CALL actShow:9		GOTO checkEOL
+	FORCE				CALL actShow:9		GOTO checkEOL
+!
+ELEMENT showNext
+	WORD	TDF		MIN 3				NEXT
+	FORCE				CALL actShow:28		GOTO checkEOL
+ELEMENT *
+	WORD	CHANGE		MIN 3	CALL actShow:28		GOTO checkEOL
+	FORCE				CALL actShow:28		GOTO checkEOL
+!
+ELEMENT showSynch  -
+PROMPT "(HOLD DOWN, COMPLETED): "
+	WORD	HOLD		MIN 3				NEXT
+	WORD	TRACE		MIN 3	CALL actShow:22		GOTO checkEOL
+	WORD	COMPLETED	MIN 3	CALL actShow:64		GOTO checkEOL
+ELEMENT *  
+	WORD	DOWN		MIN 3	CALL actShow:10		GOTO checkEOL
+	FORCE				CALL actShow:10		GOTO checkEOL
+!
+ELEMENT showCourier  
+	WORD	ROLE		MIN 3	CALL actShow:13		GOTO checkEOL
+	FORCE				CALL actShow:13		GOTO checkEOL
+!
+ELEMENT showActing  
+	WORD	COURIER		MIN 3				NEXT
+	FORCE				CALL actShow:14		GOTO checkEOL
+ELEMENT *  
+	WORD	ROLE		MIN 3	CALL actShow:14		GOTO checkEOL
+	FORCE				CALL actShow:14		GOTO checkEOL
+!
+ELEMENT showClock  -
+PROMPT "(ADJUSTMENT RATE, SETTINGS, RESOLUTION): "
+	WORD	SETTINGS	MIN 3	CALL actShow:60		GOTO checkEOL
+	WORD	RESOLUTION	MIN 3	CALL actShow:29		GOTO checkEOL
+	WORD	ADJUSTMENT	MIN 3				NEXT
+ELEMENT *  
+	WORD	RATE		MIN 3	CALL actShow:15		GOTO checkEOL
+	FORCE				CALL actShow:15		GOTO checkEOL
+!
+ELEMENT showDNA  
+	WORD	VERSION		MIN 3	CALL actShow:17		GOTO checkEOL
+	FORCE				CALL actShow:17		GOTO checkEOL
+!
+ELEMENT showDTSS  
+	WORD	VERSION		MIN 3	CALL actShow:18		GOTO checkEOL
+	FORCE				CALL actShow:18		GOTO checkEOL
+!
+ELEMENT showService  
+	WORD	TRACE		MIN 3	CALL actShow:20		GOTO checkEOL
+	FORCE							GOTO checkEOL
+!
+ELEMENT showComm  
+	WORD	TRACE		MIN 3	CALL actShow:21		GOTO checkEOL
+	FORCE				CALL actShow:21		GOTO checkEOL
+!
+ELEMENT showArith  
+	WORD	TRACE		MIN 3	CALL actShow:23		GOTO checkEOL
+	FORCE				CALL actShow:23		GOTO checkEOL
+!
+
+ELEMENT showGlobal -
+PROMPT "(SERVERS, SET): "
+	WORD	SERVERS		MIN 3  CALL actShow:203		GOTO checkEOL
+	WORD	SET		MIN 3   GOTO showGSetTimOut
+
+!	WORD    DIRECTORY       MIN 3  CALL actShow:25		GOTO checkEOL
+!ELEMENT *
+!	WORD	DIRECTORY	MIN 3  CALL actShow:25		GOTO checkEOL
+!
+!
+ELEMENT showLocal  -
+PROMPT "(SERVERS, SET, TIME DIFFFERENTIAL, TIMES NOT INTERSECTING, SERVERS NOT IN GROUP): "
+	WORD	TIMES		MIN 3				NEXT	
+	WORD	SERVERS		MIN 3	GOTO showLServers
+	WORD	SET		MIN 3   GOTO showLSetTimOut
+ELEMENT *  -
+PROMPT "(DIFFERENTIAL FACTOR, NOT INTERSECTING): "
+	WORD	DIFFERENTIAL    MIN 3   GOTO showTDF
+	WORD    NOT             MIN 3   GOTO showNot
+!
+ELEMENT showLSetTimOut
+	WORD	TIMEOUT		MIN 3	CALL actShow:8		GOTO checkEOL
+	FORCE				CALL actShow:8		GOTO checkEOL
+!
+ELEMENT showLServers
+	WORD	NOT		MIN 3				NEXT
+	FORCE				CALL actShow:204	GOTO checkEOL
+ELEMENT *
+	WORD	IN		MIN 2				NEXT
+	FORCE				CALL actShow:70		GOTO checkEOL
+ELEMENT *
+	WORD	GROUP		MIN 3	CALL actShow:70		GOTO checkEOL
+	FORCE				CALL actShow:70		GOTO checkEOL
+!
+ELEMENT showGSetTimOut
+	WORD	TIMEOUT		MIN 3	CALL actShow:9		GOTO checkEOL
+	FORCE				CALL actShow:9		GOTO checkEOL
+
+!
+ELEMENT showNot 
+	WORD	INTERSECTING	MIN 3	CALL actShow:50		GOTO checkEOL
+	FORCE				CALL actShow:50		GOTO checkEOL
+!
+ELEMENT showTDF
+	WORD FACTOR		MIN 3	CALL actShow:4		GOTO checkEOL
+	FORCE				CALL actShow:4		GOTO checkEOL
+!
+ELEMENT showCurrent  
+	WORD	TIME		MIN 3	CALL actShow:30		GOTO checkEOL
+	FORCE				CALL actShow:30		GOTO checkEOL
+!
+ELEMENT showLast  
+	WORD	SYNCHRONIZATION MIN 3	CALL actShow:32		GOTO checkEOL
+	FORCE				CALL actShow:32		GOTO checkEOL
+!
+ELEMENT showCreat  
+	WORD	TIME		MIN 3	CALL actShow:49		GOTO checkEOL
+	FORCE				CALL actShow:49		GOTO checkEOL
+!
+ELEMENT showFaulty
+	WORD	NOT		MIN 3				NEXT
+	FORCE				CALL actShow:51		GOTO checkEOL
+ELEMENT *  
+	WORD	INTERSECTING	MIN 3	CALL actShow:51		GOTO checkEOL
+	FORCE				CALL actShow:51		GOTO checkEOL
+!
+ELEMENT showDifferent  
+	WORD	EPOCHS		MIN 3				NEXT
+	FORCE				CALL actShow:52		GOTO checkEOL
+ELEMENT *  
+	WORD	DETECTED	MIN 3	CALL actShow:52		GOTO checkEOL
+	FORCE				CALL actShow:52		GOTO checkEOL
+!
+ELEMENT showToo
+	WORD	FEW		MIN 3				NEXT
+	FORCE				CALL actShow:53		GOTO checkEOL
+ELEMENT *  
+	WORD	SERVERS		MIN 3				NEXT
+	FORCE				CALL actShow:53		GOTO checkEOL
+ELEMENT *  
+	WORD	DETECTED	MIN 3	CALL actShow:53		GOTO checkEOL
+	FORCE				CALL actShow:53		GOTO checkEOL
+!
+ELEMENT showProtocol 
+	WORD    MISMATCHES	MIN 3				NEXT
+	FORCE				CALL actShow:55		GOTO checkEOL
+ELEMENT *  
+	WORD	DETECTED	MIN 3	CALL actShow:55		GOTO checkEOL
+	FORCE				CALL actShow:55		GOTO checkEOL
+!
+ELEMENT showInvalid  
+	WORD	MESSAGES	MIN 3				NEXT
+	FORCE				CALL actShow:57		GOTO checkEOL
+ELEMENT *  
+	WORD	DETECTED	MIN 3	CALL actShow:57		GOTO checkEOL
+	FORCE				CALL actShow:57		GOTO checkEOL
+!
+ELEMENT showNo  
+	WORD	GLOBAL		MIN 3				NEXT
+	FORCE				CALL actShow:58		GOTO checkEOL
+ELEMENT *  
+	WORD	SERVERS		MIN 3				NEXT
+	FORCE				CALL actShow:58		GOTO checkEOL
+ELEMENT *  
+	WORD	DETECTED	MIN 3	CALL actShow:58		GOTO checkEOL
+	FORCE				CALL actShow:58		GOTO checkEOL
+
+!
+!
+ELEMENT showNresp
+	WORD	IN		MIN 2	GOTO showNInGroup
+	WORD	RESPONDING	MIN 3	CALL actShow:59		GOTO checkEOL
+	FORCE				CALL actShow:59		GOTO checkEOL
+!
+ELEMENT showNInGroup
+	word	GROUP		MIN 3	CALL actShow:71		GOTO checkEOL
+	FORCE				CALL actShow:71		GOTO checkEOL
+!
+ELEMENT showSystem  
+	WORD	ERRORS		MIN 3				NEXT
+	FORCE				CALL actShow:63		GOTO checkEOL
+ELEMENT *  
+	WORD	DETECTED	MIN 3	CALL actShow:63		GOTO checkEOL
+	FORCE				CALL actShow:63		GOTO checkEOL
+!
+ELEMENT showUpdate  
+	WORD	INITIATED	MIN 3	CALL actShow:65		GOTO checkEOL
+	FORCE				CALL actShow:65		GOTO checkEOL
+!
+ELEMENT showEnable  
+	WORD	DIRECTIVES	MIN 3				NEXT
+	FORCE				CALL actShow:66		GOTO checkEOL
+ELEMENT *  
+	WORD	COMPLETED	MIN 3	CALL actShow:66		GOTO checkEOL
+	FORCE				CALL actShow:66		GOTO checkEOL
+!
+ELEMENT showDisable  
+	WORD	DIRECTIVES	MIN 3				NEXT
+	FORCE				CALL actShow:67		GOTO checkEOL
+ELEMENT *  
+	WORD	COMPLETED	MIN 3	CALL actShow:67		GOTO checkEOL
+	FORCE				CALL actShow:67		GOTO checkEOL
+!
+ELEMENT showInsuff  
+	WORD	RESOURCES	MIN 3				NEXT
+	FORCE				CALL actShow:68		GOTO checkEOL
+ELEMENT *  
+	WORD	DETECTED	MIN 3	CALL actShow:68		GOTO checkEOL
+	FORCE				CALL actShow:68		GOTO checkEOL
+!
+!
+ELEMENT showAll
+	WORD	COUNTERS	MIN 3	CALL actShow:200	GOTO checkEOL
+	WORD	CHARACTERISTICS MIN 3	CALL actShow:201	GOTO checkEOL
+	WORD	STATUS		MIN 3	CALL actShow:202	GOTO checkEOL
+	FORCE				CALL actShow:201	GOTO checkEOL
+
+!
+
+!
+!	Subroutine to parse a time interval. 
+!
+ELEMENT parseBAT 
+	STRING ad-+:., 	MIN 1 MAX 81	CALL actParseBAT 	SUCCESS
+	FORCE							SUCCESS
+ELEMENT parseBRT
+	STRING ad-+:.,	MIN 1 MAX 81	CALL actParseBRT	SUCCESS
+	FORCE							SUCCESS
+
+!
+!	Check that there aren't excess characters after the valid command.
+!
+ELEMENT checkEOL
+	CHAR e							SUCCESS
+
+ELEMENT parseDecimal
+	DECIMAL				CALL actParseDecimal	SUCCESS
+	FORCE							SUCCESS
+
+ELEMENT parseBool
+	WORD	TRUE		MIN 3	CALL actParseBool:1	SUCCESS
+	WORD	FALSE		MIN 3   CALL actParseBool:0	SUCCESS
+	FORCE				CALL actParseBool:2	SUCCESS
+
+ELEMENT parseSimple		
+	STRING ad-_:.		MIN 1   CALL actParseSimple	SUCCESS
+	FORCE							SUCCESS
+
+ELEMENT parseFull		
+	STRING ad$_-:.		MIN 1 	CALL actParseFull	SUCCESS
+	FORCE							SUCCESS
+
+ELEMENT parseString
+	STRING	ad$_-:./	MIN 2   CALL actParseString	SUCCESS
+	FORCE							SUCCESS
+
+
+!  DEC/CMS REPLACEMENT HISTORY, Element DTSSCP.CDT
+!  *40    8-OCT-1991 14:21:14 C_CORTES "Change LAN and WAN timeout attributes to Local Set and Global Set timeouts"
+!  *39   27-SEP-1991 17:42:46 C_CORTES "Add new managment parameters related to security"
+!  *38    8-AUG-1991 14:07:25 C_CORTES "Change actUnAdvertise to actUnadvertise"
+!  *37   29-APR-1991 13:06:16 C_CORTES "Add syntax for UNADVERTISE command"
+!  *36   26-MAR-1991 13:41:35 BARYIAMES "MSL syntax changes"
+!   25W14 11-MAR-1991 12:57:55 BARYIAMES "change faulty server help text"
+!   25W13 27-FEB-1991 17:01:35 BARYIAMES "remove servername, add lan/wan counters, add wan service"
+!  *35    5-FEB-1991 11:25:21 BARYIAMES "advertise server, unadvertise server"
+!   25W12 28-JAN-1991 15:25:46 BARYIAMES "get rid of tdf settings"
+!  *34   18-JAN-1991 16:29:05 BARYIAMES "fix syntax error"
+!   25W11  8-JAN-1991 14:36:39 BARYIAMES "syntax changed to reflect new msl"
+!  *33    8-JAN-1991 13:34:47 BARYIAMES "new non-ambiguous syntax"
+!  *32   19-DEC-1990 16:49:49 BARYIAMES "allow as few as 1 char for brts & bats"
+!   25W10 19-DEC-1990 10:48:24 BARYIAMES "make brts and bats min 1"
+!  *31   18-DEC-1990 12:07:03 BARYIAMES "fix set wan timeout attr #"
+!   25W9 18-DEC-1990 12:04:19 BARYIAMES "fix set serv name,wan timeout #"
+!  *30   17-DEC-1990 16:28:02 BARYIAMES "fix set server name"
+!  *29   30-NOV-1990 14:12:35 BARYIAMES "typo in show globals"
+!   25W8 30-NOV-1990 13:37:52 BARYIAMES "allow '+' in bats and brts"
+!  *28   30-NOV-1990 13:33:53 BARYIAMES "allow '+' on bat & brts"
+!  *27   29-NOV-1990 08:51:25 BARYIAMES "chng prompt to 'dtscp> ', remove global server directory char attr"
+!  *26   15-NOV-1990 16:51:28 BARYIAMES "got rid of local serv, added prompting"
+!   25W7 15-NOV-1990 16:45:30 BARYIAMES "reinstate create type, remove local dir"
+!   25W6 14-NOV-1990 14:55:27 BARYIAMES "commented out create command"
+!   25W5  8-NOV-1990 14:12:29 BARYIAMES "bug fixes on param numbers"
+!   25W4  8-NOV-1990 09:57:52 BARYIAMES "added prompting, fixed auto tdf syntax"
+!   25W3  2-NOV-1990 12:46:21 BARYIAMES "removed help parsing"
+!   25W2 25-OCT-1990 12:35:57 BARYIAMES "auto tdf cmds"
+!   25W1 18-OCT-1990 09:50:55 BARYIAMES "make prompt dtss"
+!  *25   18-OCT-1990 09:48:37 BARYIAMES "got rid of dtss noise word, make all min strings 3 chars instead of 4"
+!  *24   14-SEP-1990 08:09:42 BARYIAMES "added time provider present text"
+!  *23   12-SEP-1990 10:31:36 BARYIAMES "added time provider present syntax"
+!  *22   22-AUG-1990 11:11:21 BARYIAMES "call for full name/simple name parsing"
+!  *21    2-AUG-1990 16:22:11 BARYIAMES "add dtss in command line"
+!  *20   30-JUL-1990 08:23:10 BARYIAMES "rewritten....new ncl type syntax"
+!  *19   27-FEB-1990 11:21:31 BARYIAMES "add create command"
+!  *18   12-DEC-1989 13:06:17 BARYIAMES "add disable service directive"
+!  *17    7-DEC-1989 17:38:53 BARYIAMES "include new commands: add/remove local/global server, quit"
+!  *16   31-OCT-1989 11:39:01 BARYIAMES "remove TDL reference, nexttdf command and clear tdf command"
+!  *15    5-SEP-1989 12:06:33 BARYIAMES "add show servers callback"
+!  *14   18-AUG-1989 13:41:02 BARYIAMES "absolute time accepts defaults"
+!  *13    4-AUG-1989 16:24:48 BARYIAMES "added length checks to absolute time sets"
+!  *12    2-AUG-1989 09:39:21 C_CORTES "Change file formats from variable length to Stream_LF"
+!  *11   26-JUL-1989 12:29:53 BARYIAMES "fix parsing error of absolute times"
+!  *10   20-JUL-1989 08:43:11 BARYIAMES "modify TDF command to use set tdf, set nexttdf, and add CLEAR TDF"
+!  *9    11-JUL-1989 13:56:11 BARYIAMES "added ""DECLARE TDF [=] [-]<DECIMAL> TDL [=] <STR> [AT <Absolute Time>]"
+!  *8     7-JUN-1989 14:30:24 FRAMPTON "nits"
+!  *7     6-JUN-1989 16:42:38 FRAMPTON "Work on incorporating new syntax"
+!  *6    18-MAY-1989 16:33:50 FRAMPTON "Work on set epoch command"
+!  *5    17-MAY-1989 16:10:15 FRAMPTON "Finish adding show time"
+!  *4    17-MAY-1989 14:09:38 FRAMPTON "Finish adding show time"
+!  *3    16-MAY-1989 13:58:19 FRAMPTON "Add show time command, modify update time command"
+!  *2    11-MAY-1989 17:53:22 FRAMPTON "Add inacc to the UPDATE TIME command"
+!  *1    28-MAR-1989 16:54:42 FRAMPTON "Control program parse file"
+!  DEC/CMS REPLACEMENT HISTORY, Element DTSSCP.CDT

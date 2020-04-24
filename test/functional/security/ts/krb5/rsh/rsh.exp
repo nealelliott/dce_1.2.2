@@ -1,0 +1,375 @@
+#!../../../lib/expect --
+
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: rsh.exp,v $
+# Revision 1.1.2.2  1996/10/03  21:17:31  arvind
+# 	OSF DCE 1.2.2 Drop 4
+# 	[1996/10/03  21:13:30  arvind]
+#
+# Revision 1.1.2.1  1996/09/10  15:42:47  arvind
+# 	DCE 1.2.2 drop 3.5 (test) files left out
+# 	[1996/09/10  15:42:31  arvind]
+# 
+# Revision /main/DCE_1.2.2/4  1996/08/28  21:37 UTC  psn
+# 	Fix CHFts19909: restore /etc/group.
+# 	[1996/08/28  20:32 UTC  psn  /main/psn_krb5/8]
+# 
+# Revision /main/DCE_1.2.2/3  1996/08/27  14:02 UTC  psn
+# 	Change PATH to expect.
+# 	[1996/08/13  20:54 UTC  psn  /main/psn_krb5/6]
+# 
+# 	Merge KRB5 tests.
+# 	[1996/07/16  16:08 UTC  psn  /main/DCE_1.2.2/1]
+# 
+# Revision /main/psn_krb5/7  1996/08/26  19:24 UTC  psn
+# 	Fix PATHs to expect and other support lib.
+# 
+# Revision /main/psn_krb5/6  1996/08/13  20:54 UTC  psn
+# 	Change PATH to expect.
+# 
+# Revision /main/psn_krb5/5  1996/07/15  19:23 UTC  psn
+# 	Add kdestroy to cleanup.
+# 
+# Revision /main/psn_krb5/4  1996/07/12  21:36 UTC  psn
+# 	Remove unnecessary includes.
+# 
+# Revision /main/psn_krb5/3  1996/07/12  21:31 UTC  psn
+# 	Minor bug fix.
+# 
+# Revision /main/psn_krb5/2  1996/07/12  18:36 UTC  psn
+# 	Minor fix.
+# 
+# Revision /main/psn_krb5/1  1996/07/10  16:32 UTC  psn
+# 	TETize rsh test.
+# 
+# $EndLog$
+#
+
+# Kerberos rsh test.
+# This is a DejaGnu test script.
+# This script tests Kerberos rsh.
+# Written by Ian Lance Taylor, Cygnus Support, <ian@cygnus.com>.
+
+# Find the programs we need.  We use the binaries from the build tree
+# if they exist.  If they do not, then they must be in PATH.  We
+# expect $objdir to be .../kerberos/src.
+
+if {([catch {set TET_ROOT $env(TET_ROOT)}]) ||
+    ([string length $env(TET_ROOT)] == 0)} {
+    puts stderr "$argv0: TET_ROOT is not defined."
+    exit
+}
+
+## test case setup
+source $TET_ROOT/test/functional/security/lib/default.exp
+source $TET_ROOT/test/functional/security/lib/test_setup.tcl
+
+proc rsh_startup { } {
+    global OPTDCELOCAL
+    global RSH
+    global env
+    global timeout
+    global oldtimeout
+    global TET_ROOT
+
+    if ![info exists RSH] {
+        set RSH $OPTDCELOCAL/bin/rsh
+    }
+    
+    if {![get_hostname]} {
+        return
+    }
+
+    if ![get_realmname] {
+        return
+    }
+
+    # User name needed to be less than 8 char for AIX specific limitations
+    if ![info exists env(KRB5_TESTER)] {
+        set env(KRB5_TESTER) tester
+    }
+
+    if ![info exists env(KRB5_TESTER_PW)] {
+        set env(KRB5_TESTER_PW) tester
+    }
+
+    # Make sure .k5login is reasonable.
+    if ![add_k5login $env(KRB5_TESTER)] {
+        return
+    }
+
+    # Add KRB5_TESTER principal and account to the registery
+    catch {exec $TET_ROOT/functional/security/lib/rutil_setup.ksh} exec_out
+
+    if ![dce_login $env(KRB5_TESTER) $env(KRB5_TESTER_PW)] {
+        unresolved "Failed to dce_login as  $env(KRB5_TESTER)"
+        return
+    }
+    verbose "KRB5CCNAME=$env(KRB5CCNAME)"
+
+    # Run the test.  Logging in sometimes takes a while, so increase the
+    # timeout.
+    set oldtimeout $timeout
+    set timeout 75
+}
+
+proc rsh_cleanup { } {
+    global OPTDCELOCAL
+    global timeout
+    global oldtimeout
+    global env
+
+    catch "exec kdestroy" exec_out
+
+    if [dce_login $env(KRB5_CELL_ADMIN) $env(KRB5_CELL_ADMIN_PW)] {
+       catch "exec dcecp -c principal delete $env(KRB5_TESTER)" exec_out
+    }
+
+    if [file exists $OPTDCELOCAL/bin/dce_login_noexec] {
+       catch "exec rm -f $OPTDCELOCAL/bin/dce_login_noexec" exec_out
+    }
+
+    if [file exists /etc/passwd.rutil] {
+       catch "exec mv /etc/passwd.rutil /etc/passwd" exec_out
+    }
+
+    if [file exists /etc/group.rutil] {
+       catch "exec mv /etc/group.rutil /etc/group" exec_out
+    }
+
+    set timeout $oldtimeout
+}
+
+# Wrap the tests in a procedure, so that we can kill the daemons if
+# we get some sort of error.
+
+proc simple_rsh_test { } {
+    global RSH
+    global KEY
+    global BINSH
+    global hostname
+    global env
+    global spawn_id
+
+    # Test message
+    set testname "date"
+    tet_infoline Testing simple rsh: $testname
+    tet_infoline $RSH -l $env(KRB5_TESTER) $hostname date
+
+    # Run rsh date.
+    set save_tz $env(TZ)
+    set env(TZ) EST5EDT
+
+    spawn $RSH -l $env(KRB5_TESTER) $hostname "TZ=EST5EDT; export TZ; date"
+    set env(TZ) $save_tz
+    expect {
+	-re "\[A-Za-z0-9 :\]+\[\r\n\]+$" {
+	    set result $expect_out(0,string)
+	}
+	timeout {
+	    fail "$testname (timeout)"
+	    return
+	}
+    }
+
+    if ![check_exit_status $testname] {
+	return
+    }
+
+    if [check_date $result] {
+	pass $testname
+    } else {
+	fail $testname
+    }
+}
+
+proc encrypted_rsh_test { } {
+    global RSH
+    global KEY
+    global BINSH
+    global hostname
+    global env
+    global spawn_id
+
+    # Test message
+    set testname "encrypted rsh"
+    tet_infoline Testing secure rsh: $testname
+    tet_infoline $RSH -x -l $env(KRB5_TESTER) $hostname echo hello
+
+    # Check encrypted rsh.
+    set failed no
+    spawn $RSH -x -l $env(KRB5_TESTER) $hostname echo hello
+    expect {
+	"hello" { }
+	timeout {
+	    fail "$testname (timeout)"
+	    set failed yes
+	}
+    }
+
+    if { $failed == "no" } {
+	if ![check_exit_status $testname] {
+            fail "$testname - exit status"
+	    return
+	}
+	pass $testname
+    } else {
+	catch "wait -i $spawn_id"
+	catch "close -i $spawn_id"
+    }
+
+}
+
+proc rsh_stderr_test { } {
+    global RSH
+    global KEY
+    global BINSH
+    global hostname
+    global env
+    global spawn_id
+
+    # Test message
+    set testname "rsh to stderr"
+    tet_infoline Testing simple rsh: $testname
+    tet_infoline $RSH -l $env(KRB5_TESTER) $hostname $BINSH -c \'echo hello 1>&2\'
+
+    # Check stderr
+    spawn $RSH -l $env(KRB5_TESTER) $hostname $BINSH -c "'echo hello 1>&2'"
+    expect {
+	"hello" { }
+	timeout {
+	    fail "$testname (timeout)"
+	    return
+	}
+    }
+
+    if ![check_exit_status $testname] {
+        fail "$testname - exit status"
+	return
+    }
+
+    pass $testname
+
+}
+
+proc encrypted_rsh_stderr_test { } {
+    global RSH
+    global KEY
+    global BINSH
+    global hostname
+    global env
+    global spawn_id
+
+    # Test message
+    set testname "encrypted rsh to stderr"
+    tet_infoline Testing secure rsh: $testname
+    tet_infoline $RSH -x -l $env(KRB5_TESTER) $hostname $BINSH -c \'echo hello 1>&2\'
+
+    spawn $RSH -x -l $env(KRB5_TESTER) $hostname $BINSH -c "'echo hello 1>&2'"
+    expect {
+	"hello" { }
+	timeout {
+	    fail "$testname (timeout)"
+	    return
+	}
+    }
+
+    if ![check_exit_status $testname] {
+        fail "$testname - exit status"
+	return
+    }
+
+    pass $testname
+}
+
+proc forward_rsh_test { } {
+    global RSH
+    global KEY
+    global BINSH
+    global hostname
+    global env
+    global OPTDCELOCAL
+    global TET_CELLNAME_SHORT
+    global SHELL_PROMPT
+    global spawn_id
+
+    # Test message
+    set testname "forward credentials"
+    tet_infoline Testing simple rsh: $testname
+    tet_infoline rsh subtest........ setup kinit -f
+
+    spawn $OPTDCELOCAL/bin/kinit -f
+    expect "Password:"
+    send "$env(KRB5_TESTER_PW)\r"
+    expect {
+        -re "$SHELL_PROMPT" {
+            verbose "Got forwardable ticket"
+            pass "kinit -f passed"
+        }
+        timeout {
+            fail "kinit -f (timeout)"
+            return
+        }
+        eof {
+            pass "kinit -f passed"
+            verbose "Now with forwardable credentials"
+        }
+    }
+
+    catch "close -i $spawn_id"
+
+    tet_infoline $RSH -l $env(KRB5_TESTER) -f $hostname klist
+    spawn $RSH -l $env(KRB5_TESTER) -f $hostname klist
+    expect_after {
+        -re "\[Ee\]rror" {
+            fail "$testname - $expect_out(buffer)"
+            return
+        }
+        -re "\[Cc\]an't" {
+            fail "$testname - $expect_out(buffer)"
+            return
+        }
+        timeout {
+            fail "$testname (timeout)"
+            catch "expect_after"
+            return
+        }
+    }
+
+    expect "DCE Identity Information:" {
+        verbose "Got DCE Identity"
+    }
+    expect "Default principal: $env(KRB5_TESTER)@$TET_CELLNAME_SHORT" {
+        verbose "Got default principal"
+    }
+    expect {
+        -re "Client: dce-ptgt@$TET_CELLNAME_SHORT\[\t\b\]*Server: krbtgt/$TET_CELLNAME_SHORT@$TET_CELLNAME_SHORT" {
+            verbose "Got client dce-ptgt, server krbtgt"
+            pass $testname
+            return
+        }
+    }
+
+    fail $testname
+}
+
+set ic1 "simple_rsh_test"
+set ic2 "encrypted_rsh_test"
+set ic3 "rsh_stderr_test"
+set ic4 "encrypted_rsh_stderr_test"
+set ic5 "forward_rsh_test"
+set iclist "ic1 ic2 ic3 ic4 ic5 "
+set tet_startup rsh_startup
+set tet_cleanup rsh_cleanup
+
+# Source the TET main script into our script. The TET main
+# script is what will do the actual function calling.
+source $TET_ROOT/lib/tcl/tcm.tcl
+

@@ -1,0 +1,497 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: README,v $
+# Revision 1.1.47.1  1996/10/02  17:03:10  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:04:37  damon]
+#
+# Revision 1.1.41.3  1994/07/13  22:19:10  devsrc
+# 	removed extra <<< theat was there
+# 	[1994/06/29  12:30:25  devsrc]
+# 
+# 	merged with bl-10
+# 	[1994/06/28  17:55:02  devsrc]
+# 
+# 	added comment leader
+# 
+# 	# Revision 1.1.41.1  1994/02/04  20:05:54  devsrc
+# 	# 	Merged from 1.0.3a to 1.1
+# 	#
+# 	Revision 1.1.39.1  1993/12/07  17:12:38  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  12:53:32  jaffe]
+# 
+# Revision 1.1.41.2  1994/06/09  13:51:41  annie
+# 	CR10892 - fix copyright
+# 	[1994/06/09  13:43:18  annie]
+# 
+# Revision 1.1.41.1  1994/02/04  20:05:54  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 
+# Revision 1.1.39.1  1993/12/07  17:12:38  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  12:53:32  jaffe]
+# 
+# $EndLog$
+======
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: README,v $
+# Revision 1.1.47.1  1996/10/02  17:03:10  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:04:37  damon]
+#
+# Revision 1.1.46.2  1996/10/01  18:04:37  damon
+# 	Newest DFS from Transarc
+#
+# Revision 1.1.41.3  1994/07/13  22:19:10  devsrc
+# 	removed extra <<< theat was there
+# 	[1994/06/29  12:30:25  devsrc]
+#
+# 	merged with bl-10
+# 	[1994/06/28  17:55:02  devsrc]
+#
+# 	added comment leader
+#
+# 	# Revision 1.1.41.1  1994/02/04  20:05:54  devsrc
+# 	# 	Merged from 1.0.3a to 1.1
+# 	#
+# 	Revision 1.1.39.1  1993/12/07  17:12:38  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  12:53:32  jaffe]
+#
+# Revision 1.1.43.3  1994/06/29  12:30:25  devsrc
+# 	removed extra <<< theat was there
+#
+# Revision 1.1.43.2  1994/06/28  17:55:02  devsrc
+# 	merged with bl-10
+#
+# $EndLog$
+
+# Copyright (C) 1993 Transarc Corporation - All rights reserved
+# $Header: /u0/rcs_trees/dce/rcs/file/bomb/README,v 1.1.47.1 1996/10/02 17:03:10 damon Exp $
+
+
+This is the README file for the "src/file/bomb" directory.
+
+
+INTRODUCTION
+
+This directory contains utilities, libraries, and programs for
+introducing and manipulating "bomb points" in code.  Bomb points
+provide a means for testers to simulate abnormal events in running
+programs.  Some examples of abnormal events are the failure of a
+routine, the failure of a system call, termination of a process, etc.
+The abnormal events supported by this package are described in more
+detail below.
+
+The bomb point utilities are available in both user-space and the
+kernel.  Some features are not available in the kernel.  These cases
+are noted throughout the description below.
+
+
+EXPLOSION TYPES
+
+To use this package, a tester must first decide which types of
+abnormal events he wants to simulate and at which points in the target
+code they should occur.  Once these choices have been made, the tester
+can choose from a variety of pre-processor macros for introduction
+into the target code.  Depending on the macro, each bomb point is
+capable of simulating a number of abnormal events.  The abnormal event
+types (or "explosion types" in the jargon of this package) are
+described below.
+
+	Abort
+	This explosion type allows the tester to abort a process or
+	panic the kernel.
+
+	Delay
+	This explosion type causes the thread to delay for a
+	specified number of seconds.
+
+	Error Return
+	Error Return explosions simulate the failure of a routine by
+	returning a specified error code in lieu of calling the
+	routine.
+
+	Errno Return*
+	This is similar to the Error Return type except that -1 is
+	returned and `errno' is set to the specified code.
+
+	Exception*
+	This explosion type allows the tester to raise an exception.
+
+	Exit*
+	This explosion type allows the tester to terminate the process
+	(via exit(2)).
+
+	If
+	This explosion type allows the tester to execute an alternate
+	code path.
+
+	Return
+	This explosion type causes the current routine to return a
+	specified value.
+
+	Signal*
+	This explosion type causes the specified signal to be sent to
+	the process.
+
+	Wait*
+	This explosion type causes the thread to suspend itself
+	pending the arrival of a SIGUSR2 signal.  After the signal is
+	received, the thread continues execution.
+
+	* These explosion types are not available in the kernel.
+
+
+BOMB POINT MACROS
+
+To use this package, the tester must embed a number of C pre-processor
+macros in the target code at the chosen bomb points.  Each of the
+bomb point macros has different uses and allows a different set of
+explosion types to occur.  The bomb point macros are described below.
+
+	BOMB_EXEC(bpName, expr)
+
+	This macro allows an alternate value to be returned from an
+	expression whenever the bomb point named by `bpName' explodes.
+	During normal execution, the value of this bomb point is the
+	value of `expr', an arbitrary expression.  When the bomb
+	"explodes", `expr' is not executed, and an alternate value is
+	returned.  The alternate value is specified by the tester when
+	setting the bomb point to go off (dynamically, at run time).
+	This macro is most commonly used to simulate the failure of a
+	particular routine.  If bomb points are not being compiled in
+	(see COMPILING below), `expr' is always executed.  The
+	following code fragment gives an example of its use.
+
+	long Foo()
+	{
+	    ...
+	    code = BOMB_EXEC("Foo#1", Bar());
+	    if (code) {
+		/* Do cleanup */
+		return code;
+	    }
+	    ...
+	}
+
+	The example shows a typical situation where Bar() is a
+	error-code-returning function.  By using the Error Return
+	explosion type, the tester can simulate the failure of Bar().
+	Bar() could just as easily be a system call; in this case, the
+	tester would use the Errno Return explosion type to simulate
+	failure, which would set `code' to -1 and set errno to a
+	tester-specified value.  The exact value of the returned code
+	or errno is specified by the tester when setting the bomb point
+	to go off.
+
+	Besides the Error Return and Errno Return explosion types, a
+	number of other explosions can occur at BOMB_EXEC bomb points.
+	The complete list is: Abort, Errno Return, Error Return,
+	Exception, Exit, and Signal.
+
+
+	BOMB_IF(bpName)
+
+	This macro causes execution of the following statement
+	whenever the bomb point named by `bpName' explodes.  If bomb
+	points are not being compiled in, the alternate code path is
+	never executed.
+
+	Example:
+
+	long Foo()
+	{
+	    ...
+	    BOMB_IF("Foo#2") {
+		/* Do special processing */
+		...
+	    }
+	    ...
+	}
+
+	This example shows a how to use BOMB_IF to execute some
+	special code whenever a bomb explodes.
+
+	Besides the If explosion type, a number of other explosions
+	can occur at BOMB_IF bomb points.  The complete list is Abort,
+	Exception, Exit, If, and Signal.
+	
+	Another, related macro, BOMB_ELSE, may be useful in
+	conjunction with BOMB_IF.  The statement following BOMB_ELSE
+	is executed if the bomb point did not explode; however, like
+	with BOMB_IF, if bomb points are not being compiled in, the
+	statement following BOMB_ELSE is never executed.  In other
+	words if bomb points are not compiled in, neither BOMB_IF's
+	statement nor BOMB_ELSE's statement will ever be executed.
+
+	Example:
+
+	long Foo()
+	{
+	    ...
+	    BOMB_IF("Foo#3") {
+		/* Do special processing */
+		...
+	    } BOMB_ELSE {
+		/* Do alternate special processing while bomb points */
+		/* are being compiled in.			     */
+		...
+	    }
+	    ...
+	}
+
+
+	BOMB_POINT(bpName)
+
+	This macro provides for a variety of explosion types whenever
+	the bomb point named by `bpName' explodes.  The explosion
+	types allowed at BOMB_POINT bomb points are: Abort, Delay,
+	Exception, Exit, Signal, and Wait.
+
+	Example:
+
+	long Foo()
+	{
+	    ...
+	    BOMB_POINT("Foo#4");
+	    ...
+	}
+
+
+	BOMB_RETURN(bpName)
+
+	This macro causes the containing function to return a
+	tester-specified value whenever the bomb point named by
+	`bpName' explodes.  The only explosion types allowed at
+	BOMB_RETURN bomb points is Return.
+
+	Example:
+
+	long Foo()
+	{
+	    ...
+	    BOMB_RETURN("Foo#5");
+	    ...
+	}
+
+
+TRIGGERS
+
+	The moment at which a bomb point explodes is controlled by a
+	countdown value.  Specifying a countdown value of N will cause
+	an explosion on the N'th execution of the bomb point.
+	Triggers are set by specifying two values: the initial value
+	(N), and the reset value (M).  The notation for this is N+M,
+	indicating that the bomb should explode on the N'th call and
+	on every M calls after.  Specifying a 0 for the initial value
+	indicates that the bomb point should be turned off, specifying
+	0 for the reset value indicates that the bomb should only
+	explode once.
+
+	In the future, this package will likely support both timed and
+	random triggers.
+
+
+COMPILING
+
+	To add bomb points to a target program, include
+	"dcedfs/bomb.h" and link with libbomb.a.  You will also need
+	to link with libafsutil.a if the target program does not
+	already do so.  After adding bomb point macros to the code as
+	described above, compile the program with the C pre-processor
+	macro "DFS_BOMB" defined.  "DFS_BOMB" is automatically defined
+	if "AFS_DEBUG" is defined, so if the target files are already
+	being compiled with "AFS_DEBUG", you need not define
+	"DFS_BOMB".  The bomb point macros take very little execution
+	time if they are compiled in but no bomb points are set, so it
+	should not hurt performance to leave them compiled in even if
+	you are not doing any bomb point related testing.  If
+	"DFS_BOMB" is not defined when the code is compiled, none of
+	the bomb point support will be compiled in.
+
+	If your program is making use of the BOMB_KERNEL_* macros
+	(described below), you will also have to link with
+	libafssys.a.
+
+
+SETTING BOMB POINTS
+
+From the Shell
+
+	To manipulate bomb points in an application or the kernel, use
+	the `bomb' command suite.  The usage message (use "bomb help"
+	to have it displayed) is included below.
+
+	Note: Server bomb points are not currently implemented.
+
+	bomb: Commands are:
+	apropos         search by help text
+	help            get help on commands
+	set             set bomb point(s)
+	unset           unset bomb point(s)
+
+
+	Setting Bomb Points
+
+	The usage message for "bomb set" is:
+
+	Usage: bomb set -bpdesc <bomb point description>...
+			{-command <shell command> |
+			 -kernel |
+			 -server <server name>}
+			[-help]
+
+	Where <bomb point description> is:
+
+	<bpName>:<expType>{=<val>}:<trigType>=<val>+<val>
+
+	Where <expType> is one of:
+		abort (takes no value)	Abort process
+		delay			Delay thread for <val> seconds
+		errno			Return failure (-1),
+					setting errno to <val>
+		error			Return <val> as code
+		exception		Raise <val> exception
+		exit			Exit with <val> as exit code
+		if (takes no value)	Execute alternate code path
+		return			Return from function with <val> as
+				 	return value
+		signal			Send signal <val> to process
+		wait (takes no value)	Suspend thread awaiting SIGUSR2
+
+	and <trigType> is one of:
+		count			Explode after <val> passes
+					over bomb point
+		timer			UNIMPLEMENTED
+		random			UNIMPLEMENTED
+
+	Examples:
+
+	bomb set 'Foo#1:error=5:count=3+2' -command /opt/dcelocal/bin/foo
+
+	This runs "/opt/dcelocal/bin/foo" as a subprocess, causing the
+	bomb point named by "Foo#1" to return code 5 on the third
+	execution, and every 2 times after that.
+
+	bomb set 'Foo#1:error=5:count=3+2' -kernel
+
+	This is similar to the example above, except that the bomb
+	point is set in the kernel, not in a subprocess.  Use of the
+	"-kernel" switch is limited to the super user.
+
+
+	Unsetting Bomb Points
+
+	The usage message for "bomb unset" is:
+
+	Usage: bomb unset -bpname <bomb point name>...
+			  {-kernel | -server <server name>}
+			  [-help]
+
+	Where <bomb point name> is the name of a bomb point (ie.
+	"Foo#1").  This unsets a kernel or server bomb point that was
+	previously set using "bomb set".  Unsetting the bomb point
+	deallocates all of the bomb point's resources.  An alternative
+	that does not deallocate the resources but that effectively
+	turns the bomb point off is to use "bomb set" with a trigger
+	value of 0.  For example,
+
+	bomb set "Foo#1:error=0:count=0+0" -kernel
+
+	turns the bomb point named by "Foo#1" off, but does not
+	deallocate its resources.
+
+
+From an Application
+
+	The following routines are can be used to manipulate bomb
+	points from inside an application.  To see the definition
+	of `bombPoint_t', check out "dcedfs/bomb.h".
+
+	long bomb_ParseDesc(char* bpDesc, char* bpName, bombPoint_t* bpP)
+
+	This routine parses a bomb point description (passed in as
+	`bpDesc') and returns the bomb point name and bomb point
+	structure as `bpName' and `bpP', respectively.  `bpName' is
+	expected to be a character array of at least `BOMB_MAX_NAME+1'
+	characters, and `bpP' is expected to point to a preallocated
+	`bombPoint_t'.
+
+	long bomb_SetDesc(char* bpDesc)
+
+	This routine parses a bomb point description (passed in as
+	`bpDesc') and sets the bomb point in the invoking process.  It
+	is equivalent to the following code fragment.
+
+		bombPoint_t	bp;
+		char		bpName[BOMB_MAX_NAME+1];
+
+		bomb_ParseDesc(bpDesc, bpName, &bp);
+		bomb_Set(bpName, *bp);
+
+
+	long bomb_Set(char* bpName, bombPoint_t* bpP)
+
+	This routine sets the bomb point named by `bpName' (in the
+	invoking process) according to the contents of `bpP'.
+
+	long bomb_Unset(char* bpName)
+
+	This routine unsets the bomb point named by `bpName',
+	deallocating any of its resources.
+
+	BOMB_SET(bpName, bpP)
+
+	This macro behaves just like bomb_Set() except that it is
+	compiled out if "DFS_BOMB" is not defined.
+
+	BOMB_SET_DESC(bpDesc)
+
+	This macro behaves just like bomb_SetDesc() except that it is
+	compiled out if "DFS_BOMB" is not defined.
+
+	BOMB_UNSET(bpName)
+
+	This macro behaves just like bomb_Unset() except that it is
+	compiled out if "DFS_BOMB" is not defined.
+
+	BOMB_KERNEL_SET(bpName, bpP)
+
+	This macro behaves like bomb_Set() except that the bomb point
+	is set in the kernel instead of in the invoking process.  Use
+	of this macro requires the invoking process to be running as
+	the super user.  Note that this macro is to be used from a
+	user-space process in order to set a kernel bomb point.  From
+	inside the kernel itself, the above routines should be used.
+
+	BOMB_KERNEL_UNSET(bpName)
+
+	This macro behaves like bomb_Unset() except that the bomb
+	point is unset in the kernel instead of in the invoking process.
+	Use of this macro requires the invoking process to be running
+	as the super user.
+
+
+VIEWING CODE WITH EMBEDDED BOMB POINTS
+
+	The use of bomb points tends to clutter code, making it less
+	readable.  The `bomb_cat' utility provides a way to view code
+	with the bomb point macros stripped out.  The command takes a
+	list of files or takes no files and acts as a filter:
+
+	% bomb_cat junk.c | more
+
+	% cat foo.c bar.c | bomb_cat | more

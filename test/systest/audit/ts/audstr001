@@ -1,0 +1,461 @@
+#!/bin/ksh
+#
+#set -x
+#
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="start_test"
+#
+RGY_EXEC="rgy_edit -update"
+RGY_INPUT="/usr/tmp/rgy_input.$$"
+RGY_OUTPUT="/usr/tmp/rgy_output.$$"
+RGY_WAIT=120
+SEC_ORG="none"
+SEC_GROUP="none"
+SEC_PERSON="foo"
+NAME="Full_Name"
+SEC_LOGIN_PASSWD="-dce-"
+PARENT_PASSWD="-dce-"
+VALID="-av"
+SEC_HOME_DIR="/"
+SEC_SHELL="/bin/csh"
+#
+startup()
+{
+#set -x
+ tet_infoline "Starting str001 audit test"
+
+#Create dce_login_noexec
+
+ if [ ! -h /usr/bin/dce_login_noexec ] ; then
+    ln -fs /opt/dcelocal/bin/dce_login /usr/bin/dce_login_noexec
+ fi
+
+ audit_pid=`env COLUMNS=160 ps -aef | grep -v grep | grep auditd | awk '{print $2}'`
+ if [ -n "$audit_pid" ]
+ then
+	tet_infoline "auditd already running"
+	echo "AUDITD is running"
+ 	tet_infoline "audit_pid = $audit_pid"
+ else
+	tet_infoline "No auditds running"
+	echo "AUDITD must be running for the audstr001 test, abort test"
+	tet_infoline "No auditds running"
+	exit
+ fi 
+
+}
+
+cleanup()
+{
+ tet_infoline "Ending str001 audit test"
+
+ audit_pid=`env COLUMNS=160 ps -aef | grep -v grep | grep auditd | awk '{print $2}'`
+ if [ -n "$audit_pid" ]
+ then
+	tet_infoline "auditd is still running"
+ 	tet_infoline "audit_pid = $audit_pid"
+ else
+	tet_infoline "No auditds running"
+ fi 
+
+
+}
+
+#===============================================================================
+# Function:     execute_rgy
+# Purpose:      Execute registry commands
+#
+#===============================================================================
+execute_rgy() {
+
+        # WARNING: Might not be universal.  Needs to be checked
+        #
+        ${RGY_EXEC} < ${RGY_INPUT} > ${RGY_OUTPUT} 2>&1 &
+        RGY_PID=$!
+        COUNT=0
+
+        while [ "${COUNT}" -le "${RGY_WAIT}" ]
+        do
+                sleep 1
+                chkproc ${RGY_PID}
+                if [ "$?" -eq 1 ]
+                then
+                        break 2
+                else
+                        COUNT=`expr ${COUNT} + 1`
+                fi
+        done
+
+        if [ "${COUNT}" -gt "${RGY_WAIT}" ]
+        then
+                xx_error "${RGY_EXEC} is hung up.  Killing process ${RGY_PID}"
+                kill -9 ${RGY_PID}
+                cat ${RGY_INPUT} ${RGY_OUTPUT}
+                return 1
+        fi
+}
+
+
+#===============================================================================
+# Function:     add_person name_of_person UNIX_id_of_person full_name
+# Purpose:      Create a file which contains the commands to add a person
+#               to the registry file.  Execute rgy_edit the batch command
+#               file and verify that the user has been entered properly.
+#===============================================================================
+add_person() {
+
+        # ASSUMPTION: The current user is not in the registry.  This
+        #               function is called after state_of_rgy which
+        #               checks for existing users.
+        #
+        tet_infoline "Attempting to add person ${1} to registry"
+        cat << EOF > ${RGY_INPUT}
+do p
+add ${1} ${2} -f "${3}"
+v ${1} -f
+q
+EOF
+        # Execute file using the rgy_edit command.  Send the output to file
+        #       ${RGY_OUTPUT}
+        execute_rgy
+        if [ "$?" != 0 ]
+        then
+                return 1
+        fi
+        # Check output file for proper execution of command.
+        # Function verify_existence checks output file for existence of a
+        # person and return error code.
+        # ASSUMPTION: Syntax of output of rgy_edit on a "view" command
+        #               is <Name of Person> *<Unix ID of person>
+        #
+        cat ${RGY_OUTPUT} | verify_existence "Full name: *${3}" > /dev/null
+        if [ "$?" != 0 ]
+        then
+                xx_error "Person ${1} was not entered in registry as expected"
+                cat ${RGY_OUTPUT}
+                return 2
+        fi
+        # Call function to report that person has been added properly.
+        #
+        tet_infoline "Person ${1} has been ADDED to the registry."
+
+        return 0
+}
+
+
+#===============================================================================
+# Function:     add_account <name_of_person> <name_of_group> <name_of_org>
+#               <password> <auth_password> <home_dir> <shell> <psswd_valid>
+# Purpose:      Adds an account for the person requested, group and
+#               organization requested.  Note that the default password
+#               is used for all accounts.
+#
+#===============================================================================
+add_account() {
+#set -x
+        # ASSUMPTION: Account doesn't already exist in registry, and
+        #               the person, group and organization do exist.
+        #
+        tet_infoline "Attempting to add account for person ${1}"
+        cat << EOF > ${RGY_INPUT}
+do a
+add ${1} -g ${2} -o ${3} -pw ${4} -mp ${5} -h ${7} -s ${8} -pv ${6}
+v ${1}
+q
+EOF
+
+        # Execute file using the rgy_edit command.  Send the output to file
+        #       ${RGY_OUTPUT}
+        execute_rgy
+        if [ "$?" != 0 ]
+        then
+                return 1
+        fi
+
+        # Check output file for proper execution of command.
+        # Function verify_existence checks output file for existence of the
+        # account and return error code.
+        #
+        cat ${RGY_OUTPUT} | verify_existence "${1} *\[${2} *${3}\]" > /dev/null
+
+        if [ "$?" != 0 ]
+        then
+                xx_error "Account for ${1} was not entered as expected"
+                cat ${RGY_OUTPUT}
+                return 2
+        fi
+
+        # Call function to report that the person has been added properly.
+        #
+        tet_infoline "Account ${1} has been ADDED to the registry."
+
+        return 0
+}
+
+#===============================================================================
+# Function:     delete_account <name_of_person> <name_of_group> <name_of_org>
+# Purpose:      Delete an account for the person requested, group and
+#               organization requested.
+#===============================================================================
+delete_account() {
+        # ASSUMPTION: Account already exist in registry
+        #
+        tet_infoline "Attempting to delete account for person ${1}"
+        cat << EOF > ${RGY_INPUT}
+do a
+del -p ${1} -g ${2} -o ${3} 
+v ${1}
+q
+EOF
+
+        # Execute file using the rgy_edit command.  Send the output to file
+        #       ${RGY_OUTPUT}
+        execute_rgy
+        if [ "$?" != 0 ]
+        then
+                tet_infoline "ERROR: Execute_rgy failed in delete_account"
+                return 1
+        fi
+
+        # Check output file for proper execution of command.
+        # Function verify_existence checks output file for nonexistence of the
+        # account and return error code.
+        #
+        cat ${RGY_OUTPUT} | verify_existence "Cannot retrieve" > /dev/null
+
+        if [ "$?" != 0 ]
+        then
+                xx_error "Account for ${1} was not deleted in delete_account"
+                cat ${RGY_OUTPUT}
+                return 2
+        fi
+
+        # Call function to report that the person has been added properly.
+        #
+        tet_infoline "Account ${1} has been DELETED from the registry."
+        return 0
+
+} # End of function delete_account.
+
+#===============================================================================
+# Function:     delete_person <name_of_person>
+# Purpose:      Create a file which contains the commands to add a person
+#               to the registry file.  Execute rgy_edit the batch command
+#               file and verify that the user has been delete properly.
+#===============================================================================
+delete_person() {
+
+        # ASSUMPTION: The current user is not in the registry.  This
+        #               function is called after state_of_rgy which
+        #               checks for existing users.
+        #
+        tet_infoline "Attempting to delete person ${1} from registry"
+        cat << EOF > ${RGY_INPUT}
+do p
+del ${1} 
+v ${1} 
+q
+EOF
+        # Execute file using the rgy_edit command.  Send the output to file
+        #       ${RGY_OUTPUT}
+        execute_rgy
+        if [ "$?" != 0 ]
+        then
+                xx_error "Execute_rgy failed in delete_person"
+                return 1
+        fi
+        # Check output file for proper execution of command.
+        # Function verify_existence checks output file for existence of a
+        # person and return error code.
+        #
+        cat ${RGY_OUTPUT} | verify_existence "Cannot retrieve entry" > /dev/null
+        if [ "$?" != 0 ]
+        then
+                xx_error "Person ${1} was not deleted from registry as expected in delete_person"
+                cat ${RGY_OUTPUT}
+                return 2
+        fi
+        # Call function to report that person has been deleted properly.
+        #
+        tet_infoline "Person ${1} has been DELETED from the registry."
+        return 0
+
+} # End of function delete_person
+
+xx_begin() {
+	date +"%D:%T-begin---:$1"
+}
+
+xx_error() {
+	fail=1
+	date +"%D:%T-error---:$1"
+}
+
+xx_fail() {
+	date +"%D:%T-fail----:$1"
+}
+
+xx_log() {
+	date +"%D:%T-log-----:$1"
+}
+
+xx_pass() {
+	date +"%D:%T-pass----:$1"
+}
+
+xx_severe() {
+	date +"%D:%T-severe--:$1"
+}
+
+xx_warning() {
+	date +"%D:%T-warning-:$1"
+}
+
+#===============================================================================
+# Function:     chkproc <process_id>
+# Purpose:      Check that a process id is in the process table
+#===============================================================================
+
+chkproc() {
+	PGM=`basename $0`
+
+	STRING="$1"
+
+#Should be changed for non BSD type system
+
+	case "osf1" in
+		sun*|ultrix*)
+			ps -a$STRING >/dev/null 2>&1
+			;;
+
+		aix*|osf1*|*)
+			ps -p $STRING | grep $STRING >/dev/null 2>&1
+                        ;;
+        esac
+
+}
+
+#===============================================================================
+# Function:     verify_existence string_to_match
+# Purpose:      Checks the output of rgy_edit view command to verify that
+#               the user/group/org with the UNIX ID provided exists in
+#               the registry.
+#===============================================================================
+verify_existence() {
+	MATCH_STRING="${1}"
+	# Search for member with specified ID in output file.
+	#
+	egrep "${MATCH_STRING}"
+	return $?
+}
+
+do_login() {
+#set -x
+	tet_infoline "Doing dce_login_noexec cell_admin -dce-"
+	KRB5CCNAME=`dce_login_noexec cell_admin -dce-`
+	export KRB5CCNAME
+}
+
+do_relogin() {
+	xx_log "Doing kdestroy"
+	kdestroy
+	xx_log "Doing dce_login_noexec cell_admin -dce-"
+	KRB5CCNAME=`dce_login_noexec cell_admin -dce-`
+	export KRB5CCNAME
+}
+
+add_accts()
+{
+#
+count=1
+peridcount=2400
+tet_infoline "AUDIT_ACCTS = ${AUDIT_ACCTS}"
+while [ ${count} -le ${AUDIT_ACCTS} ] ; do
+
+        tet_infoline "add_person ${SEC_PERSON}${count}  ${peridcount} "${NAME}${count}""
+
+        add_person ${SEC_PERSON}${count} ${peridcount} "${NAME}${count}"
+
+	tet_infoline "add_account ${SEC_PERSON}${count} ${SEC_GROUP}\
+	${SEC_ORG} ${SEC_LOGIN_PASSWD} ${PARENT_PASSWD}\
+	${VALID} ${SEC_HOME_DIR} ${SEC_SHELL}"
+
+	add_account ${SEC_PERSON}${count} ${SEC_GROUP}\
+	${SEC_ORG} ${SEC_LOGIN_PASSWD} ${PARENT_PASSWD}\
+	${VALID} ${SEC_HOME_DIR} ${SEC_SHELL}
+
+	peridcount=`expr ${peridcount} + 1`
+	count=`expr ${count} + 1`
+done
+}
+
+remove_accts()
+{
+#
+count=1
+peridcount=1200
+tet_infoline "AUDIT_ACCTS = ${AUDIT_ACCTS}"
+while [ ${count} -le ${AUDIT_ACCTS} ] ; do
+
+
+	tet_infoline "delete_account ${SEC_PERSON}${count} ${SEC_GROUP} ${SEC_ORG}" 
+
+	delete_account ${SEC_PERSON}${count} ${SEC_GROUP} ${SEC_ORG}
+
+        tet_infoline "delete_person ${SEC_PERSON}${count}"
+
+        delete_person ${SEC_PERSON}${count}
+
+	peridcount=`expr ${peridcount} + 1`
+	count=`expr ${count} + 1`
+done
+
+}
+
+################################################################################
+#
+# Start test
+#
+################################################################################
+
+start_test()
+{
+
+#set -x
+#Reset failure flag
+	fail=0
+
+#do a DCE login with no_exec
+	do_login
+
+#Add the accounts to the registry
+	add_accts
+
+	echo "Do try_logins"
+#Try logging in on the accounts created
+        ./try_logins ${SEC_PERSON} ${AUDIT_ACCTS}
+	if [ "$?" != 0 ]
+	then
+		xx_error "try_logins failed"
+		tet_infoline "ERROR: try_logins failed"
+	else
+		tet_infoline "try_logins succeeded"
+	fi
+	echo "Finish try_logins"
+	
+
+
+#Remove the accounts from the registry
+	remove_accts
+
+        if [ $fail -ne 0 ] ; then
+		tet_result FAIL
+	else
+		tet_result PASS
+	fi
+
+}
+. $TET_ROOT/lib/ksh/tcm.ksh
+

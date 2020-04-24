@@ -1,0 +1,138 @@
+/*
+ * @OSF_COPYRIGHT@
+ * Copyright (c) 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: dced0_convert.idl,v $
+ * Revision 1.1.2.1  1996/11/21  14:04:36  arvind
+ * 	OSF DCE 1.2.2 Drop5
+ * 	[1996/11/21  14:03:41  arvind]
+ *
+ * Revision /main/DCE_1.2.2/1  1996/11/20  16:17 UTC  arvind
+ * 	New file from OSF
+ * 	[1996/11/19  21:54 UTC  arvind  /main/arvind_work/1]
+ * 
+ * $EndLog$
+ */
+[
+    uuid(0007e181-8d32-1d35-bfae-0000c09ce054),
+    version(1.0)
+]
+
+interface dced0_convert
+{
+
+    import "dce/dced_base.idl";
+    import "dce/database.idl";
+    import "dce/ep.idl";
+
+
+    /*
+    **  D C E D _ E N T R Y _ T
+    **  D C E D _ E N T R Y _ L I S T _ T
+    **  The common short-hand name for most dced objects.
+    **  The storage_tag indicates where the "true" object may be found;
+    **  for example, in the hostdata and rkeytab services it is a filename.
+    */
+    typedef struct dced0_entry_s_t {
+                uuid_t                          id;
+                dced_string_t                   name;
+                dced_string_t                   description;
+                dced_string_t                   storage_tag;
+    } dced0_entry_t;
+
+    /*
+    **  These are the data types written to disk - they contain what the
+    **  user sees, plus but with the database object header.
+    */
+    typedef struct dced0_entry_data_s_t {
+        dce_db_header_t         h;
+        dced0_entry_t           data;
+    } dced0_entry_data_t;
+
+    typedef struct server0_data_s_t {
+	dce_db_header_t		h;
+	boolean32		used;
+	unsigned32		flags;
+	server_t		data;
+	[ptr,string] char	*srvr_file;
+    } server0_data_t;
+
+    typedef struct attr_schema0_data_s_t {
+	dce_db_header_t		h;
+	sec_attr_schema_entry_t	data;
+    } attr_schema0_data_t;
+
+    /*
+    **  An old EP entry.  The lists and addr fields are recreated when
+    **  the entry is read from disk.
+    */
+    typedef struct dblist0_s_t {
+        [ptr] struct dblist0_s_t *fwd;
+        [ptr] struct dblist0_s_t *back;
+    } dblist0_t;
+
+    typedef struct db_lists0_s_t {
+        dblist0_t                entries;
+        dblist0_t                objects;
+        dblist0_t                interfaces;
+    } db_lists0_t;
+
+    typedef struct db_entry0_s_t {
+        db_lists0_t              lists;
+        signed32                readers;
+        uuid_t                  dbid;
+        unsigned16              comm_failures;
+        unsigned16              flags;
+        uuid_t                  object;
+        rpc_if_id_t             ifid;
+        uuid_t                  drep_id;
+        unsigned32              drep_vers_major;
+        unsigned32              drep_vers_minor;
+        unsigned32              rpc_protocol;
+        unsigned32              rpc_protocol_vers_major;
+        unsigned32              rpc_protocol_vers_minor;
+        char                    annotation[ept_max_annotation_size];
+        [ptr] twr_t             *tower;
+            /* This will always be NULL when stored. */
+        db_rpc_addr_p_t         addr;
+            /* These three fields are for LLB compatibility. */
+        uuid_t                  type;           /* for LB compat */
+        unsigned32              llb_flags;      /* for LB compat */
+        unsigned32              saddr_len;      /* for LB compat */
+    } db_entry0_t;
+
+
+
+    /*
+    **  Encode/decode routines.
+    */
+
+    void dced0_entry_convert(
+	[in]		handle_t		h,
+	[in,out]	dced0_entry_data_t	*data,
+	[in,out]	error_status_t		*st
+    );
+
+    void dced0_server_convert(
+	[in]		handle_t		h,
+	[in,out]	server0_data_t		*data,
+	[in,out]	error_status_t		*st
+    );
+
+
+    void dced0_attr_schema_convert(
+	[in]		handle_t		h,
+	[in,out]	attr_schema0_data_t	*data,
+	[in,out]	error_status_t		*st
+    );
+
+    void dced0_ep_convert(
+	[in]		handle_t		h,
+	[in,out]	db_entry0_t		*data,
+	[in,out]	error_status_t		*st
+    );
+}

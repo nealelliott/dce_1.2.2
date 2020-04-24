@@ -1,0 +1,111 @@
+#!/bin/ksh 
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: hclcfg001,v $
+# Revision 1.1.4.2  1996/03/11  02:40:06  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:06:05  marty]
+#
+# Revision 1.1.4.1  1995/12/11  21:57:13  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:56:57  root]
+# 
+# Revision 1.1.2.1  1994/09/22  21:27:04  fadden
+# 	Initial version
+# 	[1994/09/22  19:52:06  fadden]
+# 
+# $EndLog$
+
+# This test executes one or more commands to establish intercell
+# authentication between the host cell and the specified target cells.
+#
+# This test is written to be run from the control file run.hcell
+# for consistency with the other hcell tests, but does not provide
+# repetitive capability due to the nature of the test.
+
+tet_startup="startup"
+tet_cleanup=""
+iclist="ic1"
+ic1="hclcfg001"
+
+test_purp_list="hclcfg001"
+
+
+startup()
+{
+    if [ -x /opt/dcelocal/bin/dce_login -a ! -x /usr/bin/dce_login_noexec ]
+    then
+            ln -s /opt/dcelocal/bin/dce_login /usr/bin/dce_login_noexec
+    fi
+
+    if [ -z "$CELLS" ]
+    then
+	tet_infoline "The cell list is null"
+	del_test_purp
+	return
+    fi
+
+    tet_infoline "Using cell list: $CELLS" 
+    export CELLS
+
+    PID=$$
+    FAIL_STAT=0
+
+    STATES=${STATES:-""}
+
+    export FAILURES=0
+    export CMD_F FAIL_STAT PID DEBUG  
+
+    export PS=0 TOTAL_FAILS=0 OPS_TOTAL=0  
+    export CDSSHOST=`hostname`
+
+} #end startup
+
+# Run the test
+hclcfg001()
+{
+    export KRB5CCNAME
+    KRB5CCNAME=`dce_login_noexec ${SETUP_PRINC} ${SETUP_PW}`
+    if [ "$?" != "0" ]
+    then
+	tet_infoline "-:) Failure: Unable to authenticate ${SETUP_PRINC}"
+	tet_infoline "KRB5CCNAME=$KRB5CCNAME"
+	((TOTAL_FAILS+=1))
+    fi
+
+    for CELL in $CELLS
+    do
+        export TMP_FILE="$STTMPDIR/hclrgy.${OPS_TOTAL}.$$"
+	rgy -opt cell -cell $CELL -grpl none -orgl none \
+	    -grpf none -orgf none -pw ${SETUP_PW} -facct ${SETUP_PRINC} \
+	    -fpw ${SETUP_PW} -exp none
+	if [ "$?" != "0" ]
+	then
+	    ((TOTAL_FAILS+=1))
+	    tet_infoline "ERROR: rgy_edit cell $CELL failed"
+	fi
+	((OPS_TOTAL+=1))
+    done
+
+    if (( TOTAL_FAILS == 0 && OPS_TOTAL > 0 ))
+    then
+	tet_infoline "All $OPS_TOTAL test cases passed." 
+	tet_infoline "HCLCFG001 passed"
+	tet_result PASS
+    else
+	tet_infoline "Total failures: $TOTAL_FAILS/$OPS_TOTAL" 
+	(( OPS_TOTAL <= 0 )) && tet_infoline "No test cases were executed!"
+	tet_infoline "HCLCFG001 failed"
+	tet_result FAIL
+    fi
+}
+
+. $TET_ROOT/system/profile.dcest.tet
+. $TET_ROOT/system/directory/cds/ts/hclcfg001/hclcfg001.data
+. $TET_ROOT/system/directory/cds/ts/hclcfg001/hcl_st_utils
+. $TET_ROOT/lib/ksh/tcm.ksh

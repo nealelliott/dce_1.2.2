@@ -1,0 +1,318 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: cds_types.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:12:14  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:29:26  marty]
+ *
+ * Revision 1.1.4.1  1995/12/08  15:35:11  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  14:50:58  root]
+ * 
+ * Revision 1.1.2.2  1992/12/30  14:26:24  zeliff
+ * 	Embedding copyright notices
+ * 	[1992/12/29  23:34:37  zeliff]
+ * 
+ * Revision 1.1  1992/01/19  15:24:39  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+/*
+ * COPYRIGHT (c) DIGITAL EQUIPMENT CORPORATION 1990, 1991. ALL RIGHTS RESERVED.
+ *
+ * THIS SOFTWARE IS FURNISHED UNDER A LICENSE AND MAY BE USED AND  COPIED
+ * ONLY  IN  ACCORDANCE  WITH  THE  TERMS  OF  SUCH  LICENSE AND WITH THE
+ * INCLUSION OF THE ABOVE COPYRIGHT NOTICE.  THIS SOFTWARE OR  ANY  OTHER
+ * COPIES  THEREOF MAY NOT BE PROVIDED OR OTHERWISE MADE AVAILABLE TO ANY
+ * OTHER PERSON.  NO TITLE TO AND OWNERSHIP OF  THE  SOFTWARE  IS  HEREBY
+ * TRANSFERRED.
+ *
+ * THE INFORMATION IN THIS SOFTWARE IS SUBJECT TO CHANGE  WITHOUT  NOTICE
+ * AND  SHOULD  NOT  BE  CONSTRUED  AS  A COMMITMENT BY DIGITAL EQUIPMENT
+ * CORPORATION.
+ *
+ * DIGITAL ASSUMES NO RESPONSIBILITY FOR THE USE OR  RELIABILITY  OF  ITS
+ * SOFTWARE ON EQUIPMENT THAT IS NOT SUPPLIED BY DIGITAL.
+ *
+ * MODIFIED:
+ *
+ * Gen 13, 29-Aug-1991, Alan Peckham
+ *	Added VT_gdaPointer, cds_gdaPointer_t.
+ */
+interface cds_types
+{
+
+#ifdef DCE_SEC
+import "dce/aclbase.idl";
+#endif
+
+const small VT_none = 0;
+const small VT_long = 1;
+const small VT_short = 2;
+const small VT_small = 3;
+const small VT_uuid = 4;
+const small VT_Timestamp = 5;
+const small VT_Timeout = 6;
+const small VT_Version = 7;
+const small VT_char = 8;
+const small VT_byte  = 9;
+const small VT_ReplicaPointer = 10;
+const small VT_GroupMember = 11;
+const small VT_ParentPointer = 12;
+const small VT_FullName = 13;
+const small VT_CHDirectory = 14;
+const small VT_ASN1 = 15;
+const small VT_DACL = 16;
+const small VT_gdaPointer = 18;
+
+typedef small ValueType_t;
+
+/*
+ * CDS timestamp - 6 byte node id followed by time based on smithsonian
+ * zero
+ */
+typedef struct {
+    	byte               ts_node[6];
+    	unsigned hyper int ts_time;
+} cds_Timestamp_t;
+
+/*
+ * 2 utc values.  First is absolute time, second is relative
+ */
+typedef struct  {
+	byte    to_expire[16];
+        byte    to_extend[16];
+} cds_Timeout_t;
+
+typedef [ptr]cds_Timeout_t *cds_TimeoutP_t;
+
+/*
+ * Can be used for software version numbers
+ */
+typedef struct {
+	unsigned small int ver_major;
+ 	unsigned small int ver_minor;
+} cds_Version_t;
+
+/*
+ * Represents Simplenames, attributenames and class values as input to
+ * RPC routines.  These names are passed in their internal opq format.
+ * within the nm_name array.
+ */
+typedef struct {
+	unsigned short int          nm_length;
+	[length_is(nm_length)] byte nm_name[257];
+} cds_Name_t;
+
+/*
+ * The global root and the string representation of the pathname.
+ * CDS server-server operations may use a directory uuid in the fn_root
+ * and the fn_name is the entry name relative to fn_root (ie, not global)
+ * fn_name does not include terminating null
+ */
+typedef struct {
+	uuid_t		fn_root;
+   	long int     	fn_length;
+        [length_is(fn_length)] char fn_name[1023];
+} cds_FullName_t;
+
+/*
+ * Error status return.  On Unknownentry, the er_name may be filled in
+ * with the last name the server successfully accessed.
+ */
+typedef struct {
+	unsigned long int   er_status;
+	[ptr]cds_FullName_t *er_name;
+} cds_status_t;
+
+/*
+ * Internal CDS structure that describes the replicas of directory
+ *
+ * const small RT_master = 1;
+ * const small RT_readOnly = 3;
+ * const small RT_gda = 4;
+ */
+typedef struct {
+   unsigned small int  rp_type;
+   uuid_t              rp_chid;
+   cds_FullName_t      rp_chname;
+   unsigned long int   rp_length;
+   [size_is(rp_length)] byte rp_towers[];
+} cds_ReplicaPointer_t;
+
+/*
+ * Internal CDS structure to describe the members of a CDS group
+ * Members may by other group names in which isaGroup would be true
+ */
+typedef struct {
+  boolean          gm_isaGroup;
+  cds_FullName_t   gm_member;
+} cds_GroupMember_t;
+
+
+/*
+ * Internal CDS structure that describes the parent of a directory
+ * The timeout value is used to update replica pointers in the
+ * child ptr.
+ */
+typedef struct {
+  uuid_t           pp_parentID;
+  cds_Timeout_t    pp_timeout;
+  cds_FullName_t   pp_myName;
+} cds_ParentPointer_t;
+
+/*
+ * Uppointers to the GDA
+ */
+typedef struct {
+  cds_Timeout_t        gp_timeout;
+  cds_ReplicaPointer_t gp_replica;
+} cds_gdaPointer_t;
+
+/*
+ * Internal CDS attribute that defines the directories within a
+ * clearinghouse
+ */
+typedef struct {
+   uuid_t          cp_dirID;
+   cds_FullName_t  cp_directory;
+} cds_CHDirectory_t;
+
+/*
+ * Structure for transporting opaque variable length user data
+ */
+typedef struct {
+   unsigned short int        op_length;
+   [size_is(op_length)] byte op_array[];
+} cds_OpenByte_t;
+
+/*
+ * Structure for transporting char variable length user data
+ */
+typedef struct {
+   unsigned short int	     op_length;
+   [size_is(op_length)] char op_array[];
+} cds_OpenChar_t;
+
+/* All the data types CDS recognizes */
+typedef union switch (ValueType_t av_valuetype) av_val
+	{
+	case VT_none:           ;
+	case VT_long:           long int  av_long;
+	case VT_short:          short int av_short;
+	case VT_small:          small int av_small;
+	case VT_uuid:           uuid_t    av_uuid;
+	case VT_Timestamp:      cds_Timestamp_t av_timestamp;
+	case VT_Timeout:     	cds_Timeout_t av_timeout;
+	case VT_Version:        cds_Version_t av_version;
+	case VT_char:           [ptr]cds_OpenChar_t *av_char_p;
+	case VT_ASN1:
+	case VT_byte:           [ptr]cds_OpenByte_t *av_byte_p;
+/* The remaining types are for internal CDS use only */
+	case VT_ReplicaPointer: [ptr]cds_ReplicaPointer_t *av_rp_p;
+	case VT_GroupMember:    [ptr]cds_GroupMember_t *av_gm_p;
+	case VT_ParentPointer:  [ptr]cds_ParentPointer_t *av_pp_p;
+	case VT_FullName:       [ptr]cds_FullName_t *av_fullname_p;
+	case VT_CHDirectory:    [ptr]cds_CHDirectory_t *av_cp_p;
+#ifdef DCE_SEC
+	case VT_DACL:           [ptr]sec_acl_t         *av_acl_p;
+#endif
+	case VT_gdaPointer:	[ptr]cds_gdaPointer_t  *av_gda_p;
+} cds_AtomicValue_t;
+
+
+/*
+ * Set member contains a present/absent flag, timestamp member
+ * was created and the value
+ * The flag is actually a bitmask with only bit 0 currently in use.
+ * const small SM_present=1;
+ * const small SM_absent=0;
+ */
+typedef struct {
+    unsigned small int sm_flag;
+    cds_Timestamp_t    sm_ts;
+    cds_AtomicValue_t  sm_value;
+} cds_SetMember_t;
+
+/*
+ * Sets describe single or set valued attributes. They contain a
+ * a list of members
+ * const small AT_none=1;
+ * const small AT_single=2;
+ * const small AT_set=3;
+ */
+typedef struct {
+    unsigned small int set_type;
+    unsigned short int set_length;
+    [size_is(set_length)] cds_SetMember_t set_members[];
+} cds_Set_t;
+typedef [ptr]cds_Set_t *cds_SetP_t;
+
+/*
+ * Progress record is used to direct the clerk from one server
+ * to another.
+ * Flags is a bitmask.
+ * const small PR_done=1;   Got results
+ * const small PR_up =2;    returning ptr up the tree
+ * const small PR_linked=4;  Link was found in name
+ * const small PR_hitLink=8; 	Link just found, new name returned
+ * const small PR_ignoreState=16; ignore directory state
+ * const small PR_directory =32;
+ */
+typedef struct {
+    unsigned small int	pr_flags;
+    [ptr]cds_Timeout_t  *pr_timeout;
+    cds_FullName_t	pr_unresolved;
+    cds_FullName_t	pr_resolved;
+    [ptr]cds_Set_t      *pr_replicas_p;
+} cds_Progress_t;
+
+/*
+ * Update an attribute
+ * const small UD_present=1;
+ * const small UD_absent=2;
+ */
+typedef struct {
+    small int     	ud_operation;
+    cds_Timestamp_t    	ud_timestamp;
+    unsigned small int	ud_type;	/* attribute type */
+    byte                ud_attribute[33];
+    cds_AtomicValue_t   ud_value;
+} cds_Update_t;
+
+/*
+ * Structure used to bundle multiple updates to one entry.  Used in
+ * DoUpdate function.  Name is relative to a directory.
+ * const small int ET_directory=1;
+ * const small int ET_object=2;
+ * const small int ET_childPointer=3;
+ * const small int ET_softlink=4;
+ * const small int ET_clearinghouse=5;
+ * const small int ET_anyDirectName=6;
+ * const small int ET_firstLink=7;
+ * const small int ET_dirOrObj=8;
+ */
+typedef struct {
+    cds_FullName_t      pkt_name;
+    cds_Timestamp_t  	pkt_cts;
+    small int    	pkt_type;       /* EntryType */
+    unsigned small int 	pkt_cnt;
+    [size_is(pkt_cnt)] cds_Update_t pkt_data[];
+} cds_UpdatePkt_t;
+
+
+}
+
+
+
+

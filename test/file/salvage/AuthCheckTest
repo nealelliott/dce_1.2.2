@@ -1,0 +1,338 @@
+#!/bin/sh
+
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: AuthCheckTest,v $
+# Revision 1.1.10.1  1996/10/17  18:35:04  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:57:23  damon]
+#
+# Revision 1.1.2.3  1993/01/11  18:37:04  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:21:28  htf]
+# 
+# Revision 1.1.2.2  1992/10/28  18:15:43  jaffe
+# 	New File
+# 	[1992/10/28  15:03:13  jaffe]
+# 
+# $EndLog$
+
+###############################################################################
+#     Copyright (C) 1992 Transarc Corporation - All rights reserved           #
+###############################################################################
+#
+# Usage:                AuthCheckTest -aggr <aggr-name>
+#
+###############################################################################
+#
+# Description: 
+# This test is applicable to both local Episode and exported Episode via DFS.
+# This test checks whether the salvage command performs authorization checks
+# for the issuer of the command. The authorization rules are as follows:
+#
+# 1. Only users with read access to the device file for the aggregate can
+#    issue salvage verification requests. If the user does not have read
+#    access to the device, the verification request should fail. 
+# 2. Similarly for actual salvage and recovery, the user need both read and 
+#    write access to the device file.
+#
+# Assumptions:
+# The test does not run newaggr on the specified aggregate. That must be done 
+# before the test is run. Also no filesets from this aggregate should be 
+# mounted while this test is running. 
+#
+# Privilege required:
+# You must be local root.
+
+###############################################################################
+
+#
+# PrintUsage() -
+#   Prints the usage message for this script.
+
+PrintUsage()
+{
+	echo "$programName runs authorization test checks for salvage/recovery command"
+	echo "Usage: $programName -aggr <aggr-name> [-help] "
+}
+
+###############################################################################
+
+#
+# Initialise some variables. UTIL_DIR is the directory containing 
+# the script fs_FunctionsScript with common functions.
+#
+
+TESTTOP=${TESTTOP:="`pwd`"}
+
+if [ "$TESTTOP" = "`pwd`" ]
+then
+    UTIL_DIR=../util
+    testhome=$TESTTOP
+else
+    UTIL_DIR=$TESTTOP/util
+    testhome=$TESTTOP/salvage
+fi
+
+. $UTIL_DIR/fs_FunctionsScript
+. $UTIL_DIR/fs_SetSysVar
+
+trap '
+    echo "$programName killed; returning $scriptErrorExit" | tee -a $logFile
+    exit $scriptErrorExit
+     ' 2 3 15
+
+#
+# Initialise setup variables
+#
+
+fs_InitSetup salvage
+
+help="-help"
+verify="-verifyonly"
+recover="-recoveronly"
+recoverVerify="-recoveronly -verifyonly"
+salvage="-salvageonly"
+
+#
+# NOTE: If this test ever gets big enough to generate 99 errors, this variable
+# value should be changed to a value greater than the max. # of expected 
+# errors.
+#
+setupFailureExitCode=99
+export setupFailureExitCode
+
+#
+# Verify that test is invoked as root.
+#
+
+whoami | grep root > /dev/null
+if [ $? -ne 0 ]
+then
+	echo "${programName}: must be run as root." | tee -a ${logFile}
+	exit ${scriptErrorExit}
+fi
+
+#
+# Validate number of arguments
+#
+
+if [ $# -lt 2 ]
+then
+	echo "${programName}: insufficient arguments" | tee -a ${logFile}
+	PrintUsage
+	exit ${scriptErrorExit}
+fi
+
+#
+# Parse the command line
+#
+
+aggrFlag=${FALSE}
+while [ "$1" != "" ]
+do 
+    case $1 in 
+        help|-help) PrintUsage
+                    exit ${successExit}
+                    ;;
+
+        aggr|-aggr) aggrFlag=${TRUE}
+					CheckOptionValue "aggr" ${testSuiteType} ${programName} $*
+                    aggr=$2
+                    shift 2
+                    ;;
+
+        *)          echo "${testSuiteType/$programName}: invalid argument \"$1\"" | tee -a $logFile
+                    exit ${scriptErrExit}
+                    ;;
+    esac
+done
+
+#
+# Validate arguments
+#
+
+if [ ${aggrFlag} -ne ${TRUE} ]
+then
+	echo "${programName}: need to specify aggregate name" | tee -a ${logFile}
+	PrintUsage
+	exit ${scriptErrorExit}
+fi
+
+ls ${aggr} 
+if [ $? -ne 0 ]
+then
+    echo "${programName}: specified aggr ${aggr} does not exist" | tee -a ${logFile}
+    exit ${scriptErrorExit}
+fi
+
+#
+# Determine name of raw device for the aggregate if the device specified 
+# is not a raw device.
+#
+
+IsRawDevice ${aggr}
+if [ $? -ne 0 ]
+then 
+	aggr=`DetermineRawDeviceFileName ${aggr}`
+fi
+
+#
+# Create a non-root user unix account locally.
+#
+
+testUser="test`expr $$ % 997`" 
+$UTIL_DIR/CreateLocalAccount ${testUser}
+
+#
+# Determine owner, group and permission mode of the aggregate device file
+#
+aggrOrigOwner=`DetermineOwner ${aggr}`
+aggrOrigGroup=`DetermineGroup ${aggr}`
+aggrOrigPermMode=`DetermineNumericPermissionMode ${aggr}`
+
+#
+# Start test
+#
+
+(
+    echo "$programName (authcheck) starting in $currentDir"
+    echo "Host `hostname` ($fs_SysName)"
+    date
+) | tee -a $logFile
+
+#
+# Change ownership of aggregate to root if not so.
+#
+
+if [ "${aggrOrigOwner}" != "root" ]
+then
+	chown root ${aggr}
+	if [ "`DetermineOwner ${aggr`" != "root" ]
+	then
+		echo "${programName}: failed to chown ${aggr}" | tee -a ${logFile}
+		exit ${testErrorExit} 
+	fi
+fi
+
+#
+# Actual test purposes.
+#
+
+#
+# The following test purposes are run as root.
+#
+
+#
+# Basic tests
+#
+
+salvage ${help}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E1 "salvage ${help} failed as root" ${FALSE} -log ${logFile} 
+
+salvage ${verify} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E2 "salvage ${verify} failed as root" ${FALSE} -log ${logFile} 
+
+salvage ${recover} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E3 "salvage ${recover} failed as root" ${FALSE} -log ${logFile} 
+
+salvage ${recoverVerify} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E4 "salvage ${recoverVerify} failed as root" ${FALSE} -log ${logFile} 
+
+salvage ${salvage} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E5 "salvage ${salvage} failed as root" ${FALSE} -log ${logFile} 
+
+salvage ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E6 "salvage failed as root" ${FALSE} -log ${logFile} 
+
+salvage ${verify} ${salvage} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_NONZERO} E7 "salvage ${verify} ${salvage} accepted illegal arguments" ${FALSE} -log ${logFile} 
+
+salvage ${recover} ${salvage} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E8 "salvage ${recover} ${salvage} failed as root" ${FALSE} -log ${logFile} 
+
+
+#
+# Change ownership of aggregate to non-root user.
+#
+
+chown ${testUser} ${aggr}
+if [ "`DetermineOwner ${aggr}`" != "${testUser}" ]
+then
+	echo "${programName}: failed to chown ${aggr} as root"
+	exit ${testErrorExit} 
+fi
+
+chmod 0600 ${aggr}
+if [ "`ls -l ${aggr} | cut -c2-10`" != "rw-------" ]
+then
+	echo "${programName}: failed to \"chmod 0600 ${aggr} \" as root"
+	exit ${testErrorExit} 
+fi
+
+#
+# Rerun the above test purposes.
+#
+
+salvage ${verify} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E10 "salvage ${verify} failed as root on aggregate not owned by root" ${FALSE} -log ${logFile} 
+
+salvage ${recover} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E11 "salvage ${recover} failed as root on aggregate not owned by root" ${FALSE} -log ${logFile} 
+
+salvage ${recoverVerify} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E12 "salvage ${recoverVerify} failed as root on aggregate not owned by root" ${FALSE} -log ${logFile} 
+
+salvage ${salvage} ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E13 "salvage ${salvage} failed as root on aggregate not owned by root" ${FALSE} -log ${logFile} 
+
+salvage ${aggr}
+ProcessResult ${testSuiteType} ${programName} $? ${PASS_EQ_ZERO} E14 "salvage failed as root on aggregate not owned by root" ${FALSE} -log ${logFile} 
+
+#
+# The following tests are run as an non-root ordinary user. 
+#
+# ASSERT: The aggregate is readable and writable by the non-root user.
+#
+
+export TRUE FALSE PASS_EQ_ZERO PASS_EQ_NONZERO 
+export successExit scriptErrorExit testErrorExit 
+export currentDir programName testSuiteType errorCount logFile 
+export UTIL_DIR TESTTOP testhome
+export help verify recover recoverVerify salvage aggr testUser  
+
+su ${testUser} "-c ${testhome}/AuthCheckTest.noroot"
+exitCode=$?
+
+if [ ${exitCode} -eq ${setupFailureExitCode} ]
+then
+	echo "${programName}: non-root tests setup failed"
+	exit ${testErrorExit}
+else
+	errorCount=`expr ${errorCount} + ${exitCode}`
+fi
+
+#
+# Restore ownership and modes of the aggregate device file 
+# Delete test user account.
+#
+
+chmod ${aggrOrigPermMode} ${aggr}
+chgrp ${aggrOrigGroup} ${aggr}
+chown ${aggrOrigOwner} ${aggr}
+
+$UTIL_DIR/DeleteLocalAccount ${testUser}
+
+(
+    echo ""
+    echo "$testSuiteType/$programName returning $errorCount in $currentDir"
+    date
+) | tee -a $logFile
+
+exit $errorCount
+

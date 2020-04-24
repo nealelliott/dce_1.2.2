@@ -1,0 +1,110 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: defer-io.2.test,v $
+# Revision 1.1.9.1  1996/10/02  17:24:53  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:32:18  damon]
+#
+# Revision 1.1.4.1  1994/06/09  14:00:53  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:36:09  annie]
+# 
+# Revision 1.1.2.3  1993/01/19  15:28:04  cjd
+# 	embedded copyright notice
+# 	[1993/01/19  13:48:44  cjd]
+# 
+# Revision 1.1.2.2  1992/12/09  19:50:21  jaffe
+# 	initial checking
+# 
+# 	$TALog: defer-io.2.test,v $
+# 	Revision 1.3  1994/11/01  21:26:32  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r1.2 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	Revision 1.1  1992/11/17  16:02:45  mason
+# 	Complete work here.  This version completes the delta.  Add several
+# 	regression tests and enhance the testing language to support better
+# 	concurrency guarantees.
+# 
+# 	Test script for the deferred I/O in recovery, plus basic regression testing.
+# 	[added by delta mason-ot5976-defer-io-during-recovery, r1.2]
+# 
+# Revision 1.1  1992/11/17  00:07:06  mason
+# 	The NBS changes meant that there could be many pages which didn't really need
+# 	I/O.  The existing simplistic algorithm was merrily reading and writing those
+# 	pages even though no data on the pages was modified.  To fix this, we merely
+# 	defer the I/O until we find a transaction really needing to write on the data
+# 	page; once found we keep it around.  At the end we check to see if we ever
+# 	read it.  If so, we write it back to disk. If not, we just go to the next
+# 	modified disk block.
+# 
+# 	This first delta is a checkpoint.
+# 
+# 	New test script.
+# 	[added by delta mason-ot5976-defer-io-during-recovery, r1.1]
+# 
+# $EndLog$
+#
+# test deferal of i/o (NBS-style) - this time verify that the
+# commit of the transaction doesn't do the undo operation.
+#
+# (C) Copyright 1992 Transarc Corporation - All Rights Reserved
+#
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/logbuf/defer-io.2.test,v 1.1.9.1 1996/10/02 17:24:53 damon Exp $
+
+# we want a fake aggregate with 10 data blocks and 6 transactions.
+
+set logsize 10 6
+
+opendata /tmp/dev-one 8192
+createlog /tmp/dev-two 8192
+openlog /tmp/dev-two 8192
+
+# zero all pages
+pageclear 0 9
+
+#
+# this is the quintessential NBS example; start one transaction (used for
+# forcing the log).  The second transaction is the "allocation" transaction
+# which starts an undo-zero tran on an unrelated block.
+# 
+# When we recover we should see i/o to two blocks - the undo-zero block
+# and the transaction 1 block.
+#
+start 1
+data 1 1 0 data-from-transaction-one
+data 1 4 0 data-from-transaction-one-into-nbs-block
+end 1
+
+start 2
+data 2 2 0 data-from-transaction-two
+# we scribble the new data out since a clean page makes the uzero a no-op
+fill 2 5 0 0x55 8192
+# now insert an undo-zero record for that block
+uzero 2 5 0 8192
+sync
+force 1             # push the log out at this point
+end 2
+
+# turn on rcvrdebug to see what is happening during recovery...
+#set rcvrdebug -1
+recover
+
+# verify that transaction 1 rolled forward
+compare 1 0 data-from-transaction-one
+
+# verify that transaction 2 is not on disk
+ncompare 2 0 data-from-transaction-two
+
+# the uz tran will be active here, so fill data will NOT be on disk.
+ncompare 5 0 UUUU
+
+# done
+quit

@@ -1,0 +1,90 @@
+#
+#      SCCS:  @(#)makefile	1.3 (92/10/06) 
+#
+#	UniSoft Ltd., London, England
+#
+# (C) Copyright 1992 X/Open Company Limited
+#
+# All rights reserved.  No part of this source code may be reproduced,
+# stored in a retrieval system, or transmitted, in any form or by any
+# means, electronic, mechanical, photocopying, recording or otherwise,
+# except as stated in the end-user licence agreement, without the prior
+# permission of the copyright owners.
+#
+# X/Open and the 'X' symbol are trademarks of X/Open Company Limited in
+# the UK and other countries.
+#
+#
+# ************************************************************************
+#
+# SCCS:   	@(#)makefile	1.3 92/10/06
+# NAME:		makefile
+# PRODUCT:	DTET (Distributed Test Environment Toolkit) release 1.0b
+# AUTHOR:		Andrew Dingwall, UniSoft Ltd.
+# DATE CREATED:	June 1992
+#
+# DESCRIPTION:
+#	tcm makefile
+# 
+# MODIFICATIONS:
+#	Andrew Dingwall, UniSoft Ltd., October 1992
+#	added rules for building dtcmchild.o
+# 
+# ************************************************************************
+
+include ../defines.mk
+include ../common.mk
+
+# generic dtet tcm .o files - this list is also in dtet.mk
+OFILES_GN = tcmfuncs.o fake.o
+
+# INET-specific dtet tcm .o files - this list is also in dtet.mk
+OFILES_IN = tcm_in.o tcm_bs.o
+
+OFILES = $(OFILES_GN) $(OFILES_IN)
+
+ALL = mtcm.o stcm.o tcmrem.o dtcmchild.o
+
+TARGETS = $(LIB)/mtcm.o $(LIB)/stcm.o $(LIB)/tcmrem.o $(LIB)/dtcmchild.o
+
+all: all1 all2
+
+all1:
+	$(MAKE) -f tet.mk all
+	$(MAKE) -f dtet.mk all
+	
+all2: $(ALL)
+
+install: all $(TARGETS)
+
+$(TARGETS): $$(@F)
+	cp $(@F) $@
+
+MTCM = mtcmfuncs.o dtcm.o mtcmdist.o ictp.o $(OFILES)
+mtcm.o: $(MTCM)
+	$(LD) -r -o $@ $(MTCM)
+
+STCM = stcmfuncs.o dtcm.o stcmdist.o ictp.o $(OFILES)
+stcm.o: $(STCM)
+	$(LD) -r -o $@ $(STCM)
+
+TCMCHILD = child.o ctcmfuncs.o $(OFILES)
+dtcmchild.o: $(TCMCHILD)
+	$(LD) -r -o $@ $(TCMCHILD)
+
+TCMREM = child.o rtcmfuncs.o $(OFILES)
+tcmrem.o: $(TCMREM)
+	$(LD) -r -o $@ $(TCMREM)
+
+
+CLEAN clean:
+	$(MAKE) -f tet.mk $@
+	$(MAKE) -f dtet.mk $@
+	rm -f $(ALL)
+
+CLOBBER clobber: clean
+	rm -f $(TARGETS)
+
+FORCE FRC: clobber all
+
+

@@ -1,0 +1,107 @@
+Hi,
+
+With the advice I have got from you in recent days, I attempt to 
+put together the first draft of a checklist for Salvage and Recovery
+Tests below. Could you please go over it and critique it?
+
+Thank you
+Rajesh
+
+Checklist for Recovery and Salvage Tests - Draft 1
+==================================================
+
+Basic Tests:
+
+- Authorization checks.
+  The user running salvage/recovery should be root or own the device.
+
+- Aggregates with mounted filesets.
+  I assume the command should fail or at least warn the administrator.
+
+
+Recovery:
+
+Existing
+
+- RCX (Recovery Exerciser).
+  Does operations involving intensive metadata modifications
+  and checks if the system is in a consistent state after
+  running recovery.
+
+- asdb.
+  A program to freeze all operations on an aggregate. Currently used
+  in conjunction with RCX.  
+
+To do
+  
+- Stress tests.
+  While running the filesystem metadata intensive stress tests, freeze
+  the aggregate and perform recovery on it. Usage of fs, low test suites.
+  Usage of asdb.
+
+- New Block Security tests.
+  Usage of RCX.
+
+- Synchronous file creation and modifications.
+  Usage of O_SYNC flag to ensure the log is correctly updated and
+  recovery is successful.  Usage of asdb.
+
+- Log on a different aggregate than the aggregate being logged.
+  Is this currently implemented in the code? It seems no support
+  in user interface for this though mentioned in the design specs.
+
+
+Salvager:
+
+Existing
+
+- Ravager
+  Bashes disk blocks in an aggregate to all 0's, 1's, swaps bytes in
+  the disk blocks and then runs salvager. 
+
+- Scavenger
+  Modifies particular attributes of episode objects, satisfying
+  defined characteristics/attributes and then runs salvager.
+  
+To do
+
+- Tests on aggregates with filesets with features like:
+  	Clones - Large filesets, many small filesets.
+ 	ACL's -  shared, large.
+	Full filesets.
+        Open files and directories.
+
+- Stress tests.
+  Run filesystem metadata intensive stress tests, freeze the aggregate
+  at various points and perform salvage on it.
+
+- Regression Tests.
+  Generate tests that cause the aggregates to go into a known bad
+  states and run salvage. Usage of scavenger and branch coverage 
+  analysis.
+  
+- Ravager
+  Addition of invert_all operation that will replace each
+  byte on disk by its 1's complement.
+
+- Log on a different aggregate than the aggregate being logged.
+  I am not sure about if this is an interesting case for the salvager.
+
+- Test correctness and completeness of entries in the SalvageLog file.
+  Does this file get created at all? If yes, what would be its location in 
+  stand-alone episode?
+
+Notes added 2/94 by Bruce Leverett
+==================================
+
+At this time the ravager has four subcases:  bash disk blocks to all 0's and
+salvage; bash disk blocks to all 1's and salvage; swap disk blocks with each
+other and salvage; copy disk blocks to other disk blocks and salvage.
+
+A substantial component of the salvager tests is the "salt" test.  This
+bashes an aggregate in a systematic way using knowledge of the disk structure,
+e.g. change a magic number, or add one to a block count, or zero a block
+pointer.  After each bashing it tests the salvager.
+
+Another substantial component of the salvager tests is a collection of
+aggregates obtained from past bug reports.

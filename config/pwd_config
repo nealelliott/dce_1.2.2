@@ -1,0 +1,618 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# @HP_COPYRIGHT@
+#
+# HISTORY
+# $Log: pwd_config,v $
+# Revision 1.1.10.4  1996/03/09  23:10:23  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:28:17  marty]
+#
+# Revision 1.1.10.3  1996/02/07  17:48:02  parul
+# 	DCE 1.2.1 final drop from HP
+# 	[1996/02/07  16:13:50  parul]
+# 
+# 	DCE 1.2.1 final drop from HP
+# 
+# Revision 1.1.6.1  1994/10/25  20:04:28  aha
+# 	CR12184: export binding information to /.:/subsys/dce/pwd_mgmt/pwd_strength.
+# 	[1994/10/25  20:03:20  aha]
+# 
+# Revision 1.1.2.3  1994/10/25  17:16:41  aha
+# 	CR12184: export binding information to /.:/subsys/dce/pwd_mgmt/pwd_strength.
+# 	[1994/10/25  17:14:39  aha]
+# 
+# Revision 1.1.2.2  1994/09/12  20:08:46  aha
+# 	CR12040: expand test for error on rpccp output to capture
+# 	"no matching objects found" as well as "error:".
+# 	[1994/09/12  19:47:06  aha]
+# 
+# Revision 1.1.2.1  1994/08/08  14:23:25  mdf
+# 	Hewlett Packard Security Code Drop
+# 	[1994/08/05  17:05:40  mdf]
+# 
+# $EndLog$
+#
+#
+# Configure Password Management Server
+#   with option "-unconfig", unconfigures the server
+#
+#-----------------------------------------------------
+
+#-----------------------------------------------------
+# Initialize global/default variables
+#-----------------------------------------------------
+opt=$1
+
+: ${DCE_ETC:="/etc"}
+CURRENT_RC_FILE=/etc/rc.dce
+export DCE_ETC
+
+SCRIPT="pwd_config"
+TMP=/tmp/$$
+
+#---------------------------------------------------------
+# following files must match dce_com_utils chk_* utilities
+#---------------------------------------------------------
+Rgy_File=/tmp/rgy_edit_out$$
+Cds_File=/tmp/cdscp_out$$
+Rpc_File=/tmp/rpccp_out$$
+Acl_File=/tmp/acl_edit_out$$
+# following not in dce_com_utils
+Dcecp_File=/tmp/dcecp.$$
+
+#---------------------------------------------------------
+# Following entries must match values coded into the
+# Password Management Server
+#---------------------------------------------------------
+
+# CDS directory for pwd_mgmt entries
+Pw_Cds_Dir="/.:/subsys/dce/pwd_mgmt"
+
+# Principal name for Password Management Server
+Pw_Svr_Principal="pwd_strength"
+
+# Password Management Server CDS entry
+Pw_Cds_Svr_Entry="$Pw_Svr_Principal"
+
+# Logfile to be used by Password Management Server
+# (used only for deleting file during unconfigure)
+Pw_Logfile="$DCELOCAL/var/security/pwd_strengthd.log"
+
+# Keytable file to be used by Password Management Server
+Pw_Ktab="/krb5/pwd_strength_tab"
+
+# Password Management Server Interface UUID
+Pw_If="bababf24-dd2d-11cc-8dfb-080009353559,1.0"
+
+# Password Management Server bindings
+Pw_tcp_bind="ncacn_ip_tcp:$HOSTNAME"
+Pw_udp_bind="ncadg_ip_udp:$HOSTNAME"
+
+#------------------------------------------------------
+# Source the common dce_config utility functions
+#------------------------------------------------------
+if [ -z "$SOURCE_COM_UTILS" ]
+then
+	if [ -f ${DCE_ETC}/dce_com_utils ]
+	then
+		. ${DCE_ETC}/dce_com_utils
+	else
+		echo Cannot source "${DCE_ETC}/dce_com_utils"
+		exit 1
+	fi
+fi
+
+#-----------------------------------------------------
+# verify_config_env()
+#
+# verify on master secd and not already configured
+#-----------------------------------------------------
+verify_config_env()
+{
+    log_msg DEBUG "Executing: verify_config_env()"
+
+    # Ensure Password Management Server binaries have been installed
+    if [ -z "${PWD_MGMT_SVR}" ]; then
+	err_exit "The PWD_MGMT_SVR environment variable is empty.  Must specify path to a Password \
+Management Server.  Continuing will by-pass configuration of Password Management Server."
+	err_found=1
+    elif [ ! -x "${PWD_MGMT_SVR}" ]; then
+	err_exit "${PWD_MGMT_SVR} is not installed. \
+Continuing will by-pass configuration of Password Management Server."
+	err_found=1
+    else
+	# Ensure being configured on the master DCE Security Server machine
+	# First get network address of this machine
+	my_addr=`getip ${HOSTNAME}`
+	# Now get network address of the master DCE Security Server
+	# and see if my network address matches
+	dcecp -c registry show -replica | \
+	         sed -n -e "/^{masteraddrs/,/^[^ ]/p" | \
+	         sed -n -e "/^ /p" | grep "$my_addr" >/dev/null 2>&1
+	if [ $? -ne 0 ]; then
+	    err_exit "Password Management Server must run on the same \
+machine as the master DCE Security Server.  Continuing will by-pass \
+configuration of Password Management Server."
+	    err_found=1
+	fi
+    fi
+
+    if [ $err_found -eq 0 ]; then
+	# Ensure no other Password Management Server has been configured by
+	# seeing if Password Management principal already exists
+	rm -f ${Rgy_File}
+	rgy_edit >${Rgy_File} 2>&1 << EOF
+do p
+view ${Pw_Svr_Principal}
+EOF
+	grep "?(rgy_edit)" ${Rgy_File} >/dev/null 2>&1
+	if [ $? -ne 0 ]; then
+	    err_exit "A Password Management Server has already been configured \
+on this machine.  Continuing will by-pass configuration of Password \
+Management Server."
+	    err_found=1
+	fi
+    fi
+    return ${err_found}
+}
+
+#-----------------------------------------------------
+# set_pwd_CDS_entries()
+#
+# Fill in Password Management CDS entries
+#-----------------------------------------------------
+set_pwd_CDS_entries()
+{
+    log_msg DEBUG "Executing: set_pwd_CDS_entries()"
+
+    # First see if CDS directory already exists
+    cdscp >${Cds_File} 2>&1 << EOF
+show directory ${Pw_Cds_Dir}
+quit
+EOF
+    grep "Requested entry does not exist" ${Cds_File} >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+
+	# Create CDS directory
+	rm -f ${Cds_File}
+	log_msg VERBOSE "Creating CDS entries for Password Management Server..."
+	log_msg DETAIL "Executing: cdscp> create dir ${Pw_Cds_Dir}"
+	cdscp >${Cds_File} 2>&1 << EOF
+create dir ${Pw_Cds_Dir}
+quit
+EOF
+	cdscp_status=$?
+        chk_cdscp "cdscp error while creating CDS directory \"${Pw_Cds_Dir}\" for \
+Password Management Server."
+	if [ $? -ne 0 ]; then
+            err_found=1
+	fi
+    fi
+
+    # see if rpc interfaces already exported to CDS
+    rm -f ${Rpc_File}
+    rpccp >${Rpc_File} 2>&1 <<EOF
+show server ${Pw_Cds_Dir}/${Pw_Cds_Svr_Entry}   
+quit
+EOF
+    grep -e "no matching objects found" -e "error:" ${Rpc_File} >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+
+        # Export interfaces to CDS
+        log_msg DETAIL "Executing: rpccp> export ${Pw_Cds_Dir}/${Pw_Cds_Svr_Entry} \
+-i ${Pw_If} -b ${Pw_tcp_bind} \
+-b ${Pw_udp_bind}"
+        rm -f ${Rpc_File}
+        rpccp >${Rpc_File} 2>&1 <<EOF
+export ${Pw_Cds_Dir}/${Pw_Cds_Svr_Entry} \
+-i ${Pw_If} -b ${Pw_tcp_bind} \
+-b ${Pw_udp_bind}
+quit
+EOF
+        rpccp_status=$?
+        chk_rpccp "rpccp error while exporting interfaces for \
+Password Management Server."
+        if [ $? -ne 0 ]; then
+            err_found=1
+        fi
+    fi
+    rm -f ${Rpc_File}
+
+    # Set ACL's on CDS entries
+    rm -f ${Acl_File}
+    log_msg VERBOSE "Setting ACL on \
+Password Management Server CDS directory and object..."
+    log_msg DETAIL "Executing: acl_edit ${Pw_Cds_Dir} -m user:cell_admin:rwidtca"
+    log_msg DETAIL "Executing: acl_edit -e ${Pw_Cds_Dir}/${Pw_Cds_Svr_Entry} \
+-m user:cell_admin:rwdtc user:${Pw_Svr_Principal}:rwt user:dce-rgy:rt"
+
+    acl_edit_status=0
+    acl_edit ${Pw_Cds_Dir} -m user:cell_admin:rwidtca >${Acl_File} 2>&1
+    if [ $? -ne 0 ]; then
+        acl_edit_status=1
+    fi
+
+    acl_edit -e ${Pw_Cds_Dir}/${Pw_Cds_Svr_Entry} -m user:cell_admin:rwdtc \
+user:${Pw_Svr_Principal}:rwt user:dce-rgy:rt >>${Acl_File} 2>&1
+    if [ $? -ne 0 ]; then
+        acl_edit_status=1
+    fi
+
+    chk_acl_edit "Error while setting ACL on \
+Password Management Server CDS directory and object."
+
+    if [ $? -ne 0 ]; then
+        err_found=1
+    fi
+    return ${err_found}
+}
+
+#-----------------------------------------------------
+# create_schema_entries()
+#
+# Create ERA schema entries required for Password Management Server
+#-----------------------------------------------------
+create_schema_entries()
+{
+    log_msg DEBUG "Executing: create_schema_entries()"
+
+    # pwd_val_type and pwd_mgmt_binding are built-in
+
+    return ${err_found}
+}
+
+#-----------------------------------------------------
+# create_pwd_acct()
+#
+# Create account and keys for Password Management Server
+#-----------------------------------------------------
+create_pwd_acct()
+{
+    log_msg DEBUG "Executing: create_pwd_acct()"
+
+    #
+    # See if principal already exists
+    #
+    rm -f ${Rgy_File}
+    rgy_edit >${Rgy_File} 2>&1 << EOF
+do p
+view ${Pw_Svr_Principal}
+EOF
+    grep "?(rgy_edit)" ${Rgy_File} >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+
+        #
+	# Create principal
+        #
+	rm -f ${Rgy_File}
+	log_msg VERBOSE "Creating Password Management Server principal..."
+	log_msg DETAIL "Executing: rgy_edit> domain principal"
+	log_msg DETAIL "Executing: rgy_edit> add ${Pw_Svr_Principal}"
+	rgy_edit -update >${Rgy_File} 2>&1 << EOF
+domain principal
+add ${Pw_Svr_Principal}
+quit
+EOF
+	rgy_edit_status=$?
+	chk_rgy_edit "rgy_edit error while creating Password Management Server principal."
+	if [ $? -ne 0 ]; then
+		err_found=1
+	fi
+    fi
+
+    #
+    # See if account already exists
+    #
+    rm -f ${Rgy_File}
+    rgy_edit >${Rgy_File} 2>&1 << EOF
+do a
+view ${Pw_Svr_Principal}
+EOF
+    grep "?(rgy_edit)" ${Rgy_File} >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+
+        #
+	# Create account
+        #
+        rm -f ${Rgy_File}
+	log_msg DETAIL "Executing: rgy_edit> domain account"
+	log_msg DETAIL "Executing: rgy_edit> add ${Pw_Svr_Principal} -g acct-admin -o none -pw <not shown> -mp <not shown>"
+	rgy_edit -update >${Rgy_File} 2>&1 << EOF
+domain account
+add ${Pw_Svr_Principal} -g acct-admin -o none -pw ${cellpw}${cellpw} -mp ${cellpw}
+quit
+EOF
+	rgy_edit_status=$?
+	chk_rgy_edit "rgy_edit error while creating Password Management Server account."
+	if [ $? -ne 0 ]; then
+		err_found=1
+	fi
+    fi
+
+    #
+    # See if keytables already exist
+    #
+    rm -f ${Rgy_File}
+    rgy_edit >${Rgy_File} 2>&1 << EOF
+ktl -p ${Pw_Svr_Principal} -f ${Pw_Ktab}
+EOF
+    grep "?(rgy_edit)" ${Rgy_File} >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+
+        #
+	# Create keytables
+        #
+        rm -f ${Rgy_File}
+	log_msg VERBOSE "Creating Password Management Server keys..."
+	log_msg DETAIL "Executing: rgy_edit> ktadd -p ${Pw_Svr_Principal} -pw <not shown> -f ${Pw_Ktab}"
+	log_msg DETAIL "Executing: rgy_edit> ktadd -p ${Pw_Svr_Principal} -a -r -f ${Pw_Ktab}"
+	rgy_edit -update >${Rgy_File} 2>&1 << EOF
+ktadd -p ${Pw_Svr_Principal} -pw ${cellpw}${cellpw} -f ${Pw_Ktab}
+ktadd -p ${Pw_Svr_Principal} -a -r -f ${Pw_Ktab}
+quit
+EOF
+	rgy_edit_status=$?
+	chk_rgy_edit "rgy_edit error while creating Password Management Server keys."
+	if [ $? -ne 0 ]; then
+		err_found=1
+	fi
+    fi
+    return ${err_found}
+}
+
+#-----------------------------------------------------
+# start_d()
+#
+# start daemon (argument 1)
+#-----------------------------------------------------
+start_d()
+{
+	daemon=$1
+	shift
+	opts=$*
+	log_msg DEBUG "Executing: start_d(${daemon} ${opts})"
+	if [ ${daemon_pid} -ge 0 ]; then
+		log_msg WARNING "Password Management Server \"${daemon_prog}\" is already running."
+	elif [ -x ${daemon} ]; then
+		log_msg VERBOSE "Starting execution of Password Management Server..."
+		log_msg DETAIL "Executing: ${daemon} ${opts}"
+		${daemon} ${opts}
+		if [ $? -ne 0 ]; then
+			err_exit "Failed to start \"${daemon}\" successfully."
+			err_found=1
+		fi
+	else
+		err_exit "\"${daemon}\" does not exist or is not executable."
+		err_found=1
+	fi
+
+	# Verify daemon is running
+	ps ${PSARGS} | grep -q `basename ${daemon}`
+	if [ $? -ne 0 ]; then
+		err_exit "${daemon} is not executing.  Logfile contains:
+  `cat ${Pw_Logfile}`
+Continuing will terminate configuration of Password Management Server."
+		err_found=1
+	fi
+
+	if [ ${err_found} -eq 0 ]; then
+
+	    modify_rcfile pwd_strengthd " -v"
+
+        fi
+
+	return ${err_found}
+}
+
+#-----------------------------------------------------
+# unconfigure_pw()
+#
+# unconfigure Password Management Server
+#-----------------------------------------------------
+unconfigure_pw()
+{
+    log_msg DEBUG "Executing: unconfigure_pw()"
+
+    # kill server daemon, if it exists
+    if [ ${daemon_pid} -gt 0 ]; then
+        log_msg VERBOSE "Killing the Password Management Server..."
+        log_msg DETAIL "Executing: kill -SIGTERM ${daemon_pid}"
+        kill -SIGTERM ${daemon_pid} >/dev/null 2>&1
+    fi
+
+    # See if CDS object exists
+    cdscp >${Cds_File} 2>&1 << EOF
+show object ${Pw_Cds_Dir}/${Pw_Cds_Svr_Entry}
+quit
+EOF
+    grep "Requested entry does not exist" ${Cds_File} >/dev/null 2>&1
+    if [ $? -ne 0 ]; then
+
+        log_msg VERBOSE "Deleting cdscp object for Password Management Server..."
+        rm -f ${Cds_File}
+        log_msg DETAIL "Executing: cdscp delete object ${Pw_Cds_Dir}/${Pw_Cds_Svr_Entry}"
+        cdscp >${Cds_File} 2>&1 << EOF
+delete object ${Pw_Cds_Dir}/${Pw_Cds_Svr_Entry}
+quit
+EOF
+
+        cdscp_status=$?
+        chk_cdscp "cdscp error while deleting CDS \
+object for Password Management Server."
+        if [ $? -ne 0 ]; then
+            err_found=1
+        fi
+    fi
+
+    # See if CDS directory exists
+    cdscp >${Cds_File} 2>&1 << EOF
+show directory ${Pw_Cds_Dir}
+quit
+EOF
+    grep "Requested entry does not exist" ${Cds_File} >/dev/null 2>&1
+    if [ $? -ne 0 ]; then
+
+        log_msg VERBOSE "Deleting cdscp directory for Password Management Server..."
+        rm -f ${Cds_File}
+        log_msg DETAIL "Executing: cdscp delete directory ${Pw_Cds_Dir}"
+        cdscp >${Cds_File} 2>&1 << EOF
+delete directory ${Pw_Cds_Dir}
+quit
+EOF
+
+        cdscp_status=$?
+        chk_cdscp "cdscp error while deleting CDS \
+directory for Password Management Server."
+        if [ $? -ne 0 ]; then
+            err_found=1
+        fi
+    fi
+
+    # Delete principal (also deletes account), if it exists
+    rm -f ${Rgy_File}
+    rgy_edit >${Rgy_File} 2>&1 << EOF
+do p
+view ${Pw_Svr_Principal}
+EOF
+    grep "?(rgy_edit)" ${Rgy_File} >/dev/null 2>&1
+    if [ $? -ne 0 ]; then
+
+        log_msg VERBOSE "Deleting Registry account and principal for \
+Password Management Server..."
+        rm -f ${Rgy_File}
+        log_msg DETAIL "Executing: rgy_edit> domain principal"
+        log_msg DETAIL "Executing: rgy_edit> delete ${Pw_Svr_Principal}"
+        rgy_edit -update >${Rgy_File} 2>&1 << EOF
+domain principal
+delete ${Pw_Svr_Principal}
+exit
+EOF
+        rgy_edit_status=$?
+        chk_rgy_edit "rgy_edit error while deleting \
+Password Management Server account and principal."
+        if [ $? -ne 0 ]; then
+            err_found=1
+        fi
+    fi
+
+    # Delete keytab file, if it exists
+    if [ -f ${Pw_Ktab} ]; then
+        log_msg VERBOSE "Deleting keytab file for Password Management Server..."
+        log_msg DETAIL "Executing: rm -f ${Pw_Ktab}"
+        rm -f ${Pw_Ktab} >/dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            err_exit "Failed to delete keytab file for Password Management Server."
+            err_found=1
+        fi
+    fi
+
+    # Delete logfile, if it exists
+    if [ -f "${Pw_Logfile}" ]; then
+        log_msg VERBOSE "Deleting logfile used by Password Management Server..."
+        log_msg DETAIL "Executing: rm -f ${Pw_Logfile}"
+        rm -f ${Pw_Logfile} >/dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            err_exit "Failed to delete Password Management Server logfile \
+\"${Pw_Logfile}\"."
+            err_found=1
+        fi
+    fi
+
+    # Fix entry in the startup file.
+    log_msg DEBUG "Changing the startup line for pwd_strengthd" > /dev/null
+    unmodify_rcfile pwd_strengthd
+}
+
+#---------------------------------------------------
+# get_admin_pw()
+#
+# get Cell Admin password in "cellpw", if not already
+# available
+#-----------------------------------------------------
+get_admin_pw()
+{
+
+	log_msg DEBUG "Executing: get_admin_pw()"
+
+	while [ "${cellpw:="NULL"}" = "NULL" ]
+	do
+		log_msg VERBOSE "User query: Enter cell administrator password: "
+		echon "\tEnter cell administrator password: "
+		stty -echo 2>/dev/null
+		read cellpw
+		stty echo 2>/dev/null
+		echo "\n"
+		log_msg VERBOSE "User entry: <not shown>"
+	done
+	return ${err_found}
+}
+
+#-----------------------------------------------------
+# main
+#-----------------------------------------------------
+err_found=0
+
+ID=`id -u`
+if [ ${ID} -ne 0 ];then
+	echo "You must have root permission to run \"${SCRIPT}\"."
+	exit 1
+fi
+klist 2>&1 | grep "subsys/dce/sec-admin" >/dev/null
+if [ $? -ne 0 ]; then
+	echo "You must have sec-admin DCE privileges to execute \"${SCRIPT}\"."
+	exit 1
+fi
+
+if [ -n "${PWD_MGMT_SVR}" ]; then
+	daemon_prog=`basename "${PWD_MGMT_SVR}"`
+	daemon_pid=`get_pid "${daemon_prog}"`
+fi
+
+if [ -z "${opt}" ]; then
+	log_msg SUMMARY "Configuring Password Management Server..."
+
+	lc_text=""
+
+	# verify on master secd and not already configured
+	{ verify_config_env; } &&
+
+	# get cell admin password
+	{ get_admin_pw; } &&
+
+	# create ERA schema entries
+	{ create_schema_entries; } &&
+
+	# Create account and keys for Password Management Server
+	{ create_pwd_acct; } &&
+
+	# Set CDS entries for Password Management Server
+	{ set_pwd_CDS_entries; } &&
+
+	# Start it up and create startup for rc.dce
+	{ start_d ${PWD_MGMT_SVR} -v; };
+
+elif [ "${opt}" = "-unconfig" ]; then
+	log_msg SUMMARY "Unconfiguring Password Management Server..."
+
+	lc_text="un"
+	unconfigure_pw
+
+else
+	err_exit "$SCRIPT called with invalid option. Usage: $SCRIPT [-unconfig]."
+	exit 1
+fi
+
+if [ $err_found -eq 0 ]; then
+	log_msg SUMMARY "Successfully ${lc_text}configured Password Management Server."
+else
+	log_msg SUMMARY "Failed to ${lc_text}configure Password Management Server."
+fi
+
+exit $err_found

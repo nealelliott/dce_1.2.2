@@ -1,0 +1,203 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: svccfg001,v $
+# Revision 1.1.4.2  1996/03/11  02:48:46  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:09:31  marty]
+#
+# Revision 1.1.4.1  1995/12/11  22:48:42  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/jrr_1.2_mothra/1  1995/11/30  20:39 UTC  bell_d
+# 	Update paths, set DCELOGDIR
+# 	[1995/12/11  22:22:58  root]
+# 
+# Revision 1.1.2.4  1994/07/28  20:59:09  hester
+# 	added check for running as root
+# 	[1994/07/28  20:36:42  hester]
+# 
+# Revision 1.1.2.3  1994/07/12  21:23:00  hester
+# 	updates to use dce_shutdown, remove rc.dts, add log saving
+# 	[1994/07/12  16:32:58  hester]
+# 
+# Revision 1.1.2.2  1994/06/17  18:46:25  devsrc
+# 	cr10872 - fix copyright
+# 	[1994/06/17  18:38:24  devsrc]
+# 
+# Revision 1.1.2.1  1994/05/18  21:12:40  hester
+# 	initial version for svc cfg systests
+# 	[1994/05/13  20:17:35  hester]
+# 
+# $EndLog$
+#
+#  SVCCFG001 - Serviceability Configuration Test
+#
+# purpose:
+#  verifies DCE servers read default routing file on startup
+#
+# procedure:
+# for each DCE server
+#   create /opt/dcelocal/var/svc/routing to route all non-debug levels 
+#      of svc msgs to distinct files based on server name
+#   start server
+#   verify logs specified in /opt/dcelocal/var/svc/routing are created/used
+#
+#
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="run_test"
+
+#
+#
+startup() {
+
+# Must be running as root
+ID=`id -u`
+if [ ${ID} -ne 0 ]; then
+    fail=1
+    echo "*** You must be id=0 to execute svccfg001! ***" 
+    tet_infoline "*** You must be id=0 to execute svccfg001! ***"
+    tet_delete run_test "FAILURE in startup()...run_test() deleted."
+    return
+fi
+
+tet_infoline "Starting svccfg001 serviceability test"
+
+# Remove any possible temp files from previous run
+
+	rm -f ${RC_TEMP} ${RC_NEW} ${CLEAN_TEMP} ${RC_OUT} ${RC_ERR} 
+
+}
+
+cleanup() {
+
+# Don't attempt cleanup if we didn't run the test 
+# because we're not root
+if [ ${ID} -ne 0 ]; then
+ return
+fi
+
+ tet_infoline "Ending svccfg001 serviceability test"
+
+	shutdown_dce
+        if [ $? -ne 0 ];  then
+		tet_infoline "**** CLEANUP_ERROR ****"
+        fi
+
+# Remove routing files set up by test and log files 
+# created by running servers
+
+	if [ $SAVE_LOGS = no ]; then
+	   cleanup_log_and_routing_files DEFAULT
+	fi
+
+# Since this test uses default routing file ($DCELOCAL/var/svc/routing)
+# we should restore that too
+
+	restore_routing_file
+
+# Bring DCE daemons back up w/o SVC (or the way it was before)
+	
+	restore_rc_file
+
+# Sleep here a while (5 mins) since servers don't
+# always like being started up soon after shutdown
+
+	tet_infoline "At `date +%r`, sleeping for 5 minutes before starting daemons..."
+	sleep 300
+	tet_infoline "Starting daemons in cleanup"
+	startup_dce
+	if [ $startup_failed = no ]; then
+		tet_infoline "Successfully restarted DCE in cleanup"
+	fi
+
+
+# Remove any possible temp files from run
+	
+	rm -f ${RC_TEMP} ${RC_NEW} ${CLEAN_TEMP} ${RC_OUT} ${RC_ERR} 
+
+}
+
+
+#
+# Run CFG001 test
+#
+
+run_test() {
+
+fail=0
+
+# Bring down existing daemons; verify all gone
+# Possibly use dcecp
+
+	shutdown_dce
+        if [ $? -ne 0 ];  then
+		tet_infoline "**** CLEANUP_ERROR ****"
+		tet_result UNINITIATED
+                return
+        fi
+
+	check_rc_file
+        if [ $? -ne 0 ];  then
+		tet_result UNINITIATED
+                return
+        fi
+
+# Setup routing files based on component name and test name
+
+        create_component_routing_files DEFAULT
+
+# Restart each server first (re)specifying contents of 
+# /opt/dcelocal/var/svc/routing in rc.dce to use component based routing
+
+        add_svc_deflt_to_rc_file DEFAULT
+
+# Make sure log dir exists
+
+	check_log_dir DEFAULT
+
+# Sleep here a while (5 mins) since servers don't
+# always like being started up soon after shutdown
+
+	tet_infoline "At `date +%r`, sleeping for 5 minutes before starting daemons..."
+	sleep 300
+	tet_infoline "Starting daemons in run_test"
+        startup_dce
+        if [ $startup_failed = yes ]; then
+		tet_result UNINITIATED
+		return
+	else
+		tet_infoline "Successfully started DCE in run_test"
+	fi
+
+# Give servers a little time to get up and running and log
+# their messages
+
+	sleep 15
+
+# Verify Log files were created upon successful startup of each server
+# and startup registered in NOTICE file
+
+	verify_logs DEFAULT
+        if [ $fail -ne 0 ] ; then
+                tet_result FAIL
+        else
+                tet_result PASS
+        fi
+
+
+}
+
+. $TET_ROOT/profile.dcest
+. $TET_ROOT/svc/ts/svc.data
+. $TET_ROOT/svc/ts/svc.functions
+. $TET_ROOT/lib/ksh/tcm.ksh
+

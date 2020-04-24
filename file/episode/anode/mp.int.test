@@ -1,0 +1,587 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: mp.int.test,v $
+# Revision 1.1.81.1  1996/10/02  17:18:08  damon
+# 	New DFS from Transarc
+# 	[1996/10/01  18:57:42  damon]
+#
+# $EndLog$
+# /* Copyright (C) 1994, 1990 Transarc Corporation - All rights reserved */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/mp.int.test,v 1.1.81.1 1996/10/02 17:18:08 damon Exp $
+
+# mp.int -- is a variant of basic.test that is designed to be run in multi-
+#     thread tests.  It assumes it is started in a "home" volume created on
+#     device 1 which is shared by all threads.  This volume needs at
+#     least 251 (measured 930323) per thread.  This volume starts with a
+#     10K byte file called "a".  The aggregate on device 1 almost must
+#     have at least this much space.  The largest volume on device 0 has
+#     a quota of 50K which it uses most of.  This implies that dev 0
+#     will require at least 50K per thread as well.  Device 1 is assumed
+#     to be 4K/1K, and device 0 is assumed to contain a 1K/1K aggregate.
+#     It also creates several filesets as it runs.  All created volumes
+#     are deleted on exit.
+#
+#     It tests volume full, but not aggregate full.  See
+#     multi-block-frag.int.test for another variant of this test.
+
+mp.int 1
+
+open_file a
+read_file 0 10000 314159
+
+create_dir aa
+write_file 4086 20 12345		# use specific seed for later COW use
+write_file 4100 1 12345			# two data version numbers
+
+get_info h=1 A=0 P=0
+
+read_aux acl ""
+read_aux plist ""
+write_aux acl fab
+read_aux acl fab
+write_aux ifacl faxx
+write_aux idacl fizzz
+write_aux plist zzzzzzzzzzaaaaaaaaaa
+read_aux plist zzzzzzzzzzaaaaaaaaaa
+set_status p=0655
+get_info h=1 p=0655 !c =m =a A=3 D=5 F=4 P=20
+
+create_file b aa aa			# try a simple delete, that uses blocks
+write_file 9900 100
+read_file 9900 100
+get_info l=10000 A=4 P=20
+change_link -1 delete
+
+create_dir dir1 aa aa			# try a simple directory (logged data)
+write_file 9900 100
+read_file 9900 100
+get_info l=10000 A=5 P=20
+
+create_dir dir2 aa aa			# try a pair of directories
+write_file 99900 100
+read_file 99900 100
+get_info l=100000 A=5 P=20
+
+delete_file
+open_file dir1
+delete_file
+
+create_file grow			# test basic storage method promotion
+write_file 4 30				# inline
+get_info z=0 l=34
+write_file 4 1 0141
+write_file 45 300			# one fragment
+get_info z=1 l=345
+write_file 5 1 0142
+write_file 456 3000			# one block
+write_file 6 1 0143
+get_info z=4 l=3456
+write_file 4567 1			# two blocks
+get_info z=8 l=4568
+read_file 0 4 0
+read_file 4 1 0141
+read_file 5 1 0142
+read_file 6 1 0143
+read_file 8 26
+read_file 34 11 0
+read_file 45 300
+read_file 345 111 0
+read_file 456 3000
+read_file 3456 1111 0
+read_file 4567 1 
+(code = EOF) read_file 4568 1 
+truncate_file 10000                   # check growing file w/ truncate
+read_file 4568 5432 0
+(code = EOF) read_file 10000 1
+delete_file
+create_file extend
+write_file 1234 1234
+read_file 0 1234 0
+read_file 1234 1234
+write_file 5678 1111
+read_file 0 1234 0
+read_file 1234 1234
+read_file 2468 3210 0
+read_file 5678 1111
+truncate_file 0
+write_file 5678 1111
+write_file 1111 1111
+fsync
+read_file 0 1111 0
+read_file 1111 1111
+read_file 2222 3456 0
+read_file 5678 1111
+
+truncate_file 0
+write_file 10 10                        # create INLINE
+get_info z=0
+truncate_file 1000 			# "grow" to FRAGMENTED
+get_info z=1
+truncate 4000				# "grow" to BLOCKED
+get_info z=4
+truncate 5000				# don't actually allocate second block
+get_info z=4
+truncate 50000				# allocate indirect block
+get_info z=4
+read_file 0 10 0
+read_file 10 10
+read_file 20 980 0
+read_file 1000 3000 0
+read_file 4000 2000 0
+read_file 49000 1000 0
+delete_file
+
+# There are 8 direct blocks, so 8*4096 is the first byte in an indirect block
+create_file x aa			# try a write from direct to indirect
+get_info d=0 A=4 P=0
+read_aux acl faxx
+write_aux acl abcdef			# overwrite our copy of acl!
+write_aux plist 500 2345		# make big random plist (3 frags)
+read_aux plist 0 500 0			# first read from fragmented container
+read_aux plist 500 2345
+write_file 28671 10000			# write block #6,7,8&9
+get_info d=1 !c !m =a A=6 P=2845
+read_file 28671 10000
+read_file 100 1 0			# make sure others are zero
+get_info l=38671 z=20 h=1 d=1 =c =m #=a
+write_file 1000 100		      	# write block 0 to change DV
+read_file 100 1 0			# make sure others are zero
+get_info d=2 !c !m =a
+change_link +1 
+get_info l=38671 z=24 h=2 d=2 !c =m =a	# no data change.
+
+create_file y (1,1)			# in the middle of tree[1]
+					# use non-existant acl from volroot
+write_file 1234567890 5000		# write blocks 301408 & 301409
+fsync
+read_file 1234567890 5000
+read_file 100000000 1 0
+get_info l=1234572890 z=16 d=1 A=0 P=0
+
+# with a bsize of 4096, ibsize = 1016.
+# This gives the block addresses for indirectBlockTree as follows:
+#   tree[0] 8 to 1023
+#   tree[1] 1024 to (1016^2 + 1023)=1033279
+#   tree[2] 1033280 to (1016^3 + 1033279)=1049805375
+#   tree[3] 1049805376 to (1016^4 + 1049805375)=1066602254911
+# Thus the first byte of tree[2] is 1033280*4096 = 4232314880, which is
+# just less than 2^32.
+
+create_file z aa x 			# at the boundary of tree 1&2
+write_file 4232314800 200
+read_file 4232314800 200
+read_file 4000000000 1 0 
+get_info l=4232315000 z=28 d=1 A=4 P=2845 # seven pages (5 are i.b.)
+
+# Without depending on the block size checks try some random offsets.  Use a
+# random number 32 bits long and write a byte at the offset specified by
+# successively adding each bit of the random number to the offset.
+
+create_file random1			# 0xeb3cde5c
+write_file 0 1
+write_file 4 1
+write_file 12 1
+write_file 28 1
+write_file 92 1
+write_file 604 1
+write_file 1628 1
+write_file 3676 1
+write_file 7772 1
+write_file 24156 1
+write_file 56924 1
+write_file 319068 1
+write_file 843356 1
+write_file 1891932 1
+write_file 3989084 1
+write_file 20766300 1
+write_file 54320732 1
+write_file 188538460 1
+write_file 725409372 1
+write_file 1799151196 1
+write_file 3946634844 1
+
+create_file random2			# 0x6ae00b6b
+write_file 1 1
+write_file 3 1
+write_file 11 1
+write_file 43 1
+write_file 107 1
+write_file 363 1
+write_file 875 1
+write_file 2923 1
+write_file 2100075 1
+write_file 6294379 1
+write_file 14682987 1
+write_file 48237419 1
+write_file 182455147 1
+write_file 719326059 1
+write_file 1793067883 1
+fsync
+delete_file
+open_file random1
+delete_file
+
+create_vol = baz.root 0,,0 300		# big quota
+create_file m aa z			# acl from a (a dir), plist from z
+vol_info g=11				#  ... auxs are copied from other vol
+					#  ... VTs now take an extra page
+get_info A=4 P=2845 U=0
+read_aux plist 500 2345
+read_aux plist 0 500 0
+replace_aux plist aa 			# 3 frag plist to inline
+read_aux plist zzzzzzzzzzaaaaaaaaaa
+vol_info g=8
+
+open_file aa				# make sure backing file w/o aux
+write_aux acl 0 0
+write_aux ifacl 0 0
+write_aux idacl 0 0
+write_aux plist 0 0
+write_aux uplist 0 0
+open_file baz.root
+
+# try copy on write
+create_file cow aa aa aa
+read_file 4086 20 12345
+(code = EOF) read_file 100000 1 0
+read_file 4000 1 0
+get_info l=4106 z=0 d=0 A=0 P=0 o=0	# data version is zero, as is size.
+vol_info g=8 G=16
+set_status p=0655
+get_info h=1 p=0655 !c =m =a
+write_file 4000 1 48
+read_file 4000 1 48
+read_file 4086 20 12345
+get_info l=4106 z=4 Z=8 d=1
+vol_info g=12 G=16
+
+#switch back to volume bar
+open_file aa				# make sure backing file unchanged
+get_info o=1
+read_file 4000 1 0
+(code = OUTSTANDINGCOPIES) write_file 4000 1 0141
+read_file 4000 1 0
+
+#now try reclone which will change "aa" to look like "cow"
+open_file cow
+reclone_file
+get_info z=0 Z=8
+vol_info g=8				# this volume's quote is reduced
+read_file 4000 1 48
+open_file aa
+read_file 4000 1 48
+get_info z=8
+
+#Some more difficult tests of reclone and unclone.
+open_file cow				# get to correct volume
+create_file cow_x (1,1) (1,1) x
+write_file 28671 10000 5546		# over-write blocks #6,7,8&9
+get_info z=20
+create_file cow_cow_x (1,1) (1,1) cow_x	# second generation copy
+write_file 28671 10000 987654
+get_info z=20
+vol_info g=48				# += 20 + 20
+open_file cow_x
+read_file 28671 10000 5546
+open_file cow_cow_x
+reclone_file
+get_info z=0
+vol_info g=28				# -= 20
+open_file cow_x
+read_file 28671 10000 987654
+get_info z=20
+open_file cow_cow_x
+get_info z=0 l=38671
+# check on truncating part of a COW indirect block!!!!
+truncate_file 36864			# == 9*4096
+get_info z=4 l=36864			# 1 indirect block
+read_file 28671 8193 987654
+delete_file
+# check on truncating all of a COW indirect block!!!!
+create_file cow_cow_x (1,1) (1,1) cow_x	# second generation copy
+truncate_file 32768			# == 8*4096
+get_info z=0 l=32768
+read_file 28671 4097 987654
+delete_file
+create_file cow_cow_x (1,1) (1,1) cow_x	# second generation copy
+truncate_file 37671			# middle of last block, just set length
+get_info z=0 Z=24 l=37671 o=0
+unclone_file
+get_info z=20 Z=24 l=37671 o=0
+vol_info g=28 G=40
+read_file 28671 9000 987654
+(code = EOF) read_file 37671 1000 0
+fsync
+open_file x
+get_info o=1 z=24			# cow_x points to this: blk 0 exists
+open_file cow_x				# this should be sort of orphaned
+get_info o=0 z=0
+read_file 28671 10000 0			# empty file reads as zero
+delete_file
+open_file cow_cow_x
+delete_file
+vol_info g=8 G=16
+open_file x	      			# this should no longer be backing
+get_info o=0 z=24
+
+# now test reclone and unclone on inline & fragmented containers
+open_file cow
+create_file cif_1			# empty
+get_info z=0 l=0
+create_file cif_2 cif_1 cif_1 cif_1
+get_info z=0 l=0
+unclone			      		# un empty/empty
+get_info z=0 l=0
+write_file 20 20
+create_file cif_3 cif_2 cif_2 cif_2
+reclone			      		# re inline/inline
+get_info z=0 l=40
+open_file cif_2
+get_info z=0 l=40 o=1
+open_file cif_3
+unclone			      		# un inline/inline
+get_info z=0 l=40
+create_file cif_4 cif_3 cif_3 cif_3
+write_file 200 200
+reclone	       				# re frag/inline
+get_info z=0 l=400
+open_file cif_3
+get_info z=1 l=400
+open_file cif_4
+unclone	  				# un frag/frag
+get_info z=1 l=400
+create_file cif_5 cif_4 cif_4 cif_4
+truncate_file 0
+reclone	      				# re empty/frag
+get_info z=0 l=0
+open_file cif_4
+get_info z=0 l=0			# also empty.
+create_file cif_6 cif_5 cif_5 cif_5
+write_file 200 200
+reclone	       				# re frag/empty
+get_info z=0 l=400
+open_file cif_5
+get_info z=1 l=400
+open_file cif_6
+truncate_file 0
+write_file 20 20
+reclone	      				# re inline/frag
+get_info z=0 l=40
+open_file cif_5
+get_info z=0 l=40
+open_file cif_6
+write_file 200 200
+unclone	       				# re frag/inline
+create_file cif_7 cif_6 cif_6 cif_6
+truncate_file 0
+write_file 20 20
+unclone	      				# un inline/frag
+get_info l=40 z=0
+open_file cif_6
+get_info l=400 z=0 o=0
+open_file cif_5
+get_info l=40 z=0 o=0			# note: unclone doesn't zero length
+open_file cif_4
+get_info l=0 z=0 o=1
+open_file cif_3
+get_info l=400 z=0 o=0
+open_file cif_2
+get_info l=40 z=0 o=0
+open_file cif_1
+get_info l=0 z=0 o=0
+vol_info g=8
+
+(var = 2) quiesce commit
+(var = 3) quiesce fsync commit
+
+# get full coverage of blocked containers
+open_file cow
+create_file w
+write_file 4090 20			# two direct blocks
+write_file 32768 10			# level 1 indirect
+write_file 1234567890 10		# level 2 indirect
+# first reclone
+create_file cow_w w w w
+create_file cow_cow_w w w cow_w
+write_file 4090 1
+write_file 32768 1
+reclone					# a,b,re & b,b,re
+truncate_file 0
+reclone	      				# e,a,re & e,b,re
+write_file 4090 20
+write_file 32768 10
+write_file 1234567890 10
+reclone					# a,e,re
+write_file 4099 1
+write_file 1234567890 1
+reclone					# b,a,re & a,a,re
+#now unclone
+unclone					# b,b,un
+delete_file
+open_file cow_w
+delete_file
+create_file cow_w w w w
+write_file 4099 1
+write_file 1234567890 1
+create_file cow_cow_w w w cow_w
+write_file 4090 1
+write_file 32768 1
+unclone					# a,b,un & b,a,un
+delete_file
+open_file cow_w
+truncate_file 0
+write_file 1234567890 1
+create_file cow_cow_w w w cow_w
+write_file 4090 1
+write_file 32768 1
+write_file 1234567890 1
+unclone					# a,e,un, a,a,un
+delete_file
+open_file cow_w
+delete_file
+create_file cow_w w w w
+write_file 4099 1
+write_file 1234567890 1
+create_file cow_cow_w w w cow_w
+truncate_file 0
+unclone					# e,a,un & e,b,un
+delete_file
+open_file cow_w
+delete_file
+open_file w
+delete_file
+vol_info g=8
+
+# switch devices
+open_device 0
+create_volume = xxx.root 0,,0 20
+
+create_file l1
+write_file 8190 4			# blocks 7&8
+read_file 8190 4
+get_info l=8194 z=3 d=1
+delete_file
+vol_info g=1				# volume table takes one
+
+create_file l2
+write_file 262140 8			# blocks 255 & 256
+read_file 262140 8
+get_info l=262148 z=5 d=1
+delete_file
+vol_info g=1
+
+create_file l3
+write_file 63242230 20			# blocks 61759 & 61760
+read_file 63242230 20
+get_info l=63242250 z=7 d=1
+vol_info g=8
+fsync
+delete_file
+vol_info g=1
+
+create_volume = little.root 0,,0 2
+create_file vol_too_small
+write_file 1023 1
+(code = VOLUMEFULL) write_file 1023 2
+
+create_volume = big.root 0,,0 50
+create_file leggy
+write_file 8190 4			# blocks 7&8
+write_file 262140 8			# blocks 255 & 256
+write_file 63242230 20			# blocks 61759 & 61760
+get_info z=13
+create_file big
+write_file 8192 29696
+fsync
+get_info z=30
+# at this point aggr should have these blocks: 
+#   2 avl, 10+1 log, 1 bitmap, 1 vol xxx, 2 vol little, 1+13+29+1=44 vol big
+#   61 total
+### (code = AGGREGATEFULL) write_file 0 1
+
+# now go back an see if its still there...
+open_device 1
+open_file bar.root
+
+open_file (1,1)				#check for volume root
+get_info h=1
+
+#must break copy-on-write line first.
+
+open_file aa
+read_file 4086 20 12345
+read_file 4000 1 48
+get_info z=8 p=0655 A=0 P=0 o=1
+#read_aux acl 1 1 97				# 'a'
+#read_aux acl 2 1 98				# 'b'
+#(code = EOF) read_aux acl 3 1 
+#(code = READSHORT) read_aux acl 2 2 
+#read_aux plist zzzzzzzzzzaaaaaaaaaa
+(code = OUTSTANDINGCOPIES) delete_file
+
+open_file cow
+read_file 4000 1 48
+read_file 4086 20 12345
+get_info z=0 o=0
+vol_info g=8
+unclone_file
+get_info z=8 o=0
+vol_info g=16
+
+open_file aa
+get_info z=0 o=0
+read_file 4000 106 0
+delete_file
+
+open_file cow
+
+delete_volume
+
+open_file x
+read_aux acl 3 1 100			# acl here is abcdef
+read_file 28671 10000
+read_file 1000 100
+read_file 100 1 0			# make sure others are zero
+read_aux plist 500 2345			# check big random plist
+(code = EOF ) read_file 100000 1 0
+(code = HASLINKS) change_link -1 delete
+get_info h=2 d=2 z=24 l=38671 A=6 P=2845
+change_link -2 delete
+
+open_file y
+read_file 1234567890 5000
+read_file 100 1 0			# make sure others are zero
+read_file 1000000000 1 0
+(code = EOF) read_file 2000000000 1 0
+read_aux acl ""
+delete_file
+
+open_file z
+read_file 4232314800 200
+read_file 1 1 0
+read_file 10 1 0
+read_file 100 1 0
+read_file 1000 1 0
+read_file 10000 1 0
+read_file 100000 1 0
+read_file 1000000 1 0
+read_file 10000000 1 0
+read_file 100000000 1 0
+read_file 1248985500 1 0
+read_file 4000000000 1 0
+(code = EOF) read_file 4294967294 1 0	# 2^32 - 2
+read_aux acl faxx
+read_aux plist 500 2345
+delete_file
+
+# already deleted # delete_vol baz.root
+delete_vol xxx.root
+delete_vol little.root
+delete_vol big.root
+
+end

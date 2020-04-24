@@ -1,0 +1,96 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: many_files.test,v $
+# Revision 1.1.12.1  1996/10/02  17:18:00  damon
+# 	New DFS from Transarc
+# 	[1996/10/01  18:57:36  damon]
+#
+# Revision 1.1.6.1  1994/06/09  13:58:06  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:33:19  annie]
+# 
+# Revision 1.1.4.3  1993/01/18  22:05:32  cjd
+# 	embedded copyright notice
+# 	[1993/01/18  21:45:03  cjd]
+# 
+# Revision 1.1.4.2  1992/09/25  16:19:41  jaffe
+# 	Transarc delta: mason-ot5370-log-full 1.1
+# 	  Selected comments:
+# 	    Found a bug in the transaction GC code.
+# 	    Fixed test so the last aggregate is large enough to pass test.
+# 	[1992/09/23  17:42:52  jaffe]
+# 
+# Revision 1.1.2.3  1992/05/13  21:56:21  jdp
+# 	Transarc delta: ota-16K-fid-index-map-2680 1.1
+# 	  Files modified:
+# 	    anode: anode_block.c, anode_block.h, fid.c, fixed_anode.c
+# 	    anode: many_files.test, volume_table.c
+# 	  Selected comments:
+# 	    In aggregates with 16K block size the calculation of how many anodes fit
+# 	    in a block was being done separately in fid.c and anode_block.h.
+# 	    Clearly this is a "bad thing".  Worse, however, was that the logic in
+# 	    fid.c was wrong!
+# 	    Change anode_block.c to export an array indexed by [log(block size)-10]
+# 	    of anodes per block.  Have fid.c use this.
+# 	    Instead of running many_files.int.test in a single 8K aggregate, try 1K,
+# 	    16K and 32K.
+# 	[1992/05/13  20:08:40  jdp]
+# 
+# Revision 1.1.2.2  1992/05/06  14:10:53  jdp
+# 	Initial revision.
+# 	[1992/05/05  23:29:07  jdp]
+# 
+# $EndLog$
+
+# /* Copyright (C) 1992, 1991 Transarc Corporation - All rights reserved */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/many_files.test,v 1.1.12.1 1996/10/02 17:18:00 damon Exp $
+
+many_files 1 
+modify_afsdb anode on 31		# turn on code block counting
+
+# Exercise many volume_table pages cases.
+
+open_device 1 1024 1024 1000
+create_aggregate 100
+exist_vol foo 0,,0 1040
+
+fork many_files.int.test
+
+wait
+check_device
+delete_vol
+check_device
+
+# test for bug in fid index mapping at 16K block size.
+
+open_device 1 16384 1024 100
+create_aggregate 20
+exist_vol foo 0,,0 1040
+
+fork many_files.int.test
+
+wait
+check_device
+delete_vol
+check_device
+coverage
+
+# Exercise large block case, 64K => 260 anodes/page (not a power of 2).
+
+open_device 1 65536 1024 25
+create_aggregate 
+exist_vol foo 0,,0 1040
+
+fork many_files.int.test
+
+wait
+check_device
+delete_vol
+check_device
+coverage
+end

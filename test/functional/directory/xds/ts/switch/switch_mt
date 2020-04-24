@@ -1,0 +1,235 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: switch_mt,v $
+# Revision 1.1.4.2  1996/03/11  01:48:01  marty
+# 	Update copyright years
+# 	[1996/03/10  19:47:41  marty]
+#
+# Revision 1.1.4.1  1995/12/11  17:16:57  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  17:01:18  root]
+# 
+# Revision 1.1.2.12  1994/08/17  11:51:45  marrek
+# 	Use uname -n .
+# 	[1994/08/17  07:37:18  marrek]
+# 
+# Revision 1.1.2.11  1994/08/01  12:27:24  marrek
+# 	Fixes for OT 10742, 11357, 11432.
+# 	[1994/08/01  12:26:14  marrek]
+# 
+# Revision 1.1.2.10  1994/07/15  16:58:22  keutel
+# 	OT 11316: unsetting of XDS_LOG and D2_LOG removed
+# 	[1994/07/15  15:29:49  keutel]
+# 
+# Revision 1.1.2.9  1994/07/15  13:30:39  marrek
+# 	Fix for OT11209.
+# 	[1994/07/15  09:35:18  marrek]
+# 
+# Revision 1.1.2.8  1994/07/15  00:02:16  keutel
+# 	typo in find command
+# 	[1994/07/14  23:47:33  keutel]
+# 
+# Revision 1.1.2.7  1994/07/06  15:54:20  marrek
+# 	Add version string in July 1994 code drop.
+# 	[1994/07/06  15:42:53  marrek]
+# 
+# Revision 1.1.2.6  1994/06/21  14:29:42  marrek
+# 	June 1994 code submission.
+# 	[1994/06/16  07:50:55  marrek]
+# 
+# Revision 1.1.2.5  1994/06/10  20:25:23  devsrc
+# 	cr10872 - fixed copyright
+# 	[1994/06/10  17:01:05  devsrc]
+# 
+# Revision 1.1.2.4  1994/05/27  13:13:11  keutel
+# 	OT 10736
+# 	[1994/05/27  13:11:28  keutel]
+# 
+# Revision 1.1.2.3  1994/05/23  17:42:26  zeliff
+# 	ot10728: remove threads_stress from cleanup() list
+# 	ot10705: fix tet lock problem
+# 	[1994/05/23  15:50:58  zeliff]
+# 
+# Revision 1.1.2.2  1994/05/18  22:10:26  zeliff
+# 	ot10695: fix testcases mismatch
+# 	[1994/05/18  21:54:22  zeliff]
+# 
+# 	ot10647: added prefixs for script invocations
+# 	[1994/05/15  21:03:12  zeliff]
+# 
+# Revision 1.1.2.1  1994/05/10  14:46:30  marrek
+# 	Add shell interpreter in first line.
+# 	[1994/05/09  09:13:34  marrek]
+# 
+# 	Created in April 1994 submission.
+# 	[1994/05/03  12:18:17  marrek]
+# 
+# $EndLog$
+#
+# $RCSfile: switch_mt,v $ $Revision: 1.1.4.2 $ $Date: 1996/03/11 01:48:01 $
+#
+#  (c) Copyright 1991,1992-1994 Siemens-Nixdorf Information Systems
+#  Munich, Germany
+#  All Rights Reserved
+#
+#
+# switch_mt
+# NAME switch_mt
+#
+# DESC
+# {
+# GDS XDS/Switch Tests (multi threaded mode)
+# Each invocable component runs the 'xt_test -t' executable using as standard
+# input the batch file specified in each strategy statement.
+# Also, the DIT must already contain at least the two following object:
+#  DSA1:        /C=de/O=dbp/OU=dap11/CN=dsa/CN=dsa-m1
+#  DSA2:        /C=de/O=dbp/OU=dap11/CN=dsa/CN=dsa-m2
+# }
+#
+TP_PATH="lib/"
+_HOST_NAME=`uname -n`
+
+tet_startup="Startup"                   # startup function
+tet_cleanup="Cleanup"                   # cleanup function
+
+iclist="ic1 ic2 ic3 ic4 ic5 ic6 ic7 ic8"
+
+ic1="tp1"				# functions for ic1
+ic2="tp2"				# functions for ic2
+ic3="tp1"				# functions for ic1
+ic4="tp3"				# functions for ic3
+ic5="tp1"				# functions for ic1
+ic6="tp4"				# functions for ic4
+ic7="tp1"				# functions for ic1
+ic8="tp5"
+
+tp1() {
+	tet_infoline "XDS/Switch - cleantree"
+	$API_SCRIPTS/cleantree "${TP_PATH}"
+}
+
+tp2() {
+	tet_infoline "XDS/Switch - threads_as/Testcases"
+	$API_SCRIPTS/TTEST "${TP_PATH}"threads_as > /tmp/test_trace 2>&1
+	check_ERROR_xds "${TP_PATH}threads_as.$_HOST_NAME.result" 0 12
+}
+
+tp3() {
+        tet_infoline "XDS/Switch - threads_os/Testcases"
+        $API_SCRIPTS/TTEST "${TP_PATH}"threads_os > /tmp/test_trace 2>&1
+        check_ERROR_xds "${TP_PATH}threads_os.$_HOST_NAME.result" 9 3
+}
+
+tp4() {
+        tet_infoline "XDS/Switch - threads_af/Testcases"
+        $API_SCRIPTS/TTEST "${TP_PATH}"threads_af > /tmp/test_trace 2>&1
+        check_ERROR_xds "${TP_PATH}threads_af.$_HOST_NAME.result" 0 12
+}
+
+tp5() {
+        tet_infoline "XDS/Switch - threads_up/Testcases"
+        $API_SCRIPTS/TTEST "${TP_PATH}"threads_up > /tmp/test_trace 2>&1
+        check_ERROR_xds "${TP_PATH}threads_up.$_HOST_NAME.result" 0 0
+}
+
+
+Verify_CDS()
+{
+   cdscp show cell /.: > /tmp/cdstst
+   if test $? -ne 0
+   then
+      tet_infoline "Verify_CDS - Couldn't execute <cdscp> properly - STOP"
+      tet_infoline "UNINITIATED"
+#     tet_result=UNINITIATED
+      exit 1
+   else
+      if [ `grep -c 'c=ie/o=digital' /tmp/cdstst` -gt 0 ]
+      then
+         cdscp show dir /.:/sales > /tmp/cdstst_sales
+         if test $? -ne 0
+         then
+            tet_infoline "Verify_CDS - gdscp show dir /.:/sales failed -> STOP"
+            tet_infoline "UNINITIATED"
+#           tet_result=UNINITIATED
+            exit 1
+         fi
+         cdscp show dir /.:/sales/admin > /tmp/cdstst_sales_admin
+         if test $? -ne 0
+         then
+            tet_infoline "Verify_CDS - gdscp show dir /.:/sales/admin failed ->
+ STOP"
+            tet_infoline "UNINITIATED"
+#           tet_result=UNINITIATED
+            exit 1
+         fi
+      else
+         tet_infoline "Verify_CDS - Invalid CDS cellname specified --> STOP"
+         tet_infoline "UNINITIATED"
+#        tet_result=UNINITIATED
+         exit 1
+      fi
+   fi
+}
+
+Cleanup() 
+{
+        rm -f /tmp/test_trace
+        if [[ -z "$KEEP_API_LOGS" ]]
+        then
+          find ${TET_EXECUTE}/switch/lib/threads_as -name *.log -exec rm -f {} \;
+          find ${TET_EXECUTE}/switch/lib/threads_af -name *.log -exec rm -f {} \;
+          find ${TET_EXECUTE}/switch/lib/threads_os -name *.log -exec rm -f {} \;
+          find ${TET_EXECUTE}/switch/lib/threads_up -name *.log -exec rm -f {} \;
+        fi
+        rm -f ${TET_EXECUTE}/switch/save*
+	tet_infoline "TESTING (XDS/Switch) with XT_TEST FINISHED"
+}
+
+Startup() 
+{
+        rm -f ${TET_EXECUTE}/tet.log
+
+#        echo "\n\
+#        Aware that CDS is installed already - Enter 'n' if not: \n\
+#            : \c"
+#        read xyz
+#        if [ x$xyz = xn ]
+#        then
+#           exit
+#        fi
+
+        Verify_CDS
+
+        if [ $? -ne 0 ]
+        then
+           exit
+#        else
+#           echo "\n\
+#           Aware you have executed <dce_login> - Enter 'n' if not: \n\
+#               : \c"
+#           read xyz
+#           if [ x$xyz = xn ]
+#           then
+#              exit
+#           fi
+        fi
+
+	export_paths
+
+	tet_infoline "TESTING (XDS/Switch) with XT_TEST STARTED"
+        . ${TET_EXECUTE}/config/two_dsas.sh
+}
+
+#source shell common functions
+. ${TET_EXECUTE}/lib/shfuncs
+
+#execute shell test case manager - must be last line
+. ${TET_ROOT}/lib/xpg3sh/tcm.sh
+

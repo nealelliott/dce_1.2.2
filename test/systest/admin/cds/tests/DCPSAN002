@@ -1,0 +1,183 @@
+#!/opt/dcelocal/bin/dcecp
+#
+# FILE_NAME: backup_ch.tcl
+#
+# USAGE: backup_ch.tcl
+#
+# DESCRIPTION:
+#
+#	This script backups to the clearinghouse files to a local
+#	directory.
+#
+# PREREQUISITES and SETUP:
+#	
+#	1. Login as root.
+#
+#	2. Install and configure DCE.
+#
+#	3. Configure the hostmachine as a CDS server.
+#
+#	4. Edit the variables defined in the configuration file
+#	   admintest_env.tcl to agree with your local environment.
+#
+# DESCRIPTION:
+#
+#   1. Source the files admintest_env.tcl and backup_procs.tcl.
+#   2. Set up logs and environment.
+#   3. Verify that root is running this script. 
+#   4. Verify that the hostmachine is configured as a CDS server.
+#   5. Create test directories and objects.
+#   6. Disable cdsd.
+#   7. Backup the following CDS files:
+#	$DCELOCAL/etc/cds_attributes
+#	$DCELOCAL/var/directory/cds/cds_files
+#	$DCELOCAL/var/directory/cds/*_ch.checkpoint.nnnnnnnnnn
+#	$DCELOCAL/var/directory/cds/*_ch.tlognnnnnnnnnn
+#	$DCELOCAL/var/directory/cds/*_ch.version
+#	$DCELOCAL/var/adm/directory/cds/cds_cache.version
+#	$DCELOCAL/var/adm/directory/cds/cds_cache.nnnnnnnnnnn
+#   8. Restart cdsd.
+#   9. Clean up and exit.
+#################################################################################
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Set some local variables.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+set TESTNAME    DCPSAN002
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# 	Source the data file and the common procedures file.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+if {([catch {set STROOT $env(STROOT)}]) ||
+    ([string length $env(STROOT)] == 0)} {
+    puts stderr "$argv0: STROOT is not defined."
+    exit
+}
+
+source $STROOT/admin/cds/tests/admintest_env.tcl
+source $STROOT/admin/cds/tests/cds_common_procs.tcl
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Initliaze working directories and log file.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling initlogs."
+
+initlogs
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Check the user running this script is root.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling user_root."
+print_msg "-log---:" $logfile
+
+if {[user_root] == 1} {
+   print_msg "-log---:" $logfile
+   print_msg "-log---: Insuficient privilages to execute this test." $logfile
+   print_msg "-log---: Before running the script again, log in as root." $logfile
+   exit_proc EXIT_ON_ERROR
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Verify that the hostmachine is a CDS server.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling getcdsserver."
+
+if { [getcdsserver $HOSTNAME] } {
+        print_msg "-log---:" $logfile
+        print_msg "-log---: $HOSTNAME is not a CDS server. " $logfile
+        print_msg "-log---: Backing up a clearinghouse can only" $logfile
+	print_msg "-log---: be done on a CDS server machine. " $logfile
+        print_msg "-log---: have been configured as CDS servers." $logfile
+        exit_proc EXIT_ON_ERROR
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Login as cell_admin 
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling run_cmd to login as cell_admin."
+
+print_msg "-log---: Calling procedure run_cmd to login as cell_admin." $logfile
+
+if {[run_cmd {login $CELLADMIN -password $ADMIN_PW}] != 0 } {
+    print_msg "-log---:" $logfile
+    print_msg "-log---: Failed to log in as $CELLADMIN" $logfile
+    print_msg "-log---: Program exiting on error." $logfile
+    exit_proc EXIT_ON_ERROR
+}   
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Make entries in the name space.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling init_name_space."
+
+init_name_space
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#       Disable the CDS server (cdsd) on the local host.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling disable_cdsd."
+print_msg "-log---: Calling procedure disable_cdsd to stop cdsd." $logfile
+
+if {[disable_cdsd $HOSTNAME] == 0 } {
+    print_msg "-log---:" $logfile
+    print_msg "-log---: The CDS server has been disabled temporarily." $logfile
+} else {
+    print_msg "-log---:"  $logfile
+    print_msg "-log---: Failed to disable the CDS server." $logfile
+    print_msg "-log---: Exiting on error." $logfile
+    exit_proc EXIT_ON_ERROR
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#       Backup the clearinghouse files.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling backup_ch."
+print_msg "-log---: Calling backup_ch to back up the clearinghouse." $logfile
+
+if {[backup_ch] == 0} {
+   print_msg "-log---:" $logfile
+   print_msg "-log---: The clearinghouse has been backed up succesfully." $logfile
+} else {
+   print_msg "-log---:" $logfile
+   print_msg "-log---: Failed to backup the clearinghouse successfully." $logfile   
+   print_msg "-log---: Restarting the CDS daemon cdsd and exiting." $logfile
+   puts "Calling restart_cdsd after backup_ch failed."
+   if {[restart_cdsd] == 1} {
+       print_msg "-log---: Failed to start cdsd, it needs to be started by hand." $logfile
+   }
+   exit_proc EXIT_ON_ERROR
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#       Restart cdsd - modify the entries backed up and add new ones.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling restart_cdsd."
+print_msg "-log---: Calling procedure restart_cdsd to start cdsd." $logfile
+
+if {[restart_cdsd] == 1 } {
+    print_msg "-log---:" $logfile
+    print_msg "-log---: Failed to start cdsd." $logfile
+    print_msg "-log---: cdsd needs to be started by hand." $logfile
+    print_msg "-log---: Exiting on error." $logfile
+    exit_proc EXIT_ON_ERROR
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Exit backup_ch.tcl
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+set EXIT_ON_ERROR 0
+exit_proc EXIT_ON_ERROR
+
+
+

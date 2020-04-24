@@ -1,0 +1,254 @@
+*
+* ID: $Id:
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* linkcall.scr -- This script implements the unlink syscall, symlink syscall,
+* and hardlink syscall.
+*
+
+*
+* Privilege: login as root.
+*
+
+*
+* Usage: file_test -I linkcall.scr 
+*        file_test -I linkcall.scr -D 
+*        or 
+*        file_test <linkcall.scr
+*        or
+*     	 See file_test -help 
+*
+
+*  Check points:
+
+*  Terminology:
+*  PASSED -- no problem for the testings.
+*  FAILED -- failed when doing basic checks.
+*  XXXXXX -- means will be enhanced later.
+
+*  Errors: 6 
+
+* Note: super user can issue unlink dir calls.
+
+
+*
+* Common settings.
+*
+include common1.env
+
+echo
+echo Running linkcall.scr
+echo
+
+set numOfFilesToCreate ( $MAXDCACHEENTRY+10 )
+
+*************************************************************************
+!*                         BASIC CASES                                   *
+*************************************************************************
+
+*
+!* unlink and hard link syscalls.
+*
+
+umask 0
+chdir $testDir
+
+*  Test basic unlink call, verifying name gone from both listing and 
+*  name cache.
+
+*
+!* Create bunch of names under the test directory.
+*
+
+loop x 1 1 $numOfFilesToCreate 
+  set fileName ($testFile+$x)
+  open $fileName ($O_CREAT|$O_RDWR) 0777 fileNameId[$x]
+  write $fileNameId[$x] "This is a test file."
+  close $fileNameId[$x]
+endloop
+
+*
+!* Check that the files exist.
+*
+opendir . dirPtr
+
+* Read the dir ".".
+readdir $dirPtr dirInfo
+
+* Read the dir "..".
+readdir $dirPtr dirInfo
+
+* Read the rest files.
+loop x 1 1 $numOfFilesToCreate
+  set fileName ($testFile+$x)
+  readdir $dirPtr dirInfo
+  if ( $dirInfo.d_name != $fileName ) {
+    set errorMessage "FAILED: The file did not exist. --E1"
+    exec err_Process
+  }
+endloop
+
+*
+!* Unlink the files.
+*
+loop x 1 1 $numOfFilesToCreate
+  set fileName ($testFile+$x)
+  unlink $fileName
+endloop
+
+*
+!* Check that file were gone. Better way to check.
+*
+seekdir $dirPtr 0
+readdir $dirPtr dirInfo
+set inode1 $dirInfo.d_ino
+
+readdir $dirPtr dirInfo
+set inode2 $dirInfo.d_ino
+
+readdir $dirPtr dirInfo
+do
+  loop x 1 1 $numOfFilesToCreate
+    set fileName ($testFile+$x)
+    if ( $inode1 != $dirInfo.d_ino && $inode2 != $dirInfo.d_ino ) {
+      if ( $dirInfo.d_name == $fileName ) {
+        set errorMessage ("FAILED: The file did exist " + $fileName + ". --E2")
+        exec err_Process
+      }
+    }
+  endloop
+  readdir $dirPtr dirInfo
+while ( $CommandResult == 0 )
+
+closedir $dirPtr
+
+*  Try also unlink from test client with same test client having file
+*  open (run through "cm_ReturnToken" in that case).
+
+*
+!* unlink file with file open.
+*
+
+* Create files.
+loop x 1 1 $numOfFilesToCreate 
+  set fileName ($testFile+$x)
+  open $fileName ($O_CREAT|$O_RDWR) 0777 fileNameId[$x]
+  write $fileNameId[$x] "This is a test file."
+  close $fileNameId[$x]
+endloop
+
+set commd "cm flush -path ."
+shellexec commd
+
+* Open them and unlink them.
+loop x 1 1 $numOfFilesToCreate 
+  set fileName ($testFile+$x)
+  open $fileName ($O_CREAT|$O_RDWR) 0777 fileNameId[$x]
+  unlink $fileName
+  close $fileNameId[$x]
+endloop
+
+*
+!* Check that file were gone.
+*
+opendir . dirPtr
+readdir $dirPtr dirInfo
+readdir $dirPtr dirInfo
+loop x 1 1 $numOfFilesToCreate
+  set fileName ($testFile+$x)
+  readdir $dirPtr dirInfo
+  if ( $dirInfo.d_name == $fileName ) {
+    set errorMessage "FAILED: The file did exist. --E3"
+    exec err_Process
+  }
+endloop
+
+closedir $dirPtr
+
+*
+*   Try unlink with target hard-linked to another name, and ensure that
+*   the updated status is fine.
+
+*
+!* Check that unlink hard-linked file and make sure the updated status.
+*
+
+* Having the file there.
+open target ($O_CREAT|$O_RDWR) 0777 targetId
+write $targetId "This is a hard-linked file."
+close $targetId
+
+* linked the file to "linked".
+
+hardlink target linked
+stat linked var
+if ( $var.st_nlink != 2 ) {
+  set errorMessage "FAILED: hardlink call fails. --E4"
+  exec err_Process
+}
+
+shellexec commd
+
+* Open the file for unlink.
+open linked $O_RDWR 0777 linkedId
+write $linkedId "This is a hard-linked file."
+
+unlink linked
+if ( $ITL_Status != 0 ) {
+  set errorMessage "FAILED: Can not unlink an opened file. --E5"
+  exec err_Process
+}
+
+stat target var
+if ( $var.st_nlink != 1 ) {
+  set errorMessage "FAILED: unlink call failed to decrease the ref count. --E6"
+  exec err_Process
+}
+
+shellexec commd
+
+*
+*  Try unlink with target recently stat-ed and try unlink with target
+*  recently flushed. (different code path).
+*
+
+unlink target
+
+verifyStatus false
+access target $accessFlagE
+if ( $ITL_Status == 0 ) {
+  set errorMessage "FAILED: unlink, the target is there. --E6"
+  exec err_Process
+}
+verifyStatus true
+
+
+*************************************************************************
+*                         CLEANING UP AND REPORT                        *
+*************************************************************************
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+*rmdir $testDir
+exec report_Proc "linkcall.scr" $errorCounter
+echo
+quit

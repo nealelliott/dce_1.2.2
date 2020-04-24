@@ -1,0 +1,80 @@
+*
+* @OSF_COPYRIGHT@
+* COPYRIGHT NOTICE
+* Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+* ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+* the full copyright text.
+*
+* HISTORY
+* $Log: lock00.itl,v $
+* Revision 1.1.11.1  1996/10/17  18:21:19  damon
+* 	Submitting on behalf of Transarc
+* 	[1996/10/17  16:51:14  damon]
+*
+* Revision 1.1.6.1  1994/02/04  20:41:35  devsrc
+* 	Merged from 1.0.3a to 1.1
+* 	[1994/02/04  15:22:53  devsrc]
+* 
+* Revision 1.1.4.1  1994/01/28  20:44:03  annie
+* 	expand OSF copyright
+* 	[1994/01/28  20:42:32  annie]
+* 
+* Revision 1.1.2.2  1993/02/16  16:26:42  jaffe
+* 	Transarc delta: jdp-db3072-aggregate-interlocking 1.2
+* 	  Selected comments:
+* 	    This delta implements an interlocking feature that keeps
+* 	    administrative commands like salvage and newaggr from stomping on an
+* 	    attached (or mounted) fileset.  Two new primitives,
+* 	    ftu_LockAggrDevice() and ftu_UnlockAggrDevice(), are provided by the
+* 	    ftutil library and are used in both newaggr and salvage.
+* 	    Two new test cases were added to the fset (ftutil) tests suite.  The first,
+* 	    lock00.itl, tests the primitives directly. The second, lock01.itl, tests
+* 	    interaction with newaggr and salvage for both attached aggregates and
+* 	    mounted filesets.
+* 	    This script tests the ftutil locking primitives.
+* 	    Fix things up for OSF/1.
+* 	[1993/02/15  19:26:01  jaffe]
+* 
+* $EndLog$
+*
+
+!**********************************************************
+!*** Test basic locking routines
+!**********************************************************
+
+include "defaults.itl"
+
+!*** Lock the raw device
+getRawDeviceName $device raw_device
+lockAggrDevice $raw_device dev_lock
+
+!*** Attempt to gain second lock in another process
+set shell_cmd "./fset_test -I scripts/lock00_helper1.itl"
+shellExec shell_cmd
+
+!*** Unlock the raw device
+unlockAggrDevice $dev_lock
+
+!*** Ensure that we can now gain the lock in another process
+set shell_cmd "./fset_test -I scripts/lock00_helper2.itl"
+shellExec shell_cmd
+
+!*** Lock the raw device again
+lockAggrDevice $raw_device dev_lock
+
+!*** Attempt to attach the aggregate in another process
+set shell_cmd "./fset_test -I scripts/lock00_helper3.itl"
+shellExec shell_cmd
+
+!*** Unlock the raw device
+unlockAggrDevice $dev_lock
+
+exec setup_aggr
+
+!*** Attempt to lock the raw device
+verifyStatus false
+lockAggrDevice $raw_device dev_lock_scratch
+assert ($ITL_Status == $FTU_E_ATTACHED)
+verifyStatus true
+
+exec shutdown_aggr

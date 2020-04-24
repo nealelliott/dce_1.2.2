@@ -1,0 +1,1208 @@
+#!/bin/sh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# @HP_DCE_VERSION@
+# @(#)Module: dce_com_utils $Revision: 1.1.17.1 $ $Date: 1996/10/03 17:56:16 $
+#
+# HISTORY 
+# $Log: dce_com_utils,v $
+# Revision 1.1.17.1  1996/10/03  17:56:16  arvind
+# 	Fix CHFts19682: remove service_guard.
+# 	[1996/08/08  17:11 UTC  psn  /main/psn_bugfix/1]
+#
+# Revision 1.1.14.3  1996/03/09  23:09:41  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:27:45  marty]
+# 
+# Revision 1.1.14.2  1996/02/07  17:47:34  parul
+# 	DCE 1.2.1 final drop from HP
+# 	[1996/02/07  16:13:17  parul]
+# 
+# 	DCE 1.2.1 final drop from HP
+# 
+# Revision 1.1.10.3  1994/06/21  16:55:27  tom
+# 	Remove 'Return to Main menu' messages.
+# 	[1994/06/21  16:44:37  tom]
+# 
+# Revision 1.1.10.2  1994/05/18  19:57:09  tom
+# 	Bug 10628 - Remove chk_dtscp, no longer needed.
+# 	[1994/05/18  19:56:21  tom]
+# 
+# Revision 1.1.10.1  1994/03/30  15:33:32  tom
+# 	Bug 9570 - Remove explitives from slay routine.
+# 	Bug 9503 - trap for window resize signal in getoption.
+# 	[1994/03/30  15:26:33  tom]
+# 
+# Revision 1.1.8.1  1993/09/17  21:27:05  tom
+# 	Make install here match one that was in dce_config.
+# 	Use CPCMD instead of user supplied CP_OR_SYMLINK.
+# 	Change name to install_list.
+# 	Unset cell admin principal and passwd if login failure.
+# 	[1993/09/17  21:26:11  tom]
+# 
+# Revision 1.1.6.3  1993/08/19  20:28:38  tom
+# 	Bug 8438 - Replace parse_nls with working version from dce_config.
+# 	[1993/08/19  20:27:09  tom]
+# 
+# Revision 1.1.6.2  1993/07/19  19:26:10  zeliff
+# 	HP port of DFS
+# 	[1993/07/19  18:19:52  zeliff]
+# 
+# Revision 1.1.4.6  1993/07/16  22:37:39  kissel
+# 	Additional cleanup
+# 	[1993/07/15  21:14:48  jake]
+# 
+# 	Fixes and changes per tom@osf
+# 	[1993/07/15  02:12:02  jake]
+# 
+# 	Ref Port Changes
+# 	[1993/07/09  18:04:54  jake]
+# 
+# 	removed bogus getip(), conditionalized terminally long log_msg
+# 	[1993/07/08  21:00:20  jake]
+# 
+# 	*** empty log message ***
+# 	[1993/06/21  14:10:31  kissel]
+# 
+# Revision 1.1.2.3  1993/06/16  21:04:26  jake
+# 	HP Reference Port dce_com_utils first offering
+# 	[1993/06/16  21:03:33  jake]
+# 
+# Revision 1.1.2.2  1993/06/04  01:08:17  kissel
+# 	Initial HPUX RP version.
+# 	[1993/06/03  20:18:36  kissel]
+# 
+# Revision 1.1.2.6  1993/05/07  15:17:00  jake
+# 	Added $@ to slay, and changed WARNING to DEBUG in daemon_slayer.
+# 	Fixed get_pid
+# 	[1993/05/07  15:16:36  jake]
+# 
+# Revision 1.1.2.5  1993/05/06  13:36:05  jake
+# 	Temporary fix for here-document read
+# 	[1993/05/05  21:44:22  jake]
+# 
+# Revision 1.1.2.4  1993/05/05  19:38:45  jake
+# 	Checking and changing celladmin cellpw
+# 	[1993/05/05  19:37:48  jake]
+# 
+# 	Added quotes to get_pid() check
+# 	[1993/04/27  23:23:07  jake]
+# 
+# 	Checkin for first Bsubmit
+# 	[1993/04/27  22:08:47  jake]
+# 
+# 	fixes for GAMERA
+# 	[1993/04/22  20:53:50  jake]
+# 
+# 	First entry for dce_com_utils; utilities used by configuration tools
+# 	[1993/04/22  15:22:42  jake]
+# 
+# $EndLog$
+
+if [ "$D" = "D" ]
+then
+set -x
+fi
+
+: ${DCE_ETC:="/etc"}
+export DCE_ETC
+
+SOURCE_COM_UTILS=1
+
+if [ -z "${SOURCE_COM_ENV}" ]
+then
+	if [ -f ${DCE_ETC}/dce_com_env ]
+	then
+		. ${DCE_ETC}/dce_com_env
+	else
+		echo Cannot source "${DCE_ETC}/dce_com_env"
+		exit 1
+	fi
+fi
+
+#------------------------------------------------------
+# clear()
+#
+# comment out this function to re-enable "clear" calls
+# before menu displays
+#
+clear()
+{
+	echo "\n"
+}
+
+#-----------------------------------------------------
+# echon()
+# Equivalent of echo -n on AIX.  Used for portability
+# to other platforms.  This prevents the new line character
+# from being printed after an echo statement.
+#-----------------------------------------------------
+echon()
+{
+	echo "$*\c"	
+}
+
+# log_msg()
+#
+# Write a message to stdout and/or logfile depending on priority of
+# the message type specified in the first parameter.  Message is
+# formatted before being written.
+#
+# Porting note: log_msg should be replaced with an appropriate vendor function
+#----------------------------------------------------------------------------
+log_msg()
+{
+	msg_type=$1
+	msg=$2
+	if [ $use_samlog ]
+	then
+		case $msg_type in
+		    ERROR)	msg_priority=1;;
+		    WARNING)	msg_priority=2;;
+		    SUMMARY)	msg_priority=3;;
+		    DETAIL)	msg_priority=4;;
+		    VERBOSE)	msg_priority=5;;
+		    DEBUG)	msg_priority=6;;
+		    *)	        msg_priority=6;
+				msg="log_msg: bad message type=\"$msg_type\";"$2"";
+				msg_type=DEBUG;;
+		esac
+
+		# build samlog message in /tmp/sam$$
+		touch /tmp/sam$$
+		samlog "$msg_type" "$msg"
+
+		# write to stdout all msg's with priority at least 
+		# $DISPLAY_THRESHOLD (default SUMMARY)
+		if [ $msg_priority -le $display_priority ]; then
+			cat /tmp/sam$$
+		fi
+
+		# write to $logfile all msg's with priority at least $logfile_priority
+		# (set from $LOG_THRESHOLD; default DEBUG)
+		if [ $msg_priority -le $logfile_priority ]; then
+		    cat /tmp/sam$$ >>$logfile
+		fi
+
+		rm -f /tmp/sam$$
+	else
+		case $msg_type in
+		    ERROR)	log_header="ERROR:   ";  msg_priority=1;;
+		    WARNING)	log_header="WARNING: ";  msg_priority=2;;
+		    SUMMARY)	log_header="S:****** ";  msg_priority=3;;
+		    DETAIL)	log_header="D:         ";msg_priority=4;;
+		    VERBOSE)	log_header="V:         ";msg_priority=5;;
+		    DEBUG)	log_header="DEBUG:     ";msg_priority=6;;
+		    *)	        log_header="*BAD MSG:  ";msg_priority=6;
+				msg="log_msg: bad message type=\"$msg_type\";"$2"";
+				msg_type=DEBUG;;
+		esac
+
+	        # If no message will be sent to the screen or the logfile,
+		# don't bother formatting the message
+		if [ $msg_priority -gt $display_priority  \
+			-a $msg_priority -gt $logfile_priority ]; then
+			return
+		fi
+
+		if [ $msg_priority -ge 4 ]; then
+			indent="           "
+		else
+			indent="         "
+		fi
+		if [ "$UNAME" = "HP-UX" ]
+		then
+		formatted_msg=`echo "$log_header$msg" | \
+		    awk -v I="$indent"\
+			'BEGIN	{IL=length(I);
+				MAXLINE=79;
+				MAXILINE=MAXLINE-IL;
+				FIRST="y";
+				}
+			{S=$0;             # this line of the message
+			STARTL=length($0); # length of this line of the message
+			L=STARTL;          # current length of this line as processed
+			while(L>0)
+				{if(FIRST=="y")
+					{# CASE 1: first line of message
+					FIRST="n";
+					sub(" *$","",S); # remove trailing spaces
+					HINDENT="";  # no indent for header
+					UINDENT="";  # no extra indent for user indentation
+					MAXP=MAXLINE+1;
+					}
+				else
+					{if(L==STARTL)
+						{# CASE 2: new line of message
+						sub(" *$","",S); # remove trailing spaces
+						match(S,"^ +[^ ]"); # find any initial spaces
+						if (RSTART == 0)
+							UINDENT="";
+						else
+							UINDENT=substr(S,1,RLENGTH-1);
+						}
+					# else CASE 3: wrapped line
+					# COMMON 2-3: common processing for cases 2 and 3
+					HINDENT=I;
+					MAXP=MAXILINE+1;
+					sub("^ *","",S); # remove leading spaces
+					}
+				# COMMON: common processing for all cases
+				S1=substr(S,1,MAXP); # select max printable line
+				E=MAXP; # initialize E to use entire line
+				if (length(S1) == MAXP)
+					{match(S1,"[^ ]+$"); # back up before last word
+					E=RSTART; # corrected E
+					if(E <= 1)
+						E=MAXP; # no spaces in line - have to use entire line
+					}
+				print HINDENT UINDENT substr(S1,1,E-1); # print without trailing frags
+				S=substr(S,E);
+				L=length(S);
+				} # end of while loop
+			} # end of awk script'`
+		else
+			formatted_msg=`echo "$log_header$msg"`
+		fi
+
+		# write to stdout all msg's with priority at least $display_priority
+		# (set from $DISPLAY_THRESHOLD; default SUMMARY)
+		if [ $msg_priority -le ${display_priority} ]; then
+			echo "$formatted_msg"
+		fi
+
+		# write to $logfile all msg's with priority at least $logfile_priority
+		# (set from $LOG_THRESHOLD; default DETAIL)
+		if [ $msg_priority -le $logfile_priority ]; then
+		    echo "$formatted_msg" >>$logfile
+		fi
+	fi
+}
+
+# Utilities for installation/configuration routines
+#------------------------------------------------------
+
+
+#---------------------------------------------
+# err_exit()
+#
+# Usage: err_exit "<error message>"
+#
+# This routine should be called after an error
+# message is displayed.  The error message should
+# conclude by telling users what will happen if they
+# press <RETURN> to continue.  Example: "A security server
+# is already running on this node.  Continuing will
+# return to the Main Menu."
+# 
+# If $EXIT_ON_ERROR is "y", then dce_config
+# exits with return value 1 after displaying the message.
+#
+# If $EXIT_ON_ERROR is not set, or is "n", then
+# err_exit displays the error message, displays "Press
+# <RETURN> to continue", then waits for user input.
+# Any input causes this function to return to the caller.
+#---------------------------------------------
+err_exit()
+{
+	xerr_msg=$1
+	log_msg DEBUG "Executing: err_exit($xerr_msg)"
+	log_msg ERROR "$xerr_msg"
+	if [ "${exit_on_err}" = "y" ]
+	then
+	    exit 1
+	else
+	    log_msg VERBOSE "User query: Press <RETURN> to continue, CTRL-C to exit: "
+	    echon "\tPress <RETURN> to continue, CTRL-C to exit: "
+	    read string;
+	    log_msg VERBOSE "User entry: $string"
+	fi
+}
+
+#---------------------------------------------
+# x_exit()
+#
+# Usage:    x_exit
+# Obsolete: x_exit "<optional message>"
+#
+# For backward compatibility, this function displays the 
+# optional message, if there is one.  This message is not
+# logged.
+#
+# This function then displays "Press <RETURN> to contine",
+# then waits for input from stdin.  When any input
+# is received, it returns to the caller.
+# 
+# Thus, the administrator can fix the condition
+# that occurred manually, if so desired, or may
+# force the routine to exit by using CTRL-C.
+#---------------------------------------------
+x_exit()
+{
+	x_msg="$1"
+	log_msg DEBUG "Executing: x_exit($x_msg)"
+	if [ "${x_msg:="NULL"}" != "NULL" ]
+	then
+		echo "$x_msg"
+	fi
+	log_msg VERBOSE "User query: Press <RETURN> to continue, CTRL-C to exit: "
+	echon "\tPress <RETURN> to continue, CTRL-C to exit: ";
+	read string;
+	log_msg VERBOSE "User entry: $string"
+}
+
+#---------------------------------------------
+# get_option()
+#
+# This routine reads an input value and ensures it
+# is among the valid values.  The user is continually
+# prompted until a valid value is entered.
+#
+#---------------------------------------------
+get_option()
+{
+	trap "" 23
+        read opt
+	if [ $? = 1 ]
+        then
+                log_msg WARNING "get_option() read has reached EOF, exiting"
+                opt=99
+        fi
+
+	# Ensure option gets a bad value if <RETURN> was
+	# pressed prior to entering a value
+	opt=${opt:-'10000'}
+	FOUND=1
+
+	for item in $opt
+	do
+		# Ensure option gets a bad value if <RETURN> was
+		# pressed prior to entering a value
+		option=${item:-10000}
+		FOUND=1
+       		for i in $LIST
+       		do
+			if [ $option -eq $i ]; then
+				FOUND=0
+		fi
+       		done
+       		if [ "$FOUND" -ne "0" ]; then
+			echo "\t\t An invalid value was entered."
+			echo "\t\t Valid values are: $LIST"
+			while [ $FOUND -ne 0 ] 
+			do
+				echon "\t\t Re-enter selection:  "
+				get_option
+			done
+       		fi
+	done
+}
+
+#---------------------------------------------
+# get_string()
+#
+# This routine reads an input string.
+#---------------------------------------------
+get_string()
+{
+        read string
+	export string
+}
+
+#---------------------------------------------
+# read_media()
+#
+# Reads information from the media device and stores
+# it into $DCEINSTDIR
+# Note that information is read one file at a time,
+# so this routine is very slow.  Vendors could
+# devise a packaging scheme that replaces this type
+# of installation.
+#---------------------------------------------
+read_media()
+{
+	TARGETDIR=$1
+	if [ $TAPE -eq 1 ]
+   	then
+		LASTDIR=`pwd`
+		cd $DCEROOT
+		RESTLIST=""
+  		for i in $LIST
+   		do
+			RESTLIST="$RESTLIST dce1.0/$TARGETDIR/$i"
+		done
+		tar -xvf $DEV $RESTLIST || \
+		   { x_exit "Ensure $DEV is ready ..."; }
+		cd $LASTDIR
+   	fi
+}
+
+#---------------------------------------------
+# one_option()
+#
+# Ensures only one option was selected from the menu
+# from which this routine was invoked.
+#---------------------------------------------
+one_option()
+{
+	ONE_ARG=0
+	while [ $ONE_ARG -eq "0" ]
+	do
+		numargs=0
+		for i in $opt
+		do
+			numargs=`expr $numargs + 1`
+		done
+        	if [ $numargs -ne "1" ]
+        	then
+			echon "\tOnly one choice may be entered.  Re-enter selection:  "
+			numargs=0
+			get_option
+		else
+			ONE_ARG=1
+        	fi
+	done
+}
+
+#---------------------------------------------------
+# setdirperms()
+#
+# This routine is used to set ownership, group, and permission
+# bits for the newly created $DCELOCAL structure.
+#---------------------------------------------------
+setdirperms()
+{
+	mkdir -p $1 || return 2
+	chmod 755 $1
+	chown root $1
+	chgrp bin $1
+	return 0
+}
+
+
+#---------------------------------------------------
+# parse_nls()
+#
+# Ensure message catalogs are stored into the
+# correct directory on the local machine.
+# The default directory is the first directory specified
+# in the $NLSPATH environment variable.  The user is
+# asked to override this value if not accurate.
+#---------------------------------------------------
+parse_nls()
+{
+	location=$DEF_MSG_PATH
+
+	if [ "${USE_DEF_MSG_PATH:-n}" != "y" ];
+	then
+		echo "\n"
+		echo "\tEnter the directory into which message catalogs"
+		echo "\t\tshould be stored on the local machine"
+		echon "\t\t($location):  "
+		read string
+		nlsdir=${string:-$location}
+	else
+		nlsdir=$location
+	fi
+
+	if [ ! -d $nlsdir ]
+	then
+		echo "\t$nlsdir does not exist.  Attempting to create it..."
+		mkdir -p $nlsdir 
+		if [ $? -ne 0 ]
+		then
+			echo "\tUnable to create $nlsdir.  Please create it"
+		 	echo "\tmanually at this time before pressing ENTER"
+			x_exit
+		fi
+	fi
+
+	# Note this overwrites previous versions of DCE catalogs
+	# Supress any warning message that they were identical
+	cp $DCELOCAL/$NLSDIR/* $nlsdir/. 2>/dev/null
+}
+
+
+#---------------------------------------------------
+# install_list()
+# 
+# This routine copies the designated file(s) from $DCESHARED/bin
+# to $DCELOCAL/bin and creates symlinks from /usr/bin to $DCELOCAL.
+#---------------------------------------------------
+install_list()
+{
+	read_media bin
+  	for i in $LIST
+   	do
+		rm -f $DCELOCAL/bin/$i
+		if [ -z "$CPCMD" -o "$CPCMD" = "cp" ]; then
+		  	cp $CPOPT $DCESHARED/bin/$i $DCELOCAL/bin/$i || \
+                        { echo "Can't create file $DCELOCAL/bin/$i";
+                          x_exit "Ensure no DCE daemons are running"; }
+		else 
+			$CPCMD $DCEINST/bin/$i $DCELOCAL/bin/$i || \
+			{ echo "Can't create file $DCELOCAL/bin/$i";
+			  x_exit "Ensure no DCE daemons are running"; }
+		fi
+                rm -f /usr/bin/$i
+                ln -s $DCELOCAL/bin/$i /usr/bin/$i 2>/dev/null
+	done
+}
+
+#------------------------------------------------------
+# dcelogin()
+#
+# log into DCE, asking for celladmin and cellpw if necessary
+#
+# If failure, displays error, displays
+# "Continuing will return to the Main Menu.", and returns 1
+# If warning, displays warning.
+# If warning "Password must be changed" is found, it is not
+#   displayed, but CHANGE_PW is set to "y".  This is currently
+#   checked and handled in menu99 exit from dce_config.
+# If success (including warnings), exports KRB5CCNAME and returns 0
+#
+# Note the use of the dce_login_noexec feature.  This
+# binary is simply a link to dce_login, but has a different
+# name.  The name of the executable is checked within the
+# dce_login code, and if the name is "dce_login_noexec" then
+# no sub-shell is exec'ed.  This feature is intended only
+# for use by dce_config, so is PURPOSELY
+# not documented.  Note that dce_login_noexec is always
+# removed upon exit from dce_config.
+#------------------------------------------------------
+dcelogin()
+{
+	log_msg DEBUG "Executing: dcelogin()"
+	err_found=0
+	rm -f /tmp/login$$
+
+	# Get Cell Administrator's principal name and password if not entered via environment variables
+	# and if not entered on a previous login
+	while [ "${celladmin:="NULL"}" = "NULL" ]
+	do
+		log_msg VERBOSE "User query: Enter Cell Administrator's principal name: (cell_admin) "
+		echon "\n\tEnter Cell Administrator's principal name: (cell_admin) "
+		read string
+		celladmin=${string:='cell_admin'}
+		log_msg VERBOSE "User entry: ${celladmin}"
+	done
+
+	while [ "${cellpw:="NULL"}" = "NULL" ]
+	do
+		log_msg VERBOSE "User query: Enter password: "
+		echon "\tEnter password: "
+		stty -echo 2>/dev/null
+		read cellpw
+		stty echo 2>/dev/null
+		echo "\n"
+		log_msg VERBOSE "User entry: <not shown>"
+	done
+
+	log_msg VERBOSE "Executing: dce_login_noexec $celladmin <password not shown> 2>/tmp/login$$"
+	KRB5CCNAME=`dce_login_noexec $celladmin $cellpw 2>/tmp/login$$`
+	echo $KRB5CCNAME | grep '^FILE:' >/dev/null
+	if [ $? -ne 0 ]; then
+		err_exit "login failure.
+  message from login:
+  `cat /tmp/login$$`
+  `echo $KRB5CCNAME`
+Failed to log in to DCE.  Continuing will return to the Main Menu."
+		celladmin=NULL
+		cellpw=NULL
+		export celladmin cellpw
+		err_found=1
+	elif [ -s /tmp/login$$ ]; then
+		grep -v 'Password must be changed' /tmp/login$$ >/dev/null
+		if [ $? = 0 ]; then
+			if [ "$do_checks" = "y" ]; then
+				log_msg WARNING "Possible problem logging in to DCE:
+  message from login:
+  `cat /tmp/login$$`"
+				# give user a chance to bail out on this one
+				x_exit
+			fi
+		else
+			grep 'Password must be changed' /tmp/login$$ >/dev/null
+			if [ $? = 0 ]; then
+				CHANGE_PW="y"
+			fi
+		fi
+	fi
+	rm -f /tmp/login$$
+	if [ $err_found = 0 ]; then
+		if [ ! -n "${KRB5CCNAME}" ]; then
+			err_exit "KRB5CCNAME was not generated by dce_login, although \
+no other errors were detected.  Continuing will return to the Main Menu."
+			menu0
+		fi
+		export KRB5CCNAME
+	fi
+	return $err_found
+}
+
+#------------------------------------------------------
+# chk_rgy_edit()
+#
+# Usage: chk_rgy_edit <message to display if error found>
+#
+# Check output from a rgy_edit call (found in /tmp/rgy_edit_out$$)
+# and handle error display, etc.  rgy_edit status should
+# have been saved in "rgy_edit_status" variable.
+#
+# If failure, displays error, removes /tmp file, returns 1
+# If OK, removes /tmp file, returns 0
+#------------------------------------------------------
+chk_rgy_edit()
+{
+	chk_rgy_msg=$1
+	log_msg DEBUG "Executing: chk_rgy_edit($chk_rgy_msg)"
+	grep "?(rgy_edit)" /tmp/rgy_edit_out$$ >/dev/null
+	if [ $? -eq 0  -o  $rgy_edit_status -ne 0 ]; then
+		err_exit "$chk_rgy_msg
+  Message from rgy_edit:
+  `cat /tmp/rgy_edit_out$$`"
+		rm -f /tmp/rgy_edit_out$$
+		return 1
+	fi
+	rm -f /tmp/rgy_edit_out$$
+	return 0
+}
+
+#------------------------------------------------------
+# chk_cdscp()
+#
+# Usage: chk_cdscp <message to display if error found>
+#
+# Check output from a cdscp call (found in /tmp/cdscp_out$$)
+# and handle error display, etc.  The exit status from
+# the cdscp call should be passed in the "cdscp_status"
+# variable.
+#
+# If failure, displays error, removes /tmp file, returns 1
+# If OK, removes /tmp file, returns 0
+#------------------------------------------------------
+chk_cdscp()
+{
+	chk_cdscp_msg=$1
+	log_msg DEBUG "Executing: chk_cdscp($chk_cdscp_msg)"
+	grep "Error" /tmp/cdscp_out$$ >/dev/null
+	if [ $? -eq 0  -o  $cdscp_status -ne 0 ]; then
+		err_exit "$chk_cdscp_msg
+  Message from cdscp:
+  `cat /tmp/cdscp_out$$`"
+		rm -f /tmp/cdscp_out$$
+		return 1
+	fi
+	rm -f /tmp/cdscp_out$$
+	return 0
+}
+
+#------------------------------------------------------
+# chk_rpccp()
+#
+# Usage: chk_rpccp <message to display if error found>
+#
+# Check output from a rpccp call (found in /tmp/rpccp_out$$)
+# and handle error display, etc.  The exit status from the
+# rpccp call should be passed in the "rpccp_status" variable.
+#
+# If failure, displays error, removes /tmp file, returns 1
+# If OK, removes /tmp file, returns 0
+#------------------------------------------------------
+chk_rpccp()
+{
+	chk_rpccp_msg=$1
+	log_msg DEBUG "Executing: chk_rpccp($chk_rpccp_msg)"
+	grep "error:" /tmp/rpccp_out$$ >/dev/null
+	if [ $? -eq 0  -o  $rpccp_status -ne 0 ]; then
+		err_exit "$chk_rpccp_msg
+  Message from rpccp:
+  `cat /tmp/rpccp_out$$`"
+		rm -f /tmp/rpccp_out$$
+		return 1
+	fi
+	rm -f /tmp/rpccp_out$$
+	return 0
+}
+
+#------------------------------------------------------
+# chk_acl_edit()
+#
+# Usage: chk_acl_edit <message to display if error found>
+#
+# Check output from a acl_edit call (found in /tmp/acl_edit_out$$)
+# and handle error display, etc.  The exit status from the
+# acl_edit call should be passed in the "acl_edit_status" variable.
+#
+# If failure, displays error, removes /tmp file, returns 1
+# If OK, removes /tmp file, returns 0
+#------------------------------------------------------
+chk_acl_edit()
+{
+	chk_acl_edit_msg=$1
+	log_msg DEBUG "Executing: chk_acl_edit($chk_acl_edit_msg)"
+	grep "ERROR:" /tmp/acl_edit_out$$ >/dev/null
+	if [ $? -eq 0  -o  $acl_edit_status -ne 0 ]; then
+		err_exit "$chk_acl_edit_msg
+  Message from acl_edit:
+  `cat /tmp/acl_edit_out$$`"
+		rm -f /tmp/acl_edit_out$$
+		return 1
+	fi
+	rm -f /tmp/acl_edit_out$$
+	return 0
+}
+
+#------------------------------------------------------
+# wait_for_id()
+#
+# Waits in short increments for a total of 75 seconds
+# for node identity to be established.
+#
+wait_for_id()
+{
+	log_msg DEBUG "Executing: wait_for_id()"
+	log_msg SUMMARY "Waiting for node self-identity to be established..."
+	id_found=0
+	for i in $TEST15CNT; do
+		test -s $DCELOCAL/var/security/creds/dcecred_ffffffff -a -s \
+			$DCELOCAL/var/security/creds/dcecred_ffffffff.data
+		if [ $? = 0 ]; then
+			id_found=1
+			break
+		else
+			log_msg VERBOSE "Executing: sleep 5"
+			sleep 5
+		fi
+	done
+	if [ $id_found = 0 ]; then
+		err_exit "Node identity has not been established.  There may be a problem with the \
+security server, this node may have stale configuration information.  If this is a client node, \
+then node may not have been unconfigured following a previous configuration."
+		return 1
+	else
+		return 0
+	fi
+}
+
+#------------------------------------------------------
+# chk_dcecp()
+#
+# Usage: chk_dcecp <message to display if error found>
+#
+# Check output from a dcecp call (found in $dcecp_out)
+# and handle error display, etc.  The exit status from the
+# dcecp call should be passed in the "dcecp_status" variable.
+#
+# If failure, displays error, removes $dcecp_out, returns 1
+# If OK, removes $dcecp_out, returns 0
+#------------------------------------------------------
+chk_dcecp()
+{
+	chk_dcecp_msg=$1
+	log_msg DEBUG "Executing: chk_dcecp($chk_dcecp_msg)"
+	grep "^Error:" $dcecp_out >/dev/null
+	if [ $? -eq 0  -o  $dcecp_status -ne 0 ]; then
+		err_exit "$chk_dcecp_msg
+  Message from dcecp:
+  `cat $dcecp_out`"
+		rm -f $dcecp_out
+		return 1
+	fi
+	rm -f $dcecp_out
+	return 0
+}
+
+#------------------------------------------------------
+# get_pid()
+#
+# Returns PID's of specified process or negative
+# value if the process isn't running.
+#
+#		usage: get_pid <process name>
+#------------------------------------------------------
+get_pid()
+{
+	proc_name=$1
+	log_msg DEBUG "Executing: get_pid($1)"
+	PID=`ps $PSARGS | grep $proc_name | ${CUT_LINE}`
+	if [ -z "$PID" ]
+	then
+		PID=-2
+	fi
+	echo ${PID}
+}
+
+#--------------------------------------------------------
+#  Slay function to kill processes
+#
+#--------------------------------------------------------
+slay()
+{
+        kill $@
+	killed=0
+	count=0
+	until [ "$killed" -ne 0 -o "$count" -gt 75 ]
+	do
+		ps $PSARGS | grep -q $@
+		killed=$?
+		if [ "$killed" -eq 0 ]; then
+			sleep 5
+			count=`expr $count + 5`
+		fi
+	done
+
+	if [ "$killed" -eq 0 ]; then
+		log_msg WARNING "...Could not slay $1"
+	fi
+}
+
+#---------------------------------------------------------
+#       daemon_slayer()
+#	Called by dce_shutdown
+#	usage:daemon_slayer <daemon name>
+#
+#---------------------------------------------------------
+daemon_slayer()
+{
+	daem=$1
+	PID=`grep $1 $PSFILE | $CUT_LINE `
+	log_msg DEBUG "Executing: daemon_slayer($1)"
+	if [ -z "$PID" ]
+	then
+		log_msg DEBUG "$daem can't be killed, not running"
+	else
+		slay $PID > /dev/null 2>&1
+	fi
+}
+
+#------------------------------------------------------
+# checktime()
+#
+# Usage: checktime <server node | -b>
+#
+#  Checktime synchronizes current node's system time with the server node's.
+#  It will update the current node's system time if the time difference is
+#  greater than $tol_sec (initialized from $TOLERANCE_SEC).  Note that if
+#  the -b switch is passed tol_sec will be set to tol_sec_min, and we
+#  do not synchronize clocks if the difference is greater than TOLERANCE_SEC_MAX.
+#  Also, if the boot_time parameter is passed only the inetd option is exercised.
+#
+
+checktime()
+{
+	if [ "$check_time" = "n" ]; then
+		return
+	fi
+
+	if [ "$1" = "-b" ]; then
+		sserver="at boot time"
+		tol_sec=$tol_sec_min
+		boot_time="y"
+	else	
+		sserver=$1
+		boot_time="n"
+	fi
+	log_msg DEBUG "Executing: checktime($sserver)"
+
+	time_server=${TIME_SERVER}
+	if [ -z "$time_server" ]; then
+		echo " "
+		echo "\tDCE requires close synchronization of clocks.  During normal"
+		echo "\tcell operation, DTS takes care of this.  However during"
+		echo "\tconfiguration, you need to synchronize clocks with a"
+		echo "\tnode that is already part of the cell.  Usually this is"
+		echo "\tthe node running the master security server."
+		echo " "
+		
+		log_msg VERBOSE "User query: Enter a machine to synchronize with($sserver):"
+		echon "\tEnter a machine to synchronize with: ($sserver) "
+		read time_server
+		log_msg VERBOSE "User entry: $time_server"
+		if [ -z "$time_server" ]; then
+			time_server=$sserver
+		fi
+	fi
+	
+	#
+	# Obtain the time from the remote cell node, and compare it to
+	# the local time.  If the time difference is greater than $tol_sec
+	# then ask the user if they wish to synchronize.
+	# Note that when we obtain the time from the remote time_server node
+	# we first try dced, then the inetd, and finally if both of these fail
+	# we try the plain clock show command which will work if there is
+	# at least one dtsd running in the cell.  If everything fails we 
+	# instruct the user to synchronize clocks by hand.
+	#
+	if [ "$boot_time" = "y" ]; then
+		log_msg DEBUG "Executing: dcecp clock show -inetd $time_server"
+		its_date=`echo clock show -inetd $time_server | dcecp -s`
+	else
+		log_msg DEBUG "Executing: dcecp clock show -dced $time_server"
+		its_date=`echo clock show -dced $time_server | dcecp -s`
+		if [ $? -ne 0 ]; then
+			log_msg DEBUG "Executing: dcecp clock show -inetd \
+$time_server"
+			its_date=`echo clock show -inetd $time_server | dcecp -s`
+			if [ $? -ne 0 ]; then
+				log_msg DEBUG "Executing: dcecp clock show"
+				its_date=`echo clock show | dcecp -s`
+			fi
+		fi
+	fi
+
+	if [ -z "$its_date" ]; then
+		if [ "$boot_time" = "y" ]; then
+			return 1
+		else
+			err_exit "All attempts to obtain a time stamp from\
+ $time_server or any dtsd server running in the cell have been unsuccessful.\
+ You may either synchronize the local clock with that of another node in the\
+ cell by hand, or you may check to see that inetd is running on $time_server\
+ and retry the configuration.  Continuing will return to the Main Menu."
+			menu0
+		fi
+	fi
+
+	#
+	# Obtain my date.  Note that dced must be running since the endpoint
+	# mapper has been configured on this node by now.
+	#
+	if [ "$boot_time" = "y" ]; then
+		log_msg DEBUG "Executing: dcecp clock show -inetd $HOSTNAME"
+		my_date=`echo clock show -inetd $HOSTNAME | dcecp -s`
+	else
+		log_msg DEBUG "Executing: dcecp clock show -dced $HOSTNAME"
+		my_date=`echo clock show -dced $HOSTNAME | dcecp -s`
+		if [ $? -ne 0 ]; then
+			log_msg DEBUG "Executing: dcecp clock show -inetd $HOSTNAME"
+			my_date=`echo clock show -inetd $HOSTNAME | dcecp -s`
+		fi
+	fi
+	if [ -z "$my_date" ]; then
+		if [ "$boot_time" = "y" ]; then
+			err_exit "An attempt to get the local time has failed.\
+ Check to see that inetd is running."
+			return 1
+		else
+			err_exit "An attempt to get the local time has failed.\
+ Check to see that the local endpoint mapper dced, or  inetd is running.  Continuing will return to the Main Menu."
+			menu0
+		fi
+	fi
+
+	#
+	# Now that we posses the two dates, we compare them and determine 
+	# if the clocks are off by more than $tol_sec.
+	#
+	log_msg DEBUG "Executing: dcecp utc subtract $its_date $my_date"
+	clocks_diff=`echo utc subtract $its_date $my_date | dcecp -s`
+
+	#
+	# Get the hours in difference.
+	#
+	log_msg DEBUG "Calculating hours of difference between clocks"
+	hours0=`echo $clocks_diff | cut -c4`
+	hours1=`echo $clocks_diff | cut -c5`
+	decimal=`expr $hours1`
+	tens=`expr $hours0 \* 10`
+	hours=`expr $tens + $decimal`
+
+	#
+	# Get the minutes in difference.
+	#
+	log_msg DEBUG "Calculating minutes of difference between clocks"
+	mins0=`echo $clocks_diff | cut -c7`
+	mins1=`echo $clocks_diff | cut -c8`
+	decimal=`expr $mins1`
+	tens=`expr $mins0 \* 10`
+	mins=`expr $tens + $decimal`
+
+	#
+	# Get the seconds in difference.
+	#
+	log_msg DEBUG "Calculating seconds of difference between clocks"
+	secs0=`echo $clocks_diff | cut -c10`
+	secs1=`echo $clocks_diff | cut -c11`
+	decimal=`expr $secs1`
+	tens=`expr $secs0 \* 10`
+	secs=`expr $tens + $decimal`
+
+	#
+	# Calculate the total difference between the times in seconds and
+	# compare it to $tol_sec.
+	#
+	total_secs=`expr $hours \* 60 \* 60 + $mins \* 60 + $secs`
+
+	if [ "$boot_time" = "y" ]; then
+		if [ "$total_secs" -gt "$tol_sec_max" ]; then
+			err_exit "The difference in time exceeds $tol_sec_max."
+			return 1
+		fi
+	fi
+		
+	if [ "$total_secs" -lt "$tol_sec" ]; then
+		log_msg SUMMARY "Time on $HOSTNAME is within specified\
+ tolerance ($tol_sec secs) of time on $time_server."
+	else
+		log_msg SUMMARY "Time on $HOSTNAME is not within specified\
+ tolerance ($tol_sec secs) of time on $time_server."
+		log_msg SUMMARY "Time on $HOSTNAME:	$my_date"
+		log_msg SUMMARY "Time on $time_server:	$its_date"
+		if [ -z "$SYNC_CLOCKS" ]; then
+			log_msg VERBOSE "User query: Do you wish to sync the\
+ clock of this machine?"
+			echon "\tDo you wish to sync the clock of this\
+ machine? (y)"
+			read answer
+			log_msg VERBOSE "User entry: $answer"
+			if [ -z "$answer" ]; then
+				answer="y"
+			fi
+		else
+			answer=${SYNC_CLOCKS}
+		fi
+		case $answer in
+			y*) ;;
+			*)  return;;
+		esac
+		if [ "$boot_time" = "y" ]; then
+			log_msg DETAIL "Executing: dcecp clock synchronize\
+ -inetd $time_server."
+			echo "clock synchronize -inetd $time_server" | dcecp -s
+			if [ $? -ne 0 ]; then
+				err_exit "Cannot synchronize\
+ the clock of $HOSTNAME with that of $time server.  Clocks must be synchronized\
+ before continuing."
+				return 1
+			fi
+		else
+			log_msg DETAIL "Executing: dcecp clock synchronize\
+ -dced $time_server."
+			echo "clock synchronize -dced $time_server" | dcecp -s
+			if [ $? -ne 0 ]; then
+				log_msg DETAIL "Executing: dcecp clock\
+ synchronize -inetd $time_server."
+				echo "clock synchronize -inetd $time_server" \
+                                     | dcecp -s
+				if [ $? -ne 0 ]; then
+					log_msg DETAIL "Executing: dcecp clock\
+ synchronize"
+					echo "clock synchronize" | dcecp -s
+					if [ $? -ne 0 ]; then
+						err_exit "Cannot synchronize\
+ the clock of $HOSTNAME with that of $time server.  Clocks must be synchronized\
+ before continuing.  Continuing will return to the Main Menu."
+						menu0
+					fi
+				fi
+			fi
+		fi
+	fi
+}
+
+#------------------------------------------------------
+# modify_rcfile()
+#
+# modifies the $RC_DCE file so the correct daemons
+# will be started at boot time.
+#------------------------------------------------------
+modify_rcfile()
+{
+	mdaemon=$1
+        args=$2
+	log_msg DEBUG "Executing: modify_rcfile($mdaemon)"
+	if [ ! -f $RC_DCE ]
+	then
+		err_exit "$RC_DCE is not installed.  Continuing will return to the Main Menu."
+		menu0
+	else
+		grep "#daemonrunning \$DCELOCAL/bin/$mdaemon" $RC_DCE >/dev/null 2>&1
+		if [ $? -ne 0 ]
+		then
+      			grep "daemonrunning \$DCELOCAL/bin/$mdaemon" $RC_DCE >/dev/null 2>&1
+      			if [ $? -ne 0 ]
+			then
+				err_exit "$RC_DCE is corrupted.  Continuing will return to the Main Menu."
+				menu0
+			else
+		        	log_msg DETAIL "$mdaemon is already set."
+			fi
+		else
+      			sed "s:#daemonrunning \$DCELOCAL/bin/$mdaemon.*$:daemonrunning \$DCELOCAL/bin/${mdaemon}${args}:g" \
+               		   	$RC_DCE > /tmp/rc.dce.new  && \
+   				{ cp /tmp/rc.dce.new $RC_DCE ;
+			rm -f /tmp/rc.dce.new;
+			log_msg VERBOSE "Successfully modified rcfile /etc/rc.dce for \"$mdaemon\"."; }
+		fi
+	fi
+}
+
+#------------------------------------------------------
+# unmodify_rcfile()
+#
+# modifies the $RC_DCE file so the specified daemon
+# will not be started at boot time.
+#------------------------------------------------------
+unmodify_rcfile()
+{
+	mdaemon=$1
+	log_msg DEBUG "Executing: unmodify_rcfile($mdaemon)"
+	if [ ! -f $RC_DCE ]
+	then
+		err_exit "$RC_DCE is not installed.  Continuing will return to the Main Menu."
+		menu0
+	else
+		grep "daemonrunning \$DCELOCAL/bin/$mdaemon" $RC_DCE >/dev/null 2>&1
+		if [ $? -ne 0 ]
+		then
+      			grep "#daemonrunning \$DCELOCAL/bin/$mdaemon" $RC_DCE >/dev/null 2>&1
+      			if [ $? -ne 0 ]
+			then
+				err_exit "$RC_DCE is corrupted.  Continuing will return to the Main Menu."
+				menu0
+			else
+		        	log_msg DETAIL "$mdaemon is already unset."
+			fi
+		else
+      			sed "s:daemonrunning \$DCELOCAL/bin/$mdaemon.*$:#daemonrunning \$DCELOCAL/bin/${mdaemon}:g" \
+               		   	$RC_DCE > /tmp/rc.dce.new  && \
+   				{ cp /tmp/rc.dce.new $RC_DCE ;
+			rm -f /tmp/rc.dce.new;
+			log_msg VERBOSE "Successfully modified rcfile /etc/rc.dce for unsetting \"$mdaemon\"."; }
+		fi
+	fi
+}
+
+daemonrunning()
+{
+	cmdall=$*
+	cmd=`basename $1`
+	ps -ef | grep ${cmd} | grep -v grep >/dev/null 2>&1
+	[ $? -ne 0 ] || return 0
+	echo "\tStarting $cmd"
+	log_msg DETAIL "Starting daemon $cmd"
+	if [ ${cmd} = "dced" ]
+	then
+		# If rpcd is running, kill it.
+		ps -ef | grep rpcd | grep -v grep | cut -c9-14 | xargs kill >/dev/null 2>&1
+
+		if [ ! -f ${DCELOCAL}/var/dced/Acl.db ] ; then
+			log_msg SUMMARY "Initializing dced..."
+			log_msg DETAIL "Executing: dced -i || { err_exit \"dced -i failed to start.\"; }"
+			${DCELOCAL}/bin/dced -i || { err_exit "dced -i failed to start."; exit 1; }
+			${DCELOCAL}/bin/dced -b
+		else
+			${DCELOCAL}/bin/dced
+		fi
+		sleep 10 # Endpoint warmup period.
+	else
+		$cmdall
+	fi
+}
+

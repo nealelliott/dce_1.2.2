@@ -1,0 +1,1050 @@
+%
+% @OSF_COPYRIGHT@
+% COPYRIGHT NOTICE
+% Copyright (c) 1993 Open Software Foundation, Inc.
+% ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+% src directory for the full copyright text.
+%
+%
+% (C) Copyright 1993 Transarc Corporation.
+% All Rights Reserved.
+%
+%
+% HISTORY
+% $Log: adversemove,v $
+% $EndLog$
+%
+
+\documentstyle[makeidx]{trarticle}
+\begin{document}
+\input /afs/transarc.com/project/fs/dev/de/doc/src/common/basedefs.tex
+
+\title{ Testing the CM Under Adverse Fileset Moves }
+\documentname{ Testing CM }
+\confidential{OSF Members Only}
+\author{Transarc Corporation} %%  \\ \ \\ OSF Members Only}
+\date{15 June, 1993 \\
+\copyright \number\year\ Transarc Corporation\\
+All Rights Reserved}
+\maketitle
+\tableofcontents
+
+\pagebreak
+\section{Background}
+\label{overviewref}
+
+Moving a fileset between two file servers (or even moving between two the 
+aggregates within the same file server)
+is a very complicated operation. It requires a lot of coordinating efforts
+between various components of the DFS system such as  
+the source and the target file server, all participating Cache Managers (CMs), 
+ftservers, flservers that manage FLDB, and the fts program itself. 
+Therefore, a failure from any one of the DFS components involved 
+in a fileset move not only would stop the move but also might have left the 
+DFS system in an inconsistent state. Even worse, for files in the moving
+fileset, the CM might have tokens granted from both the source 
+file server and target file server. 
+
+The recent enhanced work on the fileset move in the CM is to make the CM 
+system more robust and more bulletproof under any circumstances.
+Thus, in the event of an adverse fileset move, the CM will still be able to 
+recover itself from failures incurred in a fileset move.
+
+The purpose of this memo is to describe and design a set of automated test 
+programs to be used to test the CM system under adverse fileset moves. 
+These test programs will be used as part of regressional tests for fileset
+moves. 
+
+For detailed information about moving a fileset, please refer to available
+documents {\bf DCE DFS: Token Management Under Adverse Conditions } and 
+{\bf Moving Filesets Despite Errors}.
+In addition, the following paragraphs also
+briefly explain how the CM works during the course of a fileset move.
+
+Before accessing any file in a fileset, the CM always requests a HERE token 
+first for that fileset. The CM only requests the HERE token once for a given
+fileset and the HERE token information is kept in {\bf cm_volume} data
+structure representing that fileset. In essence, the HERE token is a fileset's
+property and does not belong to any files. 
+
+When the CM requests a token for a particular file, it always checks whether
+it has acquired a HERE token for the fileset containing that file.
+Normally, the CM would expect it already has the HERE token: the CM acquired
+the HERE token when it first crossed the mount point of that fileset.
+
+The file server uses revoking a HERE token as a way to tell the CM that a 
+fileset is to be moved. Therefore, upon receiving a HERE token revocation
+request for a particular fileset, the CM immediately starts
+the TSR-MOVE procedure to renew appropriate tokens from the target file 
+server. That is, for each token granted from the old (source) file server for 
+a particular active file (i.e., the file is not closed),
+the CM will get the same set of tokens from the target file server
+and also send the original one back to the old server. The CM then returns
+the HERE token to the old file server and concludes the move. 
+
+Depending on state transitions of a moving fileset, 
+any file operation to that fileset during a move would get an appropriate 
+status returned from the file server. The returned fileset status
+indicates whether a fileset is already moved to a new location, or a fileset 
+is made off line for the time being, or the fileset is not in service any 
+more, etc. The CM would react accordingly. 
+Mostly important, the whole move operation is transparent 
+to user applications: they would not even 
+notice the underlying move. 
+
+However things may not always work as planed. There could be several abnormal
+situations in which a fileset move could generate some unexpected results.
+Without proper recovery procedures in the CM, the whole DFS system could 
+become chaos. 
+For example, 
+when a fileset is moved the CM may not get a HERE token revocation request 
+from the file server due to a network partition or other unknown reasons. 
+As a result, the CM may end up having tokens for a given file from both 
+old server and new server. 
+In some case, the CM may notice that it does not have a HERE token 
+while requesting a regular type of token for a file in that fileset. 
+The CM could have just missed a fileset move. 
+
+\pagebreak
+\section{Goals}
+
+Our goals are pretty straightforward. We plan to write some test programs 
+to better test the CM to make sure that CM will behave appropriately under
+any adverse move situations. To be more specific, the goals are:
+\begin{itemize}
+\item to come up a set of test scenarios that will have a good coverage
+in testing the CM under {\bf adverse fileset moves}. 
+\item to implement a set of realistic test programs based on scenarios 
+mentioned above. More important, we plan to make them automated test programs
+by writing them in ITL test scripts. So that these test
+programs can be integrated as part of our regressional test suite
+for each future DFS release or build. 
+\end{itemize}
+
+Note that these test programs in question are only to test the CM system under
+{\bf adverse fileset moves}. Implementing additional test programs to test the
+CM system under {\bf normal move circumstances} is not in the scope of this 
+task. 
+The reason is that there are already several ITL test scripts written 
+for testing the fileset moves.  
+However, Section 4 will briefly
+describe these test programs for testing fileset moves under normal 
+circumstances. 
+
+\section {Designs of Test Programs -- Under Adverse Fileset Moves}
+
+As mentioned before, all test programs will be implemented in such a way
+that they can be run automatedly. This can be achieved by writing these
+test programs with the ITL scripts. The ITL test tool also provides a 
+distributed environment in which test programs can be synchronized with each 
+other. 
+
+In addition, each test program also uses the {\bf bomb point} library 
+functions to simulate a special event. For example, in order to create 
+an RPC {\bf communication failure} event for the CM, a {\bf bomb point} is 
+implemented in a function (of the CM source code) where each returning RPC call
+is checked. When the {\tt bomb point} is set off by the {\bf bomb program}, 
+the function will return {\bf rpc_s_comm_failure} as if the RPC call really 
+returned a communication failure to the CM. 
+
+Note that for more detailed information about the {\tt bomb point} and the 
+ITL test tool, please refer to the related documentation.
+
+All test programs will be running in a two-machine cell environment. The
+first machine, M1, is configured as primary one running DCE server, DFS server
+and DFS client (CM1). The second machine, M2, is configured as a DCE client
+running both DFS server and DFS client (CM2).
+
+\pagebreak 
+\subsection {Test Program 1 -- Moving A Fileset When Network Partitioned}
+
+\subsubsection {Test Description}
+
+When one of the clients, CM1, is reading a file
+from a particular fileset, {\tt fset1}, the network is suddenly partitioned 
+between CM1 and the file server that exports {\tt fset1}. 
+CM1's subsequent file operations to that fileset will encounter 
+RPC communication failures. As a result, 
+the HERE-token-revocation request cannot be delivered to CM1 and the fileset
+is eventually moved with a success. 
+
+After the network partition gets repaired, CM1 starts the TSR-CRASH
+procedure. It is during the TSR-CRASH procedure that the CM1 
+detects the fileset {\tt fset1} is actually moved to a new file server (M2). 
+As part of the TSR-CRASH procedure, CM1 also performs the TSR-MOVE procedure
+to recover/renew the tokens from the target file server. 
+
+The purpose of this test is to make sure that if new files are created and
+modified by CM2 while CM1 is isolated due to a network partition, new files
+and changes will be visible to CM1 after the TSR-CRASH recovery. 
+(Note that there is no conflicting token granted to either CM1 or CM2)
+
+
+\subsubsection {Bomb Point Implantation}
+
+Two bomb points will be implemented in the DFS/CM source code to mimic
+a network partition.
+\begin{itemize}
+\item A bomb point is implemented in CM's ping-server function. When the bomb
+point is set off, the ping-server calls, 
+{\bf AFS_GetTime}, start returning 
+{\bf rpc_s_comm_failure} errors to the CM. The CM marks the 
+server {\bf down} and subsequent RPC calls will not be issued.
+Note that in this test scenarios, the CM is only accessing files from one
+file server, 
+\item Another bomb point is placed in CM's HERE-token-revocation function. 
+When the bomb point is set off, the CM, upon receiving a HERE-token-revocation
+request, simply returns {\bf rpc_s_comm_failure} to the caller and
+{\b does not} perform the TSR-MOVE procedure. 
+\end{itemize}
+
+\pagebreak 
+
+\subsubsection {Test Program Logics}
+
+The test program is written with an ITL script. It has two ITL test scripts running by two 
+Spokes on M1 and M2 respectively. There is a third script running by Hub on machines M1
+as well. Here is the detailed steps. 
+\begin{programexample}
+    Hub/M1		Proc1/M1			Proc2/M2
+	 	 
+t0  Hub:- Initialization,
+	- create a fileset, fset1 and fts mount it over /:/fset1
+	- create two dirs /:/fset1/tdir1 and /:/fset1/tdir2, 
+
+t1							ls -l /:/fset1  > /dev/null
+							cat /:/fset1/* > /dev/null
+							create /:/fset1/tdir1/file3
+							write file3
+	`						close file3
+							(get all open/read/write tokens)
+t2							wait for SYNC 'NETWORK_PARTITIONED'
+t3							wait for SYNC 'MOVE_THE_FILESET'
+
+t4			ls -l /:/fset1 > /dev/null 				
+			cat /:/fset1/* > /dev/null
+			create /:/fset1/file1
+			write file1
+			create /:/fset1/tdir1/file4
+			write file4
+			(get all open/read/write tokens)
+t5			wait for SYNC 'NETWORK_PARTITIONED'
+
+t6  Hub:-Trun on `COMM_FAILURE' Bomb Point
+	- Release SYNC 'NETWORK_PARTITIONED'
+
+t7			verify the network is partitioned
+			read /:/fset1/file1 
+			(experiencing a comm failure)
+t8			wait for SYNC 'MOVE_THE_FILESET'
+t9			wait for SYNC 'NETWORK_REPAIRED'
+		
+t10 Hub:-Move fileset from M1 to M2
+t11	-Release SYNC 'MOVE_THE_FILESET'
+t12							create a new file /:/fset1/tdir1/file5
+							write /:/fset1/tdir1/file5
+							create /:/fset1/file2
+							write /:/fset1/file2
+							rename /:/fset1/tdir1/file3 to 
+							       /:/fset1/tdir2/file3
+t12							wait for SYNC 'NETWORK_REPAIRED'
+t13 Hub:-Unset the Bomb Point 
+	-(Network repaired)
+	- Release SYNC 'NETWORK_REPAIRED'
+	- (CM is doing TSR work)
+
+t15							close all files
+
+t16			Verify the results:
+			file5 created by M2 is visible by M1,  
+			file5's data integrity is ok,
+			file3 is indeed moved from tdir1 to tdir2,	
+			file1's data integrity is ok,
+			file4's data integrity is ok
+\end{programexample}
+
+\pagebreak 
+\subsection {Test Program 1.A -- Moving A Fileset When Network Partitioned}
+
+\subsubsection {Test Description}
+
+This is similar to Test No.1 except that file1 has been modified by another
+client during the network partition. After the network gets repaired, 
+the user at CM1 will get an ESTALE error when trying to read the same file
+again.
+
+The purpose of this test is to make sure that CM detects that files have been modified by
+some other clients. Therefore the CM has to mark those files bad.
+
+
+\subsubsection {Bomb Point Implantation}
+
+The same as Test 1.
+
+\pagebreak
+\subsubsection {Test Program Logic}
+
+The test program is written with an ITL script. It has two ITL test scripts
+running on M1 and M2 respectively. Here is the detailed steps. 
+
+\begin{programexample}
+    Hub/M1		Proc1/M1			Proc2/M2
+	 	 
+t0  Hub:- Initialization,
+	- create a fileset, fset1 and fts mount it over /:/fset1
+	- create two dirs /:/fset1/tdir1 and /:/fset1/tdir2, 
+
+t1							ls -l /:/fset1  > /dev/null
+							cat /:/fset1/* > /dev/null
+							create /:/fset1/tdir1/file3
+							write file3
+	`						close file3
+							(get all open/read/write tokens)
+t2							wait for SYNC 'NETWORK_PARTITIONED'
+t3							wait for SYNC 'MOVE_THE_FILESET'
+
+t4			ls -l /:/fset1 > /dev/null 				
+			cat /:/fset1/* > /dev/null
+			create /:/fset1/file1
+			write file1
+			create /:/fset1/tdir1/file4
+			write file4
+			(get all open/read/write tokens)
+t5			wait for SYNC 'NETWORK_PARTITIONED'
+
+t6  Hub:-Trun on `COMM_FAILURE' Bomb Point
+	- Release SYNC 'NETWORK_PARTITIONED'
+
+t7			verify the network is partitioned
+			read /:/fset1/file1 
+			(experiencing a comm failure)
+t8			wait for SYNC 'MOVE_THE_FILESET'
+t9			wait for SYNC 'NETWORK_REPAIRED'
+		
+t10 Hub:-Move fileset from M1 to M2
+t11	-Release SYNC 'MOVE_THE_FILESET'
+t12							open  /:/fset1/tdir1/file4
+							read/write /:/fset1/tdir1/file4
+							close file4
+							create/write /:/fset1/file2
+							rename /:/fset1/tdir1/file3 to 
+							       /:/fset1/tdir2/file3
+t12							wait for SYNC 'NETWORK_REPAIRED'
+t13 Hub:-Unset the Bomb Point 
+	-(Network repaired)
+	- Release SYNC 'NETWORK_REPAIRED'
+	- (CM is doing TSR work)
+
+t15							close file1, file2 and file3
+
+t16			Verify the results:
+			file1 is ESTALE
+			file4 is ESTALE
+			file3 is indeed moved from tdir1 to tdir2,	
+
+
+\end{programexample}
+
+\pagebreak 
+\subsection {Test Program 1.B -- Moving A Fileset When Network Partitioned}
+
+\subsubsection {Test Description}
+
+The purpose of this test is to make sure that files are opened and accessed
+by CM1 will still be accessible after the network partition gets repaired despite the
+fact that thoese files are removed by other clients during an interval where the CM1 is
+encountered a 'network partition' and the fileset in question is moved to a new location.
+This test is essentially to test the notion of {\bf ZLC} supported by the fx server.
+
+\subsubsection {Bomb Point Implantation}
+
+Same as Test No.1.
+
+\subsubsection {Test Program Logic}
+
+The test program is written with an ITL script. It has two ITL shell scripts
+running on M1 and M2 respectively. Here is the detailed steps. 
+
+\begin{programexample}
+
+    Hub/M1		Proc1/M1			Proc2/M2
+	 	 
+t0  Hub:- Initialization,
+	- create a fileset, fset1 and fts mount it over /:/fset1
+	- create two dirs /:/fset1/tdir1 and /:/fset1/tdir2, 
+
+t1							ls -l /:/fset1  > /dev/null
+							cat /:/fset1/* > /dev/null
+							wait for SYNC 'WAIT_FOR_TO_DELETE_FILES'
+
+t2			create 50 files under 
+			/:/fset1/tdir1
+			write these 50 files
+			read these 50 files
+
+t3			sleep 1 minute
+			wait for SYNC 'WAIT_FOR_TO_DELETE_FILES'
+
+t4  Hub:-Release 'WAIT_FOR_TO_DELETE_FILES'
+
+t5							before the partition,
+							delete 25 files: file1 to file25
+
+
+t6			wait for SYNC 'NETWORK_PARTITIONED'
+t7							wait for SYNC 'NETWORK_PARTITIONED'
+							wait for SYNC 'MOVE_THE_FILESET'
+
+t8  Hub:-Trun on `COMM_FAILURE' Bomb Point
+	- Release SYNC 'NETWORK_PARTITIONED'
+
+t9			verify the network is partitioned
+			read /:/fset1/file1 
+			(experiencing a comm failure)
+t10			wait for SYNC 'MOVE_THE_FILESET'
+t11			wait for SYNC 'NETWORK_REPAIRED'
+		
+t12 Hub:-Move fileset from M1 to M2
+t13	-Release SYNC 'MOVE_THE_FILESET'
+
+t14							during the partition and move
+							delete another 25 files: file26 to file50
+
+t15							wait for SYNC 'NETWORK_REPAIRED'
+
+t16 Hub:-Unset the Bomb Point 
+	-(Network repaired)
+	- Release SYNC 'NETWORK_REPAIRED'
+	- (CM is doing TSR work)
+
+t17							complete
+
+t18			CM1/Proc1 to verify the results:
+			- the first 25 files are fine,		
+			- the second 25 files are ESTALE
+
+\end{programexample}
+
+\pagebreak 
+\subsection {Test Program 2 -- Moving A Fileset When CM Is Not Involved}
+
+\subsubsection {Test Description}
+
+In a very rare situation, a fileset could be moved to a new location 
+without all of participating CMs involved. That is, the 
+HERE-token-revocation request never arrives to a particular CM during the 
+the move. Therefore, the CM still thinks that it has some tokens granted
+from the source file server. 
+
+The CM will not notice that the fileset is actually moved until
+one of users issues an RPC call to access that fileset. The RPC call
+will then trigger the CM, {\bf on the fly}, to perform the 
+TSR-MOVE procedure. 
+However, the whole TSR operations shall be still transparent to user 
+applications. 
+
+Note that this test scenario is different than that of Test No. 1 
+described above. 
+The subtle difference is that in Test No. 1, the CM experiences an RPC
+communication failure while issuing an RPC call. The CM is 
+actually isolated due to a disconnected network. 
+However, in this test scenario, the CM is not isolated from the rest of 
+DFS systems. Users in the CM do not see comm_failures from RPC calls. 
+
+The purpose of this test is to make sure that the CM will automatically 
+perform the TSR-MOVE procedure {\bf on the fly} when it notices the fileset 
+is already moved while issuing an RPC call. In essence, the CM is recovering
+tokens from the new file server at run time. In the meantime, user 
+applications  will be able to continue their file operations as if nothing 
+were happening, as long as there is no conflicting token granted from the new
+file server.
+ 
+
+\subsubsection {Bomb Point Implantation}
+
+One bomb point will be implemented in the DFS/CM source code to simulate
+the situation where the CM never gets a HERE-token-revocation request.
+\begin{itemize}
+\item Another bomb point is placed in CM's Revoke-One-Token function.
+When the bomb point is set off, the CM, upon receiving a token-revocation
+request, will simply give up that token by returning {\bf rpc_s_ok} to the 
+caller. But, in reality, the CM still thinks it has that token.
+\end{itemize}
+
+\subsubsection {Test Program Logics}
+
+The test program is written with an ITL script. It has two ITL shell scripts
+running on M1 and M2 respectively. Here is the detailed steps.
+
+\begin{programexample}
+
+    Hub/M1              Proc1/M1                        Proc2/M2
+
+t0  Hub:- Initialization,
+        - create a fileset, fset1 and fts mount it over /:/fset1
+        - create two dirs /:/fset1/tdir1 and /:/fset1/tdir2,
+
+t1							ls -l /:/fset1  > /dev/null
+							cat /:/fset1/* > /dev/null
+							open file /:/file2
+							write /:/fset1/file2
+
+							open file /:/tdir1/file3
+							write /:/fset1/tdir1/file3
+							(get all read tokens)
+							close file3
+t2		ls -l /:/fset1 > /dev/null 				
+		ls -l /:/fset1/tdir1 > /dev/null
+		ls -l /:/fset1/tdir2 > /dev/null
+		open /:/fset1/file1
+		write /:/fset1/file1
+
+		open /:/fset1/tdir2/file4
+		write file4
+		open /:/fset1/tdir2/file6
+		write file6
+
+t3		wait for SYNC 'WAIT_FOR_MISS_REVOKE'
+t4		wait for SYNC 'MOVE_THE_FILESET'
+
+t5							wait for SYNC 'WAIT_FOR_MISS_REVOKE'
+t6							wait for SYNC 'MOVE_THE_FILESET'
+
+t7  Hub:-Turn on the Bomb Point:
+	 CM lossing token-revocation rpcs
+	-Release SYNC 'WAIT_FOR_MISS_REVOKE'
+
+    Hub:-Move fileset from M1 to M2
+	-Release SYNC 'MOVE_THE_FILESET'
+
+t8		wait for SYNC 'WAIT_FOR_MISS_REVOKE_OFF'
+
+t9							(after the move )
+					                open /:/fset1/tdir2/file6
+					                write file6
+
+							create /:/fset1/tdir1/file5
+							write file5	
+							rename tdir1/file3 tdir2/file3
+t10							wait for SYNC 'WAIT_FOR_MISS_REVOKE_OFF'
+
+t11 Hub:-Turn on the Bomb Point:
+	 CM is back to normal.
+	-Release SYNC 'WAIT_FOR_MISS_REVOKE_OFF'
+	
+
+t12		CM1/Proc1 to verify the result:
+		- file2 created before move is visible to CM1
+		- file5 created after move is visible to CM1
+		- file3 is indeed removed (mv) from tdir1
+		- file3 is moved to tdir2
+		- have recovered READ/WRITE tokens and dirty data for file1
+		- file6 should be STALE
+\end{programexample}
+
+\pagebreak 
+\subsection {Test Program 2.A -- Moving A Fileset When CM Is Not Involved}
+
+\subsubsection {Test Description}
+
+The purpose of this test is very similar to Test No.1b except that in this
+test the fileset is moved while the CM1 does not handle the TSR-MOVE work
+right away. Users at CM1 later notices that the fileset is actually moved
+and then starts the TSR-MOVE at run time.
+
+This test is essentially to test the notion of 'ZLC' supported by the fx
+server.
+
+\subsubsection {Bomb Point Implantation}
+
+The same as Test No.2.
+
+\subsubsection {Test Program Logic}
+
+The test program is written with an ITL script. It has two ITL test scripts
+running on M1 and M2 respectively. Here is the detailed steps. 
+
+\begin{programexample}
+
+    Hub/M1		Proc1/M1			Proc2/M2
+	 	 
+t0  Hub:- Initialization,
+	- create a fileset, fset1 and fts mount it over /:/fset1
+	- create two dirs /:/fset1/tdir1 and /:/fset1/tdir2, 
+
+t1							ls -l /:/fset1  > /dev/null
+							cat /:/fset1/* > /dev/null
+
+t2			create 50 files under 
+			/:/fset1/tdir1
+			write these 50 files
+			read these 50 files
+
+t3			wait for SYNC 'WAIT_FOR_TO_DELETE_FILES'
+t4			wait for SYNC 'WAIT_FOR_MISS_REVOKE'
+t5			wait for SYNC 'MOVE_THE_FILESET'
+
+
+t6							wait for SYNC 'WAIT_FOR_TO_DELETE_FILES'
+
+
+t7  Hub:-Release SYNC 'WAIT_FOR_TO_DELETE_FILES'
+
+t8							delete 25 files; file1 to file25
+t9							wait for SYNC 'WAIT_FOR_MISS_REVOKE'
+t10							wait for SYNC 'MOVE_THE_FILESET'
+
+
+t11 Hub:-Trun on Bomb Point
+	- Release SYNC 'WAIT_FOR_MISS_REVOKE'
+
+t12 Hub:-Move fileset from M1 to M2
+	-Release SYNC 'MOVE_THE_FILESET'
+
+t13							after the move,
+							delete another files: file26 to file50
+							wait for SYNC 'WAIT_FOR_MISS_REVOKE_OFF'
+
+t14			wait for SYNC 'WAIT_FOR_MISS_REVOKE_OFF'
+
+t15 Hib:-Unset the Bomb Point
+	-Release SYNC 'WAIT_FOR_MISS_REVOKE_OFF'
+
+t16			Proc1/M1 to verify the results:
+			- Make sure first 25 files are accessible,
+			- Make sure the second helf 25 files are stale.
+
+
+\end{programexample}
+
+\pagebreak 
+\subsection {Test Program 3 -- Requesting System V Locking -- No Conflicting}
+
+\subsubsection {Test Description}
+
+In a very rare situation, a fileset could be moved to a new location
+without all of participating CMs involved. That is, the HERE-token-revocation
+request never arrives to a particular CM during the the move. Therefore, the
+CM still thinks that it has some tokens granted from the source file server.
+The CM will not notice that the fileset is actually moved until one of users
+issues an RPC call to access that fileset. This RPC call will then trigger 
+the CM to perform the TSR-MOVE procedure at run time. 
+ 
+The test environment of this test is very similar to Test No.2 execpt this
+test program is to make sure that CM is able to recover the System V locks
+even under this adverse fileset move.
+
+The purpose of this test is to test that the CM's {\bf on-the-fly}
+TSR-MOVE will be able to recover system locks correctly. 
+
+\subsubsection {Bomb Point Implantation}
+
+The same as Test No.2.
+
+\subsubsection {Test Program Logic}
+
+The test program is written with an ITL script. It has two ITL test scripts
+running on M1 and M2 respectively. Here is the detailed steps. 
+
+\begin{programexample}
+
+    Hub/M1		Proc1/M1			Proc2/M2
+	 	 
+t0  Hub:- Initialization,
+	- create a fileset, fset1 and fts mount it over /:/fset1
+	- create two dirs /:/fset1/tdir1 and /:/fset1/tdir2, 
+
+t1							ls -l /:/fset1  > /dev/null
+							cat /:/fset1/* > /dev/null
+							create /:/fset1/tdir2/file2
+							write-lock file2
+							write file2
+
+							create /:/fset1/tdir1/file3
+							write-lock file3,
+							write file3
+
+t2							wait for WAIT_FOR_SYSTEM5_LOCK
+
+
+t3			ls -l /:/fset1 > /dev/null
+			ls -l /:/fset1/tdir1
+			ls -l /:/fset1/tdir2
+			create /:/fset1/file1
+			write-lock entire file1
+			write file1
+			create /:/fset1/tdir1/file4
+			write-lock (16k, 16k+1000) and (40k, 40k+1000)
+t4			wait for WAIT_FOR_SYSTEM5_LOCK
+
+
+t5							test read-lock file1 and fail
+t6							wait for SYNC 'WAIT_FOR_MISS_REVOKE'
+t7							wait for SYNC 'MOVE_THE_FILESET'
+
+
+t8			test read-lock file2 and fail
+			
+t9			wait for SYNC 'WAIT_FOR_MISS_REVOKE'
+t10			wait for SYNC 'MOVE_THE_FILESET'
+t11			wait for SYNC 'WAIT_FOR_MISS_REVOKE_OFF'
+
+t12  Hub:-Trun on Bomb Point
+	- Release SYNC 'WAIT_FOR_MISS_REVOKE'
+
+t13 Hub:-Move fileset from M1 to M2
+t14	-Release SYNC 'MOVE_THE_FILESET'
+
+t15							After the move, 
+							create /:/fset1/tdir1/file5,
+							write-lock file5 and write file5,
+
+t16							close file2,
+				
+t17							wait for SYNC 'WAIT_FOR_MISS_REVOKE_OFF'
+t18							sleep one minute,
+
+t19 Hub:-Unset the Bomb Point 
+	-(Network repaired)
+	- Release SYNC 'WAIT_FOR_MISS_REVOKE_OFF'
+
+t20		        CM1/Proc1 to verify the results:
+			- OK to get read lock on file2,
+			- File1 should be STALE,
+			- File4 should be STALE,
+			- Should not get lock on file3,
+			- Should not get write lock on file5,
+
+
+t21							CM2/Proc2 to verify results:
+							-OK to get write lock on file1
+							-OK to get dwrite lock on file4
+							(CM1 lost file1 and file4)
+
+
+\end{programexample}
+   
+\pagebreak 
+\subsection {Test Program 3.A -- Request System V Locking -- Conflicting}
+
+\subsubsection {Test Description}
+
+This test is very similar to Test No.3 except that an adverse fileset move
+happened when the CM1 encounters a network partition. In essence, the CM
+is to recover the System V locks in a cascade-failure situation.
+
+The CM handles the same way as it does in a normal {\bf TSR-CRASH} situation.
+As part of the {\bf TSR-CRASHMOVE} policy, the CM marks ESTALE all files which
+used to have System V locks prior to the fileset move. Files open after the
+fileset move are fine.
+
+\subsubsection {Bomb Point Implantation}
+
+The same as Test 1 series.
+
+\subsubsection {Test Program Logic}
+
+The test program is written with an ITL script. It has two ITL test scripts
+running on M1 and M2 respectively. Here is the detailed steps. 
+
+\begin{programexample}
+
+    Hub/M1		Proc1/M1			Proc2/M2
+	 	 
+t0  Hub:- Initialization,
+	- create a fileset, fset1 and fts mount it over /:/fset1
+	- create two dirs /:/fset1/tdir1 and /:/fset1/tdir2, 
+
+t1							ls -l /:/fset1  > /dev/null
+							cat /:/fset1/* > /dev/null
+							create /:/fset1/tdir1/file3
+							write file3
+	`						close file3
+							(get all open/read/write tokens)
+							wait for WAIT_FOR_SYSTEM5_LOCK
+t2							wait for SYNC 'NETWORK_PARTITIONED'
+t3							wait for SYNC 'MOVE_THE_FILESET'
+
+t4			ls -l /:/fset1 > /dev/null
+			ls -l /:/fset1/tdir1
+			ls -l /:/fset1/tdir2
+			create /:/fset1/file1
+			write-lock entire file1
+			write file1
+			create /:/fset1/tdir1/file4
+			write-lock (16k, 16k+1000) and (40k, 40k+1000)
+
+t5			wait for WAIT_FOR_SYSTEM5_LOCK
+			test read-lock file2 and fail
+			
+t5			wait for SYNC 'NETWORK_PARTITIONED'
+
+t6  Hub:-Trun on `COMM_FAILURE' Bomb Point
+	- Release SYNC 'NETWORK_PARTITIONED'
+
+
+t7			verify the network is partitioned
+			read /:/fset1/file1 
+			(experiencing a comm failure)
+t8			wait for SYNC 'MOVE_THE_FILESET'
+t9			wait for SYNC 'NETWORK_REPAIRED'
+		
+t10 Hub:-Move fileset from M1 to M2
+t11	-Release SYNC 'MOVE_THE_FILESET'
+t12							open  /:/fset1/tdir1/file4
+							read/write /:/fset1/tdir1/file4
+							close file4
+							create/write /:/fset1/file2
+							rename /:/fset1/tdir1/file3 to 
+							       /:/fset1/tdir2/file3
+t12							wait for SYNC 'NETWORK_REPAIRED'
+t13 Hub:-Unset the Bomb Point 
+	-(Network repaired)
+	- Release SYNC 'NETWORK_REPAIRED'
+	- (CM is doing TSR work)
+
+t15							close file1, file2 and file3
+
+t16			Verify the results:
+			file1 is ESTALE
+			file4 is ESTALE
+			file3 is indeed moved from tdir1 to tdir2,	
+
+
+\end{programexample}
+
+\pagebreak 
+\subsection {Test Program 4 -- Test the CM With Abnormal Fileset States}
+
+\subsubsection {Test Description}
+
+As described in memo {\bf Moving Filesets Despite Errors}, during a fileset
+move, there could be cases where {\bf move state} of the fileset managed by the
+ftserver and the location of the fileset are not consistent. 
+For example, during a fileset move, the fileset's {\bf state } in the 
+source machine is 
+marked VOL_MOVE_SOURCE indicating that the fileset has moved to a new location.
+However, the FLDB may still point to the source server location. 
+The detailed information about these abnormal states are documented in 
+{\bf Section 4.2 Error states and their transitions}.
+
+In any event, the CM when experiencing an adverse condition like this 
+should be able to break out quickly without staying in an RPC loop. 
+
+The purpose of the following three tests is to make sure that the CM is still
+robust and is able to recover from these situations.  
+
+This particular test program is only to test the CM under the situation where 
+\begin{itemize}
+\item the source fileset is left with {\bf VOL_MOVE_SOURCE}, 
+\item the {\tt FLDB} entry is still left pointing to the {\bf source} location.
+\end{itemize}
+\subsubsection {Bomb Point Implantation}
+
+No bomb point is implanted in the kernel code. However, we need 
+the {\bf fts} program to set off the bomb points implanted in the ftserver code
+to establish these abnormal fileset states. 
+
+
+\subsubsection {Test Program Logic}
+
+The test program is written with an ITL script. It has two ITL test scripts
+running on M1 and M2 respectively. Here is the detailed steps. 
+
+\begin{programexample}
+
+Sequences	M1					M2
+
+t0		create a fileset, fset1 and fts mount it over /:/fset1
+		create one file: file1
+            
+t1							ls -l /:/fset1
+							(get all read tokens)
+							** May not be needed. 
+t2		ls -l /:/fset1
+		(get all read tokens)
+		
+
+t3		open /:/fset1/file1
+		read /:/fset1/file1
+
+t4		SYNC POINT	
+		set off fts bomb point to create 
+		that abnormal move state mentioned above
+
+		SYNC POINT
+		move fset1 from M1 to M2
+
+
+t5		SYNC POINT
+		read /:/fset1/file1 
+		should fail quickly without being
+		hung there. 
+
+\end{programexample}
+
+
+
+\subsection {Test Program 4.A -- Test the CM With Abnormal Fileset States}
+
+\subsubsection {Test Description}
+
+This test is very similar to Test No.4 except that it is to test the CM 
+under the situation where 
+\begin{itemize}
+\item the source fileset is left with {\bf VOL_MOVE_SOURCE}, 
+\item the {\tt FLDB} entry is left pointing to the {\bf target} location,
+\item the target fileset is left with {\bf VOL_MOVE_TARGET} and {\bf VOL_OUTOFSERVICE}.
+\end{itemize}
+
+\subsubsection {Bomb Point Implantation}
+
+Same as Test No. 4.
+
+\subsubsection {Test Program Logic}
+
+The test program is written with an ITL script. It has two ITL test scripts
+running on M1 and M2 respectively. Here is the detailed steps. 
+
+\begin{programexample}
+
+Sequences	M1					M2
+
+t0		create a fileset, fset1 and fts mount it over /:/fset1
+		create one file: file1
+            
+t1							ls -l /:/fset1
+							(get all read tokens)
+							** May not be needed. 
+t2		ls -l /:/fset1
+		(get all read tokens)
+		
+
+t3		open /:/fset1/file1
+		read /:/fset1/file1
+
+t4		SYNC POINT	
+		set off fts bomb point to create 
+		that abnormal move state mentioned above
+
+		SYNC POINT
+		move fset1 from M1 to M2
+
+
+t5		SYNC POINT
+		read /:/fset1/file1 
+		should fail quickly without being
+		hung there. 
+
+\end{programexample}
+
+\subsection {Test Program 4.B -- Test the CM With Abnormal Fileset States}
+
+\subsubsection {Test Description}
+
+This test is also very similar to Test No.4 execept that it is to test the CM 
+under the situation where 
+\begin{itemize}
+\item
+the source fileset is left with {\bf VOL_MOVE_SOURCE} and {\bf VOL_OUTOFSERVICE},
+\item the {\tt FLDB} entry is left pointing to the {\bf source} location
+\end{itemize}
+
+\subsubsection {Bomb Point Implantation}
+
+Same as Test No.4.
+
+\subsubsection {Test Program Logic}
+
+The test program is written with an ITL script. It has two ITL test scripts
+running on M1 and M2 respectively. Here is the detailed steps. 
+
+\begin{programexample}
+
+Sequences	M1					M2
+
+t0		create a fileset, fset1 and fts mount it over /:/fset1
+		create one file: file1
+            
+t1							ls -l /:/fset1
+							(get all read tokens)
+							** May not be needed. 
+t2		ls -l /:/fset1
+		(get all read tokens)
+		
+
+t3		open /:/fset1/file1
+		read /:/fset1/file1
+
+t4		SYNC POINT	
+		set off fts bomb point to create 
+		that abnormal move state mentioned above
+
+		SYNC POINT
+		move fset1 from M1 to M2
+
+
+t5		SYNC POINT
+		read /:/fset1/file1 
+		should fail quickly without being
+		hung there. 
+
+\end{programexample}
+
+
+\pagebreak
+\section {Fileset Moves During Normal Circumstances}
+   
+
+\subsection {Test Description}
+
+When a fileset gets moved from one file server to another file server, 
+there are several state transitions for filesets 
+on both the source server and the target server. 
+As a result, any file operations to the fileset during the move will 
+encounter different errors or status. 
+Documentation {\bf Moving Filesets Despite Errors}
+illustrates a detailed list of {\bf state transitions} during the normal 
+circumstances. 
+
+However, during a fileset move under a normal circumstances, 
+the CM may only encounter two types of errors when accessing either the source
+fileset or the target fileset. They are 
+{\bf transient fileset errors} and  {\bf persistent fileset errors}. For
+a transient fileset error condition, the CM understands that the fileset
+is unavailable only for a short interval. This could be because that the 
+server is cloning the fileset or is temporarily taking it off line. In 
+any event, the CM will prints out a message indicating the fileset is busy
+and then sleeps for a while and retrys it later. 
+
+In the case of a persistent fileset error condition, the CM notices that 
+the fileset is not exported by the original file server any longer. 
+The filset might 
+be either deleted or moved to somewhere else. The CM will contact the 
+{\bf FLDB} to find out about the fileset's new location and then determine 
+whether that the fileset is permanently deleted. 
+
+Unless the fileset is deleted, user applications
+will be able to continue their file operations transparently as if 
+nothing happened. The CM will take appropriate recovery procedure to 
+renew tokens from the new target server. 
+
+Testing the CM under this normal circumstances becomes very straightforward. 
+Any test programs that constantly issues RPC calls against that fileset
+while it is moving to a new server will cause the CM to receive these two 
+types of errors mentioned above. The CM will take appropriate actions based
+on the type of errors it receives. 
+
+\subsection {Test Programs}
+
+The existing {\bf connectathon test program} will be used to the CM 
+under the normal circumstances. The test will consist of three processes
+running on two CMs. One of the processes is moving a fileset from M1 to
+M2. In the meantime, the other two processes are running a copy of 
+{\bf connectathon test} in that fileset from each CM respectively. 
+
+The connectathon tests will run to the end without encountering any fatal
+errors. 
+
+
+\end{document}

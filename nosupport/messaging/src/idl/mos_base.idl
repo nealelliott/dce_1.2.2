@@ -1,0 +1,221 @@
+/* ______________________________________________________________________
+ * Copyright (c) 1996 The Open Group, Inc., Cambridge, MA USA
+ * All rights reserved.
+ * ______________________________________________________________________
+ *
+ *	M O S _ B A S E . I D L
+ *
+ * Data types shared amongst the various components.
+ * ______________________________________________________________________
+ *
+ * $Log: mos_base.idl,v $
+ * Revision 1.8  1996/10/03  18:41:47  bowe
+ * Added notice_sec_name. Renamed notice_dest, notice_opts.
+ *
+ * Revision 1.7  1996/09/30  20:27:51  bowe
+ * Add constants:  mos_c_use_{empty_timeout,expire_time,valid_time}.
+ *
+ * Revision 1.6  1996/09/26  17:30:58  bowe
+ * Added mos_c_info_uuid to the enum.
+ *
+ * Revision 1.5  1996/09/26  17:28:02  bowe
+ * Added utc_t to mos_kv_pair_t.
+ *
+ * Revision 1.4  1996/09/26  15:24:56  bowe
+ * Added mos_kv_pair_t, mos_kv_pair_list_t.
+ *
+ * Revision 1.3  1996/09/17  16:38:36  bowe
+ * Misc minor cleanup and attribute name clarification.
+ *
+# Revision 1.2  1996/09/16  20:56:22  bowe
+# Rename *_attr_* to *_mattr_*. Added persistence and queue
+# enable/disable attributes.
+#
+# Revision 1.1  1996/09/12  15:42:58  bowe
+# Initial revision
+#
+ * $EndLog$
+ * ______________________________________________________________________
+ */
+
+[
+    uuid(91ad2644-b980-11cf-b2f8-0800092474cc),
+    pointer_default(ptr),
+    version(1.0)
+]
+
+interface mos_base
+{
+    import "dce/aclbase.idl";
+    import "dce/utctypes.idl";
+    import "dce/id_epac.idl";
+    import "mostypes.idl";
+
+    /* ACL bits - management */
+    const unsigned32 mos_perm_create	= sec_acl_perm_insert;
+    const unsigned32 mos_perm_manage	= sec_acl_perm_execute;
+    const unsigned32 mos_perm_control	= sec_acl_perm_control;
+    const unsigned32 mos_perm_test	= sec_acl_perm_test;
+    const unsigned32 mos_perm_rdattr	= sec_acl_perm_read;
+
+    /* ACL bits - per queue */
+    /* also included mgmt ones above: manage, control, test */
+    const unsigned32 mos_perm_delete	= sec_acl_perm_delete;
+    const unsigned32 mos_perm_enqueue	= sec_acl_perm_insert;
+    const unsigned32 mos_perm_dequeue	= sec_acl_perm_read;
+    const unsigned32 mos_perm_rdqattr	= sec_acl_perm_unused_00000080;
+    const unsigned32 mos_perm_rdmattr	= sec_acl_perm_unused_00000100;
+    const unsigned32 mos_perm_purge	= sec_acl_perm_unused_00000200;
+
+
+    /* Flag bits for qattr */
+    const unsigned32 mos_c_use_empty_timeout	= 0x00000001;
+
+    /* Flag bits for mattr */
+    const unsigned32 mos_c_use_expire_time	= 0x00000001;
+    const unsigned32 mos_c_use_valid_time	= 0x00000002;
+
+    /* ________________________________________________________ */
+    /* Some building blocks. */
+
+    typedef struct mos_uuid_s_t {
+	unsigned32	count;
+	[ptr,size_is(count)]
+	  uuid_t	*list;
+    } mos_uuid_list_t;
+
+    typedef [string] char * mos_string_t;
+
+    typedef struct mos_string_s_t {
+	unsigned32	count;
+	[ptr,size_is(count)]
+	  mos_string_t	*list;
+    } mos_string_list_t;
+
+    /* ________________________________________________________ */
+
+    /* Attributes on each item (message) itself */
+    typedef struct mos_mattr_s_t {
+	uuid_t		id;		/* ID of this item in the queue */
+	uuid_t		datatype;	/* manager that encoded it */
+	mos_msg_attr_msgtype_t
+			msgtype;	/* message type */
+	sec_id_pa_t	sender;		/* sender identity */
+	unsigned32	priority;	/* priority */
+	unsigned32	flags;		/* flags */
+	mos_msg_attr_persistence_t
+			persistence;	
+	/* notice_dest, notice_sec may be null */
+	unsigned32	notice_opts;	/* notice options */
+	[ptr,string]
+	  char		*notice_dest;	/* name of ack/reply queue */
+	[ptr,string]
+	  char		*notice_sec_name;
+					/* sec group other qmgr must be in */
+	unsigned32	protectlvl;	/* protection level */
+	/* want a counter instead of time enqueued? */
+	utc_t		time_enqueued;	/* when msg was enqueued by q-mgr */
+	utc_t		expire_time;	/* when this msg will expire */
+	utc_t		valid_time;	/* when this msg will become valid */
+	uuid_t		qid;		/* ID of queue where this lives */
+    } mos_mattr_t;
+
+    /* This is for packing a message and its attributes,
+     * to be written to a backing store.
+     */
+    typedef struct mos_qitem_s_t {
+	mos_mattr_t			mattr;
+	mos_datatype_bytearray_t	body;
+    } mos_qitem_t;
+
+
+    /* Attributes on a queue */
+    typedef struct mos_qattr_s_t {
+	uuid_t		id;		/* ID of the queue */
+	[ptr,string]
+	  char		*name;		/* name of the queue */
+	[ptr,string]
+	  char		*annotation;	/* annotation */
+	mos_string_list_t
+			aliases;	/* alias names of the queue */
+	mos_que_attr_persistence_t
+			persistence;	
+	boolean		enq_enabled;	/* enqueue: enable/disable */
+	boolean		deq_enabled;	/* dequeue: enable/disable */
+	unsigned32	flags;		/* flags */
+	unsigned32	len;		/* current length of queue [ro] */
+	unsigned32	max_msgsize;	/* max message size */
+	unsigned32	max_qlen;	/* max length of queue */
+	unsigned32	n_available;	/* available items in queue */
+	utc_t		created;	/* time created [ro] */
+	utc_t		empty_timeout;	/* idle/empty time before removing */
+	utc_t		last_activity;	/* time of last activity [ro] */
+	uuid_t		acl;		/* ACL uuid - internal use [ro] */
+    } mos_qattr_t;
+
+    /* List of queue attributes (for returning via RPC) */
+    typedef struct mos_qattr_list_s_t {
+	unsigned32	count;
+	[ptr,size_is(count)]
+	  mos_qattr_t	*list;
+    } mos_qattr_list_t;
+
+    /* ________________________________________________________ */
+    /* List of masks for selection filtering (for passing via RPC) */
+
+    typedef struct mos_mask_s_t {
+	mos_msg_selmask_op_t	relation;	/* =, <, >, etc. */
+	union	mos_mask_type_u
+	    switch (mos_msg_selmask_type_t mask_type) tagged_union {
+		case mos_c_mask_type_msgid:
+		    uuid_t	id;
+		case mos_c_mask_type_msgtype:
+		    mos_msg_attr_msgtype_t	msgtype;
+		case mos_c_mask_type_priority:
+		    unsigned32	priority;
+		case mos_c_mask_type_datatype:
+		    uuid_t	datatype;
+		case mos_c_mask_type_protectlvl:
+		    unsigned32	protectlvl;
+		case mos_c_mask_type_sender_prin:
+		    uuid_t	sender;
+	    } mask_info;
+    } mos_mask_t;
+
+    typedef struct mos_mask_list_s_t {
+	unsigned32	count;
+	[ptr,size_is(count)]
+	  mos_mask_t	*list;
+    } mos_mask_list_t;
+
+    /* ________________________________________________________ */
+    /* For mos_mgmt_info - key-value pairs */
+
+    typedef enum {
+	mos_c_info_string, mos_c_info_u32, mos_c_info_uuid, mos_c_info_utc
+    } mos_info_type_t;
+
+    typedef struct mos_kv_pair_s_t {
+	[ptr,string]
+	  char		*key;
+	union	value_u
+	    switch (mos_info_type_t type) tagged_union {
+		case mos_c_info_string:
+		    mos_string_t	s;
+		case mos_c_info_u32:
+		    unsigned32		i;
+		case mos_c_info_uuid:
+		    uuid_t		uuid;
+		case mos_c_info_utc:
+		    utc_t		t;
+	    } value;
+    } mos_kv_pair_t;
+
+    typedef struct mos_kv_pair_list_s_t {
+	unsigned32		count;
+	[ptr,size_is(count)]
+	  mos_kv_pair_t		*list;
+    } mos_kv_pair_list_t;
+
+}
+

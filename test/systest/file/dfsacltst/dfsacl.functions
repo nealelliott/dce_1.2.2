@@ -1,0 +1,144 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dfsacl.functions,v $
+# Revision 1.1.6.2  1996/03/11  02:44:36  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:07:38  marty]
+#
+# Revision 1.1.6.1  1995/12/11  21:59:57  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:59:09  root]
+# 
+# Revision 1.1.4.2  1994/06/10  20:48:42  devsrc
+# 	cr10872 - fixed copyright
+# 	[1994/06/10  17:18:57  devsrc]
+# 
+# Revision 1.1.4.1  1994/06/03  16:22:51  annie
+# 	fixed incorrect comment leaders
+# 
+# 	 Revision 1.1.2.2  1993/02/27  00:28:58  ramb
+# 	 	Revised version
+# 	 	[1993/02/27  00:25:50  ramb]
+# 
+# 	 	Initial version
+# 	 	[1993/02/22  15:07:10  ramb]
+# 	[1994/06/03  15:44:25  annie]
+# 
+# $EndLog$
+#
+# This file contains a number of functions that would be used by other scripts
+#
+gethostname()
+{
+	HOSTNAME=`hostname | cut -f1 -d. 2>/dev/null`
+	export HOSTNAME
+}
+
+dfstest()
+{
+	dfsoperation=$1
+	expected_outcome=$2
+	
+	if [ "$expected_outcome" = "granted" ]
+	then
+		EXPECTED_STATUS=0
+		STATUS_STRING="granted"
+	else
+		EXPECTED_STATUS=1
+		STATUS_STRING="denied"
+	fi
+
+	echo "LOG:   $MYCELLNAME:$MYHOSTNAME:$MYOBJECTNAME:$MYPRINCIPALNAME:Testing for '$dfsoperation' to be '$STATUS_STRING'"  >> $LOGFILENAME
+
+
+	dfs_$dfsoperation $MYOBJECTNAME
+	return_status=$?
+	if [ return_status -eq $EXPECTED_STATUS ]
+	then
+		echo "PASSED:$MYCELLNAME:$MYHOSTNAME:$MYOBJECTNAME:$MYPRINCIPALNAME:$dfsoperation access to object was $STATUS_STRING" >> $LOGFILENAME
+	else
+		echo "FAILED:$MYCELLNAME:$MYHOSTNAME:$MYOBJECTNAME:$MYPRINCIPALNAME:$dfsoperation access to object was not $STATUS_STRING" >> $LOGFILENAME
+	fi
+	return return_status
+}
+	
+verify_hostname()
+{
+	if [ "$MYHOSTNAME" != "$HOSTNAME" ]
+	then
+		echo "FATAL: $MYCELLNAME:$MYHOSTNAME:$MYOBJECTNAME:$MYPRINCIPALNAME:My hostname ($HOSTNAME) does not match with ($MYHOSTNAME) specified in the file!   Aborting...." >> $LOGFILENAME
+		exit FAILURE
+	fi
+}
+	
+verify_cellname()
+{
+#	get my current cellname from cdscp and check it against the one in the
+#	file. If they don't match... complain and exit
+	local_cellname=`cdscp show cell /.: as dns 2> /dev/null | grep 'CELL   /.../' | cut -f3 -d'/'`
+	if [ "$local_cellname" != "$MYCELLNAME" ]
+	then
+		echo "FATAL: $MYCELLNAME:$MYHOSTNAME:$MYOBJECTNAME:$MYPRINCIPALNAME:My cellname ($local_cellname) does not match with ($MYCELLNAME) specified in the file! Aborting..." >> $LOGFILENAME
+		exit FAILURE
+	fi
+}
+
+
+dfs_read()
+{
+	echo "In dfs_read"
+}
+
+dfs_write()
+{
+	echo "In dfs_write"
+}
+
+dfs_execute()
+{
+	echo "In dfs_execute"
+}
+
+dfs_control()
+{
+	echo "In dfs_control"
+}
+
+dfs_insert()
+{
+	echo "In dfs_insert"
+}
+
+dfs_delete()
+{
+	echo "In dfs_delete"
+}
+
+check_for_testfile()
+{
+	if [ ! -x $TESTFILENAME ]
+	then
+		echo "FATAL: $MYCELLNAME:$MYHOSTNAME:$MYOBJECTNAME:$MYPRINCIPALNAME:File $TESTFILENAME is not available for executing! Aborting..." >> $LOGFILENAME
+		exit FAILURE
+	fi
+}
+
+
+
+#----------------------------- main commands ---------------------------------
+FALSE=0
+TRUE=1
+#
+SUCCESS=0
+FAILURE=-1
+#
+#
+gethostname
+TESTFILENAME=$TESTFILENAME.$MYHOSTNAME
+

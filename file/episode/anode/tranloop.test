@@ -1,0 +1,76 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: tranloop.test,v $
+# Revision 1.1.10.1  1996/10/02  17:19:33  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:29:05  damon]
+#
+# Revision 1.1.4.1  1994/06/09  13:59:13  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:34:30  annie]
+# 
+# Revision 1.1.2.2  1993/03/09  18:31:01  jaffe
+# 	Transarc delta: ota-ot7298-StartTran-must-wait-more 1.1
+# 	  Selected comments:
+# 	    In a non-preemptive environment we must be very careful to sleep
+# 	    whenever we can not satisfy our caller's requirements directly.
+# 	    Spinning until the right thing happens is not good enough.  This type of
+# 	    problem has caused trouble before.
+# 	    In this case elbt_StartTran is having trouble because the log is full
+# 	    because of a running transaction.  It can't wait for the transaction to
+# 	    end because it is an undo-zero transaction.  The reason it can't wait
+# 	    for an undo-zero transaction is that some are started by VM daemons and
+# 	    some are started by the buffer, and if it waits for one of the latter it
+# 	    can deadlock because only its caller can end these transactions.
+# 	    The problem was that it was returning but the transaction it needed to
+# 	    wait for was a VM undo-zero, so the buffer undo-zero ending code found
+# 	    nothing to do.  The result was that it looped not doing anything and
+# 	    never waiting on any condition.
+# 	    The fix is to wait on undo-zero transactions carefully so that we can't
+# 	    deadlock waiting for our own undo-zeros.
+# 	    User space test which reproduces this problem by doing VM data intensive
+# 	    work and metadata intensive work at the same time in an aggregate with a
+# 	    minumum sized log.
+# 	[1993/03/09  16:59:17  jaffe]
+# 
+# $EndLog$
+# /* Copyright (C) 1993 Transarc Corporation - All rights reserved */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/tranloop.test,v 1.1.10.1 1996/10/02 17:19:33 damon Exp $
+
+# tranloop -- tries to stimulate a loop in StartTran by running lots of VM
+#     with lots of metadata intensive stuff.
+
+tranloop 1
+modify_afsdb anode on 31		# turn on code block counting
+modify_afsdb anode on 29		# turn on preempts
+set_vm on 1024
+
+open_device 0 1024 1024 3000
+create_aggregate 75			# minimum size log
+create_vol foo 0,,0 10000
+
+open_device 1 4096 1024 1500
+create_aggregate 22			# minimum size log
+create_vol bar 0,,0 10000
+
+create_file a
+write_file 0 10000 314159
+read_file 0 10000 314159
+check_device
+
+fork mp.int.test			# start metadata activity
+
+open_file foo.root
+fork big_file.int.test			# VM activity on both devices
+open_file bar.root
+fork big_file.int.test
+
+wait
+check_device
+coverage
+end

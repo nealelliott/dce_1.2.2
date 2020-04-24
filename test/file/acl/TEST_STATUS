@@ -1,0 +1,303 @@
+This document describes the improvements of the new ACL tests over the
+old ones. The new tests cover all functionality covered by the old
+tests in a more robust, reliable and the correct way. Also this
+document contains an ACL test checklist with medium level of detail.
+
+Old ACL tests v/s New ACL tests
+===============================
+Setup/Execution/Cleanup
+The setup/execution mechanism in the old tests was very complicated
+and baroque.  These mechanism has been completely overhauled. For
+details refer to the README file. The old file cleanup mechanism
+did not work. This has now been fixed.
+
+Test source and execution dirs
+The old tests had to be copied over to the test directory. The new
+tests do not need you to copy the tests files into the test directory.
+Further the new tests do not even need you to cd into the test
+directory to run the tests.
+
+Log location
+In the old tests, all the log files were stored in the test directory
+and you could not specify them to be stored elswhere. In the new
+tests, the log files can be stored in any place of your choice.
+
+Security account setup/cleanup.
+The mechanisms to remove the local and DCE accounts created for the
+tests was not correctly and completely implemented. This has been 
+implemented in the new tests.
+
+Error handling and reporting
+The old main acl tests driver would report success even on failure of
+subtests. The new tests main driver records and reports the result of
+various sub tests faithfully. Also the old sub tests were inconsistent
+in logging failures. The new sub tests faithfully report and record
+all errors.
+
+Access tests
+The old accheck tests were completely broken. They were supposed to
+exercise access checks for 5 different categories of users and due to
+internal inconsistencies, they only did it for one category of users -
+the owner of the files. Also the other bogosity is that the access
+checks were made in user space instead of kernel space. The new tests
+were redesigned and rewritten to cover all 5 categories correctly.
+Further these 5 basic categories only cover only about 5% of all the
+cases. The current framework allows one to extend the tests to cover
+the remaining majority of the cases easily. Also the new tests make the
+access checks in kernel space.
+
+Test checklist
+==============
+
+The check list here contains moderate level of detail except in
+Foreign ACL test, where only the very high level categories are
+listed. The items marked with * are currently covered. The items
+marked with M have manual test checklists that can be executed
+manually. These need to be automated depending on project goals and
+resource availability. The manual test procedures are listed in the
+file indicated.
+
+Access checks
+-------------
+    These tests are for checking correct grant and denial of access.
+
+    User categories
+    [ Key - pgroup = primary group, sgroup = secondary group ]
+        User_obj test
+            user_obj_user       no_matching_group
+*           user_obj_user       group_obj_pgroup
+            user_obj_user       group_obj_sgroup    
+            user_obj_user       group_pgroup
+            user_obj_user       multiple groups
+        
+        User test
+*           user_user           no_matching_group
+            user_user           group_obj_pgroup
+            user_user           group_obj_sgroup    
+            user_user           group_pgroup
+            user_user           multiple groups
+    
+        Group_obj, Group test   
+            no_matching_user    group_obj_pgroup
+            no_matching_user    group_obj_sgroup
+*           no_matching_user    group_pgroup        
+            no_matching_user    group_sgroup        
+            no_matching_user    multiple groups
+               (There are many cases here, specially combinations 
+        involving group_obj and group_entries via primary and
+        secondary groups.)  
+
+        Other_obj test
+*           no_matching_user    no_matching_group   
+
+M  Cell admin access test
+   Test access rights for cell admin. Cell_admin of the storing cell
+   should have "c" rights on every file and directory object in that
+   cell.
+
+   Manual test procedures in specialAccessTest.manual
+
+   Cases
+    - ACL with only simple entries. Try several combinations including 
+      coverage of case of ACL with no c right to other_obj. Some
+      combinations selected essentially arbitrarily which ensuring no c
+      rights to other_obj are given below.
+
+            user_obj    group_obj   other_obj
+      File
+            rwxc        rx          x
+            rwc         rw          r
+      Dir
+            rwxcid      rx          r
+            rwcid       rwid        rwi 
+
+    - ACL with user, group entries. Try several combinations. Some
+      combinations selected essentially arbitrarily which ensuring no c
+      rights to other_obj are given below.
+
+            user_obj    group_obj   other_obj   mask_obj    user:foo  group:bar
+      File
+            rwxc        rx          r           rwx         rwx         rx
+            rwxc        rx          x           rx          rx          r
+      Dir
+            rwxcid      rwid        r           rwid        rwi         rwd
+            rwcid       rw          rw          rw          r           r
+
+    - ACL with explicit denial of c right to cell_admin via a
+      user:cell_admin entry.
+
+    - ACL with explicit denial of c right to sys admin group via
+      an subsys/dce/dfs-admin group entry.
+
+Network root access test    
+   Test access rights for network root. 
+
+M  Special Access Cases: 
+   The cell's root account should have ALL rights on every file and
+   directory object in that cell.
+   For files, try rcwx and for dir, rwxcid
+
+   Manual test procedure in specialAccessTest.manual
+
+    - ACL with only simple entries. Try several combinations including 
+      coverage of case of ACL with no rights to other_obj.
+
+            user_obj    group_obj   other_obj
+      File
+            rwxc        rx          -
+			c			-			-
+      Dir
+            rwxcid      rwxi        -
+	        c			-			-
+
+    - ACL with user, group entries. Try several combinations again.
+
+            user_obj    group_obj   other_obj   mask_obj    user:foo  group:bar
+      File
+         	rwxc        rwx         -           rwx         rw          rx
+			c			-			-			-			-			-
+      Dir
+         	rwxcid      rwid        -           rwid        rwi         rwd
+			c			-			-			-			-			-
+
+    - ACL with explicit denial of rights to root via a user:root entry.
+
+    - File owned by DCE root with an ACL with null rights except for
+      user_obj:c
+
+    Chown access right
+    Network root has chown rights like super user for local files.
+
+M   File/dir owner implicit rights
+    Test to check implicit rights for file owners. A owner of a file or
+    directory should always have c rights on the owned file or
+    directory.
+
+    Manual test procedure in specialAccessTest.manual
+
+    Cases
+
+    - Ensure that owner cannot take away c right for user_obj on file
+      and dir.
+    - Ensure that cell_admin cannot do so either.
+    - Ensure that root cannot do so either.
+    - Ensure that other users with c right to ACL cannot do so either.
+
+    Directory access checks
+    Need directory access checks.
+
+    Mask_obj tests
+    Checks to ensure mask_obj does not affect access by user_obj and 
+    other_obj.
+*   Checks to ensure mask_obj covers access by user, group_obj,
+    group.
+    Checks to ensure mask_obj covers access by any_other.
+
+    Unauthenticated mask
+    The unauthenticated mask is not used in DFS anymore.
+    Tests to ensure unauthenticated mask has no effect on access for 
+    authenticated and unauthenticated users.
+
+    Unauthenticated access
+    Need tests for unauthenticated access.
+
+Mode bit and ACL interaction
+----------------------------
+    These tests test interaction of mode bits and ACLs as per POSIX.
+
+    Correct cases in existing test for interactions with mask_obj.
+
+    The tests do relative end-to-end verification but not absolute 
+    end-to-end verification e.g. they check that mode bits and
+    ACL mode perm bits are in lockstep but these are never compared
+    to absolute values.
+    
+    Test interaction in absence of mask_obj 
+        For files 
+            Changing ACLs ->  Change modebits
+            Changing modebits. -> Change ACLs
+        For dirs
+            Changing ACLs ->  Change modebits
+            Changing modebits. -> Change ACLs
+
+    Test interaction in presence of mask_obj 
+        For files.
+        Change ACL group_obj !-> Change group UNIX mode
+        Change group UNIX mode !-> Change ACL group_obj
+*           Changing ACLs (in mask_obj, excluding group_obj)
+*           Changing modebits.
+        For directories
+            Changing ACLs (in mask_obj, excluding group_obj)
+            Changing modebits.
+    
+ACL consistency
+---------------
+*   Verify integrity of ACL entries in both files and directories.
+    
+ACL inheritance
+---------------
+    Test interaction of umask in inheritance
+*   Test file ACL inheritance with non-conflicting mode bits
+    Test directory ACLs inheritance with non-conflicting mode bits
+    Test file ACL inheritance with conflicting mode bits
+*   Test directory ACLs inheritance with conflicting mode bits.
+    Test to break ACLs sharing on files and directories. 
+*       Verify that ACLs on other objects are preserved.
+        Verify that ACLs on objects responsible for cow linkage
+        breakage are correctly broken.
+
+System call access checks
+-------------------------
+    Tests access checking in various system calls/library routines
+    including denials with expected error codes. Various candidate
+    system calls are
+*       utime
+*       open
+        rename
+            Modification of rename test to be consistent with others.
+*       chmod
+*       mkdir
+*       rmdir
+*       stat
+*       opendir     
+        setacl
+        getacl 
+
+Well formed ACL tests
+---------------------
+    Test that ACLs with entries other than user_obj, group_obj, other_obj
+    have mask_obj.
+
+Umask interaction
+-----------------
+    Test umask interaction.
+
+Large ACLs
+----------
+    Tests to growing ACLs to max size possible and then to shrink 
+    them. Max size possible is 8192 bytes.
+
+    Add sufficient # principals into local registry to exercise 
+    growing and shrinking of ACLs.
+
+Foreign ACL testing
+-------------------
+    The tests that need enhancements are Access Check, Mode bit and ACL
+    interaction, ACL consistency, ACL inheritance and System calls access 
+    checks, Wel formed ACL tests.
+
+    The high level categories are explained below.
+    Let the object be stored in cell S, owned by user UO from cell O
+    and let access requested be from user VR from cell R.
+    The tests need to cover various scenarios:
+        S = O = R
+        S = O, R != S or O
+        S != O, R = S
+        S != O, R = O
+        S != O, R != S, R != O 
+
+    An important test case is verification of realm conversions during
+    inheritance.
+
+	Jason has provided a manual test checklist for a limited set of
+	scenarios in foreignAclTests.manual.

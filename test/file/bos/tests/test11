@@ -1,0 +1,603 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: test11,v $
+# Revision 1.1.630.1  1996/10/17  18:17:00  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:49:31  damon]
+#
+# Revision 1.1.625.1  1994/02/04  20:39:33  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:22:08  devsrc]
+# 
+# Revision 1.1.623.1  1993/12/07  17:41:02  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  18:36:40  jaffe]
+# 
+# Revision 1.1.4.4  1993/01/11  17:38:24  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  16:55:16  htf]
+# 
+# Revision 1.1.4.3  1992/10/28  16:00:08  jaffe
+# 	Transarc delta: comer-ot4849-misc-bos-command-test-cleanup 1.3
+# 	  Selected comments:
+# 	    Miscellaneous clean-up of the bos command test suite.
+# 	    More cleanup of the bos test suite
+# 	    Installed a working version.  Fixed an rcp problem.
+# 	    Change Makefiles to install files into the export tree.  This should
+# 	    later be changed to install into the install tree as soon as we decide
+# 	    on the correct tree layout.  In the meantime, put the files under
+# 	    export/<machine>/test/bos.
+# 	[1992/10/27  16:47:49  jaffe]
+# 
+# Revision 1.1.4.2  1992/09/25  17:01:14  jaffe
+# 	Transarc delta: rajesh-ot5015-bos-test-fixes 1.7
+# 	  Selected comments:
+# 	    Various changes to fix problems in Ot 5015. This version of the delta
+# 	    is only a checkpoint and is not yet ready.
+# 	    Added support for testing the bos install command for remote servers.
+# 	    Add in a utility functions that is used to check if a server has
+# 	    a dfs-server DCE principal.
+# 	    Accidentally deleted all functions except DetermineLocalAuth() in
+# 	    util/gen_FunctionsScript. So modified to include all functions previously
+# 	    existing in the util/gen_FunctionsScript.
+# 	    Some more fixes.
+# 	    Fixed a typo in an if statement.
+# 	    Fix problem in DetermineLocalAuth function in gen_FunctionsScript.
+# 	    Just another checkpoint.
+# 	    Changes to fix problems found during execution of test11. The delta is now
+# 	    ready for export.
+# 	    See above.
+# 	[1992/09/23  20:41:50  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/21  12:34:41  jaffe
+# 	Transarc delta: fred-merge-tests 1.1
+# 	  Files modified:
+# 	    Makefile
+# 	    bos: Makefile, READ_ME, init_dce, kills, runc, runtests
+# 	    bos: setup, shows
+# 	    bos/tests: Makefile, test0, test1, test10, test11, test12
+# 	    bos/tests: test2, test3, test4, test5, test6, test7, test8
+# 	    bos/tests: test9; bos/tests/procs: Makefile
+# 	    cm: Makefile, runtests, test0, test1, test2, test3, test4
+# 	    cm: test5, test6; config: chk_errnr, echeck, environment
+# 	    fs: Makefile, READ_ME, err1, err2, longalpha, longfox
+# 	    fs: longmix, prog1.c, rtest1, shortalpha, shortfox, shortmix
+# 	    fs: test1, test10, test2, test2b, test2s, test3, test4
+# 	    fs: test5, test6, test7, test8, test9
+# 	    fts: Makefile, check, etest.sed, etest1, etest2, etest3
+# 	    fts: etest4, etest5, etest6, rtest1, rtest2, runrtests
+# 	    fts: runtests, test1, test10, test11, test12, test13, test2
+# 	    fts: test3, test4, test5, test6, test7, test8, test9
+# 	    low: Makefile, ctrl.asc, prog11.c, prog12.c, prog14.c
+# 	    low: prog3a.c, prog8.c, prog9.c, rtest1, rtest2, styl.asc
+# 	    low: test1, test10, test11, test12, test13, test14, test2
+# 	    low: test3, test4, test5, test6, test7, test8, test9
+# 	    naming: Makefile, bostest, fstest, ftstest
+# 	    scout: Makefile, test1, test2; setup: Makefile, environment
+# 	    ubik: Makefile, READ_ME, init, kills, runc, setup, shows
+# 	    ubik: udbg; util: Makefile, sys.c
+# 	  Selected comments:
+# 	    Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	    the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	    should be looking at the same test code.
+# 	    Changes to facilitate merge of local DFS test code with the OSF's.
+# 
+# 	$TALog: test11,v $
+# 	Revision 4.11  1994/11/01  22:21:13  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r4.10 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	Revision 4.10  1993/10/27  19:51:27  comer
+# 	Cheanged bos test11 and test12 to set $RSH to the proper command
+# 	for rsh/remsh, and to use it.
+# 	[from r4.9 by delta comer-db4574-make-bos-tests-use-remsh-for-hp, r1.1]
+# 
+# Revision 4.9  1993/01/14  17:32:58  jaffe
+# 	revdrop of latest OSF copyright changes to these files
+# 	[from r4.8 by delta osf-revdrop-01-12-92, r1.1]
+# 
+# 	[1992/05/20  17:16:58  jaffe]
+# 
+# $EndLog$
+#
+
+###############################################################################
+#    Copyright (C) 1991, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This test is applicable to DFS running bosserver.
+# The script tests the bos install subcommands.
+
+###############################################################################
+
+# Usage:                test11
+
+# Typically run via:    test11 >& test11.out
+# or via the bos/runtests script.
+
+###############################################################################
+
+# Test environment:
+# This test requires DFS server $SERVER_1 to be running bosserver.
+# The test now determines if the server is a remote machine and if it is
+# uses rsh/rcp to do remote operations and fetch files from the server
+# for comparision with local versions of installed files.
+
+# Privilege required:
+# You must be authenticated to DCE as someone who's in admin.bos, and
+# you must be logged into Unix as local root.
+# 
+# In case the server is a remote machine, you must be logged in as 
+# someone who can access for read and write the directories specified
+# by variables - default_files and alt_files in the script below on the
+# remote machine, using the rsh/rcp command suite without needing to
+# supply a password interactively - i.e. be on the hosts.equiv or an
+# appropriate .rhosts file on the remote machine.
+
+# Highest error number is: 16.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+rc=0
+ty=bos
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${SERVER_1=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name=/.../$CELL_NAME}
+: ${dns_server_prefix=/.:/hosts/}
+
+PATH=":"$bin_dir":"$PATH
+
+RSH=rsh
+systype=`uname -s`
+if [ "$systype" = "HP-UX" ]
+  then
+	RSH=remsh
+fi
+
+sav_arg="-server $dns_server_prefix$SERVER_1 $AUTH_ARG $VERB_ARG"
+
+alt_dir=/tmp/alt_bin
+binary=/tmp/$ty.$p.file
+default_dir=/opt/dcelocal/bin
+filename=`basename $binary`
+remoteFile=${binary}.remote
+
+#
+# Determine if the server is another machine
+#
+
+if [ "${SERVER_1}" != "$hn" ] 
+then
+	remote=1
+	if ${RSH} $SERVER_1 pwd
+	  then :
+	  else
+		echo "This test requires ${RSH} functionality to work properly (test11: E0)" >&2
+		echo "test11 FAILED"
+		exit 1
+	fi
+else
+	remote=0
+fi	
+
+###############################################################################
+
+echo ""
+date
+echo "RUNNING bos COMMANDS on SERVER $SERVER_1 in CELL $CELL_NAME."
+echo "========================================================================"
+echo ""
+
+###############################################################################
+
+if [ $remote -eq 1 ]
+then 
+	${RSH} ${SERVER_1}	mkdir $alt_dir
+else
+	if [ ! -d $alt_dir ]
+	then 
+		mkdir $alt_dir
+	fi
+fi
+
+echo ""
+date
+echo "Creating file $binary..."
+echo "This is a test" > $binary
+
+if [ $remote -eq 1 ]
+then 
+	${RSH} ${SERVER_1} rm -rf $default_dir/$filename* $alt_dir/$filename*
+else
+	rm -rf $default_dir/$filename* $alt_dir/$filename*
+fi
+
+###############################################################################
+
+for f in 1 2 3 4
+do
+
+	echo ""
+	date
+	echo "Pass $f"
+	if [ $f -eq 3 ]
+	then 
+		echo "Saving old $binary..."
+		cp $binary.BAK $binary.OLD
+	fi
+	if [ $f -gt 1 ]
+	then 
+		echo "Saving backup $binary..."
+		cp $binary $binary.BAK
+	fi
+	echo "Modifying $binary..."
+	echo "This is line $f" >> $binary
+	ls -l $binary*
+
+	echo ""
+	date
+	echo "Installing `basename $binary` in the default directory..."
+	echo bos install $sav_arg -file $binary
+	bos install $sav_arg -file $binary
+	if [ $? -ne 0 ]
+	then 
+		echo "- failed ($p: E1)"
+		rc=`expr $rc + 1`
+	fi
+
+	
+	if [ $remote -eq 1 ]
+	then
+		${RSH} ${SERVER_1} ls -l $default_dir/$filename*
+		rcp "${SERVER_1}:$default_dir/`basename $binary`" $remoteFile
+		diff $binary $remoteFile > /dev/null 2>&1
+		if [ $? -ne 0 ]
+		then 
+			echo "- files are different ($p: E2r)"
+			rc=`expr $rc + 1`
+		fi
+	else
+		ls -l $default_dir/$filename*
+		diff $binary $default_dir/`basename $binary` > /dev/null 2>&1
+		if [ $? -ne 0 ]
+		then 
+			echo "- files are different ($p: E2s)"
+			rc=`expr $rc + 1`
+		fi
+	fi
+	
+	if [ $f -gt 1 ]
+	then
+		if [ $remote -eq 1 ]
+		then
+			rcp "${SERVER_1}:$default_dir/`basename $binary`.BAK" ${remoteFile}.BAK
+			diff $binary.BAK "${remoteFile}.BAK"	> /dev/null 2>&1	
+			if [ $? -ne 0 ]
+			then 
+				echo "- .BAK files are different ($p: E3r)"
+				rc=`expr $rc + 1`
+			fi
+		else
+			diff $binary.BAK $default_dir/`basename $binary`.BAK > /dev/null 2>&1
+			if [ $? -ne 0 ]
+			then 
+				echo "- .BAK files are different ($p: E3s)"
+				rc=`expr $rc + 1`
+			fi
+		fi
+	fi
+	
+	if [ $f -eq 3 ]
+	then
+		if [ $remote -eq 1 ]
+		then
+			rcp "${SERVER_1}:$default_dir/`basename $binary`.OLD" ${remoteFile}.OLD
+			diff $binary.OLD "${remoteFile}.OLD"	> /dev/null 2>&1	
+			if [ $? -ne 0 ]
+			then 
+				echo "- .OLD files are different ($p: E4r)"
+				rc=`expr $rc + 1`
+			fi
+		else
+			diff $binary.OLD $default_dir/`basename $binary`.OLD > /dev/null 2>&1
+			if [ $? -ne 0 ]
+			then 
+				echo "- .OLD files are different ($p: E4s)"
+				rc=`expr $rc + 1`
+			fi
+		fi
+	fi
+	
+	echo ""
+	date
+	echo "Installing `basename $binary` in the alternate directory..."
+	echo bos install $sav_arg -file $binary -dir $alt_dir
+	bos install $sav_arg -file $binary -dir $alt_dir
+	if [ $? -ne 0 ]
+	then 
+		echo "- failed ($p: E5)"
+		rc=`expr $rc + 1`
+	fi
+	
+	if [ $remote -eq 1 ] 
+	then
+		${RSH} ${SERVER_1} ls -l $alt_dir/$filename*
+	else
+		ls -l $alt_dir/$filename*		
+	fi
+	
+	
+	if [ $remote -eq 1 ]
+	then
+		rcp "${SERVER_1}:$alt_dir/`basename $binary`" $remoteFile
+		diff $binary $remoteFile	> /dev/null 2>&1	
+		if [ $? -ne 0 ]
+		then 
+			echo "- files are different ($p: E6r)"
+			rc=`expr $rc + 1`
+		fi
+	else
+		diff $binary $alt_dir/`basename $binary` > /dev/null 2>&1
+		if [ $? -ne 0 ]
+		then 
+			echo "- files are different ($p: E6s)"
+			rc=`expr $rc + 1`
+		fi
+	fi
+	
+	if [ $f -gt 1 ]
+	then
+		if [ $remote -eq 1 ]
+		then
+			rcp "${SERVER_1}:$alt_dir/`basename $binary`.BAK" ${remoteFile}.BAK
+			diff $binary.BAK "${remoteFile}.BAK"	> /dev/null 2>&1	
+			if [ $? -ne 0 ]
+			then 
+				echo "- .BAK files are different ($p: E7r)"
+				rc=`expr $rc + 1`
+			fi
+		else
+			diff $binary.BAK $alt_dir/`basename $binary`.BAK > /dev/null 2>&1
+			if [ $? -ne 0 ]
+			then 
+				echo "- .BAK files are different ($p: E7s)"
+				rc=`expr $rc + 1`
+			fi
+		fi
+	fi
+	
+	if [ $f -eq 3 ]
+	then
+		if [ $remote -eq 1 ]
+		then
+			rcp "${SERVER_1}:$alt_dir/`basename $binary`.OLD" "${remoteFile}.OLD"
+			diff $binary.OLD "${remoteFile}.OLD"	> /dev/null 2>&1	
+			if [ $? -ne 0 ]
+			then 
+				echo "- .OLD files are different ($p: E8r)"
+				rc=`expr $rc + 1`
+			fi
+		else
+			diff $binary.OLD $alt_dir/`basename $binary`.OLD > /dev/null 2>&1
+			if [ $? -ne 0 ]
+			then 
+				echo "- .OLD files are different ($p: E8s)"
+				rc=`expr $rc + 1`
+			fi
+		fi
+	fi
+done
+
+###############################################################################
+
+sleep 10
+
+###############################################################################
+
+for f in 1 2
+do
+	echo ""
+	date
+	echo "Pass $f"
+	echo "Uninstalling `basename $binary` from the default directory..."
+	echo bos uninstall $sav_arg -file $binary
+	bos uninstall $sav_arg -file $binary
+	if [ $? -ne 0 ]
+	then 
+		echo "- failed ($p: E9)"
+		rc=`expr $rc + 1`
+	fi
+
+	if [ $remote -eq 1 ] 
+	then
+		${RSH} ${SERVER_1} ls -l $default_dir/$filename*
+	else
+		ls -l $default_dir/$filename*		
+	fi
+
+	if [ $remote -eq 1 ]
+	then
+		rcp "${SERVER_1}:$default_dir/`basename $binary`" $remoteFile
+		diff $binary.BAK $remoteFile	> /dev/null 2>&1	
+		if [ $? -ne 0 ]
+		then 
+			echo "- files are different ($p: E10r)"
+			rc=`expr $rc + 1`
+		fi
+	else
+		diff $binary.BAK $default_dir/`basename $binary` > /dev/null 2>&1
+		if [ $? -ne 0 ]
+		then 
+			echo "- files are different ($p: E10s)"
+			rc=`expr $rc + 1`
+		fi
+	fi
+	
+	if [ $f -eq 1 ]
+	then
+		if [ $remote -eq 1 ]
+		then
+			rcp "${SERVER_1}:$default_dir/`basename $binary`.BAK" "$remoteFile.BAK"
+
+			diff ${binary}.OLD $remoteFile.BAK	> /dev/null 2>&1	
+			if [ $? -ne 0 ]
+			then 
+				echo "- .BAK files are different ($p: E11r)"
+				rc=`expr $rc + 1`
+			fi
+		else
+			diff $binary.OLD "$default_dir/`basename $binary`.BAK" > /dev/null 2>&1
+			if [ $? -ne 0 ]
+			then 
+				echo "- .BAK files are different ($p: E11s)"
+				rc=`expr $rc + 1`
+			fi
+		fi
+	fi	
+
+
+	echo ""
+	date
+	echo "Uninstalling `basename $binary` from the alternate directory..."
+	echo bos uninstall $sav_arg -file `basename $binary` -dir $alt_dir
+	bos uninstall $sav_arg -file `basename $binary` -dir $alt_dir
+	if [ $? -ne 0 ]
+	then 
+		echo "- failed ($p: E12)"
+		rc=`expr $rc + 1`
+	fi
+
+	if [ $remote -eq 1 ] 
+	then
+		${RSH}  ${SERVER_1} ls -l $alt_dir/$filename*
+	else
+		ls -l $alt_dir/$filename*		
+	fi
+
+
+	if [ $remote -eq 1 ]
+	then
+		rcp "${SERVER_1}:$alt_dir/`basename $binary`" $remoteFile
+		diff $binary.BAK $remoteFile	> /dev/null 2>&1	
+		if [ $? -ne 0 ]
+		then 
+			echo "- files are different ($p: E13r)"
+			rc=`expr $rc + 1`
+		fi
+	else
+		diff $binary.BAK $alt_dir/`basename $binary` > /dev/null 2>&1
+		if [ $? -ne 0 ]
+		then 
+			echo "- files are different ($p: E13s)"
+			rc=`expr $rc + 1`
+		fi
+	fi
+	
+
+	if [ $f -eq 1 ]
+	then
+		if [ $remote -eq 1 ]
+		then
+			rcp "${SERVER_1}:$alt_dir/`basename $binary`.BAK" "$remoteFile.BAK"
+			diff ${binary}.OLD $remoteFile.BAK	> /dev/null 2>&1	
+			if [ $? -ne 0 ]
+			then 
+				echo "- .BAK files are different ($p: E14r)"
+				rc=`expr $rc + 1`
+			fi
+		else
+			diff $binary.OLD "$alt_dir/`basename $binary`.BAK" > /dev/null 2>&1
+			if [ $? -ne 0 ]
+			then 
+				echo "- .BAK files are different ($p: E14s)"
+				rc=`expr $rc + 1`
+			fi
+		fi
+	fi	
+
+
+	mv $binary.BAK $binary
+	if [ $f -eq 1 ]
+	then 
+		mv $binary.OLD $binary.BAK
+	fi
+
+done
+
+
+###############################################################################
+
+echo ""
+echo "These attempts to uninstall $binary should fail..."
+echo bos uninstall $sav_arg -file $binary
+bos uninstall $sav_arg -file $binary
+if [ $? -eq 0 ]
+then 
+	echo "- worked ($p: E15)"
+	rc=`expr $rc + 1`
+fi
+if [ $remote -eq 1 ] 
+then
+	${RSH} ${SERVER_1} ls -l $default_dir/$filename*
+else
+	ls -l $default_dir/$filename*		
+fi
+
+echo bos uninstall $sav_arg -file $binary -dir $alt_dir
+bos uninstall $sav_arg -file $binary -dir $alt_dir
+if [ $? -eq 0 ]
+then 
+	echo "- worked ($p: E16)"
+	rc=`expr $rc + 1`
+fi
+if [ $remote -eq 1 ] 
+then
+	${RSH} ${SERVER_1} ls -l $alt_dir/$filename*
+else
+	ls -l $alt_dir/$filename*		
+fi
+
+###############################################################################
+
+if [ $remote -eq 1 ]
+then
+	${RSH} ${SERVER_1} rm -f $default_dir/$filename* $alt_dir/$filename*
+else
+	rm -f $default_dir/$filename* $alt_dir/$filename*
+fi
+
+rm -f $binary*
+
+sync
+sync
+sleep 2
+
+echo ""
+echo "Done at `date`."
+echo ""
+if [ $rc -eq 0 ]
+then 
+	echo "$p PASSED"
+else 
+	echo "$p FAILED ($rc errors)"
+fi
+exit $rc
+
+###############################################################################

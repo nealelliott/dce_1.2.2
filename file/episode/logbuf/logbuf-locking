@@ -1,0 +1,155 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: logbuf-locking,v $
+# Revision 1.1.11.1  1996/10/02  17:25:05  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:32:23  damon]
+#
+# Revision 1.1.6.1  1994/06/09  14:01:02  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:36:18  annie]
+# 
+# Revision 1.1.4.3  1993/01/19  15:28:43  cjd
+# 	embedded copyright notice
+# 	[1993/01/19  13:49:19  cjd]
+# 
+# Revision 1.1.4.2  1992/11/09  21:36:40  jaffe
+# 	Transarc delta: ota-ot3804-new-block-security 1.1
+# 	  Selected comments:
+# 	    This is a super-delta comprising changes necessary to accomplish both
+# 	    deltas which are a very tough import and are really intertwined anyway.
+# 	    Transarc delta: mason-ot5508-wrong-comparison-in-WaitForTranFree 1.4
+# 	    Selected comments:
+# 	    WARNING: THIS DELTA HAS HAD ITS SCOPTE MASSIVELY EXTENDED
+# 	    See revision 1.2 below.
+# 	    An earlier change to the transaction activity test in elbt_TranForce
+# 	    resulted in an incorrect test.
+# 	    This resulted in aimIII test looping in the kernel trying to commit the
+# 	    transaction in a vnode being deleted.
+# 	    A long chain of complications associated with the fix for this problem
+# 	    gradually lead to more and more expansive repairs.  At some point the
+# 	    effort devolved into a new complete rewrite of most of the functions in
+# 	    the tran module and a similar fraction of the tran related functions in
+# 	    the log module.  As a side-effect other OT bugs were addressed.  Here is
+# 	    a list of the major changes made.
+# 	    o This delta effective completes implementation of new block security.
+# 	    This affects OT 3804 and OT 1020.
+# 	    o Handling of ended transactions is completely revised.  Rules of
+# 	    responsibility for trans in various states between tran and log
+# 	    modules are clarified.  This addresses the concerns raised in OT 5249.
+# 	    o The locking strategy in the tran module was extensively revised.  The
+# 	    logbuf-locking document was updated.
+# 	    o Changes in waiting and sleeping, especially when starting
+# 	    transactions, follow from the above two changes.  Deadlocks removed
+# 	    from GCTran.
+# 	    o Equivalence Class handling improved, eliminating at least one latent
+# 	    bug in when a pending transaction can be discarded.  Locking changes
+# 	    should also improve concurrency.
+# 	    o Significant enhancement of the test scripts in the stress level they
+# 	    impose on the transaction system.
+# 	    o Reimplemented FsyncForce to use unified buffer/event set handling.
+# 	    This fixes OT 5316.
+# 	    o The Quiesce operation is improved, internally to serialize, commit
+# 	    metadata and commit userdata.  It still needs an interface change when
+# 	    volops requirements are ready.
+# 	    o Now tran and log module track three reservation sizes for
+# 	    transactions: full size, undo-zero size, and end size.  This only
+# 	    partially addresses the concerns of OT 4548.
+# 	    o Macros for comparing log positions where improved and bullet proofed.
+# 	    They now replace many suspect by-hand comparisons throughout the code.
+# 	    o New test repeatedly shuts down a device when other devices with the
+# 	    same block size(s) are still active.
+# 	    o Added passno test to expose OT 5527.  Added to all_tests.
+# 	    o Improved comments throughout.
+# 	    o Added growaggr script to all_tests.  Affects OT 3216, TR 2570.
+# 	    o Added vm1.test to all_tests.
+# 	    o Move nbs_tests into all_tests.
+# 	    o Upgraded copyrights.
+# 	    Document new locking strategy.  For details see comments in log.c and
+# 	    tran.c.  In brief:
+# 	    o Changed global TRAN lock to be lower than the per tran lock.
+# 	    o A new global EC lock protects operations on mutliple trans involved
+# 	    in ECs.  This lock is higher than the per tran lock.
+# 	    o A new global GC lock allows multiple simultaneous users of
+# 	    elbt_GCTran from confusing each other.
+# 	    After upgrading to epi 1.22 (dfs 1.53) the shutdown script stopped working.
+# 	    A few more problems noticed after upgrading to epi-1.22.
+# 	    A real bug in RecycleLogBufs was discovered, which resulted in reporting
+# 	    a more recent value for activeLogBlock than was correct if the members
+# 	    of the inTransit list were within 5 blocks of the end of the log.
+# 	    A real bug in recover was discovered, which resulted in discarding the
+# 	    last page of the log on the first pass (after log create).
+# 	[1992/11/09  18:19:34  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/05  19:10:55  jdp
+# 	delta mason-tran-0033 1.11
+# 	[1992/05/04  17:53:22  jdp]
+# 
+# $EndLog$
+Last update: 6 November 1991
+/* Copyright (C) 1992 Transarc Corporation - All rights reserved. */
+
+$Header: /u0/rcs_trees/dce/rcs/file/episode/logbuf/logbuf-locking,v 1.1.11.1 1996/10/02 17:25:05 damon Exp $
+
+Last update: 6 November 1991
+Last update: 16 October 1992 -ota
+
+This file describes the locking hierarchy within the log/buffer package.
+I am describing the hierarchy as it currently is with the addition of
+some other specific locks I plan on adding (which I'll identify).
+
+buffer : 
+
+ + *global* bufferLock covers all buffer data structures
+ + bLock covers the data within a single buffer
+     o *NOT YET IMPLEMENTED*
+
+tran:
+ + *global* EC lock protects ec fields of all tran records.  This means
+   ecHead, ecSize, and ecList (iff ecSize > 0).  Also serializes all
+   code paths that obtain multiple tran locks.  Incidently, all such
+   paths manage ec structures anyway.
+     o Note that the global EC lock protects the transition of ecSize
+       (from 1 to 0).
+ + tranLock covers most individual transaction record fields.
+     o Since tran status changes also involve changes to global tran
+       lists these changes are de facto protected by both the per tran
+       lock and the global TRAN lock.
+     o Some tran fields are really owned by the log module.  As such
+       they are protected by the corresponding mapLock.  For safety we
+       assume that transactions touched by the log module are never
+       FREE.  This is implemented because new transactions are always
+       Alloc'ed by elbt_StartTran before elbl_StartTran is called and
+       because old are only Dealloc'ed after being explicitly returned
+       by the log module via elbl_Close or elbl_GCTran.  Ownership by
+       the log module is indicated by non-zero mapP field.  This field
+       can be cleared asynchronously on completed trans, because
+       elbl_GCTran can remove them from its control without locking each
+       one first.
+     o The ec fields are not protected by this lock except that if
+       ecSize is zero then this lock protects the ecList (this is used
+       during CompleteEC).
+ + *global* TRAN lock covers global transaction mgr structures: tran id hash
+   table, and active, pending and complete lists.  Some wakeup flags are
+   also protected by this lock.
+ + *global* GC lock protects the GCTran procedure's private list of
+   committed but not yet freed transactions.  Also implements wakeup on
+   exit from elbt_GCTran.
+
+log:
+
+ + logLock covers global log data structures
+ + mapLock covers the data within a single log map entry
+
+recover:
+ no locks
+
+locks are aquired in the module order specified above (buffer, then
+tran, then log, then recover.)
+      
+

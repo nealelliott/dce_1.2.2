@@ -1,0 +1,100 @@
+*
+* @OSF_COPYRIGHT@
+* COPYRIGHT NOTICE
+* Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+* ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+* src directory for the full copyright text.
+*
+* HISTORY
+* $Log: create00.itl,v $
+* Revision 1.1.418.1  1996/10/17  18:21:02  damon
+* 	Submitting on behalf of Transarc
+* 	[1996/10/17  16:51:07  damon]
+*
+* Revision 1.1.413.1  1994/02/04  20:41:18  devsrc
+* 	Merged from 1.0.3a to 1.1
+* 	[1994/02/04  15:22:46  devsrc]
+* 
+* Revision 1.1.411.1  1993/12/07  17:42:19  jaffe
+* 	1.0.3a update from Transarc
+* 	[1993/12/03  18:57:27  jaffe]
+* 
+* Revision 1.1.2.3  1993/01/11  18:27:33  htf
+* 	Embedded copyright notice
+* 	[1993/01/11  17:02:17  htf]
+* 
+* Revision 1.1.2.2  1992/10/28  16:32:28  jaffe
+* 	Transarc delta: fred-itl-make-open-like-c 1.3
+* 	  Selected comments:
+* 	    Fix ITL system calls to have more C like syntax.  Previously only a
+* 	    single open or opendir could be issued against a file resource, since the
+* 	    filename/directory name being opened was hashed.  Now the names are no longer
+* 	    hashed and the resulting file descriptor (or DIR *) is placed in a
+* 	    user supplied variable.  This changes the syntax of the open, creat,
+* 	    opendir and mmap commands.  They now all require a variable name as the
+* 	    last argument to the command.
+* 	    Also a number of commands that previously took a filename or directory
+* 	    name, now take the actual file descriptor or DIR *, as was placed in a
+* 	    variable by the open and opendir comands.
+* 	    Make the necessary changes to the fset ("ftutil") tests to match the
+* 	    described above.
+* 	    Convert system calls to use the more traditional usage.
+* 	    Cleanup debugging code.
+* 	Transarc delta: jdp-itl-add-fset-driver 1.2
+* 	  Selected comments:
+* 	    Add the code for fset_test, the fileset (ftutil) test driver.
+* 	    This delta adds "fset" to the list of build directories in the test tree
+* 	    and adds all of the test scripts.
+* 	    Create test.
+* 	[1992/10/27  18:51:34  jaffe]
+* 
+* $EndLog$
+*
+
+!**********************************************************
+!*** Attempt to create a fileset in a full aggregate
+!**********************************************************
+
+include "setup.itl"
+
+!*** Fill aggregate
+open $path_name[0] ($O_CREAT|$O_WRONLY) 0666 fd1
+getAggrInfo $aggr_id aggr_info
+setFsetQuota $aggr_id $fset_id ($aggr_info_free * 2)
+set free_bytes ($aggr_info_free * 1024)
+
+!*** Fill in 1 megabyte chunks
+set one_meg 1048576
+set data ("1" * $one_meg)
+set megs ($free_bytes / $one_meg)
+loop i 1 1 $megs
+	write $fd1 $data
+end
+
+!*** Fill remaining space with blocks
+getAggrInfo $aggr_id aggr_info
+set free_bytes ($aggr_info_free * 1024)
+set data2 ("1" * $block_size)
+set blocks ($free_bytes / $block_size)
+loop i 1 1 $blocks
+	write $fd1 $data2
+end
+
+*!*** Fill remaining space with frags
+*getAggrInfo $aggr_id aggr_info
+*set free_bytes ($aggr_info_free * 1024)
+*set data3 ("1" * $frag_size)
+*set frags ($free_bytes / $frag_size)
+*loop i 1 1 $frags
+*	write $fd1 $data3
+*end
+close $fd1
+
+!*** Attempt to create a new fileset
+*setError ENOSPC
+createFset $aggr_id ($fset_id + 1) "junk"
+
+!*** Unmount fileset
+unmountFset $mount_point[0]
+
+include "shutdown.itl"

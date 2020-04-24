@@ -1,0 +1,436 @@
+#! /bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: uptest,v $
+# Revision 1.1.618.1  1996/10/17  18:37:30  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:58:20  damon]
+#
+# Revision 1.1.613.1  1994/02/04  20:47:58  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:25:49  devsrc]
+# 
+# Revision 1.1.611.1  1993/12/07  17:46:51  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  19:44:12  jaffe]
+# 
+# Revision 1.1.5.2  1993/01/11  18:37:59  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:23:13  htf]
+# 
+# Revision 1.1.2.2  1992/05/21  12:53:52  jaffe
+# 	Transarc delta: rajesh-update-1 1.1
+# 	  Selected comments:
+# 	    Convert the shell script to standard style
+# 
+# 	$TALog: uptest,v $
+# 	Revision 4.6  1994/11/01  22:35:41  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r4.5 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	Revision 4.5  1993/06/24  19:31:16  comer
+# 	Bullet-proffed upserver/upclient with respect to exceptions from the
+# 	RPC.  The model is to use TRY/FINALLY/ENDTRY constructs in the
+# 	functions that call the pipe functions on the server.  If an exception
+# 	is raised, the lock is released and the exception is propogated to the
+# 	next context.  Eventually, this will reach the TRY in the server stub
+# 	itself.  The exception will be propogated as a fault to the client,
+# 	where it will be turned into an status code (since fault_status is set
+# 	in the ACF file).
+# 
+# 	Added a new test to the script that will test the situation where a
+# 	client tries to import a file that the server is not exporting.
+# 	[from r4.4 by delta comer-db3771-check-RPC-interface-for-exceptions, r1.1]
+# 
+# Revision 4.4  1993/02/18  14:33:28  comer
+# 	Updated the upserver/upclient test.
+# 
+# 	Gutted and rewrote.  Test cases are in the same vein as the originals.
+# 	[from r4.3 by delta comer-ot7207-update-upserver-test, r1.1]
+# 
+# Revision 4.3  1993/01/14  17:42:05  jaffe
+# 	revdrop of latest OSF copyright changes to these files
+# 	[from r4.2 by delta osf-revdrop-01-12-92, r1.1]
+# 
+# 	[1992/05/20  21:23:58  jaffe]
+# 
+# $EndLog$
+#
+#
+###############################################################################
+#     Copyright (C 1990, 1991 Transarc Corporation - All rights reserved     #
+###############################################################################
+FREQUENCY=3	# have upclient check every 3 seconds
+Startup()
+{
+	hostname=`hostname`
+	SERVER=`hostprincipal $hostname`
+	CLIENT=`findremote $SERVER`
+	if [ ! "$CLIENT" ]
+	  then
+		echo "This test requires a cell with at least 2 machines" >&2
+		exit 1
+	fi
+
+	# make sure of authorization
+	_id=`checkid`
+	case "$_id" in
+		self) LOCALAUTH=-localauth ;;
+		cell_admin) LOCALAUTH= ;;
+		*) echo "Must be root or cell_admin to run this test" >&2
+		   exit 1;;
+	esac
+
+	# stop any running upserver/upclient on CLIENT or SERVER
+	stopcurrent
+
+	echo "** upserver will run on $SERVER"
+	echo "** upclient will run on $CLIENT"
+}
+
+Shutdown() {
+	# remove installed processes
+	removeclient
+	removeserver
+
+	# restart old ones 
+	restart
+}
+
+UPSERVER=
+UPCLIENT=
+removeclient() {
+	if [ "$UPCLIENT" ]
+	  then
+		bos stop $CLIENT $UPCLIENT -wait ${LOCALAUTH} > /dev/null 2>&1
+		bos delete $CLIENT $UPCLIENT ${LOCALAUTH} > /dev/null 2>&1
+		UPCLIENT=
+	fi
+}
+removeserver() {
+	if [ "$UPSERVER" ]
+	  then
+		bos stop $SERVER $UPSERVER -wait ${LOCALAUTH} > /dev/null 2>&1
+		bos delete $SERVER $UPSERVER ${LOCALAUTH} > /dev/null 2>&1
+		UPSERVER=
+	fi
+}
+
+RUNNINGS=
+RUNNINGC=
+stopcurrent() {
+	if bos stat $SERVER upserver -noauth > /dev/null 2>&1
+	  then
+		RUNNINGS=$SERVER
+		bos shutdown $SERVER upserver -wait ${LOCALAUTH}
+	elif bos stat $SERVER upclient -noauth > /dev/null 2>&1
+	  then
+		RUNNINGC=$SERVER
+		bos shutdown $SERVER upclient -wait ${LOCALAUTH}
+	fi
+
+	if bos stat $CLIENT upserver -noauth > /dev/null 2>&1
+	  then
+		RUNNINGS=$CLIENT
+		bos shutdown $CLIENT upserver -wait ${LOCALAUTH}
+	elif bos stat $CLIENT upclient -noauth > /dev/null 2>&1
+	  then
+		RUNNINGC="$RUNNINGC $CLIENT"
+		bos shutdown $CLIENT upclient -wait ${LOCALAUTH}
+	fi
+}
+
+# restart original processes
+restart() {
+	if [ "$RUNNINGS" ]
+	  then
+		bos startup $RUNNINGS upserver ${LOCALAUTH} > /dev/null 2>&1
+	fi
+	if [ "$RUNNINGC" ]
+	  then
+		for _server in $RUNNINGC
+		  do
+			bos startup $_server upclient ${LOCALAUTH} > /dev/null 2>&1
+		done
+	fi
+}
+
+# Construct host principal
+hostprincipal() {
+	_host=$1
+
+	_cell=`getcellname 2>/dev/null`
+	if [ "$_cell" ]
+	  then
+		echo $_cell/hosts/$_host
+	  else
+		set -- `bos lscell $_host -noauth`
+		if [ "$1" = Cell ]
+		  then
+			echo $4/hosts/$_host
+		  else
+			echo
+		fi
+	fi
+}
+
+# Find a remote host in this cell
+findremote() {
+	_princ=$1
+
+	set -- `cdscp show dir /.:/hosts/\* | grep MyName | awk '{print $3}'`
+
+	while [ "$1" = $_princ ]
+	  do
+		shift
+	done
+
+	echo $1
+}
+
+# Check ID
+checkid() {
+	_glob=`klist 2>/dev/null | grep "Global Principal:"`
+	_id=`expr "$_glob" : '.*/\([^/]*\)$'`
+
+	echo $_id
+}
+
+# start upserver with specified file/directory
+installserver() {
+	_filelist="$*"
+
+	echo "Upserver exporting $_filelist"
+	UPSERVER=upserver.$$
+	bos create $SERVER $UPSERVER simple "/opt/dcelocal/bin/upserver $_filelist -admin admin.bos" $LOCALAUTH
+	bos stat $SERVER $UPSERVER -noauth -long
+}
+
+# start upclient with specified file/directory
+installclient() {
+	_filelist="$*"
+
+	echo "Upclient importing $_filelist"
+	UPCLIENT=upclient.$$
+	bos create $CLIENT $UPCLIENT simple "/opt/dcelocal/bin/upclient $SERVER $_filelist -time $FREQUENCY -verbose" $LOCALAUTH
+	bos stat $CLIENT $UPCLIENT -noauth -long
+}
+
+# MAIN
+
+Startup				# initialize variables
+
+TESTDIR=/tmp/testUpd.$$
+mkdir $TESTDIR			# create directory to distribute
+
+####################################################################################
+# test 1: server exporting directory, client requesting same directory
+#	  Add a file to directory on server, see it appear on client
+echo "** Test 1: server exporting and client importing same directory"
+installserver $TESTDIR
+installclient $TESTDIR
+echo "sleeping 4 minutes to let server and client get started"
+sleep 240
+
+before=`bos getdates $CLIENT test1 -dir $TESTDIR $LOCALAUTH | grep -v "does not exist"`
+if [ "$before" ]
+  then
+	echo "FAIL: File $TESTDIR/test1 already exists on $CLIENT" >&2
+	Shutdown
+	exit 1
+fi
+
+# create a file to export
+echo "creating $TESTDIR/test1 then sleeping 10 seconds"
+date > $TESTDIR/test1
+sleep 10
+
+after=`bos getdates $CLIENT test1 -dir $TESTDIR $LOCALAUTH | grep -v "does not exist"`
+if [ ! "$after" ]
+  then
+	echo "FAIL: File $TESTDIR/test1 not distributed to $CLIENT" >&2
+	Shutdown
+	exit 1
+fi
+
+# stop and delete created upserver/upclient instances
+removeclient
+echo "Test 1 PASSED"
+
+####################################################################################
+# test 2: server exporting directory, client requesting different directory
+#	  Add a file to directory on server, make sure it doesn't show up on client
+echo "** Test 2: server exporting and client importing different directories"
+# server already runing
+installclient $TESTDIR.bogus
+echo "sleeping 4 minutes to let server and client get started"
+sleep 240
+
+before=`bos getdates $CLIENT test2 -dir $TESTDIR.bogus $LOCALAUTH | grep -v "does not exist"`
+if [ "$before" ]
+  then
+	echo "FAIL: File $TESTDIR.bogus/test2 exists on $CLIENT" >&2
+	Shutdown
+	exit 1
+fi
+
+# create a file to export
+echo "creating $TESTDIR/test2 then sleeping 30 seconds"
+date > $TESTDIR/test2
+sleep 30
+
+after=`bos getdates $CLIENT test2 -dir $TESTDIR.bogus $LOCALAUTH | grep -v "does not exist"`
+if [ "$after" ]
+  then
+	echo "FAIL: File $TESTDIR/test2 incorrectly distributed to $CLIENT $TESTDIR.bogus" >&2
+	Shutdown
+	exit 1
+fi
+
+# stop and delete created upserver/upclient instances
+removeclient
+echo "Test 2 PASSED"
+
+####################################################################################
+# test 3: server exporting directory, client requesting file in directory
+#	  Add a file to directory on server, see it appear on client.  A
+#	  second file in the exported directory should not be imported.
+echo "** Test 3: server exporting directory; client importing file in directory"
+# server already runing
+installclient $TESTDIR/test3
+echo "sleeping 4 minutes to let server and client get started"
+sleep 240
+
+before=`bos getdates $CLIENT test3 -dir $TESTDIR $LOCALAUTH | grep -v "does not exist"`
+if [ "$before" ]
+  then
+	echo "FAIL: File $TESTDIR/test3 already exists on $CLIENT" >&2
+	Shutdown
+	exit 1
+fi
+
+# create a file to export
+echo "creating $TESTDIR/test3 then sleeping 10 seconds"
+date > $TESTDIR/test3
+date > $TESTDIR/test3.noimport
+sleep 10
+
+after=`bos getdates $CLIENT test3 -dir $TESTDIR $LOCALAUTH | grep -v "does not exist"`
+if [ ! "$after" ]
+  then
+	echo "FAIL: File $TESTDIR/test3 not distributed to $CLIENT" >&2
+	Shutdown
+	exit 1
+fi
+after=`bos getdates $CLIENT test3.noimport -dir $TESTDIR $LOCALAUTH | grep -v "does not exist"`
+if [ "$after" ]
+  then
+	echo "FAIL: File $TESTDIR/test3.noimport incorrectly distributed to $CLIENT" >&2
+	Shutdown
+	exit 1
+fi
+
+# stop and delete created upserver/upclient instances
+removeclient
+removeserver
+echo "Test 3 PASSED"
+
+####################################################################################
+# test 4: server exporting file, client requesting same file
+#	  Add a file to directory on server, see it appear on client
+echo "** Test 4: server exporting and client importing file in directory"
+echo "creating $TESTDIR/test4"
+date > $TESTDIR/test4
+
+before=`bos getdates $CLIENT test4 -dir $TESTDIR $LOCALAUTH | grep -v "does not exist"`
+if [ "$before" ]
+  then
+	echo "FAIL: File $TESTDIR/test4 already exists on $CLIENT" >&2
+	Shutdown
+	exit 1
+fi
+
+installserver $TESTDIR/test4
+installclient $TESTDIR/test4
+echo "sleeping 4 minutes to let server and client get started"
+sleep 240
+
+after=`bos getdates $CLIENT test4 -dir $TESTDIR $LOCALAUTH | grep -v "does not exist"`
+if [ ! "$after" ]
+  then
+	echo "FAIL: File $TESTDIR/test4 not distributed to $CLIENT" >&2
+	Shutdown
+	exit 1
+fi
+
+# stop and delete created upserver/upclient instances
+removeclient
+removeserver
+echo "Test 4 PASSED"
+
+####################################################################################
+# test 5: server exporting 2 files, client requesting those files but also
+#	  a bogus file.  Make sure that the two good files show up but that
+#	  the bogus one does not.
+echo "** Test 5: server exporting files and client importing them plus bogus file"
+echo "creating $TESTDIR/test5a $TESTDIR/test5b"
+date > $TESTDIR/test5a
+date > $TESTDIR/test5b
+
+beforeA=`bos getdates $CLIENT test5a -dir $TESTDIR $LOCALAUTH | grep -v "does not exist"`
+if [ "$beforeA" ]
+  then
+	echo "FAIL: File $TESTDIR/test5a already exists on $CLIENT" >&2
+	Shutdown
+	exit 1
+fi
+
+beforeB=`bos getdates $CLIENT test5b -dir $TESTDIR $LOCALAUTH | grep -v "does not exist"`
+if [ "$beforeB" ]
+  then
+	echo "FAIL: File $TESTDIR/test5b already exists on $CLIENT" >&2
+	Shutdown
+	exit 1
+fi
+
+installserver $TESTDIR/test5a $TESTDIR/test5b
+installclient $TESTDIR/test5a $TESTDIR/test5.bogus $TESTDIR/test5b
+echo "sleeping 4 minutes to let server and client get started"
+sleep 240
+
+# make sure that test5a and test5b were installed but test5.bogus was not
+afterA=`bos getdates $CLIENT test5a -dir $TESTDIR $LOCALAUTH | grep -v "does not exist"`
+if [ ! "$afterA" ]
+  then
+	echo "FAIL: File $TESTDIR/test5a not distributed to $CLIENT" >&2
+	Shutdown
+	exit 1
+fi
+
+afterB=`bos getdates $CLIENT test5b -dir $TESTDIR $LOCALAUTH | grep -v "does not exist"`
+if [ ! "$afterB" ]
+  then
+	echo "FAIL: File $TESTDIR/test5b not distributed to $CLIENT" >&2
+	Shutdown
+	exit 1
+fi
+
+afterBogus=`bos getdates $CLIENT test5.bogus -dir $TESTDIR $LOCALAUTH | grep -v "does not exist"`
+if [ "$afterBogus" ]
+  then
+	echo "FAIL: File $TESTDIR/test5.bogus incorrectly distributed to $CLIENT" >&2
+	Shutdown
+	exit 1
+fi
+echo "Test 5 PASSED"
+
+Shutdown
+echo "SUCCESS: all tests passed"
+exit 0

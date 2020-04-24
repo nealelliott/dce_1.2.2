@@ -1,0 +1,144 @@
+/*
+ * @OSF_COPYRIGHT@
+ * Copyright (c) 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: secval.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:07:03  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:25:49  marty]
+ *
+ * Revision 1.1.4.1  1995/12/08  21:27:43  root
+ * 	Submit OSF/DCE 1.2.1
+ * 
+ * 	HP revision /main/HPDCE02/1  1995/04/04  17:25 UTC  mdf
+ * 	Merge for CHFts13120
+ * 	[1995/12/08  17:59:48  root]
+ * 
+ * Revision 1.1.2.6  1994/08/24  19:27:02  bowe
+ * 	Merged with changes from 1.1.2.5
+ * 	[1994/08/24  19:26:42  bowe]
+ * 
+ * 	Add import "dce/rsbase.idl" [CR 11773]
+ * 	[1994/08/24  19:12:29  bowe]
+ * 
+ * Revision 1.1.2.5  1994/08/24  16:40:53  baum
+ * 	Full dced service on bootup.  Secval on by default (OT 11726 & 11656)
+ * 	[1994/08/24  16:34:54  baum]
+ * 
+ * Revision 1.1.2.4  1994/04/11  18:45:52  rsalz
+ * 	Update to final RFC revision.
+ * 	[1994/04/11  18:26:24  rsalz]
+ * 
+ * Revision 1.1.2.3  1994/03/07  20:18:04  rsalz
+ * 	Updating to second edition of functional spec.
+ * 	[1994/03/07  19:39:21  rsalz]
+ * 
+ * Revision 1.1.2.2  1994/02/01  21:43:21  bowe
+ * 	Added secval_validate_cert_auth() call.
+ * 	[1994/02/01  21:40:07  bowe]
+ * 
+ * Revision 1.1.2.1  1994/01/21  18:03:33  bowe
+ * 	Initial checkin
+ * 	[1994/01/21  18:00:27  bowe]
+ * 
+ * $EndLog$
+ */
+
+
+[
+    uuid(0075c5f7-0e11-1d34-a24d-0000c09ce054),
+    version(1.0)
+]
+
+
+/*
+**  S E C V A L
+**  This service allows a server to act as the security client daemon
+**  (SCD, or sec_clientd) for a host.  There should be only one server
+**  providing this service on each host; that server should be trusted.
+**  It should also provide the rsec_cert interface (for compatibility)
+**  and the roverride interface.  Historically this is a separate server;
+**  as implemented in dced, the secval_enable and secval_disable operations
+**  are provided to emulate the "separate process" behavior.
+*/
+interface secval
+{
+    import "dce/dced_base.idl";
+    import "dce/rsbase.idl";
+
+
+    /*
+    **  Enable the secval service.
+    */
+    void
+    secval_enable(
+	[in]		handle_t		h,
+	[out]		error_status_t		*st
+    );
+
+
+    /*
+    **  Disable the secval service.
+    */
+    void
+    secval_disable(
+	[in]		handle_t		h,
+	[out]		error_status_t		*st
+    );
+
+    /*	
+    **  Get running status of secval service
+    */
+    void
+    secval_status(
+	[in]		handle_t		h,
+	[out]		boolean32		*secval_is_active,
+	[out]		error_status_t		*st
+    );
+
+    /*
+    **  Update the pe site file.
+    */
+    void
+    secval_update_pesite(
+	[in]		handle_t		h,
+	[in]		signed32		delay,
+	[out]		error_status_t		*st
+    );
+
+
+    /*
+    **  Validate the certification authority by giving the client a trusted
+    **  destination to which it can make an authenticated RPC.
+    */
+    void
+    secval_validate_cert_auth(
+	[in]		handle_t		h,
+	[out]		error_status_t		*st
+    );
+
+
+    /*
+    **  Allow a client to request a key to talk to a server.  This will
+    **  update the machine credentials by call rpc_mgmt_is_server_listening
+    **  on an authenticated binding handle.  *Advisory, not currently
+    **  implemented.*
+    */
+    void
+    secval_request_ticket(
+	[in]		handle_t		h,
+	[in]		twr_t			*tower,
+	[in]		sec_timeval_period_t	how_long,
+	[out]		error_status_t		*st
+    );
+
+    [maybe] void
+    secval_check_cell_names(
+	[in]		handle_t		h,
+	[in]		rs_cache_data_t		*cache
+    );
+}

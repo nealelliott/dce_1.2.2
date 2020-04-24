@@ -1,0 +1,418 @@
+<HTML>
+<HEAD>
+<TITLE>High-level Design - Model</TITLE>
+</HEAD>
+<!-- $Header: -->
+<BODY>
+<H1 ALIGN=CENTER>High-level Design - Model</H1>
+<P ALIGN=CENTER>
+Art Harvey, <A HREF="mailto:harvey@osf.org">harvey@osf.org</A>
+<BR>
+<EM>13-Sep-96</EM>
+</P>
+
+<P>
+<HR> <!-- __________________________________________________ -->
+<P>
+
+This document describes a model for a distributed messaging
+infrastructure that meets the goals stated in [High Level Goals].  The
+infrastructure includes services for secure message-based
+communication with location-independent naming.
+<P>
+One of the goals is to integrate messaging with DCE, consequently, the
+security, naming and messaging models will be consistent with and
+extend that of DCE.
+
+
+<H2>Introduction</H2>
+Providing a means for applications to communicate is a fundamental
+service of any distributed computing infrastructure.  One method,
+which is analogous to inter-process communication mechanisms typically
+available within a single system, is message exchange.  A message is a
+unit of data that one application process may send to other
+application processes.  The size, content and significance of a
+message is determined by the communicating application processes.
+<P>
+Viewed from the highest level, there are three components of interest
+in the messaging environment: those that use the messaging service;
+those that the messaging service uses; and the messaging service
+itself. Each of these will be described in more detail in later
+sections.
+<P>
+There are primarily two types of message service users: senders and
+receivers of messages; and administrators.  A sender is a process
+which calls upon the messaging service to communicate a message to
+other processes.  A receiver is a process which calls upon the
+messaging service to retrieve messages that were sent by other
+processes.  A process may be both a sender and a receiver.  An
+administrator controls the configuration and operation of the
+messaging service.  The services provided by the messaging system to
+support these usage types are each described separately.
+<P>
+The messaging system itself provides services through two interfaces,
+one for message communication and related functions, and one for
+administration.  Internally, the system is logically partitioned into
+the components which support the interfaces local to an individual
+system, queue managers, and queues.  There may be multiple instances
+of each of these components as described later.
+<P>
+The messaging system makes use of data transmission, marshaling,
+naming, and security services provided by the underlying computing
+environment, in this case, DCE.
+
+
+<H2>Message Communication</H2>
+The messaging service allows senders and receivers to execute
+concurrently and to send and receive messages asynchronously.  Two
+forms of asynchronous message communication to consider are message
+queuing and message passing.  The focus of this work is to build a
+message queuing system, therefore, message passing will only be
+mentioned to illustrate some of the differences between queuing versus
+passing.  To adequately describe these forms of message communication,
+some of the components of the messaging system must first be described
+in more detail.
+<P>
+
+<H3> Messaging System Components </H3>
+For the purpose of defining message passing and queuing, the following
+components and their properties are relevant.
+
+<H4> Communication Interface </H4>
+All operations necessary for message communication are provided by the
+messaging system application programming interface (API).  There must
+be an instance of this interface (and associated underpinnings
+required to support the operations) on the same system as each sender
+and each receiver.
+
+<H4> Queue </H4>
+A queue is a container for 0 or more messages.  The messaging system
+may have 0 or more (instances of) queues.  The location of a queue
+(system on which a queue physically resides) is independent of the
+number and location of the communication APIs.  The number and
+location of queues may vary over time.
+
+<H4> Queue Manager </H4>
+A queue manager controls 0 or more queues.  This control includes
+creation and destruction of queues, insertion and removal of messages
+from a queue, saving messages in a persistent data store to protect
+against failures, and all other operations on queues.  The messaging
+system may have 0 or more (instances of) queue managers.  The location
+of a queue manager is independent of the number and location of the
+communication interfaces, however, there must exist at least one
+communication channel between each interface instance and each queue
+manager.  The number and location of queue managers may vary over
+time.
+
+Each queue is controlled by exactly one queue manager.  The physical
+location of a queue is an implementation detail.  Logically, a queue
+can be thought of as being colocated with its controlling queue
+manager.
+
+<H3>Message Queuing</H3>
+In message queuing, a sender calls its local messaging interface to
+store messages in a queue.  Similarly, a receiver calls its local
+messaging interface to retrieve messages from a queue.  The messaging
+system provides the necessary functions to move the messages from the
+sender to the queue and from the queue to receivers.  The sender may
+enqueue messages at any rate and a receiver may dequeue them at any
+rate.
+<P>
+Note that, unlike message passing, senders and receivers need neither
+be available simultaneously nor have a direct communication channel
+between their messaging interfaces.  The sender may enqueue messages
+while the receiver is not available or non-existent, and the receiver
+may later dequeue these messages after the sender is no longer
+available or has been terminated.
+<P>
+Each call to the messaging interface directs a message to one or more
+queues.  Multiple senders may enqueue messages to a queue and multiple
+receivers may dequeue messages from a queue.
+
+<H3>Message Passing</H3>
+In message passing, a sender calls its local messaging API to send
+messages to a receiver which also calls its local messaging API to
+retrieve these messages.  The messaging system provides the necessary
+functions to move the messages from the sender to the receiver.  The
+sender may send messages at any rate and a receiver may retrieve them
+at any rate, however, both the sender and receiver must be available
+during this transfer and there must exist a communication channel
+between the sending and receiving messaging interface components.  If
+the availability and communication requirements are not met, then it
+is likely that the messages will be lost.
+
+
+<H2>Quality of Service</H2>
+The message queuing system provides various service qualities for
+handling messages.
+
+<H3> Delivery Notification </H3>
+
+<H4>Message Queuing</H4>
+Three delivery notices are available to a message queuing sender:
+<OL>
+<LI> None.
+<LI> Queued.
+<LI> Dequeued.
+</OL>
+
+The sender may request one of: None; Queued; Dequeued; or, Queued and Dequeued.
+<P>
+<DL>
+<DT>None.
+<DD>
+The messaging system makes a best effort attempt to store the message
+in a queue.  Zero or more copies of the message may be stored in the
+queue.  No notification is provided to the sender.
+<P>
+<DT>Queued.
+<DD>
+The messaging system notifies the sender that the message was stored
+in a queue exactly one time as long as neither the sending system nor
+the queue manager handling the destination queue fail.  Transient
+failure of other systems will not cause failure to store the message
+in a queue.  If either the sender does not receive a notification or
+the sender receives a failure notification, then the message may have
+been stored in a queue either once or not at all.
+<P>
+<DT>Dequeued.
+<DD>
+The messaging system notifies the sender that the message was removed
+from the queue and the reason for removal.  The reason may be that a
+receiver retrieved the message, that the message was discarded by the
+messaging system, or that some failure occurred.
+</DL>
+
+<H3> API styles </H3>
+The messaging API supports both synchronous and asynchronous styles of
+programming.
+<P>
+For queued and dequeued notifications, the sender may request either
+that notification be returned on the enqueue call to the messaging
+interface and whether to wait for space to be freed if the queue is
+full, or that the notification be stored in a queue specified by the
+sender for subsequent retrieval.
+<P>
+<H3> Persistence </H3>
+A sender may request persistent queuing of a message.  A message sent
+with persistent handling must be placed in stable storage such that
+the message is not lost from the queue due to a failure of the system
+on which queue manager resides.  If persistent queuing is requested,
+then the message must be saved in the persistent store before sending
+success notification to the sender if any was requested.
+<P>
+Note that the message is protected from loss only while it is stored in
+the queue.  Once the message is removed from the queue (as part of a
+receiver dequeue operation for example), the message safety is no
+longer guaranteed.
+
+
+<H2>Message Order</H2>
+The order in which messages are stored in a queue may be partially
+determined by the sender.  Unless otherwise specified by the sender,
+messages are transmitted from the communications interface in the
+order most convenient for the messaging system.  In particular, the
+messaging system may choose to reorder or send multiple messages
+concurrently.
+<P>
+When executing dequeue requests from receivers, a queue manager will
+remove messages for return to the receivers in the same order in which
+the messages were stored by the queue manager (i.e. FIFO) unless
+otherwise specified by the sender.
+<P>
+A sender may choose from the following handling options to alter
+message deliver order.
+
+<H4>Priority Queuing</H4>
+A sender may specify a priority for the handling of a message when
+making an enqueue call.  A queue manager will always dequeue messages
+in order of priority.  Within a given a priority, the queue manger
+removes messages from a queue in FIFO order.
+
+<H4>Timed Dequeuing</H4>
+A sender may request that a message cannot be retrieved from the queue
+by a receiver before a specified time.  When the specified time is
+reached, a queue manager handles the message as though it had been
+received from the sender at the specified time.
+
+
+<H2>Naming</H2>
+The messaging system provides the same set of flexible naming
+operations as found in DCE.  For example, queues, services, servers,
+people, places, resources and other objects can be given location
+independent names that are used to determine where messages will be
+sent.
+<P>
+There are 4 attributes which can be associated with a name in any
+combination: Profile, Object, Group, and Binding.  Refer to chapters
+2.4 and 6.2.3 of the DCE AES for the syntax, operations and algorithms
+provided for manipulating these attributes and determining message
+destinations.
+<P>
+Part of messaging application design includes determining how to use
+these operations and attributes in way that is meaningful for the
+users of the application.
+<P>
+Because queues are resources provided and controlled by queue
+managers, the names of queues are composite names.  These composite
+names are formed from a "junction" name that identifies the queue
+manager along with a name for a queue that is local to that queue
+manager.
+<P>
+The structure of these names is transparent to users in that junctions
+are traversed automatically by the messaging system.
+
+<H2>Security</H2>
+The messaging service adheres to the model specified in the DCE
+Security AES, and protects resources as described below.
+<P>
+The sender and receiver may both specify the end-to-end level of
+protection for messages.  The messaging system must guarantee that the
+requested protection is enforced by not allowing a receiver to dequeue
+a message unless the stronger of the protection levels requested by
+both the sender and receiver are satisfied.
+<P>
+The protection levels provided by the messaging service and two
+methods of enforcing the requested protection are given below.
+
+<H3> Protection Levels </H3>
+The choices that both sender and receiver have for protection level
+are listed below in order of weakest to strongest:
+
+<OL>
+<LI> None
+<LI> Authentication
+<LI> Authentication and Data Integrity
+<LI> Authentication, Data Integrity and Privacy
+</OL>
+
+<DL>
+<DT>None
+<DD>
+The messaging service provides no protection.
+<P>
+<DT>Authentication
+<DD>
+The messaging service guarantees that the sender of a message is
+correctly identified to a receiver.  It is the receiver's
+responsibility to determine a sender's authorization based upon this
+identity.  In addition, the following checks are made:
+<UL>
+ <LI>For a message queuing sender, the queue manager principal identity
+  or group membership is verified for enqueue operations.
+ <LI>For a message queuing receiver, the queue manager principal
+  identity or group membership is verified for dequeue operations.
+</UL>
+<P>
+<DT>Authentication and Data Integrity
+<DD>
+In addition to the authentication guarantee, the message is protected
+from any form of modification including addition or deletion of data.
+<P>
+<DT>Authentication, Data Integrity and Privacy
+<DD>
+In addition to Authentication and Data Integrity, the message data is
+protected such that it can only be read by authorized receivers.  This
+includes protection against eavesdropping on the communication
+channels used by the messaging service.
+<P>
+The level of protection provided for a delivery notification will be
+at least as great as that requested for the message to which it
+corresponds.
+</DL>
+
+<H3> Enforcement </H3>
+Ideally, message protection is provided by a trusted service that is
+external to the messaging service so that queue managers need not be
+part of the trusted computing base.
+<P>
+If such a service is not available, the messaging API components and
+the queue managers must be part of the trusted computing base.
+Senders and receivers rely on their messaging API components to
+enforce the requested protection level in all communications among
+these components and the queue managers.  Also, the queue manager must
+maintain the requested protection for all messages sent to and
+received from messaging components, and for those messages stored in
+queues.
+
+<H3> Access Control </H3>
+Control over the creation, destruction and operational behavior of
+queues and queue managers is determined by access control lists (ACL).
+The DCE Security AES specifies general the definition and use of ACLs.
+
+<H4>Queue Manager ACLs</H4>
+Each queue manager ACL provides five permissions:
+<P>
+<UL>
+<LI> Control.  Permission to modify the ACL.
+<P>
+<LI> Queue Creation.  Permission to create queues.
+<P>
+<LI> Queue Management.  Permission to control queue behavior and
+   operation such enabling and disabling queuing or message
+   persistence.
+<P>
+<LI> Queue Status Query. Permission to access queue information on the
+   queue manager.
+<P>
+<LI> Test.  Permission to check attributes of a queue manager and its queues.
+</UL>
+
+<H4>Queue ACLs</H4>
+Each queue ACL provides ten permissions:
+<UL>
+<P>
+<LI> Control.  Permission to modify the ACL.
+<P>
+<LI> Queue Deletion. Permission to delete the queue.
+<P>
+<LI> Queue Management.  Permission to control queue behavior and
+   operation (attributes) such enabling and disabling queuing or
+   modifying queue attributes.
+<P>
+<LI> Read Queue Attributes.  Permission to read queue attributes.
+<P>
+<LI> Enqueue Message.  Permission to add a message to a queue.
+<P>
+<LI> Dequeue Message.  Permission to remove a message from a queue.
+<P>
+<LI> Purge Messages. Permission to purge/delete a message (without reading its
+   data).
+<P>
+<LI> Test.  Permission to check attributes of a queue or of messages in
+   the queue.
+</UL>
+
+
+<H2>Marshaling</H2>
+It is often the case that the information to be transmitted in a
+message is a data structure.  In addition, various systems may each
+employ a different representation of simple data types.  Determining
+how to encode and decode information in messages can be a tedious and
+error prone task which is automated by the messaging service.
+<P>
+The messaging service employs the DCE encoding services to handle this
+data marshaling and unmarshaling.  Using DCE Interface Definition
+Language (IDL), a messaging application defines the structure of the
+messages it will send and receive.
+<P>
+To send a message, the sender points to the data to be included in the
+message and indicates the message structure.  The messaging system will
+encode this data structure for transmission.
+<P>
+The receiver of the message is provided with an indication of the data
+structure that is encoded within the message.  The receiver may then
+invoke the decoding service to extract the information into a local
+representation of the structure.
+
+<P> <!--EndPage-->
+<HR> <!-- __________________________________________________ -->
+<P ALIGN=CENTER>
+[
+<A HREF="index.html">High-level Design Contents</A> |
+<A HREF="index.html">Messaging</A>
+]
+</P>
+</BODY>
+</HTML>
+

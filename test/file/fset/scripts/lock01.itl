@@ -1,0 +1,121 @@
+*
+* @OSF_COPYRIGHT@
+* COPYRIGHT NOTICE
+* Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+* ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+* the full copyright text.
+*
+* HISTORY
+* $Log: lock01.itl,v $
+* Revision 1.1.11.1  1996/10/17  18:21:24  damon
+* 	Submitting on behalf of Transarc
+* 	[1996/10/17  16:51:17  damon]
+*
+* Revision 1.1.6.1  1994/02/04  20:41:44  devsrc
+* 	Merged from 1.0.3a to 1.1
+* 	[1994/02/04  15:22:57  devsrc]
+* 
+* Revision 1.1.4.1  1994/01/28  20:44:08  annie
+* 	expand OSF copyright
+* 	[1994/01/28  20:42:35  annie]
+* 
+* Revision 1.1.2.2  1993/02/16  16:35:35  jaffe
+* 	Transarc delta: jdp-db3072-aggregate-interlocking 1.2
+* 	  Selected comments:
+* 	    This delta implements an interlocking feature that keeps
+* 	    administrative commands like salvage and newaggr from stomping on an
+* 	    attached (or mounted) fileset.  Two new primitives,
+* 	    ftu_LockAggrDevice() and ftu_UnlockAggrDevice(), are provided by the
+* 	    ftutil library and are used in both newaggr and salvage.
+* 	    Two new test cases were added to the fset (ftutil) tests suite.  The first,
+* 	    lock00.itl, tests the primitives directly. The second, lock01.itl, tests
+* 	    interaction with newaggr and salvage for both attached aggregates and
+* 	    mounted filesets.
+* 	    This script tests the locking interaction of newaggr and salvage.
+* 	    Fix things up for OSF/1.
+* 	[1993/02/15  19:29:50  jaffe]
+* 
+* $EndLog$
+*
+
+!**********************************************************
+!*** Test locking interaction with administrative commands
+!**********************************************************
+
+include "defaults.itl"
+
+!*** Check interaction with an attached fileset
+exec setup_aggr
+
+!*** Ensure that the aggregate can be verified
+verifyAggr $device
+
+verifyStatus false
+
+!*** Ensure that the aggregate can't be reinitialized
+initAggr $device $block_size $frag_size
+assert ($ITL_Status == 1)
+
+!*** Ensure that the aggregate can't be recovered
+recoverAggr $device
+assert ($ITL_Status == 16)
+
+!*** Ensure that the aggregate can't be salvaged
+salvageAggr $device
+assert ($ITL_Status == 16)
+
+verifyStatus true
+
+!*** Check interaction with a mounted fileset
+exec setup_fset
+
+verifyStatus false
+
+!*** Ensure that the aggregate can't be detached. 
+detachAggr $aggr_id
+assert ($ITL_Status == 16)
+
+!*** Ensure that the aggregate can't be reinitialized
+initAggr $device $block_size $frag_size
+assert ($ITL_Status == 1)
+
+!*** Ensure that the aggregate can't be recovered
+recoverAggr $device
+assert ($ITL_Status == 16)
+
+!*** Ensure that the aggregate can't be salvaged
+salvageAggr $device
+assert ($ITL_Status == 16)
+
+verifyStatus true
+
+!*** Check interaction after unmounting fileset
+unmountFset $mount_point[0]
+
+verifyStatus false
+
+!*** Ensure that the aggregate can't be reinitialized
+initAggr $device $block_size $frag_size
+assert ($ITL_Status == 1)
+
+!*** Ensure that the aggregate can't be recovered
+recoverAggr $device
+assert ($ITL_Status == 16)
+
+!*** Ensure that the aggregate can't be salvaged
+salvageAggr $device
+assert ($ITL_Status == 16)
+
+verifyStatus true
+
+!*** Destroy the fileset
+exec shutdown_fset
+
+!*** Detach the aggregate
+detachAggr $aggr_id
+
+!*** Ensure that the aggregate can be verified and re-attached
+verifyAggr $device
+attachAggr $device $aggr_type $aggr_name $aggr_id
+
+exec shutdown_aggr

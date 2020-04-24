@@ -1,0 +1,375 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dfs.repfldb_checklist,v $
+# Revision 1.1.86.2  1996/03/11  02:44:05  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:07:24  marty]
+#
+# Revision 1.1.86.1  1995/12/11  21:59:35  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:58:50  root]
+# 
+# Revision 1.1.84.1  1994/02/04  20:48:36  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:26:07  devsrc]
+# 
+# Revision 1.1.82.3  1994/01/26  21:20:40  gmd
+# 	Merged with changes from 1.1.82.2
+# 	[1994/01/26  21:20:32  gmd]
+# 
+# 	Per 9521, clarified intro w/r/to required config.
+# 	Made other minor grammatical/syntactical changes ie.
+# 		udebug now takes -rpcgroup not -group
+# 		no quorum means no write access, SOME read access
+# 	[1994/01/26  21:14:18  gmd]
+# 
+# Revision 1.1.82.2  1994/01/20  18:44:24  annie
+# 	added copyright header
+# 	[1994/01/20  18:40:47  annie]
+# 
+# Revision 1.1.82.1  1993/12/28  20:15:36  sally
+# 	Changed comment leader from #<tab> to #<space>
+# 	[1993/12/28  20:11:02  sally]
+# 
+# Revision 1.1.5.2  1993/07/20  20:42:22  mhickey
+# 	Updated to reflect reality and remove extraneaous steps.
+# 
+# 	From the defect report:
+# 
+# 	CR Number                           (idnum): 8301
+# 
+# 	Short Description                    (text): needs work for accuracy, utility
+# 
+# 	While trying to follow this checklist, I encountered a number of
+# 	inaccuracies, missing information, and steps that served no real useful
+# 	purpose.  Specifically:
+# 	  -  You must either run the core DCE services on a non-DFS machine, or
+# 	     on the machine with the highest IP address of the machines in the
+# 	     test cell so that the DCE core server does not get elected the
+# 	     fldb sync site.
+# 
+# 	  -  missing the '-process flserver' arguement to the bos restart command
+# 	     to restart the flservers so that they can elect a sync site.
+# 
+# 	  -  Information on setting up to run the ubik unit tests is extraneous
+# 	     since there is no step that tells you to run them, nor is it well
+# 	     understood how to run them.
+# 
+# 	  -  To determine the fldb sync site, you should check amoung the members
+# 	     of the /.:/fs group, not the /.:/subsys/dce/dfs/utst group.
+# 
+# 	  -  After shutting down the initial sync site, you should verify that a
+# 	     new sync site is elected from the remaining flservers before
+# 	     re-starting the old sync site.
+# 
+# 	  -  The last step should be to run the fts short test, periodically
+# 	     determining the sync site, stopping the flserver on that machine,
+# 	     waiting to see that a new sync site is elected, restarting the
+# 	     old sync site's flserver, and verifying that it sees the same
+# 	     fldb info as the machines left running.
+# 	[1993/07/20  20:38:15  mhickey]
+# 
+# Revision 1.1.2.2  1993/02/12  21:38:37  gmd
+# 	Original version.
+# 	[1993/02/12  20:55:12  gmd]
+# 
+# $EndLog$
+############################################################################
+# TITLE: dfs.repfldb_checklist
+# 
+# OBJECTIVE:
+# Document procedures used to setup and verify replicated
+# fileset location database servers (FLDBs). 
+# Examples of commands to be typed in are preceeded by "> ". 
+# Example output is preceeded by "< ".
+#
+# LOGIC FLOW:
+# Order of procedures is:
+# 	A. Setup DCE and DFS
+# 	B. Verify setup
+# 	C. Determine the location of the master fldb server 
+#                  (also known as the "sync site") and shut it down.
+# 	D. Verify determination of a new master fldb server
+#               E. Update fldb
+#               F. Verify updates
+# 	G. Restart master fldb server
+# 	H. Verify updates still seen by all
+# 	I. Test basic read/write access to filesets
+# 	J. Test fileset manipulation
+#
+# CALLED FROM:
+#       Not applicable for a checklist.  Run by hand.
+#
+# CALLS INTO: 
+#       fts command suite (lsfldsb, crfldbentry, delfldbentry)
+#
+# PREREQUISITES: 
+#       4 test machines configured as follows:
+#		machine 1 = sec and cds server (explicitly NOT a fldb server)
+#		machine 2 = dts, dfs file and fldb server, dfs client
+#		machine 3 = dts, dfs file and fldb server, dfs client
+#		machine 4 = dts, dfs file and fldb server, dfs client
+#
+# SYNTAX: 
+#       Not applicable.
+#
+############################################################################
+
+	A. Setup DCE and DFS
+
+           1. Run dce_config on each of 4 machines,
+ 	      choosing the DCE CORE server options (SEC and CDS) on
+	      the 1st machine and the FLDB server option on the
+	      other 3. These FLDB server machines must be configured
+	      as dfs clients as well. It is highly recommended that
+	      you also run 3 local DTS servers to maintain accurate
+	      time within your cell. There can be no more than a 30
+	      second difference in system times on the fldb server
+	      machines.
+
+           NOTE 1: You will be instructed in a later step to reboot the 
+                   master fldb server (the sync site) and then to do some 
+                   fldb work while the sync site system is down.  This is
+		   why a separate DCE CORE Servers machine is used.
+
+	   NOTE 2: If the machine is a DECstation (pmax), you
+	           must have previously installed and booted up on
+  	           a dfs kernel. If the machine is an HP, you
+		   must have previously installed and booted up
+		   on a kernel that supports extensions.
+
+	B. Verify setup
+
+           1. On each machine, list the fileset location database entries.
+
+                > fts lsfldb 
+
+	      The output should be the same on all machines.
+
+  	      The following output is an example of what you would see
+	      for a 3 machine cell, cobbler, dce12 and valentine, each
+	      machine acting as a fl server and file server exporting
+	      a native fileset.
+
+                < dce12.u3  
+                <         readWrite   ID 0,,4  valid
+                <         readOnly    ID 0,,5  invalid
+                <         backup      ID 0,,6  invalid
+                < number of sites: 1
+                <  server         flags     aggr   siteAge principal    owner
+                < dce12.osf.org     RW      /u3     0:00:00 hosts/dce12 <nil>
+                < 
+                < root.dfs  
+                <         readWrite   ID 0,,1  valid
+                <         readOnly    ID 0,,2  invalid
+                <         backup      ID 0,,3  invalid
+                < number of sites: 1
+                <  server         flags    aggr   siteAge principal      owner
+                < cobbler.osf.org   RW     /u1     0:00:00 hosts/cobbler <nil>
+                <
+                < val.u4  
+                <         readWrite   ID 0,,7  valid
+                <         readOnly    ID 0,,8  invalid
+                <         backup      ID 0,,9  invalid
+                < number of sites: 1
+                <  server         flags    aggr   siteAge principal      owner
+                < valentine.osf.org   RW   /u4    0:00:00 hosts/valentine <nil>
+                < ----------------------
+                < Total FLDB entries that were successfully enumerated: 3 (0 failed)
+
+           2. Add an entry and check that it can be seen from all FLDBs.
+
+ 	      For example ('\' is for readability of this document only):
+
+                > fts crfldbentry -ftname val.u2 -server valentine  -aggrid 4 \
+                                                                   -localauth
+
+	      Then, on each machine:
+
+ 	        > fts lsfldb 
+
+	      And the output on all machines should now end with
+              Total = Previous Total + 1.
+
+                < Total FLDB entries that were successfully enumerated: 4 (0 failed)
+
+
+	C. Determine the location of the master fileset location database 
+           server (also known as the "sync site") and shut it down.
+
+	   1. You can determine which machine is serving as the sync site by
+              using "udebug". On each fldb machine type the following:
+
+                > udebug -rpcgroup /.:/fs -long 
+
+              The udebug command output looks like this (the '\' breaks 
+              a line for readability purposes of this document):
+
+                > udebug -group /.:/fs -long
+                < Host 130.106.234.527, his time is 0
+                < Vote: Last yes vote for 130.106.234.527 at -13 \
+                <       (sync site);  Last vote started at -13  <<<<=====
+                < Local db version is 743098730.5
+                < I am sync site until 77 (2 servers)   <<<<=============
+                < Recovery state 1f
+                < Sync site's db version is 743098730.5
+                < 0 locked pages, 0 of them for write
+                < This server started at -10699
+                  
+                < [ output about votes received from other fldb's ]
+                 
+              Note the lines delimited by the arrow (<<<====).  These lines 
+              show that this machine is the sync site.  If udebug is run on a 
+              machine that does not house the sync site, the output
+              will be very similar, but the lines would read 
+
+                 < Vote: Last yes vote for 130.106.234.527 at -13 (not \
+                        sync site);  Last vote started at -13
+              and
+                 < I am not sync site
+
+              respectively.
+
+	      There should be one and only one sync site.
+
+
+	   2. Shutdown the sync site machine, to simulate a crash or network 
+              partition. Do NOT have the dce and dfs services start up
+	      upon reboot.
+
+                 sync_site> shutdown -r now 
+
+
+        D. Verify determination of a new master fldb server
+           
+           When the sync site is shut down in a cell, the remaining fldb server
+           processes begin "voting" to "elect" a system to become the new sync
+           site.  This process commences when the fldb servers detect that the 
+           original sync site has gone down, and should complete in a short 
+           number of minutes.
+  
+	   Although read access to the fldb is now possible without
+	   quorum (as of 103a), there is a small window during which
+	   you do do not have read access, so you will either succeed
+	   with an fts lsfldb command or get the following:
+
+	   machine2> fts lsfldb
+	   Could not access the FLDB for attributes
+	   Error: no quorum elected (dfs / ubk)
+
+           To verify that the fldb servers that were not shut down commence 
+           this voting and elect a new sync site:
+           
+           After shutting down the original sync site, wait about 5 
+           minutes, then re-run the "udebug" command described above in 
+           step C.1. on each of the machines that were not shut down.  One
+           and only one of the machines should report that it is now 
+	   the sync site.  
+           		
+	E. Update FLDB.
+
+	   1. Remove one entry and add another entry while the former 
+              master fl server is not running ('\' is for the readability of 
+              this document only):
+
+	        machine2> fts delfldbentry -fileset val.u2
+		machine2> fts crfldbentry -ftname val.u3 -server valentine \
+                                          -aggrid 5 -localauth
+
+           2. On each fldb machine still running, list the fileset 
+	      location database entries.
+
+	        > fts lsfldb 
+
+	      The output should be the same on all machines. When the
+              fts command tries to report on filesets exported from the
+              old sync site machine, you will correctly see an error from  
+              the machine that was the sync site and is currently not 
+              running dce and dfs.
+
+                < Error: communications failure (dce / rpc)
+
+		
+	F. Re-start DCE and DFS on the machine that WAS the sync site.
+
+	        > sh -x /etc/rc.dce
+
+	G. List the filesest location database entries on all machines.
+
+		> fts lsfldb
+
+	     The output should be the same.
+
+
+	H. Test fileset read/write access.
+
+           1. Test fileset read/write access from all machines
+	      to all filesets:
+                 
+                 a. for Episode filesets, you can use the dfs.lock system test.
+                    Edit the lock.data file to reflect your configuration, 
+                    desired testing parameters, and desired file locations,
+                    then run the dfs.lock test (see the README in the source
+                    tree at <dce_path>/src/test/systest/file for more complete
+                    information on running the dfs.lock test), capturing the 
+                    output in a log file (the following example is for the
+                    Bourne or Korn shell):
+                  
+                    > test/systest/file/dfs.lock -f lock.data > lock.log 2>&1
+
+                    Search the log file for lines beginning with "ITERATION"
+                    to see the status of the test passes.  You can then look
+                    in the log file for a description of what happened during
+                    each of the passes that failed.
+
+                 b. for native filesets, you can use the dfs.glue system test.
+                    Edit the glue.data file to reflect your configuration, 
+                    desired testing parameters, and desired file locations,
+                    then run the dfs.glue test (see the README in the source
+                    tree at <dce_path>/src/test/systest/file for more complete
+                    information on running the dfs.glue test), capturing the 
+                    output in a log file (the following example is for the
+                    Bourne or Korn shell):
+                   
+		    > test/systest/file/dfs.glue glue.data HH > glue.log 2>&1
+
+		    where HH is the # of hours you want the test to run.
+
+                    Search the log file for the string "FAILED" to identify
+                    places where the test clients failed.
+
+
+	I. Test fileset manipulation commands.
+
+	   1. Run the automated fts functional tests in test/file/fts.  
+              While the test is running, do the following several times to 
+              verify that the fldb servers are operating correctly:
+                 
+                a. follow the instructions in step C.1. above for determining
+                   the sync site.
+
+                b. shut down the fldb server process on the sync site system:
+                 
+                   > bos stop -server /.:/hosts/<host> -process flserver
+
+                c. follow the instructions in steps D and E for verifying 
+                   that a new sync site was elected, and for updating the fldb.
+                   
+                d. after about 30 minutes, restart the flserver on the machine
+                   the was the sync site:
+ 
+                   > bos start -server /.:/hosts/<host>  -process flserver
+
+                e. follow the instructions for step G to verify that the 
+                   fldb servers are once again in sync.
+
+	   Note that fldb writes and even some fldb reads will fail while
+	   the flservers are in the process of regaining quorum but fldb
+	   writes and reads should succeed once there is a quorum.
+
+

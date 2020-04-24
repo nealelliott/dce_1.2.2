@@ -1,0 +1,219 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: Makefile_timop_svc,v $
+# Revision 1.1.9.3  1996/02/18  18:26:24  marty
+# 	Update OSF copyright years
+# 	[1996/02/18  17:48:27  marty]
+#
+# Revision 1.1.9.2  1995/12/08  20:55:02  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/08  20:50:07  root]
+# 
+# Revision 1.1.5.1  1994/10/21  19:16:54  weir
+# 	Submit sample program sources (CR 12635)
+# 	[1994/10/21  19:16:26  weir]
+# 
+# Revision 1.1.2.1  1994/06/14  19:57:27  weir
+# 	DCE 1.1 Beta check-in
+# 	[1994/06/14  16:15:11  weir]
+# 
+# $EndLog$
+# 
+# * The Example code is provided to you as "Pass-through Code".
+# * Pass-through Code and its related Documentation are not warrented,
+# * supported, or indemnified by OSF, and are provided "AS IS".
+# * You can use, sublicense, or distribute the same at your own risk.
+#
+# Copyright (c) 1990, 1991  
+# Open Software Foundation, Inc. 
+#  
+# Permission is hereby granted to use, copy, modify and freely distribute 
+# the software in this file and its documentation for any purpose without 
+# fee, provided that the above copyright notice appears in all copies and 
+# that both the copyright notice and this permission notice appear in 
+# supporting documentation.  Further, provided that the name of Open 
+# Software Foundation, Inc. ("OSF") not be used in advertising or 
+# publicity pertaining to distribution of the software without prior 
+# written permission from OSF.  OSF makes no representations about the 
+# suitability of this software for any purpose.  It is provided "as is" 
+# without express or implied warranty. 
+#
+#  OSF DCE Version 1.0 
+#
+
+
+#******************************************************************************
+# NOTE:  This Makefile is a generic one, suitable for a typical application
+# developer.  You should modify it to suit your particular environment.
+# 
+# There is one place in particular where you will have to replace a
+#  pathname with the one appropriate to your installation. The line
+#  is marked with a "# REPLACE WITH" comment preceding the form of the
+#  replacement name you should use.
+# 
+#******************************************************************************
+
+DCEROOT = /opt/dcelocal
+
+# SAMS reference
+SAMS = sams
+
+CC = c89
+
+# IDL compiler
+IDLC = /usr/bin/idl
+
+# libraries
+LIBS = -ldce
+
+# include dirs (some compilers need -I. to pick up local header files)
+INC = -I. -I$(DCEROOT)/share/include
+
+#
+# NOTE: The following five lines are needed on HPUX...
+#
+# LDFLAGS =-Wl,-Bimmediate,-Bnonfatal
+# IDLCC=-cc_cmd 'c89 -c'
+# IDLCOPT=-cc_opt -D_HPUX_SOURCE
+# CDEFS = -D_HPUX_SOURCE
+# CC = c89
+#
+
+# CC flags
+CFLAGS = $(CDEFS) $(INC)
+
+# Link flags
+# LFLAGS = -L.
+
+# IDLC flags
+IFLAGS = -v -no_mepv $(IDLCC) $(IDLCOPT) $(INC)
+
+
+# interface and associated names
+# (given the IF name, the names for IDL, ACF, HEADER, CLIENTSTUB, and SERVERSTUB
+#     are standard defaults; others are conventional)
+IF = timop_svc
+
+IDL = $(IF).idl
+
+ACF = $(IF).acf
+HEADER = $(IF).h
+
+# application header files
+HEADERS = $(IF)_aux.h
+
+# client stuff
+CLIENT = $(IF)_client
+CLIENTH = $(CLIENT).h
+CLIENTC = $(CLIENT).c
+CLIENTO = $(CLIENT).o
+CLIENTSTUB = $(IF)_cstub
+CLIENTSTUBC = $(CLIENTSTUB).c
+CLIENTSTUBO = $(CLIENTSTUB).o
+# The following is for setting up the serviceability remote interface. The .idl file
+#  comes from the tree (as can be seen below). That being so, we don't have any control
+#  over the name of the stub files.
+CLIENTSVCSTUB = service_cstub
+CLIENTSVCSTUBC = $(CLIENTSVCSTUB).c
+CLIENTSVCSTUBO = $(CLIENTSVCSTUB).o
+
+CLIENTAUX = $(IF)_caux.o
+
+CLIENTOBJ = $(CLIENTO) $(CLIENTSVCSTUBO) $(CLIENTSTUBO)
+
+# server stuff
+SERVER = $(IF)_server
+SERVERH = $(SERVER).h
+SERVERC = $(SERVER).c
+SERVERO = $(SERVER).o
+SERVERSTUB = $(IF)_sstub
+SERVERSTUBC = $(SERVERSTUB).c
+SERVERSTUBO = $(SERVERSTUB).o
+# The following is for setting up the serviceability remote interface. The .idl file
+#  comes from the tree (as can be seen below). That being so, we don't have any control
+#  over the name of the stub files.
+SERVERSVCSTUB = service_sstub
+SERVERSVCSTUBC = $(SERVERSVCSTUB).c
+SERVERSVCSTUBO = $(SERVERSVCSTUB).o
+
+SERVERAUX = $(IF)_saux.o
+
+# The following is for the objects that contain the serviceability table
+#  and messages, respectively.
+SVCMSGO = dcetsvmsg.o
+SVCSVCO = dcetsvsvc.o
+
+# manager stuff
+MANAGER = $(IF)_manager
+MANAGERC = $(MANAGER).c
+MANAGERO = $(MANAGER).o
+
+# reference monitor stuff
+REFMON = $(IF)_refmon
+REFMONC = $(REFMON).c
+REFMONO = $(REFMON).o
+
+# This handles the remote serviceability implementations. They have to be linked
+#  in to the server code. For the client side, the stub (generated from service.idl)
+#  takes care of everything.
+SVC_REMOTE = $(IF)_svc
+SVC_REMOTEC = $(SVC_REMOTE).c
+SVC_REMOTEO = $(SVC_REMOTE).o
+
+
+# all the server objects to be linked
+SERVEROBJ = $(SERVERO) $(SVCMSGO) $(SVCSVCO) $(SERVERSTUBO) $(SERVERSVCSTUBO)\
+	$(MANAGERO) $(REFMONO) $(SVC_REMOTEO)
+
+# all object files
+OBJ_FILES = $(CLIENTO) $(CLIENTSTUBO) $(SERVERO) $(SVC_REMOTEO) $(SERVERSTUBO) $(MANAGERO) $(REFMONO)\
+	$(SERVERSVCSTUBO) $(CLIENTSVCSTUBO) $(SVCMSGO) $(SVCSVCO)
+
+# sams-generated files
+SVC_FILES = dcetsvmsg.h dcetsvmsg.c dcetsvmac.h dcetsvsvc.c dcetsvsvc.h dcetsv.cat dcetsv.msg
+
+# stuff that IDLC creates (for cleanup purposes)
+FROMIDLC = $(HEADER) $(CLIENTSTUBC) $(SERVERSTUBC) $(CLIENTSVCSTUBC) $(SERVERSVCSTUBC) service.h
+
+
+# targets & dependencies
+
+default: all
+
+all: $(CLIENT) $(SERVER)
+
+$(CLIENT): $(CLIENTOBJ)
+	$(CC) $(CFLAGS) $(LFLAGS) $(LDFLAGS) -o $(CLIENT) $(CLIENTOBJ) $(LIBS)
+
+$(SERVER): $(SERVEROBJ)
+	$(CC) $(CFLAGS) $(LFLAGS) $(LDFLAGS) -o $(SERVER) $(SERVEROBJ) $(LIBS)
+
+$(CLIENTOBJ): $(HEADER) $(HEADERS) $(CLIENTH)
+
+$(SERVEROBJ): $(HEADER) $(HEADERS) $(SERVERH)
+
+$(OBJ_FILES): $(SVC_FILES)
+
+$(SVC_FILES): tsv.sams
+
+$(HEADER): $(IDL) $(ACF)
+	$(IDLC) $(IDL) $(IFLAGS)
+	$(IDLC) /project/dce/build/dce1.1/src/dce/utils/svc/service.idl $(IFLAGS)
+# REPLACE WITH: <dce-root-dir>/dce/src/dce/utils/svc/service.idl $(IFLAGS)
+
+$(SVC_FILES):
+	$(SAMS) tsv.sams
+
+clean:
+	rm -f $(FROMIDLC) $(OBJ_FILES) $(CLIENTAUX) $(SERVERAUX) $(SVC_FILES) core
+	rm -f dcetsvmsg.man dcetsvmsg.sgm dcetsvmsg.idx \(null\).idl
+
+rmtarget:
+	rm -f $(CLIENT) $(SERVER)
+
+clobber: clean rmtarget

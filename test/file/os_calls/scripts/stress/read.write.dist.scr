@@ -1,0 +1,558 @@
+*
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* read-write-dist.scr
+* Check basic cache data consistency: update from stress process, and
+* ensure that test process sees the new information.
+
+* Also, make update (of, say, mode bits) via stress process, and then
+* make piles of *other* status (e.g. utimes) also via stress processes,
+* *while* the DFS client test process is stating the file, ensuring that
+* the first update is successful.  Since other updates are happening
+* concurrently, DFS client will encounter more race conditions, but it
+* knows what it expects to see in the mode bits.
+
+* Check updates to all status info: utimes, chmod, chown, chgrp,
+* truncate (both growing and shrinking), where the update is made via
+* a stress process, and checked via the test processes.
+*
+
+* 
+* USAGE: ./file_test -l /.:/dfs_test/a    (for hub)
+*        ./file_test -c /.:/dfs_test/a    (for two spokes)
+* Note: 
+*      1. Before running the script you have to create a cds directory
+*         /.:/dfs_test/a or whataver object in the naming space.
+*      2. It is really upto the tester (user) who can make different
+*         testing scenarios by start hub and spokes from different
+*         places (from a DFS or from LOCAL path, or form another machine).
+*      3. There are one hub and at least two spokes involved in the test.
+*         They could be under same client or not.
+*      4. Check with Mike Kazar's syscall checklist "write and read syscalls".
+*      5. Make sure that you have read and write perms for the working dir.
+*
+
+*
+!* Include config file.
+include config
+
+set writeLoops 10
+set numOfChunks 10
+set stressLoops 1
+set middleByte ($CHUNKSIZE/2)
+
+* Set this var to stress the test (100 will last about 2 hours)
+set loopTimes 10
+
+
+* 
+* This procedure writes at 20 80 140k with skipped space.
+*
+set writePartMissing_Proc proc END_PROC
+
+* The values got by getNumVec are all 0 --- XXXXXXXX -----.
+
+  echo
+  echo **** Write with part missing. ****
+
+  getwd workDir
+
+ 
+  set dataFile vector64k
+  set vector1k vector 0x0
+  open @dataFile @O_RDONLY 0777 dataFid
+  read @dataFid 1024 vector1k
+  close @dataFid
+
+  chdir $testDir
+ 
+  open $testFile (@O_CREAT|@O_RDWR) 0777 fileId
+
+  sync_join "write_part_missing" $timeout
+
+  lseek @fileId @SEEK_SET 20480
+  write @fileId @vector1k
+
+  * Skip 21k to 80k
+  * Position the file pointer to 80k and write 1k non empty data.
+  lseek @fileId @SEEK_SET 81920
+  write @fileId @vector1k
+
+  * Skip 81k to 144k.
+  * Position th file pointer to 144k and write 1k non-zero data.
+  lseek @fileId @SEEK_SET 147456
+  write @fileId @vector1k
+stat $testFile var
+echo @var.st_size  
+  sync_join "check_point" $timeout
+
+  sync_join "finish_write_part_missing" $timeout
+
+  close @fileId
+
+  chdir @workDir
+  echo End write part missing.
+  echo
+
+END_PROC
+
+*
+* This procedure check if writes are ok.
+*
+set checkPartMissing_Proc proc END_PROC
+
+  echo
+  echo **** Check with writting part missing. ****
+
+  getwd workDir
+
+  set dataFile vector64k
+  set vector0To128b vector 0x0
+  set vector896To1024b vector 0x0
+  set vector0To256b vector 0x0
+
+  open @dataFile @O_RDONLY 0777 dataFid
+  read @dataFid 128 vector0To128b
+  lseek @dataFid @SEEK_SET 0
+  read @dataFid 256 vector0To256b
+  lseek @dataFid @SEEK_SET (1024-128)
+  read @dataFid 128 vector896To1024b
+  close @dataFid
+
+  chdir $testDir
+  open $testFile O_RDONLY 0777 fileId
+
+  sync_join "write_part_missing" $timeout
+
+  sync_join "check_point" $timeout
+
+  * The file size should be  64k+81k = 145k (148480 bytes)
+  stat $testFile var
+  if ( @var.st_size != 148480 ) {
+echo @var.st_size
+    echo FAILED: The size of the file created is different from expected.
+  }
+
+  set junk vector 0x0
+  set nullData vector "0x000000000000000000000000"
+  set value vector (@nullData + @vector0To128b)
+  lseek @fileId @SEEK_SET (20480-12)
+  read @fileId 140 junk
+  if ( @junk != @value ) {
+    echo FAILED: The read spanning of 0 region and the data is failed.
+  }
+
+  lseek @fileId @SEEK_SET (20480)
+  read @fileId 256 junk
+  if ( @junk != @vector0To256b ) {
+    echo FAILED: The read spanning of the data is failed.
+  }
+
+  set value vector (@vector896To1024b + @nullData)
+  lseek @fileId @SEEK_SET (21504-128)
+  read @fileId 140 junk
+  if ( @junk != @value ) {
+    echo FAILED: The read spanning of data written and the 0 region faied.
+  }
+
+  lseek @fileId @SEEK_SET (65536-12)
+  read @fileId 12 junk
+  if ( @junk != @nullData ) {
+    echo FAILED: The read spanning of 0 region crossing the 64k boundary. 
+  }
+
+  set value vector (@nullData + @vector0To128b)
+  lseek @fileId @SEEK_SET (81920-12)
+  read @fileId 140 junk
+  if ( @junk != @value ) {
+    echo FAILED: The read spanning of 0 region and the data failed.
+  }
+
+  set value vector (@vector896To1024b + @nullData)
+  lseek @fileId @SEEK_SET (82944-128)
+  read @fileId 140 junk
+  if ( @junk != @value ) {
+    echo FAILED: The read spanning of second chunk's non-0 region and 0 failed.
+  }
+ 
+  set value vector (@nullData + @vector0To128b )
+  lseek @fileId @SEEK_SET (147456-12)
+  read @fileId 140 junk
+  if ( @junk != @value ) {
+    echo FAILED: The read spanning of second chunk's 0 region and non-0 filed.
+  }
+
+  sync_join "finish_write_part_missing" $timeout
+
+  chdir @workDir
+  echo End check part missing.
+  echo 
+
+END_PROC
+
+*
+* Test write middle bytes while the other processes checking the result.
+* DFS client should always see the upto date data.
+* This test needs multi machine env.
+*
+set writeMiddle_Proc proc END_PROC
+  echo 
+  echo Write middle bytes.
+
+  getwd workDir
+  chdir $testDir
+
+  open $testFile @O_WRONLY 0777 fileId
+
+  sync_join "write_middle" $timeout
+  
+  set counter 0
+
+  loop lv 1 1 $loopTimes
+    set offset $middleByte
+    loop x 1 1 $numOfChunks 
+      set counter ( @counter + 1 )
+      set myCounter vector @counter
+      lseek @fileId @SEEK_SET @offset
+
+      set syncVar string write_read
+      set syncVar ( @syncVar + @x +@lv )
+      sync_join @syncVar ( 2 * $timeout )
+
+      write @fileId @myCounter
+echo @myCounter
+      set offset ( @offset + $CHUNKSIZE )
+
+      set syncVar ( @syncVar + "done" )
+      sync_join @syncVar ( 2 * $timeout )
+
+    endloop
+  endloop
+  close @fileId
+
+  open $testFile @O_WRONLY 0777 fileId
+
+  sync_join "write_string_middle" $timeout
+  
+  set counter 0
+
+  loop lv 1 1 $loopTimes
+    set offset $middleByte
+    loop x 1 1 $numOfChunks 
+      set counter ( @counter + 1 )
+      set myCounter string @counter
+      lseek @fileId @SEEK_SET @offset
+
+      set syncVar string write_string_read
+      set syncVar ( @syncVar + @x +@lv )
+      sync_join @syncVar ( 2 * $timeout )
+
+      write @fileId @myCounter
+echo @myCounter
+      set offset ( @offset + $CHUNKSIZE )
+
+      set syncVar ( @syncVar + "done" )
+      sync_join @syncVar ( 2 * $timeout )
+
+    endloop
+  endloop
+  close @fileId
+
+  sync_join "finish_write_middle" $timeout
+
+  chdir @workDir
+  echo End write middle bytes.
+  echo
+END_PROC
+
+* This procedure will check if the data is consistent or not (uptodate).
+set checkMiddle_Proc proc END_PROC
+  
+  echo 
+  echo Check middle bytes.
+
+  getwd workDir
+  chdir $testDir
+
+  open $testFile @O_RDONLY 0777 fileId
+
+* Test write binary data to the middle.
+  sync_join "write_middle" $timeout
+  
+  set counter 0
+  set junk vector 0x0
+  set lastOne vector 0xffffffff
+
+  loop lv 1 1 $loopTimes
+    set offset $middleByte
+    loop x 1 1 $numOfChunks 
+
+      set counter ( @counter + 1 )
+      set myCounter vector @counter
+
+      set syncVar string write_read
+      set syncVar ( @syncVar + @x + @lv)
+      sync_join @syncVar ( 2 * $timeout )
+
+      set syncVar ( @syncVar + "done" )
+      sync_join @syncVar ( 2 * $timeout )
+
+      lseek @fileId $SEEK_SET @offset
+      read @fileId 4 junk
+echo myCounter = @myCounter junk = @junk
+      if ( @junk != @myCounter ) {
+        echo FAILED: The vector counter in the middle byte was wrong.
+      }
+      if ( @lv != 1 && @junk <= @lastOne ) {
+        echo FAILED: The cached data is not consistent.
+      }
+      set offset ( @offset+$CHUNKSIZE )
+      set lastOne vector @junk
+    endloop
+
+    set firstByte 0
+    set dummy string ""
+    loop y 1 1 $numOfChunks 
+      lseek @fileId @SEEK_SET @firstByte
+      read @fileId 1 dummy
+      set firstByte ( @firstByte + $CHUNKSIZE )
+    endloop
+  endloop
+  close @fileId
+
+  open $testFile @O_RDONLY 0777 fileId
+
+* Test write string to the middle.
+  sync_join "write_string_middle" $timeout
+  
+  set counter 0
+  set junk string ""
+  set lastOne -1
+  loop lv 1 1 $loopTimes
+    set offset $middleByte
+    loop x 1 1 $numOfChunks 
+
+      set counter ( @counter + 1 )
+      set myCounter string @counter
+      set len #@myCounter
+
+      set syncVar string write_string_read
+      set syncVar ( @syncVar + @x + @lv)
+      sync_join @syncVar ( 2 * $timeout )
+
+      set syncVar ( @syncVar + "done" )
+      sync_join @syncVar ( 2 * $timeout )
+
+      lseek @fileId $SEEK_SET @offset
+      read @fileId @len junk
+echo myCounter = @myCounter junk = @junk
+      if ( @junk != @myCounter ) {
+        echo FAILED: The string counter in the middle  was wrong.
+      }
+      if ( @lv != 1 && @junk == @lastOne ) {
+        echo FAILED: The cached data is not consistent in string counter check.
+      }
+      set offset ( @offset+$CHUNKSIZE )
+      set lastOne string @junk
+    endloop
+
+    set firstByte 0
+    set dummy string ""
+    loop y 1 1 $numOfChunks 
+      lseek @fileId @SEEK_SET @firstByte
+      read @fileId 1 dummy
+      set firstByte ( @firstByte + $CHUNKSIZE )
+    endloop
+  endloop
+  close @fileId
+
+
+  sync_join "finish_write_middle" $timeout
+
+  chdir @workDir
+  echo End Check middle bytes.
+  echo
+
+END_PROC
+
+***********************************************************************
+* Check if there are enogh spokes.
+if ( $ITL_nspokes < 2 ) {
+  echo To run the test you have to have at least two spokes.
+}
+
+verifyStatus false
+set tempName ( $testDir + "/" + $testFile )
+access $tempName $accessFlagE
+if ( $ITL_Status == 0 ) {
+  remove $tempName
+}
+verifyStatus true
+
+*
+!* Test write middle bytes while other processes do the checking 
+*  and stressing (sort of cache consistency test).
+*
+echo
+set commd ("cp onemegabin " + $testDir + "/" + $testFile)
+shellexec commd
+
+chdir $testDir
+
+open $testFile $O_RDWR 0777 fileId
+
+rexec_async $ITL_spoke[0] writeMiddle_Proc result[0] writeAsyncId[0]
+
+loop x 1 1 ($ITL_nspokes-1)
+  rexec_async $ITL_spoke[$x] checkMiddle_Proc result[$x] writeAsyncId[$x]
+endloop
+
+* Stressing the test here by various checking.
+
+set junk vector 0x0
+set junk1 vector 0x0
+set junk2 vector ((65536/4)-1)
+set boundaryData vector ($junk2+$junk1)
+set junk1 vector ((65536/4)-2)
+set lastTwo vector ($junk1+$junk2)
+
+sync_create "write_middle" $ITL_nspokes  $timeout
+sync_release "write_middle"
+
+loop loopVar 1 1 $loopTimes
+  flush_file $testFile
+  loop x 1 1 $numOfChunks  
+    set offset ($x*$CHUNKSIZE)
+    lseek $fileId $SEEK_SET ($offset-8)
+    read $fileId 8 junk
+    if ( $junk != $lastTwo ) {
+      echo FAILED: Last eight bytes are not right in a chunk.
+    }
+    lseek $fileId $SEEK_SET ($offset-4)
+    read $fileId 8 junk
+    if ( $junk != $boundaryData ) {
+      echo FAILED: The boundary data (crossing bounary) is not right.
+    }
+
+    lseek $fileId $SEEK_SET $offset
+    read $fileId $CONST64K junk
+    if ( $loopVar != 1 && $x != $numOfChunks && $junk == $NUMVEC64K ) {
+      echo FAILED: read prefetched chunk failed.
+    }
+
+    set syncVar string write_read
+    set syncVar ($syncVar+$x+$loopVar)
+    sync_create $syncVar $ITL_nspokes  ( 2 * $timeout)
+    sync_release $syncVar
+
+    set syncVar ( $syncVar + "done" )
+    sync_create $syncVar $ITL_nspokes  ( 2 * $timeout)
+    sync_release $syncVar
+
+  endloop
+endloop
+
+sync_create "write_string_middle" $ITL_nspokes  $timeout
+sync_release "write_string_middle"
+
+loop loopVar 1 1 $loopTimes
+  flush_file $testFile
+  loop x 1 1 $numOfChunks  
+
+    set syncVar string write_string_read
+    set syncVar ($syncVar+$x+$loopVar)
+    sync_create $syncVar $ITL_nspokes  ( 2 * $timeout)
+    sync_release $syncVar
+
+    set syncVar ( $syncVar + "done" )
+    sync_create $syncVar $ITL_nspokes  ( 2 * $timeout)
+    sync_release $syncVar
+
+  endloop
+endloop
+
+sync_create "finish_write_middle" $ITL_nspokes  $timeout
+sync_release "finish_write_middle"
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $writeAsyncId[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure for misc write testing.
+  }
+endloop
+
+close $fileId
+
+remove $testFile
+echo Done write middle
+echo
+
+*
+!* Test writting missing parts while processes check the status, 
+* and the data.
+*
+echo
+
+
+open $testFile ($O_CREAT|$O_RDWR) 0777 fileId
+close $fileId
+
+rexec_async $ITL_spoke[0] writePartMissing_Proc result[0] writeAsyncId[0]
+
+loop x 1 1 ($ITL_nspokes-1)
+  rexec_async $ITL_spoke[$x] checkPartMissing_Proc result[$x] writeAsyncId[$x]
+endloop
+
+sync_create "write_part_missing" $ITL_nspokes  $timeout
+sync_release "write_part_missing"
+
+sync_create "check_point" $ITL_nspokes  $timeout
+sync_release "check_point"
+
+sync_create "finish_write_part_missing" $ITL_nspokes  $timeout
+sync_release "finish_write_part_missing"
+
+async_join $writeAsyncId[0] $timeout
+if ( $result[0] != 0 ) {
+  echo Spoke 0 has a failure for misc write testing.
+}
+
+loop x 1 1 ($ITL_nspokes-1)
+  async_join $writeAsyncId[$x] $timeout
+endloop
+
+loop x 1 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure for misc write testing.
+  }
+endloop
+
+remove $testFile
+echo
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+
+echo Hub done.

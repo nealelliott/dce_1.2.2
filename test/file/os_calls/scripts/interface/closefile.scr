@@ -1,0 +1,191 @@
+*
+* ID: $Id:
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* closefile.scr -- This script tests the close sys calls.
+*
+* Usage: file_test -I closefile.scr 
+*        file_test -I closefile.scr -D 
+*        or 
+*        file_test <closefile.scr
+*        or
+*     	 See file_test -help 
+*
+
+*  Terminology:
+*  PASSED -- no problem for the testings.
+*  FAILED -- failed when doing basic checks.
+*  XXXXXX -- means will be enhanced later.
+
+*  Errors: 8
+
+
+***************************************************************************
+* This script implement the basic close  syscall test described in Mike Kazar's
+* syscall check list. It is trying to implement those basic, non distributed
+* tests.
+***************************************************************************
+
+*
+* Common settings.
+*
+include common2.env
+echo 
+echo Running closefile.scr
+echo
+
+
+*************************************************************************
+!*                         BASIC CASES  
+*************************************************************************
+
+set sleepTime 5000
+chdir $testDir
+
+umask 0
+* The umask call return $CommandResult
+
+*
+!* Check that open file for doing noting before close the file.
+*
+
+*
+*  Prepare a file to be tested.
+*
+time currTime
+open $testFile ($O_CREAT|$O_RDWR) 0777 testFileId
+write $testFileId $STRING64K
+close $testFileId
+stat $testFile var1
+
+
+
+set commd ( "cm flush " + $testFile ) 
+shellexec commd
+sleep 1000 
+
+open $testFile $O_RDWR 0777 testFileId
+close $testFileId
+
+* Check if the status changed.
+stat $testFile var2
+assert ($var2.st_atime == $var1.st_atime )
+assert ($var2.st_mtime == $var1.st_mtime )
+assert ($var2.st_ctime == $var1.st_ctime )
+
+
+*
+!* Check that open a non zero length file with truncate and close it. 
+*
+
+stat $testFile var1
+
+*
+* Check if atime is changed by read the file.
+*
+
+sleep $sleepTime
+open $testFile $O_RDONLY 0777 testFileId
+read $testFileId 10 junk
+stat $testFile var2
+if ( $var2.st_atime == $var1.st_atime ) {
+  set errorMessage ("FAILED: atime did not get changed, "+$testFile+", --E1")
+  exec err_Process
+}
+close $testFileId
+
+*
+* Check that truncate change the mtime.
+*
+stat $testFile var1
+open $testFile ($O_TRUNC|$O_RDWR) 0777 testFileId
+sleep $sleepTime
+stat $testFile var2
+
+*
+!* Check the stat infor during the file being opened.
+*
+if ( $var2.st_size != 0 ) {
+    set errorMessage ("FAILED: truncate did not truncate"+$testFile+", --E2")
+    exec err_Process
+}
+If ( $var2.st_mtime == $var1.st_mtime ) {
+  set errorMessage ("FAILED: mtime did not get changed, "+$testFile+", --E3")
+  exec err_Process
+}
+if ( $var2.st_atime != $var1.st_atime ) {
+  set errorMessage ("FAILED: atime did not get changed, "+$testFile+", --E4")
+  exec err_Process
+}
+close $testFileId
+
+*
+!* Check the stat infor after the file being closed.
+*
+* Hope we could get stat infor from server after the close.
+sleep $sleepTime
+stat $testFile var2
+if ( $var2.st_size != 0 ) {
+    set errorMessage ("FAILED: truncate did not truncate"+$testFile+", --E5")
+    exec err_Process
+}
+If ( $var2.st_mtime == $var1.st_mtime ) {
+  set errorMessage ("FAILED: mtime did not get changed, "+$testFile+", --E6")
+  exec err_Process
+}
+if ( $var2.st_atime != $var1.st_atime ) {
+  set errorMessage ("FAILED: atime did not get changed, "+$testFile+", --E7")
+  exec err_Process
+}
+
+*
+!* Check that after closing the file the lock on it get released.
+*
+open $testFile $O_RDWR 0777 testFileId
+write $testFileId $STRING64K
+if ( $ITL_SystemType != solaris ) {
+  flock $testFileId $LOCK_SH
+}
+close $testFileId
+
+open $testFile $O_RDWR 0777 testFileId
+if ( $ITL_Status != 0 ) {
+  set errorMessage ("FAILED: open read+write, perhaps the lock problem, "+$testFile+", --E8")
+  exec err_Process
+}
+else {
+  close $testFileId
+}
+
+remove $testFile
+
+*************************************************************************
+*                         CLEANING UP AND REPORT                        *
+*************************************************************************
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+*rmdir $testDir
+exec report_Proc "closefile.scr" $errorCounter
+echo 
+quit
+

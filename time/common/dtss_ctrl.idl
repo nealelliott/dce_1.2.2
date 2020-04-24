@@ -1,0 +1,608 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: dtss_ctrl.idl,v $
+ * Revision 1.1.7.2  1996/03/09  23:31:13  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:46:25  marty]
+ *
+ * Revision 1.1.7.1  1995/12/08  18:06:31  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  17:23:45  root]
+ * 
+ * Revision 1.1.5.5  1994/08/26  20:47:25  cbrooks
+ * 	CR11900 - dtscp show sync complete fails
+ * 	[1994/08/26  20:13:01  cbrooks]
+ * 
+ * Revision 1.1.5.4  1994/08/16  18:12:45  cbrooks
+ * 	CR 11494
+ * 	[1994/08/09  18:59:52  cbrooks]
+ * 
+ * Revision 1.1.5.3  1994/06/10  20:51:52  devsrc
+ * 	cr10872 - fixed copyright
+ * 	[1994/06/10  16:48:43  devsrc]
+ * 
+ * Revision 1.1.5.2  1994/05/12  15:17:03  rhw
+ * 	continued code cleanup & merging
+ * 	[1994/05/09  18:46:23  rhw]
+ * 
+ * 	first pass at code cleanup (compiler warnings, function prototypes)
+ * 	[1994/04/25  14:10:22  rhw]
+ * 
+ * Revision 1.1.5.1  1994/04/21  22:05:03  cbrooks
+ * 	CR 3231, 8353
+ * 	[1994/04/21  20:06:21  cbrooks]
+ * 
+ * 	CR 3231, 8353
+ * 	[1994/04/21  20:00:15  cbrooks]
+ * 
+ * 	Checkpoint
+ * 
+ * Revision 1.1  1992/01/19  15:32:17  devrcs
+ * 	Initial revision
+ * 
+ * Revision 1.1.2.2  1992/12/30  20:38:55  htf
+ * 	Embedding copyright notice
+ * 	[1992/12/30  19:07:21  htf]
+ * 
+ * Revision 1.1  1992/01/19  15:32:17  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+/*
+ * 	Module DTSS_CTRL.IDL
+ */
+/*
+ * Copyright (c) 1990 by
+ * Digital Equipment Corporation, Maynard, Mass.
+ *
+ * This software is furnished under a license and may be used and copied
+ * only  in  accordance  with  the  terms  of such  license and with the
+ * inclusion of the above copyright notice.  This software or any  other
+ * copies thereof may not be provided or otherwise made available to any
+ * other person.  No title to and ownership of the  software  is  hereby
+ * transferred.
+ *
+ * The information in this software  is subject to change without notice
+ * and  should  not be  construed  as a commitment by Digitial Equipment
+ * Corporation.
+ *
+ * Digital assumes no responsibility for the use or  reliablity  of its
+ * software on equipment which is not supplied by Digital.
+ *
+ *
+ */
+
+
+[uuid (5bc45f35-2652-11cd-8b09-08002b3c98dd),
+    version(2.0)
+
+]
+
+interface time_control
+{
+ import "dce/utctypes.idl";
+
+const unsigned long MAX_BUF_SIZE   = 1024;
+
+/*
+ * String buffer
+ */
+
+typedef struct String_t 
+{
+	byte buffer[MAX_BUF_SIZE];
+} String_t;
+
+
+/* ======================================================*/
+/* DTSS definitions 					 */
+/* ======================================================*/
+
+/*
+ * Status block for returning a generic status and an OS specific status
+ */
+typedef struct StatusBlk_t
+{
+    unsigned long status;           /* DTSS status */
+    unsigned long sysStatus;        /* O/S specific status */
+} StatusBlk_t;
+
+
+/**************************************************** 
+ * Control program data types
+ ****************************************************
+ */
+
+const unsigned long NUM_COUNTERS	= 22;
+const unsigned long MAX_TSERVERS	= 25;
+
+/*
+ * Function codes for the control program
+ */
+
+typedef enum
+{
+    CtlCreate,
+    CtlDelete,
+    CtlEnable,
+    CtlDisable,
+    CtlUpdate,
+    CtlSynch,
+    CtlChange,
+    CtlAdver,
+    CtlUnadver,
+    CtlSetDef,
+    CtlSet,
+    CtlShow,
+    CtlShowChar,
+    CtlShowStatus,
+    CtlShowCntrs,
+    CtlShowLservers,
+    CtlShowGservers
+}CtlFunc;
+
+
+/*
+ * Buffer for set/show single attribute data.
+ * First define the discriminator type for the CtlSetData union.
+ */
+
+const small VT_Bintime     = 0;
+const small VT_Reltime     = 1;
+const small VT_Decimal     = 2;
+const small VT_CourierRole = 3;
+const small VT_Boolean     = 4;
+const small VT_String	   = 5;
+const small VT_UUID        = 6;
+const small VT_Simplename  = 7;
+const small VT_Fullname    = 8;
+const small VT_DCEcourierRole = 9;
+const small VT_Hyper       = 10 ;
+
+typedef small SetShow_t;
+
+typedef union switch (SetShow_t type) setData {
+    case VT_Bintime:	 utc_t 		 userBinTime;
+    case VT_Reltime:	 utc_t		 userRelTime;
+    case VT_Decimal:	 long       	 userDecimal;
+    case VT_CourierRole: long		 userCourierRole;
+    case VT_Boolean:	 long      	 userBoolean;
+    case VT_String:	 String_t        userString;
+    case VT_UUID:        uuid_t          UUID;
+    case VT_Simplename:  String_t        userSimpleName;
+    case VT_Fullname:    String_t        userFullName;
+    case VT_Hyper     :  hyper int       userHyper ;
+}CtlSetData;
+
+
+/*
+ * Set command data structure
+ */
+
+typedef struct CtlSet_t
+{
+    byte  	useDefault;	/* true, set attr using default */
+    long int 	attribute;	/* attribute id */
+} CtlSet_t;
+
+
+/*
+ * Attribute Value structure
+ */
+
+typedef struct AttrVal_t
+{
+    CtlSetData	Data;		/* block data */
+    long int	attrSize;	/* size of the attribute data */
+    long int 	attributeType;
+} AttrVal_t;
+
+
+/*
+ * Set attribute value structure
+ */
+
+typedef struct CtlSetAttr_t
+{
+    CtlSet_t	setAttr;
+    AttrVal_t   attrValue;
+} CtlSetAttr_t;
+    
+
+typedef struct CtlShowAllCntrs{
+    long int  variant;
+    utc_t     creationTime;
+    hyper int counters[NUM_COUNTERS];
+}CtlShowAllCntrs;
+
+typedef struct CtlShowAllChar{
+    utc_t 	checkInt;
+    utc_t 	maxInacc;
+    utc_t 	errorTolerance;
+    utc_t 	LANtimeOut;
+    utc_t 	WANtimeOut;
+    utc_t 	syncHold;
+    utc_t  	nextTDFchange;
+    long  int   serverTDF ;
+    String_t    serverPrincName;
+    String_t    serverEntryName;
+    String_t    TSgroupName;
+    long int    minServers;
+    long int    queryAttempts;
+    long int    courierRole ;
+    long int    actingCourierRole;
+    long int    epochNumber;
+    long int    variant;
+    long int    hasProvider;
+    long int	clockAdjustment;
+    long int    clockResolution;
+    long int	driftRate;
+    long int    autoTDF;
+    byte	DNAversion[4];
+    byte	DECdts[4];
+    byte	timeVersion[4];
+} CtlShowAllChar;
+
+
+typedef struct Change_t{
+    long int        newEpoch;
+    long int        newTimePresent;
+    utc_t	    newTime;
+} Change_t;
+
+
+
+/*
+ * Response to a Show Servers command
+ */
+typedef struct ServerID
+{
+    utc_t       sync;                   /* Time and inacc of last synch */
+    utc_t       serv;                   /* Est. time and inacc at server */
+    String_t    nodeName; 	        /* node name */
+    byte	lastUsed;		/* used in last sync?, flag T > 0 */
+    byte        isGlobal;		/* TRUE if in global set else local */
+    long  int   transport;		/* transport type */
+} ServerID;
+
+
+typedef struct CtlShowAllStatus
+{
+    long int    variant;
+    uuid_t	uid;
+    utc_t	lastSynch;
+    long 	state;
+} CtlShowAllStatus;
+
+
+
+/*
+ * RPC interfaces for CP <-> Time Service communication.
+ * Each Control Program command corresponds to a separate RPC call
+ * sent to the server.
+ */
+
+/*
+ * CREATE
+ * 
+ * Create the Time Service as a server or a clerk.  This argument 
+ * is passed in servType.  The default is servType = Clerk.
+ * Time Service specific errors are returned in the statusBlk 
+ * argument. RPC communication errors are returned in the 
+ * comStatus argument.
+ */
+
+[idempotent] void CreateCmd
+	(
+	[in]	handle_t	bind_h,
+	[in]	long int	*servType,
+	[out]	StatusBlk_t	*statusBlk,
+	[out]	error_status_t	*comStatus
+	);
+
+/*
+ * DELETE
+ * 
+ * Delete the Time Service.  This command stops the process.
+ * Time Service specific errors are returned in the statusBlk 
+ * argument. RPC communication errors are returned in the 
+ * comStatus argument.
+ */
+
+[idempotent] void DeleteCmd
+	(
+	[in]	handle_t	bind_h,
+	[out]	StatusBlk_t	*statusBlk,
+	[out]	error_status_t	*comStatus
+	);
+
+/*
+ * ENABLE 
+ * 
+ * Enable the Time Service.  This command makes the server available
+ * to the network. The clockSet argument tells the Time Service 
+ * wether or not to set the clock after the first synchronization.
+ * Time Service specific errors are returned in the statusBlk 
+ * argument. RPC communication errors are returned in the 
+ * comStatus argument.
+ */
+
+[idempotent] void EnableCmd
+	(
+	[in]	handle_t	bind_h,
+	[in]	long int	*clockSet,
+	[out]	StatusBlk_t	*statusBlk,
+	[out]	error_status_t	*comStatus
+	);
+
+/*
+ * DISABLE
+ * 
+ * Disable the Time Service by making it unavailable to the 
+ * network.  In the case of servers, it makes it unavailable 
+ * to RPC client trying to talk to it.  For clerks, stop 
+ * synchronizing with servers.  
+ * Time Service specific errors are returned in the statusBlk 
+ * argument. RPC communication errors are returned in the 
+ * comStatus argument.
+ */
+
+[idempotent] void DisableCmd
+	(
+	[in]	handle_t	bind_h,
+	[out]	StatusBlk_t	*statusBlk,
+	[out]	error_status_t	*comStatus
+	);
+
+
+/*
+ * UPDATE 
+ * This command causes the Time Service to synchronize with the 
+ * time provided in timeVal.
+ * Time Service specific errors are returned in the statusBlk 
+ * argument. RPC communication errors are returned in the 
+ * comStatus argument.
+ */
+
+[idempotent] void UpdateCmd
+	(
+	[in]	handle_t	bind_h,
+	[in]	utc_t		*timeVal,
+	[out]	StatusBlk_t	*statusBlk,
+	[out]	error_status_t	*comStatus
+	);
+
+/* CHANGE
+ * 
+ * This command changes the epoch number on the server and optionally
+ * sets the time to a new time.  These values  are passed in the
+ * argument changeDir.
+ * Time Service specific errors are returned in the statusBlk 
+ * argument. RPC communication errors are returned in the 
+ * comStatus argument.
+ */
+
+[idempotent] void ChangeCmd
+	(
+	[in]	handle_t	bind_h,
+	[in]	Change_t	*changeDir,
+	[out]	StatusBlk_t	*statusBlk,
+	[out]	error_status_t	*comStatus
+	);
+
+
+/* SYNCHRONIZE
+ * 
+ * This commans causes the Time Service to synchronize immediately,
+ * If the argument clockSet is true, the clock is set to the new
+ * value after a synchronization.
+ * Time Service specific errors are returned in the statusBlk 
+ * argument. RPC communication errors are returned in the 
+ * comStatus argument.
+ */
+
+[idempotent] void SynchronizeCmd
+	(
+	[in]	handle_t	bind_h,
+	[in]	long int	*clockSet,
+	[out]	StatusBlk_t	*statusBlk,
+	[out]	error_status_t	*comStatus
+	);
+
+/* ADVERTISE
+ * 
+ * This command adds (Advertises) this Time Server node as a member  
+ * of the global set in the Cell Services Profile.
+ * Time Service specific errors are returned in the statusBlk 
+ * argument. RPC communication errors are returned in the 
+ * comStatus argument.
+ */
+
+[idempotent] void AdvertiseCmd
+	(
+	[in]	handle_t	bind_h,
+	[out]	StatusBlk_t	*statusBlk,
+	[out]	error_status_t	*comStatus
+	);
+
+
+/* UNADVERTISE
+ * 
+ * This command removes (Unadvertises) this Time Server node as a member 
+ * of the set of global servers in the Cell Services profile. 
+ * Time Service specific errors are returned in the statusBlk 
+ * argument. RPC communication errors are returned in the 
+ * comStatus argument.
+ */
+
+[idempotent] void UnadvertiseCmd
+	(
+	[in]	handle_t	bind_h,
+	[out]	StatusBlk_t	*statusBlk,
+	[out]	error_status_t	*comStatus
+	);
+
+/* SET_DEFAULT
+ * 
+ * This command sets an attribute to its default value.
+ * The attribute type is passed in the setAttr argument.
+ * Time Service specific errors are returned in the statusBlk 
+ * argument. RPC communication errors are returned in the 
+ * comStatus argument.
+ */
+
+[idempotent] void SetDefaultCmd
+	(
+	[in]	handle_t	bind_h,
+	[in]	CtlSet_t	*setAttr,
+	[out]	StatusBlk_t	*statusBlk,
+	[out]	error_status_t	*comStatus
+	);
+
+/* SET_ATTR
+ * 
+ * This command sets an attribute to a value given by the manager.
+ * The attribute type is passed in setAttr argument and the 
+ * attribute value in AttrValue argument.
+ * Time Service specific errors are returned in the statusBlk 
+ * argument. RPC communication errors are returned in the 
+ * comStatus argument.
+ */
+
+[idempotent] void SetAttrCmd
+	(
+	[in]	  handle_t	  bind_h,
+	[in, out] CtlSetAttr_t	  *setAttrVal,
+	[out]	  StatusBlk_t	  *statusBlk,
+	[out]	  error_status_t  *comStatus
+	);
+
+/* SHOW_ATTR
+ * 
+ * This command queries the time service for the value of a 
+ * particular attribute.  The attribute value is passed back 
+ * in the argument attrValue.
+ * Time Service specific errors are returned in the statusBlk 
+ * argument. RPC communication errors are returned in the 
+ * comStatus argument.
+ */
+
+[idempotent] void ShowAttrCmd
+	(
+	[in]	   handle_t	  bind_h,
+	[in]	   long int	  *attribute,
+	[in, out]  AttrVal_t	  *attrValue,
+	[out]	   StatusBlk_t	  *statusBlk,
+	[out]	   error_status_t *comStatus
+	);
+
+
+/* SHOW_ALLCHARACT
+ * 
+ * This command queries the time service for the values of all
+ * the characteristic attributes.
+ * Time Service specific errors are returned in the statusBlk
+ * argument. RPC communication errors are returned in the
+ * comStatus argument.
+ */
+
+[idempotent] void ShowAllCharsCmd
+	(
+	[in]	handle_t	bind_h,
+	[out]	CtlShowAllChar  *showAllChar,
+	[out]	StatusBlk_t	*statusBlk,
+	[out]	error_status_t	*comStatus
+	);
+
+/* SHOW_ALLSTATUS
+ * 
+ * This command queries the time service for the values of all
+ * the status attributes.
+ * Time Service specific errors are returned in the statusBlk
+ * argument. RPC communication errors are returned in the
+ * comStatus argument.
+ */
+
+[idempotent] void ShowAllStatusCmd
+	(
+	[in]	handle_t	 bind_h,
+	[out]	CtlShowAllStatus *showAllStatus,
+	[out]	StatusBlk_t	 *statusBlk,
+	[out]	error_status_t	 *comStatus
+	);
+
+/* SHOW_ALLCOUNTERS
+ * 
+ * This command queries the time service for the values of all
+ * the counters.
+ * Time Service specific errors are returned in the statusBlk
+ * argument. RPC communication errors are returned in the
+ * comStatus argument.
+ */
+
+[idempotent] void ShowAllCntrsCmd
+	(
+	[in]	handle_t	 bind_h,
+	[out]	CtlShowAllCntrs  *showAllCntrs,
+	[out]	StatusBlk_t	 *statusBlk,
+	[out]	error_status_t	 *comStatus
+	);
+
+/* SHOW_LOCAL_SERVERS
+ * 
+ * This command queries the time service for the servers in the 
+ * local set.  A variable conformant array is used to return the 
+ * set of local servers available.  The size of the array transmited 
+ * over RPC is retermined at run-time.
+ * Time Service specific errors are returned in the statusBlk
+ * argument. RPC communication errors are returned in the
+ * comStatus argument.
+ */
+
+[idempotent] void ShowLocServersCmd
+	(
+	[in]	handle_t	  bind_h,
+	[in]	long 		  *maxServers,
+	[out, length_is(*serverCount), size_is(*maxServers)]
+	        ServerID          localServers[],
+	[out]	long		  *serverCount,
+        [in]    CtlFunc	          func,
+	[out]	StatusBlk_t	  *statusBlk,
+	[out]	error_status_t	  *comStatus
+	);
+
+/* SHOW_GLOBAL_SERVERS
+ * 
+ * This command queries the time service for the servers in the 
+ * global set.  A variable conformat array is used to return the 
+ * set of global servers available.
+ * Time Service specific errors are returned in the statusBlk
+ * argument. RPC communication errors are returned in the
+ * comStatus argument.
+ */
+
+[idempotent] void ShowGblServersCmd
+	(
+	[in]	handle_t	  bind_h,
+	[in]	long 		  *maxServers,
+	[out, length_is(*serverCount), size_is(*maxServers)]
+	        ServerID          globalServers[],
+	[out]	long		  *serverCount,
+        [in]    CtlFunc	          func,
+	[out]	StatusBlk_t	  *statusBlk,
+	[out]	error_status_t	  *comStatus
+	);
+
+
+
+} /** END of IDL file ***/

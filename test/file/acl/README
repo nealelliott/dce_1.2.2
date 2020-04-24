@@ -1,0 +1,186 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: README,v $
+# Revision 1.1.661.1  1996/10/17  18:10:57  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:47:10  damon]
+#
+# $EndLog$
+
+The "runall" script is a wrapper for a higher level "runall" script.
+This script automatically verifies the presence of the test "users"
+and sets environment variable accordingly. The test "users" are not
+cleaned up by the script. The "runall" script is thus an automatic
+test harness for the acl tests.
+
+Tests Overview
+--------------
+The tests in the current ACL tests suite are described below:
+
+Accheck:
+Tests access setting and checking of acls. This is a test that sets
+the acl on an object, then tests access to the object by different
+users.
+
+Syscalls:
+Tests that system calls check access appropriately by setting
+restrictive acls and making the syscalls and then checking for
+expected failures.
+
+Chmodtest:
+Tests interaction of UNIX mode bits and ACLs.
+
+Getset:
+Tests integrity of ACLs. It sets an acl and reads back the contents,
+checking for consistency
+
+Inherit:
+Tests ACL inheritance. It checks inheritance for files and
+directories, and checks for cow link breakage
+
+Sizetest:
+Tests what happens when an acl is made as big as possible given the
+size of the local registry
+
+A checklist of test cases is provided in the file TEST_STATUS. These
+include cases that have already been implemented and cases that
+need to be implemented.
+
+Test Setup and Execution
+------------------------
+0. Caveats
+   The tests use perl and you need to ensure that perl is accessible
+   from the local machine and you need to change the first line in the
+   files mentioned below to access perl from the correct path instead of
+   /afs/tr/proj/tools/bin/perl.  The files are
+       testacl
+       scripts/accheck/accheckTest
+       scripts/accheck/accheckChild       
+       scripts/accheck/makeTestFiles
+       scripts/common/setupSecAccounts
+       scripts/misc/chmodTest
+       scripts/misc/inheritTest
+       scripts/misc/sizeTest
+       scripts/misc/getsetTest
+       scripts/syscalls/syscallsTest
+
+   On AIX, dce_login causes loss of AFS tokens. Hence on AIX, accessing the
+   test sources from AFS or logging into AFS is to be avoided. Similarly
+   DCE/DFS installation should not be done using symlinks. All binaries
+   must be physically copied over onto the local machine. Also perl should be
+   installed outside of AFS e.g. locally.
+
+1. Install and configure DCE and DFS [ Even for local Episode
+
+   testing, DFS is needed as local cell id is not initialised by
+   episode currently. ]
+
+2. Make sure that you have built the src/test/file/acl dir in 
+   your sandbox.
+
+3. Login as local rootl
+
+4. DCE login as cell_admin
+
+5. Cd to the test directory. 
+
+6. You do not need to copy over the tests to the test directory. The
+   main driver will figure out the location of the tests from the
+   pathname used to invoke it.
+
+   To run all the tests, run
+	<path>/testacl
+
+   To run a specific set of tests, run
+	<path>/testacl <list of tests>
+   e.g.
+	<path>/testacl getset inherit
+
+   The various tests can be specified using the following names
+        getset inherit chmodtest sizetest syscalls accheck
+
+7. Logging.
+
+   The tests create several log files to help diagnosis of problems in
+   case of failure. By default, these log files are present in a
+   sub-directory "results" under the directory from which the test are
+   run. To change the directory, do
+	setenv TESTACL_LOGDIR <log-dir>
+   before running the tests.
+
+   The various log files are 
+	driverLOG 		Overall Main driver log
+	getsetLOG		Getset test log
+	inheritLOG		Inheritance test log
+	chmodtestLOG		Chmodtests log
+	sizetestLOG		Sizetest log
+	syscallsLOG		System call tests log
+
+	accheck			Directory containing access tests log.
+	accheckLOG		Accheck test driver log
+	accheck_user_objLOG	Log files individual accheck tests.
+	accheck_userLOG
+	accheck_group_objLOG
+	accheck_groupLOG
+	accheck_other_objLOG	
+
+8. Options to testacl
+
+   Security accounts setup/cleanup options.
+   ---------------------------------------
+   The main driver needs to create groups and users. If you know these
+   users already exist, then you need to do
+	setenv TESTACL_SEC_SETUP skip 
+   before invoking testacl.
+
+   To prevent the tests from removing these users and groups after a 
+   successful run, you need to
+     	setenv TESTACL_SEC_CLEANUP skip
+
+   To ONLY create the users and groups you can either 
+	Do
+	   setenv TESTACL_SEC_SETUP_ONLY 1
+ 	before running testacl
+
+   OR
+	Invoke testacl as 
+	   testacl -setuponly
+
+   The tests are designed to stop at the first point of failure.
+   If any of the tests fail, the cleanup phase of the tests are
+   skipped to preserve as much of the system state at the failure
+   point as far as possible. In this case the users and groups created
+   for the tests locally and in DCE are not removed.
+
+   To ONLY remove the users and groups you can either 
+	Do
+	   setenv TESTACL_SEC_CLEANUP_ONLY 1
+ 	before running testacl
+
+   OR
+	Invoke testacl as 
+	   testacl -cleanuponly
+
+   Test dir option
+   ---------------
+   By default the tests are run in the current directory. To change 
+   the directory to be used do
+      	setenv TESTACL_TESTDIR <test-dir>
+
+   DCE passwords
+   -------------
+   By default the password of cell_admin is assumed to be -dce-. If its
+   different, do
+  
+	setenv CELL_ADMIN_PASSWD <cell-admin-passwd>
+
+   By default the password of ACL test users is -dce-. To change that, do
+	setenv COMMON_USER_PASSWD <user-passwd>
+
+   
+   

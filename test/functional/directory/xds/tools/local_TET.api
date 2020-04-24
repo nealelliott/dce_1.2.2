@@ -1,0 +1,318 @@
+#!/bin/ksh
+# 
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: local_TET.api,v $
+# Revision 1.1.4.2  1996/03/11  01:37:13  marty
+# 	Update copyright years
+# 	[1996/03/10  19:39:58  marty]
+#
+# Revision 1.1.4.1  1995/12/11  16:54:44  root
+# 	Submit
+# 	[1995/12/11  16:39:15  root]
+# 
+# Revision 1.1.2.10  1994/08/24  15:15:48  keutel
+# 	OT 11279
+# 	[1994/08/24  14:16:02  keutel]
+# 
+# Revision 1.1.2.9  1994/08/17  11:51:34  marrek
+# 	Use uname -n .
+# 	[1994/08/17  07:37:05  marrek]
+# 
+# Revision 1.1.2.8  1994/08/01  12:27:21  marrek
+# 	Fixes for OT 10742, 11357, 11432.
+# 	[1994/08/01  12:26:09  marrek]
+# 
+# Revision 1.1.2.7  1994/07/20  14:06:34  marrek
+# 	<dce_config> is started before switch tests are running
+# 	[1994/07/20  13:50:05  marrek]
+# 
+# Revision 1.1.2.6  1994/07/07  18:03:05  zeliff
+# 	ot11204: remove clear
+# 	[1994/07/07  18:00:32  zeliff]
+# 
+# Revision 1.1.2.5  1994/07/06  15:54:12  marrek
+# 	Add version string in July 1994 code drop.
+# 	[1994/07/06  15:42:37  marrek]
+# 
+# Revision 1.1.2.4  1994/07/06  15:12:09  marrek
+# 	July 1994 code drop.
+# 	[1994/07/05  13:33:48  marrek]
+# 
+# Revision 1.1.2.3  1994/06/21  14:29:36  marrek
+# 	June 1994 code submission.
+# 	[1994/06/20  08:07:29  marrek]
+# 
+# Revision 1.1.2.2  1994/06/17  18:45:45  devsrc
+# 	cr10872 - fix copyright
+# 	[1994/06/17  18:35:21  devsrc]
+# 
+# Revision 1.1.2.1  1994/05/24  15:11:43  zeliff
+# 	First version
+# 	[1994/05/24  15:08:02  zeliff]
+# 
+# $EndLog$
+#
+# $RCSfile: local_TET.api,v $ $Revision: 1.1.4.2 $ $Date: 1996/03/11 01:37:13 $
+# 
+
+bname=`basename $0`
+########################################################################
+######################### Functions ####################################
+########################################################################
+
+function print_help {
+    print "\nusage: $bname [chl] -s <test suite>"
+    print "	    c - Use XOMS Convenience functions"
+    print "	        (the default for 'all')"
+    print "	    l - Don't delete testcase logs"
+    print "	        (default: delete all logfiles)"
+    print "	    h - this help message"
+    print "	    s - Test suite, of values:"
+    print "	    xds_all_ST     - All single-threaded XDS tests"
+    print "	    xds_all_MT     - All multi-threaded XDS tests"
+    print "	    xds_all        - All XDS tests (ST+MT)"
+    print "	    xom_all_ST     - All single-threaded XOM tests"
+    print "	    xom_all_MT     - All multi-threaded XOM tests"
+    print "	    xom_all        - All XOM tests (ST+MT)"
+    print "	    xoms_all_ST    - All single-threaded XOMS tests"
+    print "	    xoms_all_MT    - All multi-threaded XOMS tests"
+    print "	    xoms_all       - All XOMS tests (ST+MT)"
+    print "	    switch_all_ST  - All single-threaded SWITCH tests (X500 cellname)"
+    print "	    switch_all_MT  - All multi-threaded SWITCH tests (X500 cellname)"
+    print "	    switch_all_DNS - All single-threaded SWITCH tests (DNS cellname)"
+    print "	    switch_all     - All SWITCH tests of above"
+    print "	    mhs_all	   - All MHS tests"
+    print "	    all		   - All of the above"
+    print "	    all_no_switch  - All of the above except of Switch tests"
+}
+
+########################################################################
+####################### Start Main #####################################
+########################################################################
+
+unset  TET_GDS_CONFIG
+unset  XT_TEST_FLAGS
+unset  KEEP_API_LOGS
+
+echo ""
+echo "  TET - Test Environment Toolkit for testing GDS/API on a local machine"
+
+# Process the command line options
+while getopts s:chl option
+do
+        case "$option"
+        in
+                c)      	export XT_TEST_FLAGS=-c;;
+                l)              export KEEP_API_LOGS="yes";;
+                s)      	export SUITE=$OPTARG;;
+                h)		print_help;
+                        	exit 1;;
+                *)	     	print "$0: unknown option $OPTARG."
+                        	print_help
+                        	exit 1;;
+	esac
+done
+
+if [ "$SUITE" = "" ]
+then
+	print "You must specify a test suite."
+	print_help
+	exit 1
+fi
+	
+echo "        Test Suite = $SUITE"
+echo ""
+
+case $SUITE 
+in
+	"xds_all_ST")	;;
+	"xds_all_MT")	;;
+	"xds_all")	;;
+	"xom_all_ST")	;;
+	"xom_all_MT")	;;
+	"xom_all")	;;
+	"xoms_all_ST")	XT_TEST_FLAGS=-c;;
+	"xoms_all_MT")	XT_TEST_FLAGS=-c;;
+	"xoms_all")	XT_TEST_FLAGS=-c;;
+	"switch_all_ST")  ;;
+	"switch_all_MT")  ;;
+	"switch_all_DNS") ;;
+	"switch_all")	  ;;
+	"mhs_all")	  ;;
+        "all_no_switch")XT_TEST_FLAGS=-c;;
+	"all")		XT_TEST_FLAGS=-c;;
+         *)	     	print "$0: unknown suite $SUITE."
+                       	print_help
+                       	exit 1;;
+esac
+
+# Change directory to  Test suite: xds
+
+cd $TET_ROOT/functional/directory/xds
+
+# User-modifiable variables
+#  OUTDIR is the path to the directory into which all test logs will be written.
+#  This should not be confused with the directory into which TET writes it's "journals".
+#  These logs are produced by the functional tests, not TET.
+if [ "$OUTDIR" = "" ]
+then
+	export OUTDIR=$TET_ROOT/functional/directory/xds/outdir.`uname -n`
+	if [ ! -d $OUTDIR ]
+	then 
+		mkdir $OUTDIR
+		if [ $? -ne 0 ]
+		then
+			echo "Can't create OUTDIR: $OUTDIR"
+			exit 1
+		fi
+	fi
+fi
+
+rm -f $OUTDIR/gds_start.log
+
+echo "\n  TET - Test Environment Toolkit for testing GDS/API on a local machine\n" >> $OUTDIR/gds_start.log
+echo "        Test Suite = $SUITE\n" >> $OUTDIR/gds_start.log
+
+# Non-modifiable variables.  There are dependencies upon these being certain 
+# values.  These should be changed only with great care.
+export TET_NSIG=32
+export TET_EXECUTE=$TET_ROOT/functional/directory/xds/ts
+export TET_GDS_CONFIG=3
+export TET_CFG_DIR=$TET_EXECUTE/config
+
+# Set SERVER_IP, CLIENT_IP
+
+CLIENT_IP="127.0.0.1"
+SERVER_IP=$CLIENT_IP
+
+# Alter SERVER_IPs, CLIENT_IPs with those just entered
+ 
+sed -e "s/SERVER_IP/${SERVER_IP}/" -e "s/CLIENT_IP/${CLIENT_IP}/"  $TET_CFG_DIR/t.cacheinit125.sed > $TET_CFG_DIR/t.cacheinit125
+sed -e "s/SERVER_IP/${CLIENT_IP}/" -e "s/CLIENT_IP/${CLIENT_IP}/" $TET_CFG_DIR/t.3cacheinit1.sed > $TET_CFG_DIR/t.3cacheinit1
+sed -e "s/SERVER_IP/${CLIENT_IP}/" -e "s/CLIENT_IP/${CLIENT_IP}/" $TET_CFG_DIR/t.4cacheinit1.sed > $TET_CFG_DIR/t.4cacheinit1
+sed -e "s/SERVER_IP/${SERVER_IP}/" -e "s/CLIENT_IP/${CLIENT_IP}/" $TET_CFG_DIR/two_dsas.sed > $TET_CFG_DIR/two_dsas.sh
+sed -e "s/SERVER_IP/${SERVER_IP}/" $TET_CFG_DIR/dsa.dsa1.sed > $TET_CFG_DIR/dsa.dsa1
+sed -e "s/SERVER_IP/${SERVER_IP}/" $TET_CFG_DIR/dsa.dsa2.sed > $TET_CFG_DIR/dsa.dsa2
+
+echo ""
+
+if [ -n "$HIT_FILE" ]
+then
+   export HIT_FILE=$HIT_FILE.$SUITE
+else
+   export HIT_FILE=./hits
+fi
+
+if [ -f $HIT_FILE ]
+then
+   echo "\n\
+      Overwrite existing hits file: $HIT_FILE - Enter 'n' if not: \n\
+      : \c"
+   read xyz
+   if [ x$xyz = xn ]
+   then
+     exit
+   fi
+fi
+
+# Additional DCE handling is required for Switch tests
+
+
+Use_X500_Name()
+{
+# $1 ... Name of TestSuite
+                       
+  CELLNAME="c=ie\/o=digital"
+  sed -e "s/CELLNAME/${CELLNAME}/" $TET_CFG_DIR/config.env.sed > $TET_CFG_DIR/config.env
+
+  echo "Run_Switch_Test ${1}" >> $OUTDIR/gds_start.log
+  Run_Switch_Test ${1} $CELLNAME
+}
+
+Use_DNS_Name()
+{
+# $1 ... Name of TestSuite
+                       
+  CELLNAME="snidec\.sni\.com"
+  sed -e "s/CELLNAME/${CELLNAME}/" $TET_CFG_DIR/config.env.sed > $TET_CFG_DIR/config.env
+
+  echo "Run_Switch_Test ${1}" >> $OUTDIR/gds_start.log
+  Run_Switch_Test "${1}" $CELLNAME
+}
+
+Run_Switch_Test()
+{
+# $1 ... Name of TestSuite
+# $2 ... CDS CellName
+
+  echo "Configure DCE using cell_name:  $2" >> $OUTDIR/gds_start.log
+
+  /etc/dce_config -e $TET_CFG_DIR/config.env -c $TET_CFG_DIR/config.cmd > /dev/null 2>>$OUTDIR/gds_start.log
+
+  if [[ $? -gt 0 ]]
+  then
+     echo "\nMessage from <local_TET.admin> "
+     echo "        dce_config returned with ERROR - STOP\n"
+     echo "See also logfile: $OUTDIR/gds_start.log"
+     exit 1
+  fi
+
+  echo "Configure Dir1 as Client system " >> $OUTDIR/gds_start.log
+
+  gdssysadm -fc -m1 -d1 -c1 -C16 -p
+
+  echo "Login to DCE ..." >> $OUTDIR/gds_start.log
+
+  dce_login cell_admin -dce- << EOX
+
+     ksh
+
+     echo "cdscp create dir /.:/sales" >> $OUTDIR/gds_start.log
+     cdscp create dir /.:/sales
+     echo "cdscp create dir /.:/sales/admin" >> $OUTDIR/gds_start.log
+     echo "" >> $OUTDIR/gds_start.log
+     cdscp create dir /.:/sales/admin
+    
+#    Start TCC in execute mode
+
+     $TET_ROOT/bin/tcc -e functional/directory/xds ${1} | tee /tmp/tcc.log
+
+     cat -s /tmp/tcc.log >> $OUTDIR/gds_start.log
+     rm -f /tmp/tcc.log
+     echo "Test Suite = $SUITE\n" >> $OUTDIR/gds_start.log
+
+EOX
+} 
+
+Run_TCC()
+{
+# Start TCC in execute mode
+
+  $TET_ROOT/bin/tcc -e functional/directory/xds $SUITE
+}
+
+
+case $SUITE 
+in
+	"switch_all_ST")  Use_X500_Name $SUITE;;
+	"switch_all_MT")  Use_X500_Name $SUITE;;
+	"switch_all_DNS") Use_DNS_Name  $SUITE;;
+	"switch_all")	  Use_X500_Name switch_all_ST
+                          Use_X500_Name switch_all_MT
+                          Use_DNS_Name  switch_all_DNS;;
+        "all")            Run_TCC
+                          Use_X500_Name switch_all_ST
+                          Use_X500_Name switch_all_MT
+                          Use_DNS_Name  switch_all_DNS;;
+         *)	     	  Run_TCC;;
+esac
+
+echo "\nInvoked tests have been finished ..."
+echo "Note:   In case of an irregular test run -->"
+echo "        See $OUTDIR/gds_start.log also"

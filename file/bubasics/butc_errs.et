@@ -1,0 +1,151 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# HISTORY
+# $Log: butc_errs.et,v $
+# Revision 1.1.52.1  1996/10/02  17:05:26  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:05:17  damon]
+#
+# Revision 1.1.46.2  1994/06/09  13:52:47  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:26:42  annie]
+# 
+# Revision 1.1.46.1  1994/02/04  20:06:48  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:06:53  devsrc]
+# 
+# Revision 1.1.44.2  1993/12/20  13:50:31  jaffe
+# 	Transarc delta: vijay-db4775-butc-handle-inconsistency-in-multi-tape-restores 1.1
+# 	    add an error code
+# 	[1993/12/16  22:07:22  jaffe]
+# 
+# Revision 1.1.44.1  1993/12/07  17:13:24  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  13:00:08  jaffe]
+# 
+# Revision 1.1.3.4  1993/01/18  20:48:00  cjd
+# 	embedded copyright notice
+# 	[1993/01/18  17:33:18  cjd]
+# 
+# Revision 1.1.3.3  1993/01/13  15:54:03  shl
+# 	Transarc delta: vijay-ot6381-correct-handling-of-device-queue-lock 1.4
+# 	  Selected comments:
+# 
+# 	    The aim of this delta is to get bak restore to succeed. The problems in restore
+# 	    were some spurious thread exceptions and assertions that made bak dump core.
+# 	    Upon investigation it turned out that there were some locking problems in
+# 	    backup and butc. The delta cleans up locking in backup and butc.
+# 	    The delta is not ready for export. Much more needs to be done to get all the
+# 	    locking issues right. This is just a checkpoint.
+# 	    Second set of changes to get locking issues in order. This time the changes
+# 	    are mostly in bakserver. The changes introduced are
+# 	    1. Establish a global lock so that two RPCs do not interfere with each other.
+# 	    This was introduced because there are some global data structures in
+# 	    backup that might get affected. These global structures now have
+# 	    individual locks to serialize changes. The global lock in temporary, and
+# 	    will go away once we have serialized all accesses to all global data
+# 	    structures.
+# 	    2. Disable cancels in bakserver RPCs. Care is taken to not disable cancels in
+# 	    operations that can be cancelled. There is some more work that needs to be
+# 	    done in this area.
+# 	    3. Accesses to the database are controlled by memoryDB.lock. The accesses are
+# 	    by means of dbread and dbwrite. The hash tables too are protected by this
+# 	    mechanism.
+# 	    4. Changes to the backup database dump code to simplify the dump operation. In
+# 	    particular, the Unix pipe mechanism is used to synchronize reader and
+# 	    writer without need for condition variables.
+# 	    5. Get rid of any pthread_mutex and pthread_cond operations. Use afslk and
+# 	    afsos routines instead.
+# 	    6. Continue the work described by the previous revision of the delta in bak
+# 	    and butc. This should be it for changes in bak and butc.
+# 	    Fix compilation problems on the RIOS.
+# 	    This is hopefully the final revision of this delta. The fixes here are
+# 	    1. Changes to the bakserver and butc RPC interfaces.
+# 	    The RPCs that handle variable size arrays now use conformant arrays.
+# 	    This avoids allocating lots of memory on the client thread stack which
+# 	    was the cause of the exceptions in restoreft. The server allocates
+# 	    memory which is freed by the server stub on the way out. The client thread
+# 	    frees the memory allocated by the client stub.
+# 	    2. get database dump and restore to handle status correctly.
+# 	    3. Get the locking hierarchy right in bakserver, bak and butc.
+# 	    4. Other minor nits.
+# 	    There is still a problem with scantape -dbadd that has to be addressed. With
+# 	    this delta, all backup commands should work when used in a straightforward
+# 	    manner. Some error cases are still not handled properly though. Subsequent
+# 	    deltas would fix those.
+# 	[1993/01/12  18:40:09  shl]
+# 
+# Revision 1.1.3.2  1992/12/09  19:20:26  jaffe
+# 	Transarc delta: vijay-ot5953-butc-bring-it-upto-date 1.3
+# 	  Selected comments:
+# 
+# 	    RPCs to butc from bak fail with rpc_s_comm_failure. Upon reviewing the butc
+# 	    code, it turns out that the server is calling dfsauth_server_InitAuthentication
+# 	    that requires authenticated incoming calls. But, bak is not authenticating
+# 	    the bindings with which it makes the RPCs. This could be one reason why the RPC
+# 	    fails. This delta updates the bak and butc code to reflect changes in
+# 	    cds and security since 1.0
+# 	    No changes made yet, closing to fix another problem.
+# 	    A single set of routines was constructed in ncscompat to register a DFS
+# 	    interface and to locate it. Butc had its own routines in ncscompat that
+# 	    register and locate butc servers. The difference between these routines
+# 	    and the original rpc_register_dfs_server and rpc_locate_dfs_server routines
+# 	    is that butc passes an object UUID and a type UUID as part of the registration
+# 	    process and passes a object UUID to locate butc processes. The general
+# 	    routines now support these UUIDs in their interface. This makes the
+# 	    general routines support servers like butc. Also, there would one set of
+# 	    routines to maintain. The general registration and location routines are
+# 	    used in many dfs packages and changes were necessary on all of them to
+# 	    support the new, more general function signature.
+# 	    some new error codes for error cases
+# 	    Correct some compilation errors and warnings. uuid_create_nil needed some
+# 	    casting to avoid warnings.
+# 	[1992/12/03  20:50:42  jaffe]
+# 
+# Revision 1.1  1992/01/19  19:41:57  devrcs
+# 	Initial revision
+# 
+# $EndLog$
+#
+# Backup Tape Coordinator Module error table
+
+error_table 2 btc
+# dump/restore management
+	ec TC_RCSID,	"$Header: /u0/rcs_trees/dce/rcs/file/bubasics/butc_errs.et,v 1.1.52.1 1996/10/02 17:05:26 damon Exp $"
+	ec TC_DUMPERROR, "error in dump/restore process "
+	ec TC_FORCEDABORT, "ungraceful abort "
+	ec TC_ABORTED, "the dump/restore has already been aborted"
+	ec TC_WORKINPROGRESS, "unable to end dump/restore since work in progress"
+	ec TC_INCOMPLETEDUMP, "some of the dump/restores were unsuccessful"
+	ec TC_ABORTFAILED, "could not abort the process "
+	ec TC_ABORTEDBYREQUEST, "the dump/restore process was aborted by request"
+#status errors
+	ec TC_NODENOTFOUND, "No dump task with specified ID"
+	ec TC_NOTASKS, "No tasks active"
+
+#tape errors
+	ec TC_VOLUMENOTONTAPE,"the fileset was not found on tape"
+	ec TC_PREMATUREEOF,"unexpected EOF encountered on tape"
+	ec TC_MISSINGTRAILER,"missing file trailer on tape"
+	ec TC_WRONGTAPE,"unexpected tape label"
+	ec TC_TAPEUNUSABLE,"tape was unusable"
+	ec TC_NOVOLUMEONTAPE, "no filesets on this tape"
+	ec TC_NOTAPE, "tape not loaded or drive offline"
+
+#general
+	ec TC_INTERNALERROR, "internal error"
+	ec TC_NOMEMORY, "memory allocation failure"
+	ec TC_BADPORTOFFSET, "invalid tape coordinator port offset"
+	ec TC_BADDEBUGLVL, "invalid debug level input"
+	ec TC_BADCONFIGFILE, "invalid tape config file name"
+	ec TC_DUPLICATE, "tape coordinator already running on this tcid"
+	ec TC_THREAD, "operation on thread failed"
+	ec TC_BADTASK, "invalid task"
+	ec TC_BADGROUP, "invalid bakserver group name"
+	ec TC_SCANFAILURE, "failed to scan tape"
+	ec TC_BADHOST, "invalid host"
+end

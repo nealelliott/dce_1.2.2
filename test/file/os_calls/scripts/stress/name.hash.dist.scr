@@ -1,0 +1,224 @@
+
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+
+*
+*> Name hash tests.
+*
+* Test name hash table code.  Test repeatedly opening or stat'ing
+* files that don't exist.  Test flushing a dir, and then having N
+* processes stat a file that *does* exist.  Do this while idle, but also
+* do this while stress processes are doing chmod or utimes calls on the
+* parent directory simultaneously.
+*
+* Test flushing name cache w/o flushing stat cache, by looking up many
+* many names that don't exist, all in the same directory that does exist.
+*
+
+*
+* Note: Try this test on both single machin cell and multi-machine cell.
+*
+* 
+* USAGE: ./file_test -l {HUBNAME} -I {this_script} ; For HUB
+*        ./file_test -c {HUBNAME} : For other spokes
+*
+
+* Include config file.
+include config
+
+* This variable is set to strength the stress as the number getting larger.	
+set loopTimes 10
+set testFile1 string "tempfile"
+
+*
+* This procedure stresses the name hash tests.
+*
+set stress_Proc proc END_PROC
+  echo
+  echo Stress testing.
+
+  getwd workDir
+  chdir $testDir
+
+  sync_join "stat_non_exist_files" $timeout
+
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    open @fileName @O_RDWR 0777 fileId
+    if ( @ITL_Status != @ENOENT ) {
+      echo FAILED: Wrong error returned.
+    }
+  endloop
+  verifyStatus true
+
+  sync_join "stat_exist_files" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile1 + @x )
+    open @fileName @O_RDWR 0777 fileId[@x]
+    close @fileId[@x]
+  endloop
+
+  sync_join "stress_stat_exist_files" $timeout
+  
+  loop x 1 1 $loopTimes
+    if ( $ITL_SystemType == solaris ) {
+      utimes . "" "" 0 "" "" 0 
+    }
+    else {
+      utimes . "" "" -1 "" "" -1
+    }
+  endloop
+
+  sync_join "flushing_name_cache" $timeout
+ * Looking up names do exist. 
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile1 + @x )
+    open @fileName @O_RDWR 0777 fileId[@x]
+    close @fileId[@x]
+  endloop
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo Stress Done.
+  echo 
+END_PROC
+
+*
+* This procedure stats, open files.
+*
+set test_Proc proc END_PROC
+  echo
+  echo stat, open files from spoke.
+
+  getwd workDir
+  chdir $testDir
+
+  sync_join "stat_non_exist_files" $timeout
+  
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    stat @fileName statVar[@x]
+  endloop
+  verifyStatus true
+
+  sync_join "stat_exist_files" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile1 + @x )
+    stat @fileName statVar[@x]
+  endloop
+
+  sync_join "stress_stat_exist_files" $timeout
+  
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile1 + @x )
+    stat @fileName statVar[@x]
+    open @fileName @O_RDWR 0777 fileId[@x]
+    close @fileId[@x]
+  endloop
+
+  sync_join "flushing_name_cache" $timeout
+ * Looking up names do not exist. 
+
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    stat @fileName statVar[@x]
+    if ( @ITL_Status != @ENOENT ) {
+      echo FAILED: Wrong error returned.
+    }
+  endloop
+  verifyStatus true
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo Stat Done.
+  echo 
+END_PROC
+
+*************************************************************************
+* Check spokes.
+if ( $ITL_nspokes < 2 ) {
+  echo FAILED: You need at least two spokes to run the test.
+  quit
+}
+
+
+chdir $testDir
+
+loop loopVar 1 1 $loopTimes
+
+loop x 1 1 $loopTimes
+  set fileName ( $testFile1 + $x )
+  open $fileName ($O_CREAT|$O_RDWR) 0777 fileId[$x]
+  close $fileId[$x]
+endloop
+
+flush_file .
+
+!* Dispatch procedures among spokes.
+loop x 0 1 (($ITL_nspokes/2) -1)
+  rexec_async $ITL_spoke[$x] stress_Proc result[$x] asyncVar[$x]
+endLoop
+
+loop x ($ITL_nspokes/2) 1 ($ITL_nspokes-1)
+  rexec_async $ITL_spoke[$x] test_Proc result[$x] asyncVar[$x]
+endLoop
+
+sync_create "stat_non_exist_files" $ITL_nspokes $timeout
+sync_release "stat_non_exist_files"
+
+sync_create "stat_exist_files" $ITL_nspokes $timeout
+sync_release "stat_exist_files"
+
+sync_create "stress_stat_exist_files" $ITL_nspokes $timeout
+sync_release "stress_stat_exist_files"
+
+sync_create "flushing_name_cache" $ITL_nspokes $timeout
+sync_release "flushing_name_cache"
+
+sync_create "finish_sync" $ITL_nspokes $timeout
+sync_release "finish_sync"
+
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+endloop
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+echo
+echo HUB Done
+quit

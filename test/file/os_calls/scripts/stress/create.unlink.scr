@@ -1,0 +1,204 @@
+
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* Check that looking up a name that's being created and unlinked
+* repeatedly by test processes running on the same client result in
+* correct behavior (try this several hundred times, I suppose) as seen
+* by a test process running on the same client.
+*
+
+*
+* Note: Try this test on both single machin cell and multi-machine cell.
+*
+* 
+* USAGE: ./file_test -l {HUBNAME} -I {this_script} ; For HUB
+*        ./file_test -c {HUBNAME} : For other spokes
+*
+
+* Include config file.
+include config
+
+set numOfFiles 100
+set loopTimes 10
+
+*
+* This procedure stats a file.
+*
+set test_Proc proc END_PROC
+
+  echo
+  echo Test create and unlink file.
+
+  sync_join "begin_sync" $timeout
+
+  set fileName ( $testDir + "/" + $testFile )
+
+  set syncName1 create
+  set syncName2 delete
+  loop x 1 1 $loopTimes
+    set syncVar (@syncName1 + @x )
+    sync_join @syncVar $timeout
+    set syncVarDone (@syncVar + "done")
+    sync_join @syncVarDone $timeout
+
+    open @fileName $O_RDWR 0777 fileId
+    read @fileId 18 junk
+    close @fileId
+
+    set syncVar (@syncName2 + @x )
+    sync_join @syncVar $timeout
+    set syncVarDone (@syncVar + "done")
+    sync_join @syncVarDone $timeout
+
+    verifyStatus false
+    stat @fileName statVar
+    if ( @ITL_Status == 0 ) {
+      echo The file is still there.
+    }
+    verifyStatus true
+  endloop
+
+  sync_join "finish_sync" $timeout
+
+  echo Done test.
+  echo 
+END_PROC
+
+
+*
+* This procedure creates and unlink files.
+*
+
+set stress_Proc proc END_PROC
+
+  echo
+  echo Create and unlink file.
+
+  sync_join "begin_sync" $timeout
+
+  set fileName ( $testDir + "/" + $testFile )
+
+  set syncName1 create
+  set syncName2 delete
+  loop x 1 1 $loopTimes
+    set syncVar (@syncName1 + @x )
+    sync_join @syncVar $timeout
+
+    open @fileName ($O_CREAT|$O_RDWR) 0777 fileId
+    write @fileId "This is a test file"
+    close @fileId 
+
+    set syncVarDone (@syncVar + "done")
+    sync_join @syncVarDone $timeout
+
+    set syncVar (@syncName2 + @x )
+    sync_join @syncVar $timeout
+
+    unlink @fileName
+
+    set syncVarDone (@syncVar + "done")
+    sync_join @syncVarDone $timeout
+  endloop
+
+  sync_join "finish_sync" $timeout
+
+  echo Done create and unlink file.
+  echo
+END_PROC
+
+****************************************************************************
+* Check spokes.
+if ( $ITL_nspokes < 2 ) {
+  echo FAILED: You need at least two spokes to run the test.
+  quit
+}
+
+chmod $testDir 0777
+chdir $testDir
+* It may not create $numOffiles since they are created randomly.
+verifyStatus false
+loop x 1 1 $numOfFiles
+  set randomFileName ( $testFile+ (1..100) )
+  open $randomFileName ($O_CREAT|$O_RDWR) 0777 randomFileNameId[$x]
+  if ( $ITL_Status == 0 ) { 
+    write $randomFileNameId[$x] @randomFileName
+    close $randomFileNameId[$x]
+  }
+endloop
+verifyStatus true
+
+
+loop loopVar 1 1 (2*$loopTimes)
+
+* Dispatch procedures among spokes.
+!* Stress procedure to the test file.
+rexec_async $ITL_spoke[0] stress_Proc result[0] asyncVar[0]
+
+loop x 1 1 ($ITL_nspokes-1)
+!* Test a single file by N test hosts.
+  rexec_async $ITL_spoke[$x] test_Proc result[$x] asyncVar[$x]
+endLoop
+
+sync_create "begin_sync" $ITL_nspokes $timeout
+sync_release "begin_sync"
+
+set syncName1 create
+set syncName2 delete
+loop y 1 1 $loopTimes
+  set syncVar ($syncName1 + $y )
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar
+
+  set syncVarDone ($syncVar + "done")
+  sync_create $syncVarDone $ITL_nspokes $timeout
+  sync_release $syncVarDone
+
+  set syncVar ($syncName2 + $y )
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar
+
+  set syncVarDone ($syncVar + "done")
+  sync_create $syncVarDone $ITL_nspokes $timeout
+  sync_release $syncVarDone
+endloop
+
+sync_create "finish_sync" $ITL_nspokes $timeout
+sync_release "finish_sync"
+
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+* End loopVar
+endloop
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+echo Done
+quit

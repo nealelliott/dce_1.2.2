@@ -1,0 +1,71 @@
+# @OSF_COPYRIGHT@
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# 
+# HISTORY
+# $Log: README,v $
+# Revision 1.1.6.2  1996/03/11  02:46:10  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:08:13  marty]
+#
+# Revision 1.1.6.1  1995/12/11  22:43:15  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/1  1994/06/30  19:30 UTC  bissen
+# 	Merge hpdce02 (DCE 1.1 beta) and HPDCE01 into HPDCE02
+# 
+# 	HP revision /main/HPDCE01/1  1994/02/01  17:53  giza
+# 	merge kk & hpdce01
+# 	[1995/12/11  22:20:15  root]
+# 
+# Revision 1.1.4.2  1993/10/28  16:41:44  qbarry
+# 	Changed CLIENTS to CLIENT_MACHINES to match changes to DCERPCRUN.
+# 	[1993/10/28  13:36:23  qbarry]
+# 
+# Revision 1.1.4.1  1993/09/09  19:02:35  cmckeen
+# 	HP's TET'ized version
+# 	[1993/09/09  18:57:46  cmckeen]
+# 
+# Revision 1.1.2.2  1993/08/24  14:29:47  giza
+# 	Info.
+# 	[1993/08/24  14:28:55  giza]
+# 
+# $EndLog$
+This test (dcerpcrun/rpc.runtime.1) will run (n<100) client process(es)
+concurrently with (x<100) loops per client(s).  A single layer attempt
+is made to start all clients at the same time using a dummy process that
+is waited upon by the client wrapper process to die.  Once the dummy
+(clientwait) process dies the client wrapper starts (n<100) process(es)
+on the client host.  All of this is controlled by (dcerpcrun) the TET
+driver.  
+
+The file (dcerpcrun.data) sets up the environment needed by the TET 
+driver to run the test.  Things such as how many client loops, number of
+iterations or minutes to run the test, the client host names, etc. are
+set in this file.  All clients create entries in the servers' database to
+report client local test status back to the server process.  This gives
+in most cases a single point of reporting/analysis.
+
+A major caveat in the client reporting is that a client may drop communi-
+cation from a whole process, ie; 5 client processes are started with 10
+loops each.  This essentially means 50 loops total are executed.  If one
+process dies or looses communication with the server, no information is
+reported back to the server for that process.  So now the other 4 client
+processes report back a PASS status to the server and the 5th is gone.
+It now looks like everything passed the test.  The total number of loops
+that were executed for each client host and the return status from the 
+dumpDB() function are checked to see if this condition exists and flags
+it if in error.
+
+The clients all report their test status locally to a text file so that
+debugging is made easier, as well as the server.  All work is done in the
+WORKDIR defined in the (dcerpcrun.data) file.  To run the dcerpcrun test
+a TET environment is neccessary.  The command line may look something
+like:
+
+    tcc -e -v CLIENT_MACHINES="wabbit flh panhead" rpc dcerpcrun
+
+This will execute the test on client hosts "wabbit flh panhead" for 1
+iteration (default).

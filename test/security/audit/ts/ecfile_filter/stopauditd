@@ -1,0 +1,52 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# (c) Copyright International Business Machines Corp. 1994, 1996
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#set -x
+
+cellpw=-dce-
+
+if [ "`uname`" = "OSF1" ]
+then
+  PS_FLAGS="-e -o ucomm"
+else
+  PS_FLAGS="-e"
+fi
+
+
+#in order to run rgy_edit, there is need to dce_login as cell_admin 
+# use -up for rgy_edit to ensure master is updated.
+  dce_login cell_admin $cellpw -e rgy_edit -up <<EOF
+domain group
+del aud_test_group1
+domain principal
+del aud_test_princ1
+quit
+EOF
+
+if (( $AUDITCP ))
+then
+
+  nr_of_auditcp=$( ps $PS_FLAGS | grep -c auditcp )
+  while ((nr_of_auditcp!=0))
+  do
+    sleep 5
+    nr_of_auditcp=$( ps $PS_FLAGS | grep -c auditcp )
+  done 
+
+  auditcp aud stop
+else
+
+ nr_of_dcecp=$( ps $PS_FLAGS | grep -c dcecp )
+ while ((nr_of_dcecp!=0))
+ do
+   sleep 5
+   nr_of_dcecp=$( ps $PS_FLAGS | grep -c dcecp )
+ done 
+
+ dcecp -c aud stop
+fi
+sleep 10 

@@ -1,0 +1,297 @@
+#!/bin/sh
+#
+###############################################################################
+#    Copyright (C) 1990, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: rtest1,v $
+# Revision 1.1.10.1  1996/10/17  18:19:54  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:50:36  damon]
+#
+# Revision 1.1.4.4  1993/01/11  18:26:36  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  16:59:45  htf]
+# 
+# Revision 1.1.4.3  1992/10/28  16:12:52  jaffe
+# 	Transarc delta: jess-ot5320-fix-fs-low-testhome 1.1
+# 	  Selected comments:
+# 	    The fs and low test shell scripts have the following if statement
+# 	    if [ "$TESTTOP" = "`pwd`" ]
+# 	    then
+# 	    UTIL_DIR=../util
+# 	    testhome=$TESTTOP
+# 	    else
+# 	    UTIL_DIR=$TESTTOP/util
+# 	    testhome=$TESTTOP/$testSuiteType
+# 	    fi
+# 	    The problem is that variable testSuiteType is not defined at this time.
+# 	    See above.
+# 	[1992/10/27  18:11:54  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/28  18:11:25  jaffe
+# 	Transarc delta: rajesh-clean-fs-tests 1.6
+# 	  Selected comments:
+# 	    To remove make, clean options from fs tests
+# 	    Remove references to sys command by using fsSetSysName
+# 	    Make the scripts modular, structured.
+# 	    The variable names are changed to follow coding standards.
+# 	    See above.
+# 	    Apply modification mentioned in revision 1.2 to 2 missed test file
+# 	    err1 and err2.
+# 	    Some bug fixes, and revision of tests err1 and err2. Introduction of
+# 	    a common functions ProcessResult to analyse the result.
+# 	    Further changes to some utility functions.
+# 	    Added error test err2 to the Makefile
+# 	[1992/08/28  12:12:19  jaffe]
+# 
+# Revision 1.1.2.3  1992/05/29  22:58:04  mason
+# 	Transarc delta: fred-3754-change-script-name 1.1
+# 	  Selected comments:
+# 	    To clean up a number of defects with the tests.  In addition to defect
+# 	    3754, the changes also fix defects 3750 and 3748.
+# 	    Fixed setting of TESTTOP variable.
+# 	[1992/05/28  22:15:48  mason]
+# 
+# Revision 1.1.2.2  1992/05/21  12:39:46  jaffe
+# 	Transarc delta: fred-remove-sys 1.1
+# 	  Files modified:
+# 	    Makefile; cm: runtests, test0, test3, test4, test6
+# 	    fs: Makefile, err1, err2, rtest1, test10, test2, test2b
+# 	    fs: test2s, test3, test4, test5, test6, test7, test8, test9
+# 	    low: progErrMap.c, rprogErrMapQuota.c, rtest1, rtest2
+# 	    low: rtestErrMapQuota, test1, test10, test11, test12, test13
+# 	    low: test14, test2, test3, test4, test5, test6, test7, test8
+# 	    low: test9, testErrMap
+# 	    util: Makefile, fs_GenerateFile, fs_SetSysName
+# 	  Selected comments:
+# 	    To remove dependency on the AFS sys command in the test scripts.
+# 	    To remove dependency on AFS sys command.
+# 
+# 	$TALog: rtest1,v $
+# 	Revision 4.13  1994/11/01  22:22:58  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r4.12 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	[1992/05/20  18:42:54  jaffe]
+# 
+# $EndLog$
+#
+
+# This script checks the chmod, chown, and chgrp commands. It will only
+# succeed if it is run by root. If you use the -noroot option, it will
+# test only "chmod," in which case it should succeed for non-root users.
+
+# Usage: rtest1 [-noroot]
+
+###############################################################################
+
+#
+# PrintUsage() -
+#   Prints the usage message for this script.
+
+PrintUsage()
+{
+    echo "$programName checks the chmod, chown, and chgrp commands"
+    echo "Usage: $programName [-noroot]"
+}
+
+#
+# Initialise some variables. UTIL_DIR is the directory containing 
+# the script fs_FunctionsScript with common functions.
+#
+
+TESTTOP=${TESTTOP:="`pwd`"}
+
+if [ "$TESTTOP" = "`pwd`" ]
+then
+    UTIL_DIR=../util
+    testhome=$TESTTOP
+else
+    UTIL_DIR=$TESTTOP/util
+    testhome=$TESTTOP/fs
+fi
+
+. $UTIL_DIR/fs_FunctionsScript
+. $UTIL_DIR/fs_SetSysVar
+createFileCmd="$UTIL_DIR/fs_GenerateFile"
+
+trap '
+    cd $currentDir
+    rm -rf tdir
+    echo "$programName killed returning $scriptErrorExit" | tee -a $logFile
+    exit $scriptErrorExit
+    ' 2 3 15
+
+#
+# Initialise setup variables
+#
+
+fs_InitSetup fs
+
+#
+# Default option argument values
+#
+
+root_flag=TRUE
+
+#
+# Parse the command line
+#
+
+while [ "$1" != "" ]
+do 
+    case $1 in 
+        help|-help) PrintUsage
+                    exit $successExit
+                    ;;
+
+        noroot|-noroot) 
+                    root_flag=FALSE
+                    shift
+                    ;;
+        root|-root) 
+                    root_flag=TRUE
+                    shift
+                    ;;
+
+        *)          echo "ERROR $testSuiteType/$programName: invalid argument \"$1\"" | tee -a $logFile
+                    exit $scriptErrExit
+                    ;;
+    esac
+done
+
+#
+# Start test
+#
+
+(
+    echo "$programName (chm/o/g) starting in $currentDir"
+    echo "Host `hostname` ($dfs_fsSysName)"
+    date
+) | tee -a $logFile
+
+if [ $root_flag = "TRUE" ]
+then 
+    echo "Doing all tests, including chown and chgrp" | tee -a $logFile
+else 
+    echo "Testing only chmod" | tee -a $logFile
+fi
+
+fs_DetermineFSType
+
+if [ $root_flag = "TRUE" ]
+then 
+    owners="0 1 3 100 1000 10000 30000"
+    groups="0 1 2 222 1111 22222"
+else 
+    owners=0
+    groups=0
+fi
+
+modes="777 755 700 666 644 600 555 511 500 444 400 333 300 222 200 111 100 0"
+
+rm -rf tdir
+mkdir tdir
+echo "This is a test." > tdir/tfile
+for owner in $owners
+do
+    for group in $groups
+    do
+        for mode in $modes
+        do
+            if [ $root_flag = "TRUE" ]
+            then
+                chown $owner tdir/tfile
+                result=$?
+                if [ $result -ne 0 ]
+                then 
+                    echo "$programName chown $owner returned $result" | tee -a $logFile
+                    errorCount="1"
+                fi
+
+                chgrp $group tdir/tfile
+                result=$?
+                if [ $result -ne 0 ]
+                then 
+                    echo "$programName chgrp $group returned $result" | tee -a $logFile
+                    errorCount="1"
+                fi
+            fi
+
+            chmod $mode tdir/tfile
+            result=$?
+            if [ $result -ne 0 ]
+            then 
+                echo "$programName chmod $mode returned $result" | tee -a $logFile
+                errorCount="1"
+            fi
+
+            if [ $root_flag = "TRUE" ]
+            then
+                f=`find tdir -type f -user $owner -print`
+                if [ "$f" != "tdir/tfile" ]
+                then 
+                    (
+                        echo "$programName find user $owner failed"
+                        ls -lg tdir
+                    ) | tee -a $logFile
+                    errorCount="1"
+                fi
+
+                f=`find tdir -type f -group $group -print`
+                if [ "$f" != "tdir/tfile" ]
+                then 
+                    (
+                        echo "$programName find group $group failed"
+                        ls -lg tdir
+                    ) | tee -a $logFile
+                    errorCount="1"
+                fi
+            fi
+            
+            f=`find tdir -type f -perm $mode -print`
+            if [ "$f" != "tdir/tfile" ]
+            then 
+                (
+                    echo "$programName find perm $mode failed"
+                    ls -lg tdir
+                ) | tee -a $logFile
+                errorCount="1"
+            fi
+            
+            if [ $errorCount -ne 0 ]
+            then 
+                (
+                    echo " "
+                    echo "$testSuiteType/$programName returning $errorCount in $currentDir"
+                    date
+                ) | tee -a $logFile
+                exit $errorCount
+            fi
+            
+        done
+    done
+done
+            
+###############################################################################
+    
+rm -rf tdir
+(
+    echo " "
+    echo "$testSuiteType/$programName returning $errorCount in $currentDir"
+    date
+) | tee -a $logFile
+
+exit $errorCount
+    
+###############################################################################
+            

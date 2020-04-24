@@ -1,0 +1,95 @@
+/* ______________________________________________________________________ */
+/*
+ *  @OSF_COPYRIGHT@
+ *  Copyright (c) 1993, 1996 Open Software Foundation, Inc.
+ *  ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ *  src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: database.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:10:40  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:28:25  marty]
+ *
+ * Revision 1.1.4.1  1995/12/08  21:35:26  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  18:07:19  root]
+ * 
+ * Revision 1.1.2.5  1994/09/19  19:52:50  bowe
+ * 	Remove status param to dce_db_header_convert() [CR 10000]
+ * 	[1994/09/19  19:52:27  bowe]
+ * 
+ * Revision 1.1.2.4  1994/05/10  21:45:01  bowe
+ * 	Simplified obj header structure
+ * 	[1994/05/10  21:31:37  bowe]
+ * 
+ * Revision 1.1.2.3  1994/04/26  19:11:32  bowe
+ * 	Added owner_id, group_id to std header
+ * 	[1994/04/26  17:34:25  bowe]
+ * 
+ * Revision 1.1.2.2  1994/03/09  22:56:42  bowe
+ * 	Replaced dce_db_aclheader_t stuff with a simpler acl_uuid (for
+ * 	databases that want headers that just point to an acl).
+ * 	[1994/03/09  22:45:10  bowe]
+ * 
+ * Revision 1.1.2.1  1994/01/24  22:01:35  bowe
+ * 	Initial checkin
+ * 	[1994/01/24  21:59:26  bowe]
+ * 
+ * Revision 1.1.2.1  1993/12/02  20:46:02  bowe
+ * 	Initial revision.
+ * 	[1993/12/02  20:31:18  bowe]
+ * 
+ * $EndLog$
+ */
+/* ______________________________________________________________________ */
+
+[uuid(bd5a2d4a-bbff-11cc-9ce2-08000925634b)]
+
+interface database {
+
+import "dce/utctypes.idl";
+
+/* This is the standard header for each "object" in the database. */
+/* IMPORTANT:
+ *	The header struct cannot have any variable-length data (eg, char *).
+ *	This is because when fetching (and unmarshalling) just the header,
+ *	the variable part is at the end of the application's entire data
+ *	object, not at the end of the header.
+ */
+typedef struct dce_db_dataheader_s_t {
+    uuid_t		uuid;
+    uuid_t		owner_id;
+    uuid_t		group_id;
+    uuid_t		acl_uuid;
+    uuid_t		def_object_acl;
+    uuid_t		def_container_acl;
+    unsigned32		ref_count;
+    /* The following fields are updated by the library */
+    utc_t		created;
+    utc_t		modified;
+    unsigned32		modified_count;
+} dce_db_dataheader_t;
+
+typedef enum {
+    dce_db_header_std,
+    dce_db_header_acl_uuid,
+    dce_db_header_none
+} dce_db_header_type_t;
+
+typedef union switch (dce_db_header_type_t type) tagged_union {
+    case dce_db_header_none:		/* none */ ;
+    case dce_db_header_std:		dce_db_dataheader_t h;
+    case dce_db_header_acl_uuid:	uuid_t	acl_uuid;
+} dce_db_header_t;
+
+void dce_db_header_convert(
+    [in]	handle_t		h,
+    [in,out]	dce_db_header_t		*data
+);
+
+}
+
+/* ______________________________________________________________________ */
+

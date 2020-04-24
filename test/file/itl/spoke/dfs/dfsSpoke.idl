@@ -1,0 +1,78 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: dfsSpoke.idl,v $
+ * Revision 1.1.6.1  1996/10/17  18:28:24  damon
+ * 	Submitting on behalf of Transarc
+ * 	[1996/10/17  16:54:15  damon]
+ *
+ * $EndLog$
+ */
+
+[
+uuid(00868bf2-bbe7-1b9b-9fa6-08005a4d081c),
+version(1.0)
+]
+interface dfsSpoke
+{
+	const long MAX_DIR_NAME_LEN = 256;
+
+	typedef struct {
+#ifdef SUNOS4
+		unsigned32	d_fileno;
+#else
+		unsigned32	d_ino;
+#endif
+		unsigned16	d_reclen;
+		unsigned16	d_namlen;
+                unsigned32      d_offset;
+		[length_is(d_namlen)]
+			char 		d_name[MAX_DIR_NAME_LEN];
+	} dfsSpoke_dirent_t;
+
+	typedef struct	{
+		unsigned32	st_dev;
+		unsigned32	st_ino;
+		unsigned32	st_mode;
+		unsigned32	st_nlink;
+		unsigned32	st_uid;
+		unsigned32	st_gid;
+		unsigned32	st_rdev;
+		unsigned32	st_size;
+		unsigned32	st_atime_;
+		unsigned32	st_mtime_;
+		unsigned32	st_ctime_;
+		unsigned32	st_blksize;
+		unsigned32	st_blocks;
+	} dfsSpoke_stat_t ;
+
+	/* this type only used for transmission of directory entries */
+	typedef struct {
+		unsigned32 n_entries;
+		[ptr, size_is(n_entries)]
+			dfsSpoke_dirent_t *entry;
+	} dfsSpoke_dirent_array_t;
+
+	/* spoke RPCs added to enable consistency checking */
+	error_status_t
+	dfsSpoke_RemoteStat(
+		[in] handle_t h,
+		[in, string] char * file_name,
+		[ ref, out ] dfsSpoke_stat_t * stat
+	);
+
+	/* read all entries of the named directory */
+	error_status_t
+	dfsSpoke_RemoteReaddir(
+		[ in ] handle_t h,
+		[ in, string ] char * file_name,
+		[ in, out ] dfsSpoke_dirent_array_t * dir_entries
+	);
+
+}

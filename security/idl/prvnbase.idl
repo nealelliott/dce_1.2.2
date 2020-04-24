@@ -1,0 +1,153 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: prvnbase.idl,v $
+ * Revision 1.1.6.2  1996/03/09  23:28:07  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:35  marty]
+ *
+ * Revision 1.1.6.1  1995/12/08  17:32:32  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:55:08  root]
+ * 
+ * Revision 1.1.4.2  1994/08/18  20:25:29  greg
+ * 	Add delegation token hooks for "confidential bytes."  They
+ * 	aren't implemented in 1.1, but at least implementing them
+ * 	later won't require a protocol change.
+ * 	[1994/08/16  19:12:49  greg]
+ * 
+ * Revision 1.1.4.1  1994/05/11  19:10:57  ahop
+ * 	hp_sec_to_osf_2 drop
+ * 	[1994/04/29  21:05:36  ahop]
+ * 
+ * Revision 1.1.2.2  1992/12/29  13:30:09  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:17:09  zeliff]
+ * 
+ * Revision 1.1  1992/01/19  14:54:56  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+
+/*
+**
+** Copyright (c) Hewlett-Packard Company 1991, 1994
+** Unpublished work. All Rights Reserved.
+**
+*/
+/* Privilege Server network base type definitions
+ *  
+ */
+
+
+interface prvnbase {
+
+    import "dce/secsts.idl";
+    import "dce/sec_attr_base.idl";
+    import "dce/id_epac.idl";
+    import "dce/rgynbase.idl";
+
+    /*  
+     * The network "pickle" for a priv server request/response
+     */
+    typedef struct {
+        unsigned32          num_bytes;
+        [size_is(num_bytes)]
+            byte            bytes[];
+    } rpriv_pickle_t;    
+
+    /* 
+     * structures to encapsulate info relevant to an optional
+     * auxiliary attributes request/response from the privilege
+     * server.
+     */
+
+    typedef struct {
+	unsigned32		num_aux_attr_keys;
+	[ptr, size_is(num_aux_attr_keys)]	
+	    sec_attr_t		*aux_attr_keys;
+    } rpriv_attr_request_t;    
+    
+    typedef struct {
+	error_status_t      status;
+        unsigned32          num_attrs;
+        [ptr, size_is(num_attrs)]
+            sec_attr_t      *attrs;
+    } rpriv_attr_result_t;  
+
+
+    /* 
+     * structures to encapsulate info relevant to an
+     * optional application service ticket response.
+     * We don't provide an app_tkt_request_t because
+     * the request consists soley of a principal name.
+     */
+    typedef struct {
+	error_status_t       status;
+	[ptr] rpriv_pickle_t *app_tkt_rep;
+    } rpriv_app_tkt_result_t;  
+ 
+    /* delegation token types */
+
+    /* sec_dlg_token_t
+     *
+     * A delegation token consists of an expiration date
+     * and a byte stream.  The first byte of any delegation
+     * token byte stream is a version number.  The contents of
+     * subsequent bytes depends on the version number.
+     *
+     * The contents of a version 0 delegation token are 
+     * illustrated in the following diagram.  As of DCE 1.1,
+     * version 0 is the only valid delegation token version.
+     *
+     *    0         1        2        3      4            12         16           20           36           44           52
+     *    |---------|--------|--------|------|------------|----------|------------|------------|------------|------------|
+     *    | 0x00    | flags1 | flags2 | kvno | confounder | crc 32   | expiration | md5 digest | conf bytes | conf bytes |
+     *    |         |        |        |      |            | checksum |            |            |  DES key   | DES ivec   |
+     *    -------------------|--------------------------------------------------------------------------------------------
+     *    |         cleartext                |                        ciphertext (des-cbc-crc)                           |
+     *    ----------------------------------------------------------------------------------------------------------------
+     *    |                                required                                            |       optional          |
+     *    ----------------------------------------------------------------------------------------------------------------
+     *
+     * kvno identifies the version of the priv server key used to encrypt
+     * the ciphertext portion of the token bytes.
+     *
+     * The ciphertext portion of a version 0 token consists of a 4 byte
+     * expiration timestamp in big-endian byte order followed by a 16 byte
+     * md5 digest.  In addition, if the low-order bit of byte
+     * 1 (flags1) is set the md5 message digest is followed by an 8 byte
+     * DES key  and an 8 byte initialization vector (used for encrypting
+     * confidential bytes ERAs in EPACs).  The ciphertext portion is 
+     * encrypted using  the des-cbc-crc encryption system as defined in 
+     * the kerberos V5 RFC.
+     *
+     * The expiration timestamp must be part of the encrypted data
+     * or delegation tokens would be valid forever.  The expiration
+     * timestamp is also provided in the clear so that priv server
+     * clients can avoid useless network operation using expired tokens.
+     * 
+     */
+
+    /* v0 token flags */
+    const unsigned8 sec_dlg_token_v0_conf_bytes = 0x1; 
+
+    typedef struct {
+        unsigned32         expiration;    
+        sec_bytes_t        token_bytes;
+    } sec_dlg_token_t;
+
+    typedef struct {
+        unsigned32  num_tokens;
+        [size_is(num_tokens), ptr]
+            sec_dlg_token_t  *tokens;
+    } sec_dlg_token_set_t;
+}
+

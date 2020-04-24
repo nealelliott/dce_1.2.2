@@ -1,0 +1,186 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: gds.functions,v $
+# Revision 1.1.2.2  1996/03/11  02:41:26  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:06:25  marty]
+#
+# Revision 1.1.2.1  1995/12/11  21:57:47  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/1  1994/11/09  19:19 UTC  bissen
+# 	merge HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/03/18  16:25 UTC  truitt
+# 	Update test to latest tet version
+# 
+# 	HP revision /main/truitt_junk/1  1994/03/18  16:12 UTC  truitt
+# 	Wrapper for tet test
+# 	[1995/12/11  20:57:28  root]
+# 
+# Revision 1.1.2.4  1993/02/12  20:39:19  pellis
+# 	Changed to use WS for directory name instead of 1st argument.
+# 	[1993/02/12  20:34:07  pellis]
+# 
+# Revision 1.1.2.3  1993/02/05  15:29:35  cjd
+# 	Embedded copyright notice
+# 	[1993/02/05  14:50:18  cjd]
+# 
+# Revision 1.1.2.2  1993/01/07  20:10:31  ramb
+# 	File contains a list of functions which are used by the systest scripts.
+# 	Not all functions are used by all the tests.
+# 	[1993/01/07  19:33:59  ramb]
+# 
+# $EndLog$
+#	systest.functions
+#	$1 - contains the name of the driver sourcing this file
+#
+#
+#
+# First re-establish the directory structure for logging according to new 
+# convention. So the new logging structure will look like:
+#	                     $LOGDIR
+#				|
+#		----------------|----------------
+#		|		|		|
+#	     working           pass	      fail
+#
+#
+STSTUB=$LOG_DIR/${WS}                   #Top of the log directory
+STLOGDIR=$STSTUB/working		#Output from tests accumulates here
+BASE_FAIL_DIR=$STSTUB/fail		#Save output from failed tests here
+BASE_PASS_DIR=$STSTUB/pass		#Save output from successful tests here
+PASS_FAIL_LOG=$STSTUB/pass_fail_log	#Scenario log file
+if [ ! -a $BASE_FAIL_DIR ]
+then
+	mkdir -p $BASE_FAIL_DIR
+fi
+if [ ! -a $BASE_PASS_DIR ]
+then
+	mkdir -p $BASE_PASS_DIR
+fi
+if [ ! -a $STLOGDIR ]
+then
+	mkdir -p $STLOGDIR
+fi
+touch $PASS_FAIL_LOG
+
+#===============================================================================
+# Function:	xx_begin print_string
+# Purpose:	Print the passed string with date/time stamp and '-begin--' prefix
+#===============================================================================
+xx_begin() {
+	STRING=$(date +"%D:%T-begin---:$1")
+	echo $STRING | tee -a $JOURNAL
+	tet_infoline $STRING
+}
+
+#===============================================================================
+# Function:	xx_error print_string
+# Purpose:	Print the passed string with date/time stamp and '-error--' prefix
+#===============================================================================
+xx_error() {
+	STRING=$(date +"%D:%T-error---:$1")
+	echo $STRING | tee -a $JOURNAL
+	tet_infoline $STRING
+}
+
+#===============================================================================
+# Function:	xx_fail print_string
+# Purpose:	Print the passed string with date/time stamp and '-fail--' prefix
+#===============================================================================
+xx_fail() {
+	STRING=$(date +"%D:%T-fail----:$1")
+	echo $STRING | tee -a $JOURNAL
+	tet_infoline $STRING
+}
+
+
+#===============================================================================
+# Function:	xx_log print_string
+# Purpose:	Print the passed string with date/time stamp and '-log--' prefix
+#===============================================================================
+xx_log() {
+	STRING=$(date +"%D:%T-log-----:$1")
+	echo $STRING | tee -a $JOURNAL
+	tet_infoline $STRING
+}
+
+#===============================================================================
+# Function:	xx_pass print_string
+# Purpose:	Print the passed string with date/time stamp and '-pass--' prefix
+#===============================================================================
+xx_pass() {
+	STRING=$(date +"%D:%T-pass----:$1")
+	echo $STRING | tee -a $JOURNAL
+	tet_infoline $STRING
+}
+
+#===============================================================================
+# Function:	xx_severe print_string
+# Purpose:	Print the passed string with date/time stamp and -severe-- prefix
+#===============================================================================
+xx_severe() {
+	STRING=$(date +"%D:%T-severe--:$1")
+	echo $STRING | tee -a $JOURNAL
+	tet_infoline $STRING
+}
+
+#===============================================================================
+# Function:	xx_warning print_string
+# Purpose:	Print the passed string with date/time stamp and -warning-- prefix
+#===============================================================================
+xx_warning() {
+	STRING=$(date +"%D:%T-warning-:$1")
+	echo $STRING | tee -a $JOURNAL
+	tet_infoline $STRING
+}
+
+
+#===============================================================================
+# Function:	rcheck [-r] expt_code act_code info_string
+# Purpose:	Check the return value of a command
+#===============================================================================
+rcheck() {
+
+   ACTUAL_RCODE=$?			# remember the return code fron
+   set -- `getopt r: $*`	        # parse the command line arguments
+   test $? -ne 0 && print "usage: rcheck [-r] expt_code act_code info_string"
+
+   RELOP="-eq"
+
+   while :
+   do
+	   case "$1" in
+	   -r)
+		   RELOP="-$2"
+		   shift
+		   ;;
+	   --)
+		   shift 
+		   break 2
+		   ;;
+	   esac
+	   shift
+   done
+
+   ACTUAL_RCODE=$1
+   EXPECTED_RCODE=$2
+   shift 2
+   MESSAGE=$*
+
+   test "$EXPECTED_RCODE" "$RELOP" "$ACTUAL_RCODE"
+   if [ $? -eq 0 ]; then
+	xx_log  "PASS: ${MESSAGE}" 
+   else
+	xx_error "FAIL: ${MESSAGE}" 
+   fi
+
+   return $ACTUAL_RCODE
+}

@@ -1,0 +1,133 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: gdsDump,v $
+# Revision 1.1.4.2  1996/03/11  02:49:24  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:10:02  marty]
+#
+# Revision 1.1.4.1  1995/12/11  22:50:50  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  22:23:36  root]
+# 
+# Revision 1.1.2.2  1994/08/04  19:15:00  mcg
+# 	fixed comment leader
+# 	[1994/08/04  19:14:42  mcg]
+# 
+# Revision 1.1.2.1  1994/08/04  18:35:17  mcg
+# 	Add capability to GDS system tests to dump state of GDS.
+# 
+# Revision 1.1.1.2  1994/08/04  18:33:15  mcg
+# 	Add capability to GDS system tests to dump state of GDS.
+# 
+# $EndLog$
+
+########################################################################
+# gdsDump
+#
+# Save GDS state information.
+# Initialy configured to save:
+#  /opt/dcelocal/var/directory/gds/adm/[dsa sstub]
+#  /opt/dcelocal/var/adm/directory/gds/[cstub cache adm]
+########################################################################
+
+# Define local paramaters here
+
+# DIR_SAVE is the root for saved GDS configation files.
+export DIR_SAVE=${DIR_SAVE:-$STSTUB/dcegdshd/dumps}
+
+# Root of VAR
+export VAR_ROOT=${VAR_ROOT:-/opt/dcelocal/var}
+
+# DirectoryGdsAdm (DGA) path string 
+export DGA=${DGA:-directory/gds/adm}
+
+# AdmDirectiryGds (ADG) path string
+export ADG=${ADG:-adm/directory/gds}
+
+# Root of (directory/gds/adm) admin directories being saved
+export DIR_DGA=${DIR_DGA:-$VAR_ROOT/$DGA}
+
+# Root of (adm/directory/gds) gds directories being saved
+export DIR_ADG=${DIR_ADG:-$VAR_ROOT/$ADG}
+
+# List of ($VAR_ROOT/directory/gds/adm) admin components being saved 
+export COMP_DGA=${COMP_DGA:-"dsa sstub"}
+
+# List of ($VAR_ROOT/adm/directory/gds) gds components being saved 
+export COMP_ADG=${COMP_ADG:-"cstub cache adm"}
+
+# Commands used
+export COPY=${COPY:-"cp -r"}
+export MKDIR=${MKDIR:-"mkdir -p"}
+export ECHO="xx_log"
+
+# WPHI is passed in $1 from the calling program.
+# WPHI stands for: combination/substition - $WS.$PID.$HOST.$ITERATION
+# of the calling test process.
+export WPHI="$1"
+
+# Error checking
+
+if [ "$WPHI" = "" ]
+then
+	$ECHO "No Directory for saving dce configuration specified"
+	return
+fi
+
+if [ ! -d $DIR_SAVE ]; then
+	$ECHO "Creating dump depository $DIR_SAVE"
+	$MKDIR $DIR_SAVE
+fi
+
+if [ ! -d $DIR_SAVE/$WPHI ]; then
+	$ECHO "Current DCE state saved in $DIR_SAVE/$WPHI"
+	$MKDIR $DIR_SAVE/$WPHI
+else
+# We should never get to a state where we are bouncing DSAs 
+# for the same WPHI, or $1 is null, but just in case,
+# scream and bail out.
+
+	$ECHO "\tWARNING: ERROR: FAIL: WARNING: ERROR: FAIL"
+	$ECHO
+	$ECHO "\tOn system: `hostname`"
+	$ECHO "\tcalled to dump to an existing dump directory:"
+	$ECHO "\t$DIR_SAVE/$WPHI"
+	$ECHO
+	$ECHO "\t$0 terminating with no action taken"
+	$ECHO
+	return
+fi
+
+# Save the DGA data
+
+for component in $COMP_DGA
+do
+	if [ -d $DIR_DGA/$component ]; then
+		$ECHO "Saving $DIR_DGA/$component to $DIR_SAVE/$WPHI/$DGA/$component"
+		$MKDIR $DIR_SAVE/$WPHI/$DGA/$component
+		$COPY $DIR_DGA/$component/* $DIR_SAVE/$WPHI/$DGA/$component
+	else
+		$ECHO "$DIR_DGA/$component does not exist"
+	fi
+done
+
+# Save the ADG data
+
+for component in $COMP_ADG
+do
+	if [ -d $DIR_ADG/$component ]; then
+		$ECHO "Saving $DIR_ADG/$component to $DIR_SAVE/$WPHI/$ADG/$component"
+		$MKDIR $DIR_SAVE/$WPHI/$ADG/$component
+		$COPY $DIR_ADG/$component/* $DIR_SAVE/$WPHI/$ADG/$component
+	else
+		$ECHO "$DIR_ADG/$component does not exist"
+	fi
+done
+

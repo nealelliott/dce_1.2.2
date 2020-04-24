@@ -1,0 +1,145 @@
+*
+* @OSF_COPYRIGHT@
+*
+* (C) Copyright 1992 Transarc Corporation.
+* All Rights Reserved.
+*
+*  open2.itl --
+*    Tests open file semantics for DFS when multiple token types are
+*    held on the file.  This is accomplished via file segment locks.
+*    One process obtains a lock on a segment, then drops the lock on
+*    the middle part of the segment.  The other process then tries to
+*    obtain that middle lock.
+*
+*  Requirements -
+*	Minimum:  1 machines
+*	Maximum:  2 machines
+*
+*  Setup - (1 machine)
+*	The master and two clients are started on one machine.  One of the
+*	clients is started in DFS and the other in the local path.
+*       For 2 machine just start a client on the server in either the local
+*       path or DFS, and start a client on the second machine in DFS.	
+*
+* HISTORY
+* $Log:$
+*
+* $EndLog$
+******************************************************************************
+*
+!* Checking for correct number of test clients.
+*
+if ($ITL_nspokes != 2) {
+  error Need exactly 2 test clients to run this test.
+  echo Test FAILED.
+  quit
+}
+*
+!*  Read configuration data.
+*
+include open2.config.itl
+
+*
+*  Define script constants.
+*
+set fileDataString string "'String with a length that must be a power of 2 or script fails.-'"
+set fileStringLength int 64
+set clientErrors int 0
+
+ 
+*
+!* Starting tests.
+*
+* Loop as many times as configured by open2.config
+*
+loop x 0 1 ($loopCount - 1)
+
+*
+*  The procedures, localOpen and dfsOpen, are the procedures executed by
+*  the spoke clients.
+*
+  set localOpen proc END_PROC
+    set middleLock fs_flock @F_WRLCK @SEEK_SET $middleLockStart[$x] $middleLockLen[$x]
+
+    open $testFileName @O_RDWR 0 fileId
+    sync_join "open_completed" $syncPointTimeout
+    sync_join "lock_middle" $syncPointTimeout
+    fcntl @fileId @F_SETLKW middleLock
+    close @fileId
+    sync_join "lock_done" $syncPointTimeout
+  END_PROC
+
+  set dfsOpen proc END_PROC
+    set rangeLock fs_flock @F_WRLCK @SEEK_SET $rangeLockStart[$x] $rangeLockLen[$x]
+    set middleLock fs_flock @F_WRLCK @SEEK_SET $middleLockStart[$x] $middleLockLen[$x]
+
+    open $testFileName @O_RDWR 0 fileId
+    sync_join "open_completed" $syncPointTimeout
+*
+* Obtain range lock.
+*
+    fcntl @fileId @F_SETLKW rangeLock
+*
+* Free middle range.
+*
+    set middleLock.l_type @F_UNLCK
+    fcntl @fileId @F_SETLKW middleLock
+    sync_join "lock_middle" $syncPointTimeout
+    sync_join "lock_done" $syncPointTimeout
+    sync_join "local_exit" $syncPointTimeout
+    close @fileId
+    unlink $testFileName
+  END_PROC
+
+*
+!* Creating $fileSizes[$x] byte file.
+*
+  set shellCommand string ($utilDirectory + "/fs_GenerateFile " + $fileDataString + " " + $fileStringLength + " " + $testFileName + " " + $fileSizes[$x])
+  shellExec shellCommand
+
+*
+!* Executing client scripts - loop $x
+*
+  rexec_async $ITL_spoke[0] localOpen localResult localAsyncId
+  rexec_async $ITL_spoke[1] dfsOpen dfsResult dfsAsyncId
+
+  sync_create "open_completed" 2  $syncPointTimeout
+  sync_release "open_completed"
+
+  sync_create "lock_middle" 2  $syncPointTimeout
+  sync_release "lock_middle"
+
+  sync_create "lock_done" 2  $syncPointTimeout
+  sync_release "lock_done"
+
+  async_join $localAsyncId $syncPointTimeout
+*
+!* Validating local path results - loop $x
+*
+  if ($localResult != 0) {
+    echo Local test client had a failure, status was $localResult
+    set clientErrors ($clientErrors + 1)
+  }
+
+  sync_create "local_exit" 1  $syncPointTimeout
+  sync_release "local_exit"
+
+  async_join $dfsAsyncId $syncPointTimeout
+*
+!* Validating DFS path results - loop $x
+*
+  if ($dfsResult != 0) {
+    echo DFS test client had a failure, status was $dfsResult
+    set clientErrors ($clientErrors + 1)
+  }
+endLoop
+
+if ($clientErrors == 0) {
+  echo Test completed successfully.
+}
+else {
+  error Test FAILED - with $clientErrors client failures.
+}
+
+quit
+

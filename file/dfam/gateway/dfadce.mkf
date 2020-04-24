@@ -1,0 +1,165 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: dfadce.mkf,v $
+# Revision 1.1.2.2  1996/03/11  14:07:28  marty
+# 	Update OSF copyright years.
+# 	[1996/03/11  13:56:54  marty]
+#
+# Revision 1.1.2.1  1996/02/22  00:57:41  takano
+# 	First Submit
+# 	[1996/02/22  00:56:29  takano]
+# 
+# $EndLog$
+
+!ifdef %SILENT
+.silent
+!endif
+
+program = Distributed File Access Manager(DCEAPI Communication Library)
+copyright = Copyright 1996 Hitachi, Ltd.  All Rights Reserved.  Derechos Reservados.
+
+pvmaj = 1
+pvmin = 01
+pvrev = 0
+
+
+!ifndef %qmkver
+!   define version d
+!else
+!   define version $(%qmkver)
+!endif
+!ifeq version d
+!   define lversion DEBUG
+!   define debug /dDEBUG /dDCELOG /dDCETRC
+!else
+!   define lversion PRODUCTION
+!   define debug /dDCETRC /dDCELOG
+!endif
+
+nlm_SYSTEM = system NETWARE
+nlm_TYPE = Form Novell NLM '$(program)'
+nlm_NAME = Name $^&
+nlm_SCREEN = Op ScreenName 'None'
+nlm_THREAD = Op ThreadName 'DFADCE main'
+nlm_STACK = Op Stack = 8k
+nlm_NLMVER = Op Version = $(pvmaj).$(pvmin).$(pvrev)
+nlm_COPYRIGHT = Op Copyright '$(copyright)'
+linkop = $+$(linkop)$- Caseexact
+linkop = $+$(linkop)$- Map
+!ifeq version d
+!   define linkop $+$(linkop)$- Verbose
+!   define ldebug debug all debug novell
+!endif
+
+objlst = dcommain.obj
+objlst = $+$(objlst)$- dcomlin.obj
+objlst = $+$(objlst)$- dcomfil1.obj
+objlst = $+$(objlst)$- dcomfil2.obj
+objlst = $+$(objlst)$- dcomfil3.obj
+objlst = $+$(objlst)$- dcomacl.obj
+objlst = $+$(objlst)$- dcomdsyn.obj
+objlst = $+$(objlst)$- dcomtime.obj
+objlst = $+$(objlst)$- dcomcon.obj
+objlst = $+$(objlst)$- dcomwdog.obj
+objlst = $+$(objlst)$- dcomlog.obj
+objlst = $+$(objlst)$- dcommem.obj
+objlst = $+$(objlst)$- $(startup)
+
+import = $(clibimp)
+import = $+$(import)$- dfalib.imp
+import = $+$(import)$- $(socklibimp)
+
+export = dfadce.imp
+
+module = CLib
+module = $+$(module)$- dfalib.NLM
+
+build_msg = Building a $(lversion) version of $(program)
+
+pgm_ver = /dvMAJ="$(pvmaj)" /dvMIN="$(pvmin)" /dvREV="$(pvrev)"
+
+!ifndef %ccf386
+!   define  d_wcc386opt /bt=NETWARE /bm /en /ms /w4 /e99 /zp1 /3s /ot /d2 $(debug)
+!   define  p_wcc386opt /bt=NETWARE /bm /en /ms /w4 /s /zp1 /3s /oaxt $(debug)
+!   define  x_wcc386opt $($(version)_wcc386opt) $(pgm_ver)
+!else
+!   define  x_wcc386opt $(%ccf386)
+!endif
+
+compiler_cmd = $(wcc386) $(x_wcc386opt) $[*.c
+
+.BEFORE
+    echo $(build_msg)
+    set inc386=$(inc_386)
+    set lib386=$(lib_386)
+    set wcg386=$(code_386)
+
+.c.obj:
+        $(compiler_cmd)
+
+dfadce.nlm : $(objlst) dfadce.LNK
+        $(linker) @dfadce
+
+dfadce.LNK : dfadce.mkf
+  if exist $^&.LNK del $^&.LNK
+  %append $^&.LNK $(nlm_TYPE)
+  %append $^&.LNK $(nlm_NAME)
+  %append $^&.LNK $(nlm_SCREEN)
+  %append $^&.LNK $(nlm_THREAD)
+  %append $^&.LNK $(nlm_STACK)
+  %append $^&.LNK $(nlm_NLMVER)
+!ifdef copyright
+  %append $^&.LNK $(nlm_COPYRIGHT)
+!endif
+!ifdef ldebug
+  %append $^&.LNK $(ldebug)
+!endif
+  for %i in ($(linkop)) do %append $^&.LNK Op %i
+  for %i in ($(objlst)) do %append $^&.LNK File %i
+  for %i in ($(import)) do %append $^&.LNK Import @%i
+  for %i in ($(export)) do %append $^&.LNK Export @%i
+  for %i in ($(module)) do %append $^&.LNK Module %i
+  for %i in ($(library)) do %append $^&.LNK Library %i
+
+dfamdce_base_header = dfadce.mkf MAKEINIT DFALIB.IMP DFADCE.IMP
+dfamdce_base_header = $+$(dfamdce_base_header)$- dceapi.h
+dfamdce_base_header = $+$(dfamdce_base_header)$- dfamdef.h dfamstr.h dfamext.h dfamprt.h
+
+dcommain.obj    : dcommain.c    $(dfamdce_base_header)
+dcomlin.obj     : dcomlin.c     $(dfamdce_base_header)
+dcomfil1.obj    : dcomfil1.c    $(dfamdce_base_header)
+dcomfil2.obj    : dcomfil2.c    $(dfamdce_base_header)
+dcomfil3.obj    : dcomfil3.c    $(dfamdce_base_header)
+dcomacl.obj     : dcomacl.c     $(dfamdce_base_header)
+dcomdsyn.obj    : dcomdsyn.c    $(dfamdce_base_header)
+dcomtime.obj    : dcomtime.c    $(dfamdce_base_header)
+dcomcon.obj     : dcomcon.c     $(dfamdce_base_header)
+dcomwdog.obj    : dcomwdog.c    $(dfamdce_base_header)
+dcomlog.obj     : dcomlog.c     $(dfamdce_base_header) dfammsg.h
+dcommem.obj     : dcommem.c     $(dfamdce_base_header)
+
+clean : .symbolic
+    del *.MAP
+    del *.OBJ
+    del *.ERR
+    del *.LNK
+    del *.NLM
+
+zip : .symbolic
+    -pkzip -u dfadce dfadce.mkf *.c *.h
+
+unzip : .symbolic
+    -pkunzip -n -d dfadce
+
+save : .symbolic
+    %make zip
+    %make clean
+
+ean
+

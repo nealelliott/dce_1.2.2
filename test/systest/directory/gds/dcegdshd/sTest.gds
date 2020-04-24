@@ -1,0 +1,143 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: sTest.gds,v $
+# Revision 1.1.6.2  1996/03/11  02:41:42  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:06:30  marty]
+#
+# Revision 1.1.6.1  1995/12/11  21:57:50  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/1  1994/06/29  19:22 UTC  bissen
+# 	Merge hpdce02 (DCE 1.1 beta) and HPDCE01 into HPDCE02
+# 
+# 	HP revision /main/HPDCE01/1  1994/03/18  15:39 UTC  truitt
+# 	update gds test to latest tet version
+# 
+# 	HP revision /main/truitt_systest_work/1  1994/03/18  15:12 UTC  truitt
+# 	Update test to latest tet version
+# 	[1995/12/11  20:57:31  root]
+# 
+# Revision 1.1.2.4  1993/11/08  21:39:10  mhickey
+# 	Merged with changes from 1.1.2.3
+# 	[1993/11/08  21:39:06  mhickey]
+# 
+# 	Added a definition for GDS_NCLIENTS and
+# 	some comments.
+# 
+# 	Defect: 9899
+# 	[1993/11/08  21:26:19  mhickey]
+# 
+# 	Enhanced to support setting up the gds_xds_str_001 system test.
+# 
+# 	Defect 9209.
+# 	[1993/10/20  15:04:16  mhickey]
+# 
+# 	Enhanced to support setting up the gds_xds_str_001 system test.
+# 
+# 	Defect 9209.
+# 
+# Revision 1.1.2.3  1993/10/28  20:51:16  mhickey
+# 	This is the new-format config file for the dcegdshd system test.
+# 
+# 	defect 9285
+# 	[1993/10/28  20:51:00  mhickey]
+# 
+# Revision 1.1.2.2  1993/09/29  21:55:07  pellis
+# 	Ported to DCE 1.0.3.
+# 	[1993/09/29  21:53:59  pellis]
+# 
+# Revision 1.1.2.1  1993/09/23  20:24:24  pellis
+# 	Moved from ./systest/tools/*.
+# 	[1993/09/23  20:19:23  pellis]
+# 
+# Revision 1.1.6.2  1993/07/16  18:18:18  marcyw
+# 	Update version to 1.1.2.3
+# 	[1993/07/16  18:17:09  marcyw]
+# 
+# Revision 1.1.2.3  1993/04/03  05:05:36  mhickey
+# 	Added GDS_DIR_ID, and GDS_DSAPORTBASE, et al to support
+# 	use of different directory ids and port numbers
+# 
+# 	Defect 7071
+# 	[1993/04/03  05:04:15  mhickey]
+# 
+# Revision 1.1.2.2  1992/07/27  18:57:03  mhickey
+# 	modified to just work for GDS
+# 	[1992/07/23  20:28:35  mhickey]
+# 
+# $EndLog$
+#
+# This setup file contains options for setting up the environment for 
+# GDS system testing.  It is assumed that 4 machines exist, with GDS installed
+# on each.  This script also disables checking for the cell that the GDS systest
+# systems belong in, since GDS does not require a cell to run, and testing is
+# only just begun.  Once the system test is stabilized, the GDS system will be 
+# incorporated into a cell.  At this point, the only inportant variables are
+# the machine definitions, the CELLNAME definition, and the GDS* definitions.
+# 
+# You will, of course, want to change the system names to something that is
+# meaningful in your environment.  You will probably want to change the
+# GDSDSADNPREFIX as well, though this is not necessary.  It may be necessary
+# for you to change the GDS_DUAPORT and GDS_DSAPORT variables if ports 21000,
+# 21001, and 21002 are already in use at your site.  It may also be necessary
+# for you to change the GDS_DIR_ID if directory id 2 is already in use at your
+# site.
+#
+#set -x
+
+NODE_LIST="$LOCALHOST $CLIENT_LIST"
+print "in sTest.gds: NODE_LIST to use = $NODE_LIST"
+
+integer c=1
+for node in $NODE_LIST
+do
+   typeset mach_$c=${node}
+   ALL_MACH="$ALL_MACH mach_$c"
+   GDS_HOSTCONFIG="$GDS_HOSTCONFIG mach_$c:name=same:dir=1,Cli-Srv,mach_$c:dir=2,Cli-Srv,mach_1"
+   export mach_$c
+   ((c = c + 1))
+done
+
+HOURS=0.25
+TIME_SERVERS=
+TIME_CLERKS=
+NTP_SERVER=
+NTP_CLIENTS=
+CDS_SERVERS="mach_1"
+AUTH_SERVER="mach_1"
+CELLNAME=NO_CELL
+GATEWAYS=
+
+#
+# List of GDS variables required to do the setup.  If any of the variables
+# in this list are not defined, then the config script will exit
+#
+GDS_REQVARS="GDS_DSADNPREFIX GDS_DUAPORTBASE GDS_DSAPORTBASE GDS_NCLIENTS ALL_MACH GDS_HOSTCONFIG"
+GDS_DSADNPREFIX="us osf dce dsa"
+GDS_INITIALDSA="2,mach_1"
+GDS_DIR_ID=2
+GDS_DUAPORTBASE="2200"
+GDS_DSAPORTBASE="2100"
+GDS_NCLIENTS=16
+
+#
+# The configuration description.  Lines are of the form:
+# <system>:name=<dsa_name>:dir=<dir-id>,<gds-type>,<deflt-dsa>:dir=<dir-id>,..
+# the dsa_name is one of "none" (for client only setups), "same" to make the
+# dsa have the same name as the machine, or <string> to make the dsa have name
+# <string>.  The gds-type is one of "Cli" or "Cli-Srv".
+#
+
+export HOURS TIME_SERVERS TIME_CLERKS NTP_SERVER NTP_CLIENTS
+export CDS_SERVERS AUTH_SERVER CELLNAME GATEWAYS
+export GDS_DSADNPREFIX  GDS_INITIALDSA GDS_DIR_ID
+export GDS_DUAPORT GDS_DUAPORTBASE GDS_DSAPORTBASE
+export GDS_HOSTCONFIG ALL_MACH

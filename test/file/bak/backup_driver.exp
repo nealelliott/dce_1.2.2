@@ -1,0 +1,316 @@
+#!/opt/dcelocal/bin/expect
+#
+# ID: $Id: backup_driver.exp,v 1.10 1994/02/25 15:09:40 andi Exp $
+#
+# COMPONENT_NAME: bak tests
+#
+# The following functions list may not be complete.
+# Functions defined by/via macros may not be included.
+#
+# FUNCTIONS:
+#    The bak test harness driver
+#
+# ORIGINS: Transarc Corp.
+#
+# (C) COPYRIGHT Transarc Corp. 1993
+# All Rights Reserved
+# Licensed Materials - Property of Transarc
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+#
+# HISTORY
+# $TALog: backup_driver.exp,v $
+# Revision 1.10  1994/02/25  15:09:40  andi
+# [merge of changes from 1.7 to 1.8 into 1.9]
+#
+# Revision 1.8  1993/12/13  16:51:06  davecarr
+# Updated to expect version 5.1.3.  There were some interface changes to
+# expect from version 4 to version 5.  Hopefully there will be no more.
+#
+# Updated to expect version 5.1.3.
+# [from r1.7 by delta vijay-db3516-add-bak-test-driver, r1.7]
+#
+# Revision 1.9  1994/02/24  20:49:26  andi
+# [merge of changes from 1.1 to 1.6 into 1.2]
+#
+# Revision 1.6  1993/11/24  15:21:43  vijay
+# The kill_job routine needed some work because it wasn't expecting output on
+# butc, but it should. Also made backup_driver.exp executable by adding
+# expect on the first line. Explained alternate methods of running the driver
+# in the README file.
+#
+# expect on the first line
+# [from r1.4 by delta vijay-db3516-add-bak-test-driver, r1.6]
+#
+# Revision 1.4  1993/11/18  19:55:03  vijay
+# fixes to bugs introduced while merging and enhancing util.exp
+# [from r1.3 by delta vijay-db3516-add-bak-test-driver, r1.3]
+#
+# Revision 1.3  1993/11/15  21:20:05  vijay
+# This revision checks in a working set of scripts to test the DFS backup
+# system. The files checked in for this delta are high level scripts to
+# configure and run the test suite. Separate deltas would export the scripts
+# to test individual bak commands.
+#
+# The README file provides a description on how to configure and run these tests.
+#
+# Driver program with some minor cosmetic enhancements in addition to support for
+# the generic expect file
+# [from r1.1 by delta vijay-db3516-add-bak-test-driver, r1.2]
+#
+# Revision 1.2  1993/06/10  18:31:51  davecarr
+#    This delta adds the first set of expect-based tests for bak restoredisk.
+#
+#    Some minor cleanup.  Also added code to output start and end of each
+# command and test to the log file.
+# [from r1.1 by delta davecarr-db3672-bak-restoredisk-tests-I, r1.1]
+#
+# Revision 1.2  1993/06/10  18:31:51  davecarr
+#    This delta adds the first set of expect-based tests for bak restoredisk.
+#
+#    Some minor cleanup.  Also added code to output start and end of each
+# command and test to the log file.
+# [from r1.1 by delta davecarr-db3672-bak-restoredisk-tests-I, r1.1]
+#
+# Revision 1.1  1993/05/05  17:47:09  vijay
+# This delta is the first in a series of changes that add a new backup test
+# suite to the DFS test tree. This delta includes the backup test harness driver,
+# a report generator and a file containing utility procedures. The tests are
+# aimed at testing the functionality of the bak command suite. They are written
+# in Expect and Tcl. For more information on the test harness design and the
+# structure of the test suite, please refer to the document "Automated Testing
+# for the DFS Backup System" by Dave Carr, and the backup test checklist.
+#
+# The test harness driver program
+# [added by delta vijay-db3516-add-bak-test-driver, r1.1]
+#
+
+# First check to be sure the version of expect being used is acceptable.
+# If not, there is no need to do anything else.
+set min_expect_version 5.1.3
+if {[string compare [expect_version] $min_expect_version]<0} {
+    send_user "Invalid expect version.\n"
+    send_user "These tests need version  $min_expect_version or higher.\n"
+    send_user "The version being used is [expect_version].\n"
+    exit
+}
+
+set all_cmds [list adddump addftentry addftfamily addhost apropos deletedump\
+              dump dumpinfo ftinfo help jobs kill labeltape lsdumps\
+              lsftfamilies lshosts quit readlabel restoredb restoredisk\
+              restoreft rmdump rmftentry rmftfamily rmhost savedb scantape\
+              setexp status verifydb]
+
+set test_setup_code ""
+set test_pre_code ""
+set test_exec_code ""
+set test_post_code ""
+set test_eval_code ""
+set test_cleanup_code ""
+
+set cmd_setup_code ""
+set cmd_pre_code ""
+set cmd_post_code ""
+set cmd_cleanup_code ""
+
+set generic_setup_code ""
+set generic_pre_code ""
+set generic_post_code ""
+set generic_cleanup_code ""
+
+set root_dir [eval pwd]
+
+trap exit SIGINT
+
+while {[llength $argv]>0} {
+    set flag [lindex $argv 0]
+    case $flag in \
+        "-dir" {
+            set root_dir [lindex $argv 1]
+            set argv [lrange $argv 2 end]
+        } "-cmds" {
+            set cmd_list [lindex $argv 1]
+            set argv [lrange $argv 2 end]
+        } "-tests" {
+            set test_list [lindex $argv 1]
+	    set tests_on_command_line ""
+            set argv [lrange $argv 2 end]
+        } default {
+            send_user "Unrecognized option: $flag\n"
+            send_user "The only recognized options are: -dir <arg>,"
+            send_user "  -cmds <arg> and -tests <arg>\n"
+            exit
+        }
+}
+
+expect_after {
+    timeout {
+        send_user "\nTimed out after $timeout seconds.\n"
+	send_user "Will try to continue but the state of this test/command"
+	send_user " may be in error."
+	continue
+    } eof {
+        send_user "\nEnd of file detected.\n"; exit
+    }
+}
+
+source util.exp
+
+# ===================================driver================================
+
+# Be sure root directory of test tree exists
+if {![file isdirectory $root_dir] || ![file readable $root_dir] ||
+    ![file writable $root_dir]} {
+        send_user "Sorry, root of test tree, $root_dir, does not exist, is"
+        send_user " not a directory, is not readable or is not writable.\n"
+        send_user "Cannot proceed.\n"
+        exit
+}
+
+# if cmd_list not given on command line, search for all cmds
+
+if {![info exists cmd_list]} {
+    set root_children [exec /bin/ls -1 $root_dir]
+    foreach file $root_children {
+        if {[file isdirectory $root_dir/$file] &&\
+            [expr [lsearch $all_cmds $file]>-1]} {
+            lappend cmd_list $file
+        }
+    }
+}
+
+if ![read_generic_file_p generic.exp] {
+    send_user "Cannot proceed, can't read file generic.exp.\n"
+    exit
+}
+
+eval $generic_setup_code
+
+eval $generic_pre_code
+
+# check if we should be verbose
+
+if {[info exists bak_verbose] && ![string match $bak_verbose ""]} {
+    exec rm -f driver.debug
+    debug -f driver.debug 10
+}
+
+if ![info exists cmd_list] {
+    send_user "\nNo commands to test in directory $root_dir"
+    send_user "\nAre you where you thing you are?\n"
+    exit
+}
+
+foreach cmd_dir $cmd_list {
+    if {![file readable $root_dir/$cmd_dir/$cmd_dir-cmd]} {
+        send_user "\nFile $root_dir/$cmd_dir/$cmd_dir-cmd does not exist"
+	send_user " or is not readable.\n"
+	send_user "Cannot proceed with this command.\n"
+        continue
+    }
+    if ![read_cmd_file_p $root_dir/$cmd_dir/$cmd_dir-cmd] continue
+
+    if {![info exists tests_on_command_line]} {
+        set test_list ""
+        # Numerically sort the test files so the order agrees with the
+	# order in the checklist, basic tests followed by error tests.
+        set tmp_list [split [exec /bin/ls -1 $root_dir/$cmd_dir\
+				  | /bin/sort -t- +1n] "\n"]
+        foreach file $tmp_list {
+            if {[string match $cmd_dir-\[1-9\]*b $file]} {
+                lappend test_list $file
+            }
+        }
+        foreach file $tmp_list {
+            if {[string match $cmd_dir-\[1-9\]*e $file]} {
+                lappend test_list $file
+            }
+        }
+    }
+
+    if {![info exists test_list]} {
+        send_user "\nNo tests exist in directory $root_dir/$cmd_dir"
+        send_user "\nAre you where you thing you are?\n"
+        continue
+    }
+
+# Needs more work for error cases.
+    if [file exists $root_dir/$cmd_dir/LOG] {
+        system /bin/mv -f $root_dir/$cmd_dir/LOG $root_dir/$cmd_dir/LOG.old
+        send_user "Caution.  Old LOG file existed. It was moved to:\n"
+        send_user "    $root_dir/$cmd_dir/LOG.old\n"
+    }
+
+    log_file $root_dir/$cmd_dir/LOG
+
+# Needs more work for error cases.
+    if [file exists $root_dir/$cmd_dir/RESULTS] {
+        system /bin/mv -f $root_dir/$cmd_dir/RESULTS\
+            $root_dir/$cmd_dir/RESULTS.old
+        send_user "Caution.  Old RESULTS file existed. It was moved to:\n"
+        send_user "    $root_dir/$cmd_dir/RESULTS.old\n"
+    }
+    if [catch {set results_Id [open $root_dir/$cmd_dir/RESULTS a+]} msg]!=0 {
+        send_user "Cannot open $root_dir/$cmd_dir/RESULTS.\n"
+        send_user "Cannot proceed with this command.\n"
+        continue
+    }
+
+    send_user "\n==========COMMAND START: $cmd_dir==========\n"
+
+    eval $cmd_setup_code
+
+    eval $cmd_pre_code
+
+    foreach test_file $test_list {
+        if ![read_test_file_p $root_dir/$cmd_dir/$test_file] continue
+
+        send_user "\n==========TEST START: $test_file===========\n"
+
+        puts -nonewline $results_Id "%%  "
+        puts -nonewline $results_Id [format "%-25s" $test_file]
+
+        set run ""
+
+        eval $test_setup_code
+
+        if [info exists run] {
+            eval $test_pre_code
+        }
+
+        if [info exists run] {
+            set pass ""
+            eval $test_exec_code
+
+            eval $test_post_code
+
+            eval $test_eval_code
+            if [info exists pass] {
+                puts $results_Id "PASS"
+                send_user "\n==========TEST RESULT: $test_file     PASSED==========\n"
+            } else {
+                puts $results_Id "FAIL"
+                send_user "\n==========TEST RESULT: $test_file     FAILED==========\n"
+            }
+        } else {
+            puts $results_Id "NOT RUN"
+            send_user "\n==========TEST RESULT: $test_file    NOT RUN==========\n"
+        }
+
+        eval $test_cleanup_code
+
+        send_user "\n==========TEST END: $test_file===========\n"
+    }
+
+    eval $cmd_post_code
+
+    eval $cmd_cleanup_code
+
+    close $results_Id
+    send_user "\n==========COMMAND END: $cmd_dir==========\n"
+}
+
+eval $generic_post_code
+
+eval $generic_cleanup_code

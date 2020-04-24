@@ -1,0 +1,149 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+# Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS exporting UFS.
+# The script tests the crfldbentry command.
+
+###############################################################################
+
+# Usage:                test11
+
+# Typically run via:    test11 >& test11.out
+# or via the fts/runtests script.
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported UFS.
+# DFS server $SERVER_1 must export UFS partition $UFS_PART_1.
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1, in order to
+# run the fts commands contained in this script.
+
+# Highest error number is: 15.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname|cut -f1 -d"." 2>/dev/null`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${UFS_AGGID_1=23}
+: ${SERVER_1=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name=/.../$CELL_NAME}
+: ${dns_server_prefix=/.:/hosts/}
+
+av_arg="$AUTH_ARG $VERB_ARG"
+
+base_name=Flintstone.$$
+
+
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+###############################################################################
+
+echo ""
+date
+echo "RUNNING fts UFS-ID COMMANDS on SERVER $SERVER_1 in CELL $CELL_NAME."
+echo "========================================================================"
+echo ""
+
+###############################################################################
+
+echo ""; echo "Running fts lsfldb"
+   fts lsfldb $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E1 rc
+
+
+echo ""; echo "Running fts crfldbentry"
+   fts crfldbentry $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E2 rc
+
+   fts crfldbentry fubar_argument $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E3 rc
+
+   fts crfldbentry $base_name.1 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E4 rc
+    
+   fts crfldbentry $base_name.2 $dns_server_prefix$SERVER_1 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E5 rc
+    
+   fts crfldbentry $base_name.3 $dns_server_prefix$SERVER_1 $UFS_AGGID_1 \
+       $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E6 rc
+   
+   fts crfldbentry $base_name.4 $dns_server_prefix$SERVER_1 $UFS_AGGID_1 \
+       $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E7 rc
+   
+   fts crfldbentry -aggrid $UFS_AGGID_1 -server $dns_server_prefix$SERVER_1 \
+       -ftname $base_name.5 -cell $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E8 rc
+       
+   fts crfldbentry -ftname $base_name.6 -server fubar_server -aggrid \
+       $UFS_AGGID_1 -cell $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E9 rc
+      
+   fts crfldbentry -ftname $base_name.7 -server $dns_server_prefix$SERVER_1 \
+       -aggrid fubar_aggregate -cell $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E10 rc
+
+   fts crfldbentry -ftname $base_name.8 -server $dns_server_prefix$SERVER_1 \
+       -aggrid $UFS_AGGID_1 -cell fubar_cell $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E11 rc
+     
+
+echo "Cleaning up"
+echo ""
+
+   fts delfldbentry -fileset $base_name.3 
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E12 rc
+
+   fts delfldbentry -fileset $base_name.4
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E13 rc
+
+   fts delfldbentry -fileset $base_name.5
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E14 rc
+
+echo ""; echo "Running fts lsfldb"
+   fts lsfldb $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E15 rc
+       
+   echo ""
+
+###############################################################################
+
+sync; sync; sleep 2
+
+echo ""; echo "Done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################

@@ -1,0 +1,110 @@
+#
+#      SCCS:  @(#)makefile	1.2 (92/09/30) 
+#
+#	UniSoft Ltd., London, England
+#
+# (C) Copyright 1992 X/Open Company Limited
+#
+# All rights reserved.  No part of this source code may be reproduced,
+# stored in a retrieval system, or transmitted, in any form or by any
+# means, electronic, mechanical, photocopying, recording or otherwise,
+# except as stated in the end-user licence agreement, without the prior
+# permission of the copyright owners.
+#
+# X/Open and the 'X' symbol are trademarks of X/Open Company Limited in
+# the UK and other countries.
+#
+#
+# ************************************************************************
+#
+# SCCS:   	@(#)makefile	1.2 92/09/30
+# NAME:		makefile
+# PRODUCT:	DTET (Distributed Test Environment Toolkit) release 1.0b
+# AUTHOR:		Andrew Dingwall, UniSoft Ltd.
+# DATE CREATED:	June 1992
+#
+# DESCRIPTION:
+#	dapilib makefile
+# 
+# MODIFICATIONS:
+# 
+# ************************************************************************
+
+include ../defines.mk
+LCDEFS = $(DTET_CDEFS)
+include ../common.mk
+
+LIBNAME = $(LIBDAPI)
+
+all install: $(LIBNAME)
+
+OFILES = exit.o getlist.o getsys.o remexec.o remkill.o remwait.o rtab.o \
+	sync.o
+
+MEMBERS = $(LIBNAME)(exit.o) $(LIBNAME)(getlist.o) $(LIBNAME)(getsys.o) \
+	$(LIBNAME)(remexec.o) $(LIBNAME)(remkill.o) $(LIBNAME)(remwait.o) \
+	$(LIBNAME)(rtab.o) $(LIBNAME)(sync.o)
+
+
+$(LIBNAME): $P lib_made $(MEMBERS)
+	sleep 2
+	touch lib_made
+	$(RANLIB) $@
+
+.PRECIOUS: $(LIBNAME)
+
+lib_made:
+	$(MAKE) $(OFILES)
+	$(AR) rv $(LIBNAME) `$(LORDER) $(OFILES) | $(TSORT)`
+	rm -f $(OFILES)
+
+
+CFILES = $(OFILES:.o=.c) ../tcm/*.c ../servlib/*.c ../dtetlib/*.c
+
+LLIBS = $(LLIB)/llib-lserv.ln $(LLIB)/llib-ldtet.ln
+
+lint:
+	lint -u $(CDEFS) $(OFILES:.o=.c) $(LLIBS) $(LINTLIBS)
+
+tags: $(CFILES)
+	ctags $(CFILES)
+
+scope: $(CFILES)
+	ls -d $(CFILES) | sort -t/ +1 -o $@
+
+CLEAN clean:
+	rm -f $(OFILES)
+
+CLOBBER clobber: clean
+	rm -f lib_made
+
+FORCE FRC: clobber all
+
+
+# dependencies
+
+exit.o $(LIBNAME)(exit.o): $(INC)/dapi.h $(INC)/dtmac.h $(INC)/dtmsg.h \
+	$(INC)/ptab.h $(INC)/servlib.h
+
+getlist.o $(LIBNAME)(getlist.o): $(INC)/dapi.h $(INC)/dtetlib.h $(INC)/dtmac.h
+
+getsys.o $(LIBNAME)(getsys.o): $(INC)/dapi.h
+
+remexec.o $(LIBNAME)(remexec.o): $(INC)/avmsg.h $(INC)/dapi.h \
+	$(INC)/dtetlib.h $(INC)/dtmac.h $(INC)/dtmsg.h $(INC)/error.h \
+	$(INC)/ltoa.h  $(INC)/ptab.h $(INC)/servlib.h $(INC)/synreq.h rtab.h
+
+remkill.o $(LIBNAME)(remkill.o): $(INC)/dapi.h $(INC)/dtmsg.h $(INC)/ptab.h \
+	$(INC)/servlib.h $(INC)/valmsg.h rtab.h
+
+remwait.o $(LIBNAME)(remwait.o): $(INC)/dapi.h $(INC)/dtmsg.h $(INC)/ptab.h \
+	$(INC)/servlib.h $(INC)/valmsg.h rtab.h
+
+rtab.o $(LIBNAME)(rtab.o): $(INC)/bstring.h $(INC)/dtmac.h $(INC)/error.h \
+	$(INC)/llist.h $(INC)/ltoa.h rtab.h
+
+sync.o $(LIBNAME)(sync.o): $(INC)/dapi.h $(INC)/dtetlib.h $(INC)/dtmac.h \
+	$(INC)/dtmsg.h $(INC)/error.h $(INC)/servlib.h $(INC)/synreq.h \
+	$(DINC)/dtet/tet_jrnl.h
+
+

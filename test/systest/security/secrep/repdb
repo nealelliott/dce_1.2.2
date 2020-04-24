@@ -1,0 +1,382 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: repdb,v $
+# Revision 1.1.2.2  1996/03/09  20:52:00  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:40  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:14  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  18:57 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  19:53 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:53 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  19:34 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 	[1995/12/11  22:22:24  root]
+# 
+# Revision 1.1.2.3  1993/08/11  13:24:29  sekhar
+# 	Fixed array indexing error in repdb_get_slvlist
+# 	[1993/08/11  13:14:11  sekhar]
+# 
+# Revision 1.1.2.2  1993/08/02  16:51:50  sekhar
+# 	Replication system test. Initial version.
+# 	[1993/08/02  16:50:34  sekhar]
+# 
+# $EndLog$
+#
+
+# History of changes
+#
+#     
+if [ -z "${REPDB_DEFINED}" ] ; then
+
+REPDB_DEFINED=1
+
+. $PHOME/replog
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  OBJECT : 
+#      Replication Database which maintains a list of 
+#      all the replicas configured in the current cell.
+#
+#  INTERNAL IMPLEMENTATION
+#      The following internal data structures are used to 
+#      implement this object and operations on this object.
+#      These are not (and should never be) visible outside
+#      of this module.
+#
+#      REPDB_NAMES ... Array of replica names. The replica name is the name
+#                      on the replica list ( e.g. subsys/dce/sec/<slave_name> )
+#                      REPDB_NAMES[0] is the name of the master. 
+#                      The names of the slaves begin with REPDB_NAMES[1]
+#
+#      REPDB_HOSTNAMES Array of host names of hosts running the replicas.
+#                      REPDB_HOSTNAMES[0] is the name of the host running
+#                      the master.
+#                      The host names of the slaves begin with REPDB_HOSTNAMES[1]
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+#-----------------------------------------------------------------------
+#  repdb_getind : Returns the index of (arg2 - a string ) into the array 
+#                 ( arg1 ). 
+#
+#  IN arg1 : Array of strings
+#     arg2 : String whose index into arg1 is to be returned.
+#-----------------------------------------------------------------------
+
+repdb_getind()
+{
+    typeset i arl st
+
+    set -A arl $1
+    st=1 ; i=0
+    while [ $i -lt ${#arl[*]} ]
+    do
+        if [ $2 = ${arl[i]} ] ; then
+            REPDB_STRIND=$i ; st=0
+            break
+        fi
+        i=`expr $i + 1`
+    done
+#    if [ $st -ne 0 ] ; then
+#        replog_msg "repdb_getind() : $2 not found in string \"$1\""
+#    fi
+    return $st
+} 
+
+#   IN  arg1 .... String from which elmnt is to be deleted.
+#       arg2 .... Element to be deleted from string in arg1.
+#      
+#   OUT REPDB_STRING ... arg1 with arg2 deleted.
+
+repdb_del_elmnt()
+{
+    typeset str elmnt ind i j 
+
+    set -A str $1 ; set -A elmnt $2 ; unset REPDB_STRING
+    i=0 ; j=0
+    while [ $i -lt ${#str[*]} ]
+    do
+        if [ $elmnt != ${str[i]} ] ; then
+            REPDB_STRING[j]=${str[i]}
+            j=`expr $j + 1`
+        fi
+        i=`expr $i + 1`
+    done
+}
+
+
+#-----------------------------------------------------------------------
+#  repdb_del_slv : Deletes slave from the database.
+#
+#  IN  arg1 ..... Name (on the replica list) of slave to be deleted.
+#-----------------------------------------------------------------------
+repdb_del_slv()
+{
+    typeset st ind new_NAMES new_HOSTNAMES
+
+    repdb_getind "${REP_NAMES[*]}" $1 ; st=$?
+    if [ $st -eq 0 ] ; then
+        DEL_HOST=${REP_HOSTNAMES[REPDB_STRIND]}
+        DEL_NAME=${REP_NAMES[REPDB_STRIND]}
+
+        ind=`expr $REPDB_STRIND + 1`
+        set -A new_NAMES     `   echo "${REP_NAMES[*]}"      \
+                                 | awk -v ind=$ind '{            \
+                                       for ( i = 1 ; i <= NF ; i++ ) 
+                                           if ( $i != $ind) print $i
+                                   }'                            \
+                               ` 
+        set -A new_HOSTNAMES `   echo "${REP_HOSTNAMES[*]}"  \
+                                 | awk -v ind=$ind '{            \
+                                       for ( i = 1 ; i <= NF ; i++ )
+                                           if ( $i != $ind) print $i
+                                   }'                            \
+                               `
+        set -A REP_NAMES     ${new_NAMES[*]}
+        set -A REP_HOSTNAMES ${new_HOSTNAMES[*]}
+        #  IF there are no slaves then don't use cut
+        if [ ${#REP_NAMES[*]} -eq 1 ] ; then
+            unset SLV_NAMES ; unset SLV_HOSTNAMES
+            SLV_CNT=0
+        else
+            set -A SLV_NAMES     `echo ${REP_NAMES[*]}     | cut -f2- -d " "`
+            set -A SLV_HOSTNAMES `echo ${REP_HOSTNAMES[*]} | cut -f2- -d " "`
+            SLV_CNT=${#SLV_NAMES[*]}
+        fi
+    fi
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#  repdb_add_slv : Add slave to the database.
+#
+#  IN arg1 .... Hostame of the slave to be added .
+#     arg2 .... Name (on replica list) of slave .
+#-----------------------------------------------------------------------
+
+repdb_add_slv()
+{
+    SLV_CNT=`expr $SLV_CNT + 1`
+    REP_HOSTNAMES[$SLV_CNT]=$1
+    REP_NAMES[$SLV_CNT]=$2
+    set -A SLV_NAMES     `echo ${REP_NAMES[*]}     | cut -f2- -d " "`
+    set -A SLV_HOSTNAMES `echo ${REP_HOSTNAMES[*]} | cut -f2- -d " "`
+}
+
+#-----------------------------------------------------------------------
+#  repdb_get_rep_byname : Looks up a repilca (can be either the 
+#                         master or slave ) as specified by
+#                         replica name in the database
+#                                
+#  OUT : REP_HOSTNAME .... Hostname of the replica
+#
+#  IN arg1 : Name of the replica
+#
+#  RETURNS : 0 if the replica name is found in the database 
+#            1 otherwise 
+#-----------------------------------------------------------------------
+
+repdb_get_rep_byname()
+{
+    typeset st
+
+    repdb_getind "${REP_NAMES[*]}" $1 ; st=$?
+    if [ $st -eq 0 ] ; then
+        set -A REP_HOSTNAME ${REP_HOSTNAMES[REPDB_STRIND]}
+        set -A REP_NAME $1
+    fi
+    return $st
+} 
+
+#-----------------------------------------------------------------------
+#  repdb_get_rep_byhostname : Looks up a replica (can be either the 
+#                             master or slave ) as specified by
+#                             hostname in the database.
+#                                
+#  IN arg1 : Hostname running the replica
+#
+#  OUT : REP_NAME .... Name of the replica.
+#
+#  RETURNS : 0 if the host name is found in the database 
+#            1 otherwise 
+#-----------------------------------------------------------------------
+
+repdb_get_rep_byhostname()
+{
+    typeset st
+
+    repdb_getind "${REP_HOSTNAMES[*]}" $1 ; st=$?
+    if [ $st -eq 0 ] ; then
+        set -A REP_HOSTNAME $1
+        set -A REP_NAME ${REP_NAMES[REPDB_STRIND]}
+    fi
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#  repdb_get_slvlist : Gets the list of all slaves.
+#
+#  OUT  : SLV_NAME, SLV_HOSTNAME
+#-----------------------------------------------------------------------
+
+#repdb_get_slvlist()
+#{
+#    set -A SLV_NAME     `echo ${REPDB_NAMES[*]}     | cut -f2- -d " "`
+#    set -A SLV_HOSTNAME `echo ${REPDB_HOSTNAMES[*]} | cut -f2- -d " "`
+#}
+
+#-----------------------------------------------------------------------
+#  repdb_get_replist : Gets the list of all slaves + master
+#
+#  OUT  : REP_NAME, REP_HOSTNAME
+#-----------------------------------------------------------------------
+
+repdb_get_replist()
+{
+    set -A REP_NAME     ${REPDB_NAMES[*]}
+    set -A REP_HOSTNAME ${REPDB_HOSTNAMES[*]}
+}
+
+
+#-----------------------------------------------------------------------
+#  repdb_get_slvcnt : Gets the number of slaves in the database.
+#
+#  OUT  : SLV_CNT  
+#-----------------------------------------------------------------------
+
+#repdb_get_slvcnt()
+#{
+#    SLV_CNT=$REPDB_SLVCNT
+#}
+
+
+#-----------------------------------------------------------------------
+#  repdb_add_master : Add master to the database.
+#
+#  IN arg1 .... Hostame of the master to be added .
+#     arg2 .... Name (on replica list) of master .
+#-----------------------------------------------------------------------
+
+repdb_add_master()
+{
+    REP_HOSTNAMES[0]=$1
+    REP_NAMES[0]=$2
+    MASTER_HOSTNAME=$1
+    MASTER_NAME=$2
+}
+
+repdb_become_master()
+{
+    typeset ind st
+
+    repdb_del_slv $1 ; st=$?
+    if [ $st -eq 0 ] ; then
+         repdb_add_master $DEL_HOST $1
+    fi
+    return $st
+}
+
+repdb_become_slave()
+{
+    #  First add the current master as a new slave and then
+    #  make the current master null.
+
+    repdb_add_slv    $MASTER_HOSTNAME $MASTER_NAME
+    repdb_add_master $NULL_MASTER_HOST $NULL_MASTER_NAME
+} 
+
+#-----------------------------------------------------------------------
+#  repdb_change_master : Change the current master to the slave specified
+#                        in arg1
+#
+#  IN arg1 .... Name (on replica list) of slave.
+#
+#  RETURNS : 0 if the replica name is in the database.
+#            1 otherwise 
+#-----------------------------------------------------------------------
+
+repdb_change_master()
+{
+    typeset st
+
+    repdb_del_slv $1 ; st=$?
+    if [ $st -eq 0 ] ; then
+        repdb_add_slv $MASTER_HOSTNAME $MASTER_NAME    # Set new master
+        repdb_add_master $DEL_HOST $DEL_NAME # Old master is a slave
+    fi
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#  repdb_config_print() : Prints  config info (i.e. master and slaves configured)
+#                         in the cell. 
+#-----------------------------------------------------------------------
+
+repdb_config_print()
+{
+    typeset i
+
+    cat > $repdb_tmpf <<- EOF
+        
+	+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+	
+	         Security Server Configuration        
+	         -----------------------------
+	
+	    Master Site ......... ${REP_NAMES[0]}
+	    Master Hostname ..... ${REP_HOSTNAMES[0]}
+	
+	    Number of slaves .... $SLV_CNT
+	EOF
+
+    i=1
+    while [ $i -le $SLV_CNT ]
+    do
+        cat >> $repdb_tmpf <<- EOF
+	
+	    Slave Site .......... ${REP_NAMES[i]}
+	    Slave Hostname ...... ${REP_HOSTNAMES[i]}
+	EOF
+        i=`expr $i + 1`
+    done
+    cat >> $repdb_tmpf <<- EOF
+	
+	+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        
+	EOF
+    replog_dumpfile $repdb_tmpf
+}
+
+repdb_init()
+{
+    repdb_tmpf=/tmp/repdb_tmpf_$HOSTNM
+    unset REP_NAMES REP_HOSTNAMES SLV_NAMES SLV_HOSTNAMES
+    SLV_CNT=0
+}
+
+#   Only called by slv_global_cleanup().
+
+repdb_global_cleanup()
+{
+    rm -f $repdb_tmpf
+}
+
+fi

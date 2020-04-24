@@ -1,0 +1,270 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: runtests,v $
+# Revision 1.1.9.1  1996/10/17  18:35:01  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:57:22  damon]
+#
+# Revision 1.1.2.6  1993/02/16  16:36:38  jaffe
+# 	Transarc delta: cfe-ot6974-rework-volid-swaps 1.4
+# 	  Selected comments:
+# 	    Get volume-ID swapping to stay out of the way in the new regime in which
+# 	    obtaining a pointer to a ``struct volume'' is de-coupled from doing
+# 	    vnode/volop synchronization for that volume.
+# 	    (a) Allow extra references at VOL_DETACH time--a number of them given as
+# 	    a parameter.
+# 	    (b) Hold the volp->v_lock write-locked over VOL_FREEDYSTAT.
+# 	    (c) Add a function (with a non-null body on RIOS only) that will load up the
+# 	    dts kernel extension.  Defined in ftutil, called from ftserver and
+# 	    repserver.  The idea is to avoid deadlock when some process refers to
+# 	    a busy fileset while holding a global kernel lock, while ftserver or
+# 	    repserver (which hold the fileset off-line) obtain the kernel lock.
+# 	    The lock is obtained during dynamic loads.
+# 	    Allow the possibility of re-structuring the vol-detach code some day.
+# 	    Still more problems.  One rep test regression and problems in doing moves
+# 	    of locally-mounted filesets.
+# 	    Change the default set of tests being run to just rtest1 and rtest2 if there
+# 	    is only one file server available for the tests.
+# 	[1993/02/15  19:37:45  jaffe]
+# 
+# Revision 1.1.2.5  1993/01/28  21:37:52  shl
+# 	Transarc delta: cfe-ot6699-another-rep-test 1.2
+# 	  Selected comments:
+# 	    (closing delta to work on another problem)
+# 	    Getting rtest3 (and runtests) to start to work.
+# 	    Make this correspond to the documentation better.
+# 	Transarc delta: cfe-ot6777-make-rep-tests-work-multiserver 1.5
+# 	  Selected comments:
+# 	    Fix some single-site assumptions.
+# 	    Close to upgrade
+# 	    (a) Get the tests to run from the REP_TESTS environment value.
+# 	    (b) Pick up error counts from sub-processes, so we don't erroneously claim that all
+# 	    tests passed.
+# 	    Fix some mis-conceived -release checks
+# 	    More of the above.
+# 	Transarc delta: cfe-ot6976-no-more-rtest4 1.1
+# 	  Selected comments:
+# 	    Remove rep/rtest4 as fatally-flawed.
+# 	[1993/01/27  23:39:19  shl]
+# 
+# Revision 1.1.2.4  1993/01/11  18:36:59  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:21:14  htf]
+# 
+# Revision 1.1.2.3  1992/12/09  21:34:06  jaffe
+# 	Transarc delta: cfe-ot5994-get-rep-tests-working 1.4
+# 	  Selected comments:
+# 	    Lots of changes to make these real.
+# 	    Not ready for the real world yet.
+# 	    Enter new config world.
+# 	    fix errors
+# 	    Continuing on an unexpected failure.
+# 	    Found the idiot bug!
+# 	[1992/12/07  13:55:03  jaffe]
+# 
+# Revision 1.1.2.2  1992/11/19  13:36:53  jaffe
+# 	Transarc delta: cfe-ot5695-move-tests-to-rep 1.2
+# 	  Selected comments:
+# 	    Create a house for replication tests.
+# 	    Driver for replication tests.
+# 	    Forgot to add new subdir to the higher-level Makefile.
+# 	[1992/11/18  17:00:37  jaffe]
+# 
+# $EndLog$
+#
+
+###############################################################################
+#    Copyright (C) 1991, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This is a driver script, which runs rep/rtest*. The tests there are
+# applicable to DFS exporting Episode filesets.
+
+###############################################################################
+
+# Usage:                runtests [-nt <iter>] [-np <procs>] [-server1 <host>]
+#				 [-server2 <host>]
+
+# Typically run via:
+#	On server: runtests
+#	On client: runtests -server1 <hostname> -server2 <hostname>
+#		   server1 and server2 can be the same host
+
+# A test log is produced; the default name is ./rep.runtests.log.
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode and UFS.
+# DFS server $SERVER_1 must export Episode aggregate $EPI_AGGRNAME_1,
+# and $SERVER_2 must export $EPI_AGGRNAME_2.
+# $SERVER_1 and $SERVER_2 can be the same machine.
+
+#
+# If the values of the following variables are other that the default, set them
+# before running the tests.
+#
+# Variable Name		Default Value
+# -------------         -------------
+# REP_LOG_HOME		pwd
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1 and $SERVER_2, in
+# order to run the fts commands contained in this suite. You must also be
+# able to create mount points in /:/.
+
+###############################################################################
+
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=rep
+
+: ${REP_VERBOSE="OFF"}
+: ${REP_LOG_HOME=`pwd`}
+: ${TESTTOP=$dn}	# you may have to copy fts and other tests to TESTTOP
+
+: ${lf=$REP_LOG_HOME/$ty.$p.log}
+
+###############################################################################
+
+usage()
+{
+  echo "Usage: runtests [-nt <iter>] [-np <procs>] [-server1 <host>]"
+  echo "[-server2 <host>] [-help]"
+}
+
+  
+np=1; npf=FALSE
+nt=1; ntf=FALSE
+s1f=FALSE; s2f=FALSE
+
+for a in $*
+do
+   if test $npf = TRUE; then np=$a; npf=FALSE
+   elif test $ntf = TRUE; then nt=$a; ntf=FALSE
+   elif test $s1f = TRUE; then SERVER_1=$a; s1f=FALSE
+   elif test $s2f = TRUE; then SERVER_2=$a; s2f=FALSE
+   else
+      case $a in
+         -np) npf=TRUE ;;
+         -nt) ntf=TRUE ;;
+	 -server1) s1f=TRUE ;;
+	 -server2) s2f=TRUE ;;
+	 -help) usage; exit 0 ;;
+	 -h) usage; exit 0 ;;
+         *) echo "$p: invalid argument \"$a\"" | tee -a $lf; exit 2 ;;
+      esac
+   fi
+done
+
+if test $npf = TRUE
+then echo "$p: -np requires an argument" | tee -a $lf; exit 2
+elif test $np -lt 1
+then echo "$p: number of processes must be >= 1" | tee -a $lf; exit 2
+elif test $ntf = TRUE
+then echo "$p: -nt requires an argument" | tee -a $lf; exit 2
+elif test $nt -lt 0
+then echo "$p: number of times must be >= 0" | tee -a $lf; exit 2
+elif test $s1f = TRUE
+then echo "$p: -server1 requires a host name/addr as argument" | tee -a $lf; exit 2
+elif test $s2f = TRUE
+then echo "$p: -server2 requires a host name/addr as argument" | tee -a $lf; exit 2
+fi
+
+# Load the test context.
+. $dn/statusCheck
+
+###############################################################################
+
+(
+echo ""
+echo "$np processes; $nt times; parent process number $$."
+) | tee -a $lf
+
+# Run rtest3 only if there are two distinct servers.
+# Remove rtest4 as badly-architected.
+if test $SERVER_1 = $SERVER_2
+   then def_tests="1 2 5"
+   else def_tests="1 2 3 5 6"
+   fi
+: ${REP_TESTS=${def_tests}}
+
+###############################################################################
+
+t=1
+while test $t -le $nt -o $nt -eq 0
+do
+(echo ""; echo "Starting iteration number $t") | tee -a $lf
+
+mlogf=/tmp/$ty.LG.$$
+pr=1
+while test $pr -le $np
+   do
+   (echo ""; echo "Iteration $t starting process number $pr at `date`.") |
+      tee -a $lf
+   (
+   rc=0; outfile=/tmp/$ty.$pr.$$; rm -rf $outfile
+   (echo ""; echo "Listing ${test_root}/ ..."; ls -lL ${test_root}/ 2>&1) | tee -a $lf
+
+   for f in $REP_TESTS
+       do
+       test=rtest$f
+       (echo ""; echo "Iteration $t process $pr running $test.") | tee -a $lf
+       sync; sync
+       if [ "$REP_VERBOSE" = "ON" ]
+       then
+          sh -x $TESTTOP/$test > $outfile 2>&1
+       else
+          sh $TESTTOP/$test > $outfile 2>&1
+       fi
+       rf=$?; rc=`expr $rc + $rf`
+       sync; sync
+       cat $outfile | tee -a $lf
+       (echo ""; echo "Iteration $t process $pr $test returned $rf.") |
+          tee -a $lf
+       sync; sync
+       rm -f $outfile
+       (echo ""; echo "Listing ${test_root}/..."; ls -lL ${test_root}/ 2>&1) | tee -a $lf
+       sync; sync
+       done
+
+   echo "$rc" > $mlogf.$pr
+   (echo ""; echo "   process number $pr done at `date`.") | tee -a $lf
+   ) &
+   pr=`expr $pr + 1`
+   done
+
+echo "" | tee -a $lf
+wait
+
+pr=1
+while test $pr -le $np
+    do
+	rf=`cat $mlogf.$pr`; rc=`expr $rc + $rf`
+	/bin/rm -f $mlogf.$pr
+	pr=`expr $pr + 1`
+    done
+
+echo "Iteration number $t completed at `date`." | tee -a $lf
+t=`expr $t + 1`
+done
+
+###############################################################################
+
+(echo ""; echo "Tests (${REP_TESTS}) complete at `date`."; echo "") | tee -a $lf
+if test $rc -eq 0
+   then echo "$ty/$p PASSED" | tee -a $lf
+   else echo "$ty/$p FAILED ($rc errors)" | tee -a $lf
+   fi
+
+exit $rc
+
+###############################################################################

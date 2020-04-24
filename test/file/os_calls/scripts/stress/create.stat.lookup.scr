@@ -1,0 +1,265 @@
+
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* This script implements stat, lookup, write, chmod, create names, read,
+* and access syscalls according to Mike's checklist.
+*
+* stat of a single file by N test hosts
+
+* stat of a single file by N stress hosts
+* chmod/utimes calls to a specific file by stress or a test host
+
+* lookup of a name by N stress or test host
+* create/delete specific name at N stress or test hosts (same as being
+*       tested)
+* read 1 byte of a file (to start prefetch) on N stress/test hosts
+* access test calls at N test hosts
+*
+
+* 
+* USAGE: ./file_test -l {HUBNAME} -I {this_script} ; For HUB
+*        ./file_test -c {HUBNAME} : For other spokes
+*
+
+* Include config file.
+include config
+set numOfChunks 15
+
+set commd ("cp onemegabin "+$testDir+"/onemega")
+shellexec commd
+set oneMega ($testDir+"/onemega")
+
+set loopTimes 10
+
+*
+* This procedure stats a file.
+*
+set test_Proc proc END_PROC
+  echo
+  echo Test file from spoke.
+
+  sync_join "begin_sync" $timeout
+
+  set fixedTime int 694241999
+  set fileName ( $testDir + "/" + $testFile )
+  open $oneMega $O_RDONLY 0777 oneMegaId
+
+  set fileFound false
+  opendir $testDir dirPtr
+  readdir @dirPtr dirInfo
+  do 
+    if ( @dirInfo.d_name == $testFile ) {
+      set fileFound true
+    }
+    readdir @dirPtr dirInfo
+  while ( @CommandResult != 1 ) 
+  closedir @dirPtr
+  set fileFound true
+  if ( @fileFound != true ) {
+    echo FAILED: Can not find out the file by lookup.
+  }
+  
+  stat @fileName statVar1
+
+  sync_join "stat" $timeout
+  sync_join "stat_done" $timeout
+  stat @fileName statVar
+  * change time (ctime will set to the current time 
+  if ( @statVar.st_mtime != @fixedTime ) {
+    echo FAILED: utimes (mtime) failure detected from test host.
+  }
+  if ( @statVar.st_atime != @fixedTime ) {
+    echo FAILED: utimes (atime) failure detected from test host.
+  }
+  if ( @statVar.st_mode & 0777 & ~(0777) ) {
+    echo FAILED: chmod failure detected from test host.
+  }
+  if ( @statVar.st_size != @statVar1.st_size ) {
+    echo FAILED: wrong file size detected from test host.
+  }
+
+  sync_join "create" $timeout
+  sync_join "create_done" $timeout
+  stat @fileName statVar
+  if ( @statVar.st_ino != @statVar1.st_ino ) {
+    echo FAILED: file has been recreated.
+  }
+
+  sync_join "delete" $timeout
+  sync_join "delete_done" $timeout
+  verifyStatus false
+  stat @fileName statVar
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: should not see the file by now.
+  }
+  verifyStatus true
+
+  lseek @oneMegaId $SEEK_SET (2*$CHUNKSIZE)
+  read @oneMegaId $CHUNKSIZE junk
+  close @oneMegaId
+
+  sync_join "finish_sync" $timeout
+
+  echo Done.
+  echo 
+END_PROC
+
+
+*
+* This procedure creates a set of random files and does utimes, chmod
+* create adn delete the test file.
+*
+
+set stress_Proc proc END_PROC
+
+  echo
+  echo Prefetch chunks.
+
+  sync_join "begin_sync" $timeout
+
+  set fixedTime int 694241999
+  set fileName ( $testDir + "/" + $testFile )
+  open @fileName $O_RDWR 0777 fileId
+  open $oneMega $O_RDONLY 0777 oneMegaId
+
+  set offset 0
+  set junk vector 0x00
+  loop x 1 1 $numOfChunks
+    lseek @oneMegaId $SEEK_SET offset
+    read @oneMegaId 1 junk
+    if ( @junk != "0x00" ) {
+      echo @junk
+      echo FAILED the byte is not right
+    }
+    set offset ( @offset + $CHUNKSIZE )
+  endloop
+
+  echo Create random names (make noise).
+  verifyStatus false
+  set randomFileName ( @fileName+ (1..100) )
+  open @randomFileName ($O_CREAT|$O_RDWR) 0777 randomFileNameId
+  if ( @ITL_Status == 0 ) {
+    write @randomFileNameId @randomFileName
+    close @randomFileNameId
+  }
+  verifyStatus true
+
+  echo Utimes.
+  sync_join "stat" $timeout
+  chmod @fileName 0777
+  utimes @fileName "" "" 0 "" "" 0
+  utimes @fileName "12/31/91" "23:59:59" 0 "12/31/91" "23:59:59" 0
+  sync_join "stat_done" $timeout
+
+  stat @fileName statVar
+  if ( @statVar.st_mtime != @fixedTime ) {
+    echo FAILED: utimes failure detected from stress host.
+  }
+  echo Create existed test file.
+  sync_join "create" $timeout
+  verifyStatus false
+  open @fileName $O_CREAT 0777 junkId
+  verifyStatus true
+  sync_join "create_done" $timeout
+
+  echo Deleted test file.
+  sync_join "delete" $timeout
+  remove @fileName
+  sync_join "delete_done" $timeout
+
+  lseek @oneMegaId $SEEK_SET (2*$CHUNKSIZE)
+  read @oneMegaId $CHUNKSIZE junk
+  close @oneMegaId
+  sync_join "finish_sync" $timeout
+
+  echo Create random name done.
+  echo
+END_PROC
+
+****************************************************************************
+* Check spokes.
+if ( $ITL_nspokes < 2 ) {
+  echo FAILED: You need at least two spokes to run the test.
+  quit
+}
+
+chdir $testDir
+
+loop loopVar 1 1 $loopTimes
+
+* Create a single file to be tested.
+open $testFile ($O_CREAT|$O_RDWR) 0777 fileId
+write $fileId "This is a junk"
+close $fileId
+chmod $testFile 0666
+
+* Dispatch procedures among spokes.
+!* Stress procedure to the test file.
+rexec_async $ITL_spoke[0] stress_Proc result[0] asyncVar[0]
+
+loop x 1 1 ($ITL_nspokes-1)
+!* Stat a single file by N test hosts.
+  rexec_async $ITL_spoke[$x] test_Proc result[$x] asyncVar[$x]
+endLoop
+
+sync_create "begin_sync" $ITL_nspokes $timeout
+sync_release "begin_sync"
+
+sync_create "stat" $ITL_nspokes $timeout
+sync_release "stat"
+
+sync_create "stat_done" $ITL_nspokes $timeout
+sync_release "stat_done"
+
+sync_create "create" $ITL_nspokes $timeout
+sync_release "create"
+
+sync_create "create_done" $ITL_nspokes $timeout
+sync_release "create_done"
+
+sync_create "delete" $ITL_nspokes $timeout
+sync_release "delete"
+
+sync_create "delete_done" $ITL_nspokes $timeout
+sync_release "delete_done"
+
+sync_create "finish_sync" $ITL_nspokes $timeout
+sync_release "finish_sync"
+
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+* End loopVar
+endloop
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+echo Done
+quit

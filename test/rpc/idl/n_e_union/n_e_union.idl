@@ -1,0 +1,121 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: n_e_union.idl,v $
+ * Revision 1.1.4.2  1996/03/11  02:15:08  marty
+ * 	Update OSF copyright years
+ * 	[1996/03/10  19:53:48  marty]
+ *
+ * Revision 1.1.4.1  1995/12/11  19:25:24  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/11  19:13:50  root]
+ * 
+ * Revision 1.1.2.2  1993/08/11  16:28:35  ganni
+ * 	tests for new IDL functionality
+ * 	[1993/08/11  16:16:10  ganni]
+ * 
+ * $EndLog$
+ */
+/*
+*/
+[
+uuid(ddf02afc-2712-11ca-8703-08002b107359),
+pointer_default(ptr),
+version(0.0)
+]
+interface n_e_union
+{
+    typedef [switch_type(boolean)] union n_e_union_t {
+        [case (FALSE)] long l;
+        [case (TRUE)] long *p_l;
+    } n_e_union_t;
+
+    typedef [switch_type(boolean)] union n_e_union_unique_t {
+        [case (FALSE)] long l;
+        [case (TRUE), ptr /* used to be unique, but not allowed now */] long *p_l;
+    } n_e_union_unique_t;
+
+    void param_by_value(
+        [in] handle_t h,
+        [in,switch_is(b)] n_e_union_t *p_neu,
+        [in] boolean b,
+        [out] long *res
+    );
+
+    void param_by_ref(
+        [in] handle_t h,
+        [in,out,switch_is(*b)] n_e_union_t *p_neu,
+        [in,out] boolean *b
+    );
+
+    typedef struct {
+        [switch_is(b)] n_e_union_t neu;
+        boolean b;
+    } cont_neu_t;
+
+    void in_struct(
+        [in] handle_t h,
+        [in,out] cont_neu_t *p_cneu
+    );
+
+    void ptr_union_val_discrim(
+        [in] handle_t h,
+        [in,switch_is(b),ptr] n_e_union_t *p_neu,
+        [in] boolean b,
+        [out] long *res
+    );
+
+    void ptr_union_ref_discrim(
+        [in] handle_t h,
+        [in,out,switch_is(*b),ptr] n_e_union_t *p_neu,
+        [in,out] boolean *b
+    );
+
+    void union_unique_ref_discrim(
+        [in] handle_t h,
+        [in,out,switch_is(*b)] n_e_union_unique_t *p_neu,
+        [in,out] boolean *b
+    );
+
+    typedef struct multi_neu_t {
+        [switch_is(b)] n_e_union_t neu;
+        [switch_is(c)] n_e_union_t *p_neu;
+        boolean c;
+        boolean b;
+    } multi_neu_t;
+
+    void in_multi(
+        [in] handle_t h,
+        [in,out] multi_neu_t *p_mneu
+    );
+
+    const long ARRAY_SIZE = 3;
+    typedef enum {red, orange, yellow, green, blue, indigo, violet} enum_t;
+    typedef [switch_type(enum_t)] union {
+        [case(red,orange)]                     short sh;
+        [case(yellow,green,blue)]               long lo;
+        [case(indigo,violet)]                          ;
+    } u2;
+    typedef [switch_type(long)] union {
+        [case(-2)]     struct { long l; } s;
+        [case(-1),ptr] long *lp;
+        [default]      ;
+    } u5;
+    typedef struct {
+        [switch_is(e)] u2 f1;
+        enum_t e;
+        [switch_is(l)] u5 f3;
+        long l;
+    } s1;
+    void array_op(
+        [in] handle_t h,
+        [in,out] s1 a1[ARRAY_SIZE]
+    );
+
+}

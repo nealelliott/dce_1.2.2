@@ -1,0 +1,226 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: test13,v $
+# Revision 1.1.432.1  1996/10/17  18:17:05  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:49:33  damon]
+#
+# Revision 1.1.427.1  1994/02/04  20:39:38  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:22:10  devsrc]
+# 
+# Revision 1.1.425.1  1993/12/07  17:41:06  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  18:37:21  jaffe]
+# 
+# Revision 1.1.2.4  1993/01/11  17:38:37  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  16:55:25  htf]
+# 
+# Revision 1.1.2.3  1992/12/09  21:02:23  jaffe
+# 	Transarc delta: comer-ot6087-make-tests-stop-AND-wait 1.1
+# 	  Selected comments:
+# 	    The bos stop command does not wait for the bosserver-controlled
+# 	    process to die before it returns unless the -wait option is specified.
+# 	    The change is to add -wait to all the stops.
+# 	    Fixed the output of the test to match others in the suite.
+# 	[1992/12/04  20:23:43  jaffe]
+# 
+# Revision 1.1.2.2  1992/11/04  19:21:33  jaffe
+# 	Transarc delta: comer-ot5803-fix-erronenous-bosserver-return-code-test 1.1
+# 	  Selected comments:
+# 	    Added test to the bos test suite for bos uninstall.
+# 	    New test.  It tests all combinatins of <principle>, <principle>.BAK,
+# 	    and <principle>.OLD.
+# 	[1992/11/04  17:33:09  jaffe]
+# 
+# $EndLog$
+#
+###############################################################################
+#    Copyright (C) 1991, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+# This test is applicable to DFS running bosserver.
+# It must be run as root.  Only runs on the local system.
+
+# Usage:                test4
+
+# Typically run via:    test4 >& test4.out
+# or via the bos/runtests script.
+
+###############################################################################
+
+# Return success for non-local run
+if [ "$SERVER_1" -a "$SERVER_1" != `hostname` ]
+  then
+	echo "This test does not run for remote test"
+	exit 0
+fi
+
+FAILURES=0
+
+# set directory where installation occurs
+INSTALLDIR=/opt/dcelocal/bin
+
+# file to install
+BASEFILE=testBos$$
+FILE=$INSTALLDIR/$BASEFILE
+
+# this machine's principal name
+SERVER=`getcellname`/hosts/`hostname`
+
+# create a list of the files to create and their proper error codes
+# the format is foo:foo.BAK:foo.OLD:retcode:retcode_for_all
+# where 1 is create, 0 don't create
+TESTCASES="0:0:0:1:1 0:0:1:0:0 0:1:0:0:0 0:1:1:0:0 1:0:0:1:0 1:0:1:0:0 1:1:0:0:0 1:1:1:0:0"
+
+getinumber() {
+	/bin/ls -i $1 2> /dev/null | awk '{print $1}'
+}
+
+runtestcase() {
+	# usage: runtestcase doprimary doBAK doOLD rc rc_for_all
+	#		     $1        $2    $3    $4 $5  
+	SCEN=		# scenario
+	BAKI=		# .BAK inode number 
+	OLDI=		# .OLD inode number
+	# create primary if necessary
+	if [ "$1" -eq 1 ]
+	  then
+		touch $FILE
+		chmod 666 $FILE
+		SCEN="$SCEN $BASEFILE"
+	  else
+		SCEN="$SCEN !$BASEFILE"
+	fi
+	# create BAK if necessary
+	if [ "$2" -eq 1 ]
+	  then
+		touch $FILE.BAK
+		chmod 666 $FILE.BAK
+		BAKI=`getinumber $FILE.BAK`
+		SCEN="$SCEN $BASEFILE.BAK"
+	  else
+		SCEN="$SCEN !$BASEFILE.BAK"
+	fi
+	# create OLD if necessary
+	if [ "$3" -eq 1 ]
+	  then
+		touch $FILE.OLD
+		chmod 666 $FILE.OLD
+		OLDI=`getinumber $FILE.OLD`
+		SCEN="$SCEN $BASEFILE.OLD"
+	  else
+		SCEN="$SCEN !$BASEFILE.OLD"
+	fi
+
+	echo "Testing $SCEN.  Expect $4"
+	bos uninstall -server $SERVER -file $FILE -localauth
+	RESULT=$?
+	if [ $RESULT -ne $4 ]
+	  then
+		echo "FAIL: Got $RESULT, expected $4 for $SCEN"
+		FAILURES=`expr $FAILURES + 1`
+	  else
+		# check inode numbers to enforce .OLD -> .BAK -> primary
+		PRIMARYI=`getinumber $FILE`
+		if [ "$BAKI" ]
+		  then
+			# was a backup
+			if [ $BAKI -ne "$PRIMARYI" ]
+			  then
+				echo "FAIL: .BAK not moved to primary for $SCEN"
+				FAILURES=`expr $FAILURES + 1`
+			elif [ "$OLDI" -a "$OLDI" -ne "`getinumber $FILE.BAK`" ]
+			  then
+				echo "FAIL: .OLD not moved to .BAK for $SCEN"
+				FAILURES=`expr $FAILURES + 1`
+			  else
+				echo "SUCCESS"
+			fi
+		elif [ "$OLDI" ]
+		  then
+			# no .BAK but was a .OLD
+			if [ $OLDI -ne "$PRIMARYI" ]
+			  then
+				echo "FAIL: .OLD not moved to primary for $SCEN"
+				FAILURES=`expr $FAILURES + 1`
+			  else
+				echo "SUCCESS"
+			fi
+		  else
+			echo "SUCCESS"
+		fi
+	fi
+	/bin/rm -f $FILE $FILE.BAK $FILE.OLD
+
+	# do again for -all
+	SCEN=
+	# create primary if necessary
+	if [ "$1" -eq 1 ]
+	  then
+		touch $FILE
+		chmod 666 $FILE
+		SCEN="$SCEN $BASEFILE"
+	  else
+		SCEN="$SCEN !$BASEFILE"
+	fi
+	# create BAK if necessary
+	if [ "$2" -eq 1 ]
+	  then
+		touch $FILE.BAK
+		chmod 666 $FILE.BAK
+		SCEN="$SCEN $BASEFILE.BAK"
+	  else
+		SCEN="$SCEN !$BASEFILE.BAK"
+	fi
+	# create OLD if necessary
+	if [ "$3" -eq 1 ]
+	  then
+		touch $FILE.OLD
+		chmod 666 $FILE.OLD
+		SCEN="$SCEN $BASEFILE.OLD"
+	  else
+		SCEN="$SCEN !$BASEFILE.OLD"
+	fi
+
+	echo "Testing $SCEN -all.  Expect $5"
+	bos uninstall -server $SERVER -file $FILE -all -localauth
+	RESULT=$?
+	if [ $RESULT -ne $5 ]
+	  then
+		echo "FAIL: Got $RESULT, expected $4 for $SCEN -all"
+		FAILURES=`expr $FAILURES + 1`
+	  else
+		# for -all, they'd better all be gone
+		if /bin/ls $FILE* > /dev/null 2>&1
+		  then
+			echo "FAIL: Not all files removed for $SCEN -all"
+			FAILURES=`expr $FAILURES + 1`
+		  else
+			echo "SUCCESS"
+		fi
+	fi
+	/bin/rm -f $FILE $FILE.BAK $FILE.OLD
+}
+
+# run all testcases
+for testcase in $TESTCASES
+  do
+	runtestcase `IFS=:; set -- $testcase; echo $*`
+done
+
+if [ $FAILURES -ne 0 ]
+  then
+	echo "$0 FAILED ($FAILURES errors)"
+	exit $FAILURES
+  else
+	echo "$0 PASSED"
+	exit 0
+fi

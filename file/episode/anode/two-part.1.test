@@ -1,0 +1,160 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: two-part.1.test,v $
+# Revision 1.1.12.1  1996/10/02  17:19:39  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:29:08  damon]
+#
+# Revision 1.1.6.1  1994/06/09  13:59:16  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:34:34  annie]
+# 
+# Revision 1.1.4.3  1993/01/18  22:08:25  cjd
+# 	embedded copyright notice
+# 	[1993/01/18  21:49:03  cjd]
+# 
+# Revision 1.1.4.2  1992/09/15  17:35:23  jaffe
+# 	Transarc delta: mason-ot2930-logbuf-parts-of-nbs 1.14
+# 	  Selected comments:
+# 	    This is the logbuf portion of new block security (making sure someone
+# 	    else's data does not appear in your file across a system crash.)  For
+# 	    details, see the OT report, the postings to transarc.afs.episode, and
+# 	    the white paper on this subject.  Not done yet.  SNAPSHOT ONLY.
+# 	    Just wanted to fix a small nit in test_res.
+# 	    More work on NBS.  This is only a snapshot.
+# 	    Another snapshot; this time we make the interfaces between anode & buffer
+# 	    uniform (each was using a different convention).  Clean up names at the same
+# 	    time.  SNAPSHOT ONLY.
+# 	    Another snapshot.  NBS now works in the forward direction for basic.test!
+# 	    This part of this delta was removed and added to delta
+# 	    mason-ot5070-gc-tran-in-logfull-avoidance
+# 	    Snapshot of code working in the forward path in mp.test.
+# 	    Removed the contents of revision 1.6
+# 	    Checkpoint.  No work done here, just made sure that the other new
+# 	    delta works OK (mason-ot5070-gc-tran-in-logfull-avoidance).
+# 	    Make all_tests work again.
+# 	    Increase log size.
+# 	    Finish making all the tests run now.
+# 	    Cleanup compilation on OSF/1.
+# 	    Continue work to get new block security going.
+# 	    Add a script for the nbs tests.
+# 	[1992/09/14  20:04:32  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/05  20:02:48  jdp
+# 	delta mason-bug-2303 1.4
+# 	[1992/05/04  16:18:31  jdp]
+# 
+# $EndLog$
+# /* Copyright (C) 1992, 1991 Transarc Corporation - All rights reserved. */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/two-part.1.test,v 1.1.12.1 1996/10/02 17:19:39 damon Exp $
+
+two-part.1 1
+open_device 1 4096 1024 1000
+create_aggregate
+
+exist_vol bar 0,,23 100
+check_device
+
+create_dir a				# try a write spanning block #0-#1
+write_file 4086 20
+read_file 4086 20
+(code = EOF) read_file 100000 1 0
+get_info l=4106 z=8 d=1 A=0 P=0
+read_aux acl ""
+read_aux plist ""
+write_aux acl fab
+read_aux acl fab
+write_aux ifacl faxx
+write_aux plist zzzzzzzzzzaaaaaaaaaa
+read_aux plist zzzzzzzzzzaaaaaaaaaa
+set_status p=0655
+get_info h=1 p=0655 !c =m =a A=3 F=4 D=0 P=20 U=0
+
+create_file b a a			# try a simple delete, that uses blocks
+write_file 9900 100
+read_file 9900 100
+get_info l=10000 A=4 P=20
+change_link -1 delete
+
+# There are 8 direct blocks, so 8*4096 if the first byte in an indirect block
+create_file x a				# try a write from direct to indirect
+get_info d=0 A=4 P=0
+read_aux acl faxx
+write_aux acl abcdef			# overwrite our copy of acl!
+write_aux plist 1234 2345			# make big random plist
+write_file 28671 10000			# write block #6,7,8&9
+get_info d=1 !c !m =a A=6 P=3579
+read_file 28671 10000
+read_file 100 1 0			# make sure others are zero
+get_info l=38671 z=20 h=1 d=1 =c =m #=a
+write_file 1000 100
+get_info d=2 !c !m =a
+change_link +1 
+get_info l=38671 z=24 h=2 d=2 !c =m =a	# no data change.
+
+create_file y (1,1)			# in the middle of tree[1]
+					# use non-existant acl from volroot
+write_file 1234567890 5000		# write blocks 301408 & 301409
+read_file 1234567890 5000
+read_file 100000000 1 0
+get_info l=1234572890 z=16 d=1 A=0 P=0
+
+# with a bsize of 4096, ibsize = 1016.
+# This gives the block addresses for indirectBlockTree as follows:
+#   tree[0] 8 to 1023
+#   tree[1] 1024 to (1016^2 + 1023)=1033279
+#   tree[2] 1033280 to (1016^3 + 1033279)=1049805375
+#   tree[3] 1049805376 to (1016^4 + 1049805375)=1066602254911
+# Thus the first byte of tree[2] is 1033280*4096 = 4232314880, which is
+# just less than 2^32.
+
+create_file z a	x 			# at the boundary of tree 1&2
+write_file 4232314800 200
+read_file 4232314800 200
+read_file 4000000000 1 0 
+get_info l=4232315000 z=28 d=1 A=4 P=3579
+
+check_device
+
+create_vol baz 0,,0 20			# small quota
+create_file m x z			# acl from x (not a dir), plist from z,
+					# copy plist
+get_info A=0 P=3579
+read_aux plist 1234 2345
+replace_aux plist a
+read_aux plist zzzzzzzzzzaaaaaaaaaa
+check_device
+
+# switch devices
+open_device 0 1024 1024 95
+create_aggregate
+check_device
+
+exist_volume xxx 123,,987654321 170
+
+create_file l1
+write_file 8190 4			# blocks 7&8
+read_file 8190 4
+get_info l=8194 z=3 d=1
+delete_file
+
+create_file l2
+write_file 262140 8			# blocks 255 & 256
+read_file 262140 8
+get_info l=262148 z=5 d=1
+delete_file
+
+create_file l3
+write_file 63242230 20			# blocks 61759 & 61760
+read_file 63242230 20
+get_info l=63242250 z=7 d=1
+delete_file
+
+check_device
+save /tmp/two-part.fn
+end

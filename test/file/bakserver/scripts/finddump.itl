@@ -1,0 +1,300 @@
+* This test is less flexible and configurable than the other tests. This is because 
+* some of the find tests are hard to do mechanically. 
+
+
+echo This test verifies the FindLatestDump, FindDump and FindClone API calls
+
+echo  connect to the bakserver
+
+bakServerConnect init hand
+
+* define boundary conditions
+
+
+set DUMPID int 7000
+set DUMPINCR int 100
+
+
+set numdumps int 2 		* number of dumps. THIS TEST assume a value of 2
+set numtapes int 1 		* Number of tapes
+set numfilesets int 2 		* Number of filesets per tape
+
+* define variables
+set dumpid $DUMPID
+set dumpincr int $DUMPINCR
+set maxdumpid ($dumpid  + $dumpincr * $numdumps - 1)
+set tapecount int 0
+set fscount int 0
+
+set tapeseqid int 100
+set volid int 1000
+
+
+set dumpprefix  "Morpheus."
+
+set dump[1] "/full"
+set dumpstr[1] "full"
+
+set dump[2] "/full/incr"
+set dumpstr[2] "incr"
+
+* Get two dump dates
+set date[1] "6/1/90"
+set date[2] "6/1/92"
+
+
+set tapeprefix "Hyperion."
+set volprefix "Orion."
+
+set tapeset fs_bakTapeSet 11 "olorin" "%s" 0 1 1 1 2 3 4
+set principal fs_bakPrincipal "cell_admin" " " " " 0 1 2 3 4 
+
+set new int 0 
+
+set i int 1 
+
+repeat  
+
+set dumpname ($dumpprefix + $dumpid + "." + $dumpstr[$i])
+
+set dumpentry fs_bakDumpEntry $dumpid 0 1 0 test $dump[$i] $dumpname  $date[$i] "0:0:0" "" 1 $tapeset $principal 1 2 3 4
+
+* Delete old dump, to prevent failure 
+
+verifyStatus false
+
+bakDeleteDump $hand $dumpid
+
+verifyStatus true
+
+* Create Dump
+
+bakCreateDump $hand dumpentry
+
+set tapecount 0
+repeat
+* set tape entry
+
+set tapename string ($tapeprefix + $dumpid + "." + $i)
+
+set tapeentry  fs_bakTapeEntry $tapename 0  "" ""  200 10 12 1 ($tapecount + 1) $tapeseqid  1 1 $dumpid  1 2 3 4
+
+* Issue a use tape 
+
+bakUseTape $hand $tapeentry $new
+set tapeentry  fs_bakTapeEntry $tapename $BUDB_TAPE_BEINGWRITTEN  "" ""  200 10 12 1 ($tapecount + 1) $tapeseqid  1 1 $dumpid  1 2 3 4
+
+set fscount 0 
+* Use tape done, now add volume 
+repeat 
+
+* Add the same volume for both dumps 
+set volname ($volprefix + $tapecount + "." + $fscount)
+set volentry fs_bakVolumeEntry $volname  0 1 $volid  "olorin" 1 1 12 $date[$i] "0:0:0"  "" 1 200 1000 $dumpid $tapename 1  2 3 4
+set volid ($volid  + 100)
+
+bakAddvolume $hand $volentry
+* increment filesets
+set fscount ($fscount + 1)
+while ($fscount < $numfilesets)  
+* increment tape count
+
+set tapeentry  fs_bakTapeEntry $tapename  $BUDB_TAPE_WRITTEN  "" ""  200 10 12 1 ($tapecount + 1) $tapeseqid  1 1 $dumpid  1 2 3 4
+
+bakFinishTape $hand $tapeentry
+
+* Now finish dump 
+
+set tapeseqid ($tapeseqid + 10)
+set tapecount ($tapecount + 1)
+while ($tapecount < $numtapes)
+
+bakFinishDump $hand dumpentry
+
+* increment dump id
+
+set i ($i + 1)
+set dumpid ($dumpid + $dumpincr)
+while ($dumpid < $maxdumpid)
+
+
+set status int 0
+set orphans int 0 
+set host int 0 
+
+bakDbVerify $hand status orphans host
+
+if ($status == 1) {
+	echo Insertion Failed : Database cannot be verified
+	} else {
+	echo Insertion Succeeded : Database verified
+	}
+
+echo Now do lookups on inserted dumps
+
+
+echo  Verify that FindLatestDump works
+
+set dumpid $DUMPID
+set searchdate[1] "6/1/91"
+set searchdate[2] "6/1/93"
+
+Loop i 1 1 2
+
+set dumpname ($dumpprefix + $dumpid) 		
+
+bakFindLatestDump $hand $dumpname $dump[$i]  dumpentry
+
+if ($dumpentry.id != $dumpid) {
+	echo Retrieval Failed : got dumpid $dumpid
+	} else {
+	echo Retrieval succeeded : got dumpid $dumpid
+	}
+
+
+
+set dumpid ($dumpid + $dumpincr)
+endLoop
+
+
+echo Verify that FindDump works
+set dumpid $DUMPID
+
+Loop i 1 1 2
+set tapecount 0
+repeat
+* set tape entry
+
+set tapename string ($tapeprefix + $dumpid + "." + $i)
+
+
+set fscount 0 
+
+repeat 
+
+echo 
+set volname ($volprefix + $tapecount + "." + $fscount)
+
+
+bakFindDump $hand $volname $searchdate[$i] "0:0:0" "" dumpentry
+
+if ($dumpentry.id != $dumpid) {
+	echo Retrieval Failed
+	} else {
+	echo Retrieval succeeded : got dumpid $dumpentry.id
+	}
+
+
+* increment filesets
+set fscount ($fscount + 1)
+while ($fscount < $numfilesets)  
+* increment tape count
+
+set tapecount ($tapecount + 1)
+while ($tapecount < $numtapes)
+
+
+* increment dump id
+
+
+set dumpid ($dumpid + $dumpincr)
+endLoop
+
+
+set dumpid $DUMPID
+
+echo Now check that GetClone Works. 
+
+Loop i 1 1 2
+
+
+set tapecount 0
+repeat
+* set tape entry
+
+set tapename string ($tapeprefix + $dumpid + "." + $i)
+
+set fscount 0 
+
+repeat 
+
+set cltime int 0 
+set clspare int 0
+set volname ($volprefix + $tapecount + "." + $fscount)
+
+bakFindClone $hand $dumpid $volname cltime clspare
+
+* Now look at volume dump info. 
+
+set flags $BUDB_OP_VOLUMENAME 
+set CUR_BUDB_VERSION int 1
+set index 0 
+
+bakGetVolumes $hand $CUR_BUDB_VERSION $flags $volname 0 0 $index nextIndex dbtime volsetlist
+
+if ($volsetlist.len != 2) {
+	echo Improper retrieval of fileset $volname, two dumps expected. 
+	}
+
+set volentry fs_bakVolumeEntry $volsetlist.val[0]
+
+if (($volentry.name != $volname) | ($volentry.dump != $dumpid)) {
+	set volentry fs_bakVolumeEntry $volsetlist.val[1]
+
+	}
+if (($volentry.name != $volname) | ($volentry.dump != $dumpid)) {
+	echo Improper retrieval of fileset $volname, dump not found
+	}
+
+* Now compare clone times 
+
+if ($cltime != $volentry.clone) {
+	echo Retrieval Failed
+	} else {
+	echo Retrieval succeeded : got dumpid $dumpid
+	}
+
+
+
+* increment filesets
+set fscount ($fscount + 1)
+while ($fscount < $numfilesets)  
+* increment tape count
+
+set tapecount ($tapecount + 1)
+while ($tapecount < $numtapes)
+
+set dumpid ($dumpid + $dumpincr)
+endLoop
+
+
+
+bakDbVerify $hand status orphans host
+
+if ($status == 1) {
+	echo Lookups Failed : Database cannot be verified
+	} else {
+	echo Lookups Succeeded : Database verified
+	}
+
+
+echo Testing Deletion
+
+set dumpid int $DUMPID
+set dumpincr int $DUMPINCR
+set maxdumpid ($dumpid  + $dumpincr * $numdumps - 1)
+
+Loop dmpid $dumpid $dumpincr $maxdumpid
+echo deleting dumpid $dmpid
+bakDeleteDump $hand $dmpid
+endloop
+
+bakDbVerify $hand status orphans host
+
+if ($status == 1) {
+	echo Deletion Failed : Database cannot be verified
+	} else {
+	echo Deletion Succeeded : Database verified
+	}
+
+

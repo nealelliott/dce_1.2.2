@@ -1,0 +1,471 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#  
+
+###############################################################################
+# Copyright (C) 1995, 1992 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS exporting Episode (not exported UFS, and
+# not local Episode). 
+
+# This is a advanced test of the fts create, delete, crmount and delmount
+
+###############################################################################
+
+# Usage:                test19
+
+# Typically run via:    test19 >& test19.out or via runtests
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode. DFS server $SERVER_1
+# must export Episode aggregate $EPI_AGGRNAME_1, and $SERVER_2 must export
+# $EPI_AGGRNAME_2. $SERVER_1 and $SERVER_2 can be the same machine. root.dfs 
+# must be an LFS fileset because we use replication functionality here
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1 and $SERVER_2, in
+# order to run the fts commands contained in this script. You must also be
+# able to create mount points in $export_root.
+
+# Highest error number is: 32.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${EPI_AGGRNAME_1=epi1}
+: ${EPI_AGGRNAME_2=epi2}
+: ${EPI_AGGRNAME_3=epi1}
+: ${SERVER_1=$hn}
+: ${SERVER_2=$hn}
+if [ "$FTS_VERBOSE" = "ON" ]
+ then
+: ${VERB_ARG="-verbose"}
+ else
+: ${VERB_ARG=""}
+ fi
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name="/.../$CELL_NAME"}
+: ${dns_server_prefix="/.:/hosts/"}
+: ${export_root=/.../$CELL_NAME/fs}
+
+cav_arg="$CELL_ARG $AUTH_ARG $VERB_ARG"
+root=ourRootFileset.$$
+rootMount=$export_root/test/ourRootMount.$$
+ft1=fts.test19.1.$$
+
+cleanup()
+{
+# Nothing yet.
+ return 0
+test3
+}
+
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+if [ "$dfs_FileSysType" = "$DFS_WORKS_ON_UFS" ]
+then
+  echo ""; echo "$p not applicable to DFS exporting UFS"; echo ""
+  echo ""; echo "All done at `date`."; echo ""
+  if test $rc -eq 0
+     then echo "$p PASSED"
+     else echo "$p FAILED ($rc errors)"
+     fi
+  exit $rc
+fi
+
+###############################################################################
+
+echo ""
+echo "$ty/$p starting as PID $$ at `date` on $hn"
+echo "   in cell $CELL_NAME."
+echo "Using aggregates $EPI_AGGRNAME_1 on $SERVER_1 and $EPI_AGGRNAME_2 on $SERVER_2."
+
+if test "$CELL_NAME" = ""
+   then echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting."
+        exit 2
+   fi
+
+###############################################################################
+
+# A generic function to create the filesets
+createFt()
+{
+echo ""; echo "Create RW, RO, BK filesets to test crmount on..."; sync; sync
+$bin_dir/fts create $ft1 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg;rf=$?
+if test $rf -ne 0
+   then 
+        echo "fts create exit status was $rf"
+        echo "- command failed; $p ABORTING ($p: E1)"
+        rc=`expr $rc + 1`
+   fi
+$bin_dir/fts clone $ft1 $cav_arg;rf=$?
+if test $rf -ne 0
+   then 
+        echo "fts clone exit status was $rf"
+        echo "- command failed; $p ABORTING ($p: E2)"
+        rc=`expr $rc + 1`
+   fi
+$bin_dir/fts setrepinfo $ft1 -release $cav_arg; rf=$?
+if test $rf -ne 0
+   then 
+        echo "fts setrepinfo exit status was $rf"
+        echo "- command failed; $p ABORTING ($p: E3)"
+        rc=`expr $rc + 1`
+   fi
+$bin_dir/fts addsite $ft1 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+if test $rf -ne 0
+   then 
+        echo "fts addsite exit status was $rf"
+        echo "- command failed; $p ABORTING ($p: E4)"
+        rc=`expr $rc + 1`
+   fi
+$bin_dir/fts release $ft1 $cav_arg; rf=$?
+if test $rf -ne 0
+   then 
+        echo "fts release exit status was $rf"
+        echo "- command failed; $p ABORTING ($p: E5)"
+        rc=`expr $rc + 1`
+   fi
+}
+
+# A generic function to destroy the filesets
+destroyFt()
+{
+ ftid=`fts lsfldb $ft1 $cav_arg|sed -n '/backup/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+ $bin_dir/fts zap $ftid $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+ $bin_dir/fts rmsite $ft1 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+ ftid=`fts lsfldb $ft1 $cav_arg|sed -n '/readOnly/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+ $bin_dir/fts zap $ftid $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+ ftid=`fts lsfldb $ft1 $cav_arg|sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+ $bin_dir/fts zap $ftid $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+ $bin_dir/fts delfldb $ft1 $cav_arg
+
+ $bin_dir/cm checkf
+ $bin_dir/fts delmount $rootMount.RO
+ $bin_dir/fts delmount $rootMount
+ $bin_dir/fts rmsite $root $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+ ftid=`fts lsfldb $root $cav_arg|sed -n '/readOnly/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+ $bin_dir/fts delete $ftid $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+ ftid=`fts lsfldb $root $cav_arg|sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+ $bin_dir/fts zap $ftid $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+ $bin_dir/fts delfldb $root $cav_arg
+}
+
+# Create a fileset, replicate it and mount the RW
+$bin_dir/fts create $root $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+rf=$?
+if [ $rf -ne 0 ]
+   then
+     echo "fts create exit status was $rf"
+     echo "- command failed; $p ABORTING ($p: E6)"
+     rc=`expr $rc + 1`
+   fi
+$bin_dir/fts setrepinfo $root -release $cav_arg; rf=$?
+if test $rf -ne 0
+   then 
+        echo "fts setrepinfo exit status was $rf"
+        echo "- command failed; $p ABORTING ($p: E8)"
+        rc=`expr $rc + 1`
+   fi
+$bin_dir/fts addsite $root $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+rf=$?
+if test $rf -ne 0
+   then 
+        echo "fts addsite exit status was $rf"
+        echo "- command failed; $p ABORTING ($p: E9)"
+        rc=`expr $rc + 1`
+   fi
+$bin_dir/fts release $root $cav_arg; rf=$?
+if test $rf -ne 0
+   then 
+        echo "fts release exit status was $rf"
+        echo "- command failed; $p ABORTING ($p: E10)"
+        rc=`expr $rc + 1`
+   fi
+$bin_dir/cm checkf
+$bin_dir/fts crmount $rootMount $root -rw; rf=$?
+if [ $rf -ne 0 ]
+   then
+    echo "fts crmount exit status was $rf"
+    echo "- command failed; $p ABORTING ($p: E11)"
+    rc=`expr $rc + 1`
+   fi
+
+setFsetRootProt $rootMount $testuid "E11.1"
+
+$bin_dir/cm checkf
+$bin_dir/fts crmount $rootMount.RO $root.readonly; rf=$?
+if [ $rf -ne 0 ]
+   then
+    echo "fts crmount exit status was $rf"
+    echo "- command failed; $p ABORTING ($p: E11.1)"
+    rc=`expr $rc + 1`
+   fi
+$bin_dir/cm checkf
+
+# Testing fts create
+echo ""; echo "Testing fts create..."; sync; sync; sleep 1
+longFt="abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxy" # 103 characters long
+echo ""; echo "Create a fileset with illegal fileset names..."; sync; sync
+$bin_dir/fts create $longFt $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg;rf=$?
+if test $rf -eq 0
+   then 
+        echo "fts create exit status was $rf"
+        echo "- command failed; $p ABORTING ($p: E12)"
+        rc=`expr $rc + 1`
+   fi
+badFt="$%#*&^@"
+$bin_dir/fts create $badFt $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg;rf=$?
+if test $rf -eq 0
+   then 
+        echo "fts create exit status was $rf"
+        echo "- command failed; $p ABORTING ($p: E13)"
+        rc=`expr $rc + 1`
+   fi
+badFt="1234567890"
+$bin_dir/fts create $badFt $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg;rf=$?
+if test $rf -eq 0
+   then 
+        echo "fts create exit status was $rf"
+        echo "- command failed; $p ABORTING ($p: E14)"
+        rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Testing fts crmount..."; sync; sync; sleep 1
+createFt
+
+echo " The idea here is to do some simple cases where a traversal through the"
+echo " mount point ends up in a RW or RO fileset. There are a few cases here"
+echo " 1. The MP is in a RO and points to a RW"
+echo " 2. The MP is in a RW and points to a RW"
+echo " 3. The MP is in a RO and points to a RO"
+echo " In each of the above 3 cases, make the RW or RO unavailable while"
+echo " traversing the mount point"
+echo " In case 1, try using the -rw switch and see is the result is different"
+
+echo "0. First check our root mount point"
+fs=`$bin_dir/cm whereis $rootMount.RO | grep fileset | sed -n "s/.*fileset \'\(.*\)\'.*/\1/p"`
+if [ "$fs" != "$root.readonly" ]
+   then
+        echo "$root read-only version not mounted correctly"
+        echo "- command failed ($p: E15)"
+        rc=`expr $rc + 1`
+   fi
+fs=`$bin_dir/cm whereis $rootMount | grep fileset | sed -n "s/.*fileset \'\(.*\)\'.*/\1/p"`
+if [ "$fs" != "$root" ]
+   then
+        echo "$root read-write version not mounted correctly"
+        echo "- command failed ($p: E16)"
+        rc=`expr $rc + 1`
+   fi
+iter=0
+while [ $iter -lt 3 ]
+do
+echo "Case 1, with the -rw switch"
+$bin_dir/cm checkf
+$bin_dir/fts crmount $rootMount/dir1.$$.RW $ft1 -rw; rf=$?
+if [ $rf -ne 0 ]
+   then 
+        echo "fts crmount exit status was $rf"
+        echo "- command failed ($p: E17)" 
+        rc=`expr $rc + 1`
+   fi
+$bin_dir/fts release $root $cav_arg
+$bin_dir/cm checkf
+fs=`$bin_dir/cm whereis $rootMount/dir1.$$.RW| grep fileset | sed -n "s/.*fileset \'\(.*\)\'.*/\1/p"`
+if [ "$fs" != "$ft1" ]
+   then
+        echo "$root read-write version not mounted correctly"
+        echo "- command failed ($p: E18)"
+        rc=`expr $rc + 1`
+   fi
+
+echo "Case 1, without the -rw switch"
+$bin_dir/cm checkf
+$bin_dir/fts crmount $rootMount/dir1.$$.RO $ft1; rf=$?
+if [ $rf -ne 0 ]
+   then 
+        echo "fts crmount exit status was $rf"
+        echo "- command failed ($p: E19)" 
+        rc=`expr $rc + 1`
+   fi
+$bin_dir/fts release $root $cav_arg
+$bin_dir/cm checkf
+fs=`$bin_dir/cm whereis $rootMount.RO/dir1.$$.RO | grep fileset | sed -n "s/.*fileset \'\(.*\)\'.*/\1/p"`
+if [ $iter -eq 0 -a "$fs" != "$ft1.readonly" ]
+   then
+        echo "$root read-write version not mounted correctly"
+        echo "- command failed ($p: E20)"
+        rc=`expr $rc + 1`
+elif [ $iter -eq 1 -a "$fs" != "" ]
+   then
+        echo "$root read-only version not mounted correctly"
+        echo "- command failed ($p: E21)"
+        rc=`expr $rc + 1`
+elif [ $iter -eq 2 -a "$fs" != "$ft1" ]
+   then
+        echo "$root read-write version not mounted correctly"
+        echo "- command failed ($p: E22)"
+        rc=`expr $rc + 1`
+   fi
+
+if [ $iter -eq 0 ]
+ then
+  echo "Case 1, with $ft1 RO zapped"
+  ftid=`$bin_dir/fts lsfldb $ft1 $cav_arg|sed -n '/readOnly/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+  $bin_dir/fts zap $ftid $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+elif [ $iter -eq 1 ]
+ then
+  echo "Case 1, with $ft1 RO deleted entirely"
+ ftid=`fts lsfldb $ft1 $cav_arg|sed -n '/readOnly/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+ $bin_dir/fts zap $ftid $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+  $bin_dir/fts rmsite $ft1 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+ fi
+iter=`expr $iter + 1`
+$bin_dir/fts delmount $rootMount/dir1.$$.RO $rootMount/dir1.$$.RW
+$bin_dir/fts release $root $cav_arg
+done
+
+$bin_dir/fts addsite $ft1 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+if test $rf -ne 0
+   then 
+        echo "fts addsite exit status was $rf"
+        echo "- command failed; $p ABORTING ($p: E23)"
+        rc=`expr $rc + 1`
+   fi
+$bin_dir/fts release $ft1 $cav_arg; rf=$?
+if test $rf -ne 0
+   then 
+	echo "fts release exit status was $rf"
+	echo "- command failed; $p ABORTING ($p: E24)"
+        rc=`expr $rc + 1`
+   fi
+$bin_dir/cm checkf
+
+echo "Case 2, RW on a RW"
+$bin_dir/cm checkf
+$bin_dir/fts crmount $rootMount/dir1.$$.RW $ft1; rf=$?
+if [ $rf -ne 0 ]
+   then 
+	echo "fts crmount exit status was $rf"
+	echo "- command failed ($p: E25)" 
+	rc=`expr $rc + 1`
+   fi
+$bin_dir/fts release $root $cav_arg
+$bin_dir/cm checkf
+fs=`$bin_dir/cm whereis $rootMount/dir1.$$.RW | grep fileset | sed -n "s/.*fileset \'\(.*\)\'.*/\1/p"`
+if [ "$fs" != "$ft1" ]
+   then
+	echo "$root read-write version not mounted correctly"
+	echo "- command failed ($p: E26)"
+	rc=`expr $rc + 1`
+   fi
+
+ftid=`fts lsfldb $ft1 $cav_arg|sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+$bin_dir/fts zap $ftid $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+
+$bin_dir/fts delmount $rootMount/dir1.$$.RW
+$bin_dir/fts release $root $cav_arg
+$bin_dir/cm checkf
+$bin_dir/fts crmount $rootMount/dir1.$$.RW $ft1; rf=$?
+if [ $rf -ne 0 ]
+   then 
+	echo "fts crmount exit status was $rf"
+	echo "- command failed ($p: E27)" 
+	rc=`expr $rc + 1`
+   fi
+$bin_dir/fts release $root $cav_arg
+$bin_dir/cm checkf
+fs=`$bin_dir/cm whereis $rootMount/dir1.$$.RW | grep fileset | sed -n "s/.*fileset \'\(.*\)\'.*/\1/p"`
+if [ "$fs" = "$ft1" ]
+   then
+	echo "$root read-write version not mounted correctly"
+	echo "- command failed ($p: E28)"
+	rc=`expr $rc + 1`
+   fi
+ftid=`fts lsfldb $ft1 $cav_arg|sed -n '/backup/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+$bin_dir/fts zap $ftid $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+ftid=`fts lsfldb $ft1 $cav_arg|sed -n '/readOnly/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+$bin_dir/fts zap $ftid $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+$bin_dir/fts rmsite $ft1 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+ftid=`fts lsfldb $ft1 $cav_arg|sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+$bin_dir/fts zap $ftid $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+$bin_dir/fts delfldb $ft1 $cav_arg
+$bin_dir/cm checkf
+$bin_dir/fts delmount $rootMount/dir1.$$.RW
+$bin_dir/fts release $root $cav_arg
+createFt
+
+echo "Case 3"
+$bin_dir/cm checkf
+$bin_dir/fts crmount $rootMount/dir1.$$.RO $ft1.readonly; rf=$?
+if [ $rf -ne 0 ]
+   then 
+	echo "fts crmount exit status was $rf"
+	echo "- command failed ($p: E29)" 
+	rc=`expr $rc + 1`
+   fi
+$bin_dir/fts release $root $cav_arg
+$bin_dir/cm checkf
+fs=`$bin_dir/cm whereis $rootMount.RO/dir1.$$.RO | grep fileset | sed -n "s/.*fileset \'\(.*\)\'.*/\1/p"`
+if [ "$fs" != "$ft1.readonly" ]
+   then
+	echo "$root read-write version not mounted correctly"
+	echo "- command failed ($p: E30)"
+	rc=`expr $rc + 1`
+   fi
+
+ftid=`fts lsfldb $ft1 $cav_arg|sed -n '/readOnly/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+$bin_dir/fts zap $ftid $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $cav_arg
+$bin_dir/fts delmount $rootMount/dir1.$$.RO
+$bin_dir/fts release $root $cav_arg
+$bin_dir/cm checkf
+$bin_dir/fts crmount $rootMount/dir1.$$.RO $ft1.readonly; rf=$?
+if [ $rf -ne 0 ]
+   then 
+	echo "fts crmount exit status was $rf"
+	echo "- command failed ($p: E31)" 
+	rc=`expr $rc + 1`
+   fi
+$bin_dir/fts release $root $cav_arg
+$bin_dir/cm checkf
+fs=`$bin_dir/cm whereis $rootMount.RO/dir1.$$.RO | grep fileset | sed -n "s/.*fileset \'\(.*\)\'.*/\1/p"`
+if [ "$fs" = "$ft1.readonly" -o "$fs" = "$ft1" ]
+   then
+	echo "$root read-only version not mounted correctly"
+	echo "- command failed ($p: E32)"
+	rc=`expr $rc + 1`
+   fi
+$bin_dir/fts/delmount $rootMount.RO/dir1.$$.RO
+$bin_dir/fts release $root $cav_arg
+$bin_dir/cm checkf
+
+destroyFt
+
+echo ""; echo "All done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc

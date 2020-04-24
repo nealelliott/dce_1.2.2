@@ -1,0 +1,160 @@
+/*
+ * @OSF_COPYRIGHT@
+ * Copyright (c) 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rkeytab.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:07:01  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:25:48  marty]
+ *
+ * Revision 1.1.4.1  1995/12/08  21:27:33  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  17:59:42  root]
+ * 
+ * Revision 1.1.2.6  1994/04/11  18:45:52  rsalz
+ * 	Update to final RFC revision.
+ * 	[1994/04/11  18:26:23  rsalz]
+ * 
+ * Revision 1.1.2.5  1994/03/07  20:18:03  rsalz
+ * 	Updating to second edition of functional spec.
+ * 	[1994/03/07  19:39:20  rsalz]
+ * 
+ * Revision 1.1.2.4  1994/02/23  14:44:47  bowe
+ * 	renamed dkey_t->dced_key_t, dkey_list_t->dced_key_list_t
+ * 	[1994/02/23  14:43:33  bowe]
+ * 
+ * Revision 1.1.2.3  1994/02/22  21:22:19  bowe
+ * 	Renamed functions so names are all rkeytab_xxx().
+ * 	[1994/02/22  21:21:06  bowe]
+ * 
+ * Revision 1.1.2.2  1994/02/22  14:19:10  bowe
+ * 	Added rkeytab_get_list() operation.
+ * 	[1994/02/22  14:18:54  bowe]
+ * 
+ * Revision 1.1.2.1  1994/01/21  19:07:41  bowe
+ * 	Initial checkin.
+ * 	[1994/01/21  19:03:46  bowe]
+ * 
+ * Revision 1.1.2.1  1994/01/21  18:03:32  bowe
+ * 	Initial checkin
+ * 	[1994/01/21  18:00:26  bowe]
+ * 
+ * $EndLog$
+ */
+
+
+[
+    uuid(0066fbfd-0679-1d34-a337-0000c09ce054),
+    version(1.0)
+]
+
+
+/*
+**  R K E Y T A B 
+**  This service allows a server to provide remote access to local DCE
+**  keytables.  The operations parallel the sec_key_mgmt_xxx() API except
+**  that the "authen_service" parameter is part of the individual key,
+**  not the operation.  Some operations have also been simplified (e.g.,
+**  deletion) or omitted (e.g., garbage collection).
+*/
+interface rkeytab
+{
+    import "dce/dced_base.idl";
+
+    /*
+    **  Get the list of keytable objects.
+    */
+    void
+    rkeytab_get_list(
+	[in]		handle_t		h,
+	[out]		dced_entry_list_t	*items,
+	[out]		error_status_t		*st
+    );
+
+
+    /*
+    **  Create a keytable object, adding it to the entry list.
+    **  If just_import is TRUE then the item mentioned in the
+    **  id->storage_tag field must exist and the value must be NULL.
+    */
+    void
+    rkeytab_create(
+	[in]		handle_t		h,
+	[in]		dced_entry_t		*id,
+	[in]		boolean32		just_import,
+	[in]		dced_key_list_t		*value,
+	[out]		error_status_t		*st
+    );
+
+
+    /*
+    **  Delete a keytable object.  If remove_object is true, then the
+    **  id->storage_tag backing storage is also removed.
+    */
+    void
+    rkeytab_delete(
+	[in]		handle_t		h,
+	[in]		uuid_t			*id,
+	[in]		boolean32		remove_object,
+	[out]		error_status_t		*st
+    );
+
+
+    /*
+    **  Get the keys in a keytable.  Returns all the keys.
+    **  Analogous to sec_key_mgmt_initialize_cursor,
+    **  sec_key_mgmt_get_next_key, and sec_key_mgmt_release_cursor.
+    */
+    void
+    rkeytab_get_keys(
+	[in]		handle_t		h,
+	[in]		uuid_t			*id,
+	[out]		dced_key_list_t		*keys,
+	[out]		error_status_t		*st
+    );
+
+
+    /*
+    **  Add a key to a keytable.
+    **  Analogous to sec_key_mgmt_set_key and, if key->version is 0,
+    **  to sec_key_mgmt_get_next_key_kvno.
+    */
+    void
+    rkeytab_add_key(
+	[in]		handle_t		h,
+	[in]		uuid_t			*id,
+	[in]		dced_key_t		*key,
+	[out]		error_status_t		*st
+    );
+
+
+    /*
+    **  Delete a key from a keytable.
+    **  Analogous to sec_key_mgmt_delete_key and sec_key_mgmt_delete_key_type.
+    */
+    void
+    rkeytab_delete_key(
+	[in]		handle_t		h,
+	[in]		uuid_t			*id,
+	[in]		dced_key_t		*key,
+	[out]		error_status_t		*st
+    );
+
+
+    /*
+    **  Change a principal's key in a keytable.
+    **  Analogous to sec_key_mgmt_change_key after creating a login context
+    **  based on the old key.
+    */
+    void
+    rkeytab_change_key(
+	[in]		handle_t		h,
+	[in]		uuid_t			*id,
+	[in]		dced_key_t		*key,
+	[out]		error_status_t		*st
+    );
+}

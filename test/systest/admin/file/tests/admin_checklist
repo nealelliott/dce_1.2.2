@@ -1,0 +1,1238 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: admin_checklist,v $
+# Revision 1.1.12.2  1996/03/11  02:37:18  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:04:51  marty]
+#
+# Revision 1.1.12.1  1995/12/11  21:54:09  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:54:47  root]
+# 
+# Revision 1.1.10.1  1994/02/04  20:48:13  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:25:58  devsrc]
+# 
+# Revision 1.1.7.3  1994/01/20  18:44:19  annie
+# 	added copyright header
+# 	[1994/01/20  18:40:41  annie]
+# 
+# Revision 1.1.7.2  1994/01/18  23:45:23  gmd
+# 	Partial fix for 9630:
+# 		- mention "ufs" valid for all native filesystems
+# 		in dfstab
+# 		- delfldbentry to set up for syncfldb
+# 		- ls -l's in cm setsetuid
+# 		- umask mentioned and shown in acl section
+# 		- old mount points no good after fts rename
+# 	[1994/01/18  23:44:58  gmd]
+# 
+# Revision 1.1.7.1  1993/12/22  16:19:20  cmckeen
+# 	Fix comment leader
+# 	[1993/12/22  16:19:04  cmckeen]
+# 
+# 	More bci problems.
+# 	[1993/12/22  15:50:34  cmckeen]
+# 
+# 	Having bci problems.
+# 	[1993/12/22  13:53:18  cmckeen]
+# 
+# 	For OT 9259 and 9106:
+# 	Added configuration information at the beginning of each section.
+# 	Changed machines names to be generic.
+# 	Fixed inconsistencies and errors in commands.
+# 	Added setup steps where needed.
+# 
+# Revision 1.1.4.3  1993/06/15  15:02:07  treff
+# 	DCT @ OSF
+# 	Add fts dump/restore to list
+# 	[1993/06/15  15:01:40  treff]
+# 
+# Revision 1.1.2.2  1993/03/24  20:29:59  gmd
+# 	Original submission for 1.0.2.
+# 	[1993/03/24  20:07:46  gmd]
+# 
+# $EndLog$
+#
+#   FILE_NAME: admin_checklist
+#
+#   COMPONENT_NAME: dce.admin_test
+#
+#   DESCRIPTION:
+#
+# This test will exercise many of the administration functions associated
+# with dfs.
+#
+#   DCE 1.0.2 TEST PLAN COVERAGE ( ++ = covered ):
+#
+# VII)	DFS
+#
+# 		A) Install
+# ++		B) Configure
+# ++			1) native filesystem into dfs
+# ++				a) create fldb entry
+# ++				b) export native filesystem
+# ++		C) Create
+# ++			1) lfs aggregates
+# ++				a) newaggr
+# ++				b) export lfs aggregate
+# ++			2) lfs filesets 
+# ++				a) read-write and its mount point
+# ++				b) read-only replica and its replication type
+# ++				c) backup
+# ++			3) fileset quota
+#			4) RPC bindings
+#			5) server encryption keys
+#			6) server entries
+#			7) processes
+# ++			8) ACLs
+# ++		D) Disable/Enable
+# ++			1) native filesystem aggregates
+# ++				a) detach
+# ++			2) lfs aggregates
+# ++				a) detach
+# ++				b) salvage
+# ++			3) lfs filesets
+# ++				a) read-write
+# ++				b) backup
+# ++				c) read-only replica
+# ++			4) fldb entries
+# ++				a) syncfldb
+# ++				b) syncserver
+# ++			5) flserver
+# ++			6) file server (ftserver)
+# ++			7) setuid
+# ++			8) authorization checking
+# ++		E) Update/Modify
+# ++			1) lfs aggregates
+# ++				a) growaggr
+# ++			2) lfs filesets 
+# ++				a) rename
+# ++			3) server encryption keys
+# ++			4) cache size/location
+# ++			5) ACLs
+# ++		F) Start/Stop
+# ++			1) processes
+#		G) Backup - NOT IN THIS CHECKLIST
+# ++		H) Cleanup
+# ++			1) cache
+# ++		I) Monitoring
+# ++			1) scout
+# ++			2) bos
+# ++			3) /opt/dcelocal/var/dfs/adm/*Log*
+# ++			4) cm statservers
+# ++			5) udebug
+# ++		J) Dump/Restore
+# ++			1) full LFS dump/restore
+# ++			2) incremental LFS dump/restore
+# ++				a) version
+# ++				b) time
+# ++			3) full UFS dump/restore
+# ++			4) incremental UFS dump/restore (time)
+################################################################################
+MAX CONFIGURATION IS : 3 fl servers, 3 lfs aggregates, 2 dfsexportable
+
+servers		aggregates (aggregates should already exist)
+-------		----------
+
+fl_server1	lfs_aggr1
+fl_server2	/u1.fl_server2 -- native 
+fl_server3	lfs_aggr3
+
+For many of the operations, you must be dce_login'd as a principal
+included in all the admin.fl files on all the FLDB machines (for
+fileset operations), or in all the admin.bos files on all the file
+server machines (for bos commands). The default versions of these
+files contain the "subsys/dce/dfs-admin" group. The dce_config script
+adds cell_admin to this group. The commands containing the "localauth"
+switch are run as root locally on the server machine.
+
+Example commands to enter are marked by "x> %". Example output lines begin
+with ">".
+
+################################################################################
+# B. Configure
+################################################################################
+Initial configuration:
+servers		aggregates
+-------		----------
+
+fl_server1	lfs_aggr1
+fl_server2	/u1.fl_server2 -- native
+fl_server3	lfs_aggr3
+
+Configure a native filesystem into dfs. 
+
+Native filesystems can be exported via dfs by updating the FLDB (fileset
+location database) and exporting the filesystem as an aggregate containing
+a single fileset via dfsexport
+
+On fl_server2:
+The aggrid should be a unique aggregate id number in the cell.
+x> %fts crfldbentry -ftname fl_server1.u1 -server fl_server1 -aggrid 4 -localauth
+>        readWrite   ID 0,,13  valid
+>        readOnly    ID 0,,14  invalid
+>        backup      ID 0,,15  invalid
+>number of sites: 0
+>   server           flags     aggr   siteAge principal      owner               
+>fl_server1.osf.org   RW       4       0:00:00                <nil>               
+>FLDB entry created for fileset fl_server1.u1 (0,,13) on aggregate 4 of fl_server2
+
+Note the fileset id assigned to the fileset and edit the 
+/opt/dcelocal/var/dfs/dfstab file accordingly. In this case, the following
+line was added to the file:
+
+/dev/rz1b       /u1             ufs     4	0,,13
+
+(/u1 is the mount point for /dev/rz1b and serves as the aggregate name)
+
+The filesystem type "ufs" is correct for all non-lfs filesystems ie.
+do not use "hfs" or "jfs".
+
+Then dfsexport the ufs aggregate.
+
+x> %dfsexport -aggregate /u1
+
+Verify by:
+x> %fts lsfldb -fileset fl_server1.u1
+>        readWrite   ID 0,,13  valid
+>        readOnly    ID 0,,14  invalid
+>        backup      ID 0,,15  invalid
+>number of sites: 1
+>   server           flags     aggr   siteAge principal      owner               
+>fl_server1.osf.org   RW       /u1       0:00:00 hosts/fl_server1<nil>               
+x> %dfsexport
+>dfsexport: /dev/rz1b,	ufs, 4, 0,,13
+
+Create a mount point for accessing the ufs fileset via dfs.
+
+x> %fts crmount -dir /:/fl_server1_u1 -fileset fl_server1.u1
+
+Verify by:
+x> %cd /:/fl_server1_u1
+x> %pwd
+>/.../admin_cell/fs/fl_server1_u1
+x> %cp /etc/passwd .
+x> %ls -l /:/fl_server1_u1/passwd
+
+################################################################################
+# C. Create
+################################################################################
+Initial configuration:
+servers		aggregates
+-------		----------
+
+fl_server1	lfs_aggr1
+/u1 -- native
+fl_server2	/u1.fl_server2 -- native
+fl_server3	lfs_aggr3
+
+Create/configure a lfs aggregate into dfs.
+Be sure the disk partition is unmounted and does not contain data you want
+to retain.
+
+On fl_server2:
+
+WARNING: The -overwrite switch will force the reformatting of your disk
+partition/logical volume by newaggr WITHOUT asking for confirmation.
+Run the same command without the -overwrite switch if you are unsure of what
+type of filesystem exists on the disk partition/logical volume.
+
+x> %newaggr -aggregate /dev/rz1e -blocksize 8192 -fragsize 1024 -overwrite -verbose
+
+Output will vary depending on the previous state of the partition but
+successful completion of newaggr is indicated by the following last
+line of output:
+
+> Done.  /dev/rrz1e is now an Episode aggregate
+
+Update the /opt/dcelocal/var/dfs/dfstab file and dfsexport.
+In this case, the following line was added:
+
+/dev/rz1e       lfs_aggr2a       lfs     5
+
+x> %dfsexport -aggregate /dev/rz1e
+
+Verify by:
+x> %dfsexport
+>dfsexport: /dev/rz1e, lfs, 5, 0,,0
+
+Create lfs read-write fileset:
+
+x> %fts create -ftname epi.1 -server fl_server2 -aggregate lfs_aggr2a
+>        readWrite   ID 0,,16  valid
+>        readOnly    ID 0,,17  invalid
+>        backup      ID 0,,18  invalid
+>number of sites: 0    number of addresses: 1
+>   server           flags     aggr   siteAge principal      owner               
+>fl_server2.osf.org   RW       lfs_aggr2a 0:00:00                <nil>               
+>Fileset 0,,16 created on aggregate lfs_aggr2a of fl_server2
+
+Note that the fileset location database is automatically updated
+by this command.
+
+Verify by:
+x> %fts lsheader -aggregate lfs_aggr2a -server fl_server2
+>Total filesets on server fl_server2 aggregate lfs_aggr2a (id 5): 1
+>epi.1                    0,,16 RW      9 K alloc      9 K quota On-line
+>Total filesets on-line 1; total off-line 0; total busy 0
+
+Create a mount point for the lfs read-write fileset:
+
+x> %fts crmount -dir /:/epi_1 -fileset epi.1
+
+Verify by:
+x> %cd /:/epi_1
+x> %pwd
+x>/.../admin_cell/fs/epi_1
+x> %cp /etc/passwd .
+x> %ls -l /:/epi_1/passwd
+
+Create lfs read-only fileset.
+
+You must first establish the type of replication that will be used to
+update the read-only fileset, release or scheduled. Here we set the
+type to release. Once the replication type is set, you can specify the
+server and aggregate to locate the replica on.  The aggregates must
+already exist.  Note that for release replication, the first
+replication site must be on the same machine as the read-write
+fileset.
+
+x> %fts setrepinfo -fileset epi.1 -release
+>fts setrepinfo: Using default value for maxage of 2:00:00
+>fts setrepinfo: Using default value for failage of 1d0:00:00
+>fts setrepinfo: Using default value for reclaimwait of 18:00:00
+
+x> %fts addsite -fileset epi.1 -server /.:/hosts/fl_server2 -aggregate lfs_aggr2a
+>Added replication site /.:/hosts/fl_server2 lfs_aggr2a for fileset epi.1
+The aggregate lfs_aggr1 on fl_server1 must already exist.
+x> %fts addsite -fileset epi.1 -server /.:/hosts/fl_server1 -aggregate lfs_aggr1
+>Added replication site /.:/hosts/fl_server1 lfs_aggr1 for fileset epi.1
+
+Verify by:
+x> %fts lsreplicas -fileset epi.1 -all
+
+> On fl_server1.osf.org:
+>epi.1, cell 134228757,,3182493488: src 0,,16 (lfs_aggr2a) (on fl_server2.osf.org) => fl_server1.osf.org 0,,17 (lfs_aggr1)
+>   flags 0x60000, volstates 0.  NumKAs 0; lastKA sweep=Wed Dec 31 19:00:00 1969
+>   srcVV: 0,,0; curVV: 0,,0; WVT ID = 0,,0
+>   Lost token 258 ago; token expires 85962 hence; new version published 730485758 ago
+>   vvCurr 730485500.002133 (258 ago); vvPingCurr 730485500.002133 (258 ago)
+>   Last update attempt 730485320.013202 (438 ago); next scheduled attempt 730486099.002133 (341 hence)
+>   Status msg: LoseWVT: Lost WVT at 730485500: types 0x0 remain
+
+Create lfs backup fileset:
+
+x> %fts clone -fileset epi.1
+>Created backup fileset for epi.1
+
+Verify by:
+x> %fts lsfldb -fileset epi.1
+>        readWrite   ID 0,,16  valid
+>        readOnly    ID 0,,17  valid
+>        backup      ID 0,,18  valid
+>number of sites: 3
+>  Release repl: maxAge=2:00:00; failAge=1d0:00:00; reclaimWait=18:00:00
+>   server           flags     aggr   siteAge principal      owner               
+>fl_server2.osf.org   RW,BK,RO lfs_aggr2a 0:00:00 hosts/fl_server2<nil>               
+>fl_server1.osf.org     RO       lfs_aggr1 0:00:00 hosts/fl_server1  <nil>               
+
+Note that the backup fileset is marked "valid" and the "BK" flag is set.
+
+Create fileset quota.
+By default, every new read-write lfs fileset has a maximum quota of 5,000
+kilobytes. To change this:
+
+x> %fts setquota -fileset epi.1 -size 10000
+
+Verfiy by:
+x> %fts lsquota -fileset epi.1
+or:
+x> %fts lsquota -path /:/epi_1
+>Fileset Name          Quota    Used  % Used   Aggregate
+>epi.1                 10000      13     0%     1% = 3543/342376 (LFS)
+
+The dce_config script exercises these aspects of dfs cell
+administration.  There is no need to repeat them at this time.
+Create RPC bindings/groups.
+Create server encryption keys.
+Create server entries.
+Create processes.
+
+
+Verify RPC bindings by:
+
+x> %rpccp show mapping 
+.
+.(other server entries)
+.
+> <object>         nil
+> <interface id>   4d37f2dded43.02.c0.37.cf.1e.00.00.00,4.0
+> <string binding> ncadg_ip_udp:130.105.5.27[1096]
+> <annotation>     DFS ftserver
+.
+.(other server entries)
+.
+
+Verify server encryption keys by:
+
+x> %bos lskeys -server /.:/hosts/fl_server2
+>key 1 has cksum 3250462663
+>key 2 has cksum 342302487
+>Keys last changed (at the registry server) on Thu Feb 25 14:40:23 1993.
+>All done.
+
+Verify server entries by:
+
+x> %fts lsserverentry -server /.:/hosts/fl_server2
+>Description for site '/.:/hosts/fl_server2':
+>fl_server2.osf.org (2:0.0.130.105.5.27)
+>FLDB quota: 0;  uses: 1;  principal=`hosts/fl_server2';  owner=<nil>;  objid=<nil>
+
+Verify ftserver created/controlled by the bosserver by:
+
+x> %bos status -server /.:/hosts/fl_server2 -process ftserver -long
+>Instance ftserver, (type is simple) currently running normally.
+>    Process last started at Thu Feb 25 14:43:01 1993 (1 proc starts)
+>    Parameter 1 is '/opt/dcelocal/bin/ftserver'
+
+
+Create ACLs.
+When you create and mount a fileset, you are given a default set of acls.
+
+x> %acl_edit /:/epi_1
+x> %sec_acl_edit> list
+
+># SEC_ACL for /:/epi_1:
+># Default cell = /.../admin_cell
+>user_obj:rwxcid
+>group_obj:rwx-id
+>other_obj:rwx-id
+
+These correspond to the unix mode bits for the directory:
+
+x> %ls -ld /:/epi_1
+>drwxrwxrwx   2 root     daemon              352 Feb 23 11:20 /:/epi_1
+
+You are also given a default set of "initial container" acls, that is,
+the default acls that will be applied to "containers" or directories
+created in that fileset.
+
+x> %acl_edit /:/epi_1 -ic
+x>sec_acl_edit> list
+
+># Initial SEC_ACL for directories created under: /:/epi_1:
+># Default cell = /.../admin_cell
+>user_obj:rwxcid
+>group_obj:r-x---
+>other_obj:r-x---
+
+Again, these correspond to the unix mode bits for directories created
+in that fileset.
+
+x> %mkdir /:/epi_1/dir1
+x> %ls -ld /:/epi_1/dir1
+>drwxr-xr-x   2 100      daemon              256 Feb 26 17:52 /:/epi_1/dir1
+
+Note that the Unix user id = 100, for cell_admin, the current dce
+identity.  If you do NOT have a dce identity, your identity and
+permissions with respect to lfs are those of the Unix user "nobody".
+Access by "nobody" to files in an lfs fileset is dictated by the
+"any_other" acl which is not shown because it is not created by
+default.
+
+################################################################################
+# D. Disable/Enable
+################################################################################
+Initial configuration:
+servers		aggregates
+-------		----------
+
+fl_server1	lfs_aggr1
+/u1.fl_server1 -- native
+fl_server2	/u1.fl_server2 --native
+lfs_aggr2a
+fl_server3	lfs_aggr3
+
+Disable/enable native filesystem aggregates.
+
+On fl_server1:
+
+There can be no filesystem activity via EITHER the local or dfs 
+path to the native filesystem you are detaching from dfs.
+
+x> %dfsexport -aggregate u1.fl_server1 -detach
+>dfsexport: Revoking tokens for filesets on aggregate 4...
+
+Verify by:
+x> %fts lsfldb -server fl_server1 -aggregate u1.fl_server1
+>Aggregate name u1.fl_server1 does not exist on the server
+
+Re-attach by:
+x> %dfsexport -aggregate u1.flserver1
+
+Disable/enable lfs aggregates.
+
+On fl_server2:
+x> %dfsexport -aggregate lfs_aggr2a -detach
+>dfsexport: Revoking tokens for filesets on aggregate 5...
+
+If an aggregate is not detached cleanly, for example if the machine housing the
+aggregate is rebooted without detaching the aggregate, you will need to
+salvage the aggregate before re-attaching it.
+
+x> %dfsexport /dev/rz1e
+>dfsexport: Failed to attach /dev/rz1e:lfs_aggr2 (Aggregate may need to be recovered (dfs / ftu)).  Ignoring it.
+x> %salvage /dev/rz1e
+>Will run recovery on /dev/rz1e
+>recovery statistics:
+>        Elapsed time was 5415 ms
+>        1 log page recovered consisting of 3 records
+>        Modified 1 data block
+>        1 redo-data record, 0 redo-fill records
+>        0 undo-data records, 0 undo-fill records
+>Ran recovery on dev 1/1
+>Processed 1 vols 11 anodes 2 dirs 10 files 0 acls
+>Done.  /dev/rrz1e checks out as Episode aggregate.
+x> %dfsexport /dev/rz1e
+>
+
+To disable a  read-write lfs fileset without removing it,
+delete the mountpoint. To enable, re-create the mount point
+(see crmount examples above).
+
+x> %fts delmount -dir /:/epi_1
+
+Verify by:
+x> %cd /:/epi_1
+>/:/epi_1: No such file or directory
+
+To remove only the backup fileset:
+
+x> %fts delete -fileset epi.1.backup -server fl_server2 -aggregate lfs_aggr2a
+>Fileset 0,,18 on aggregate lfs_aggr2a server fl_server2 deleted
+
+To remove the read-only replicas:
+
+x> %fts rmsite -fileset epi.1 -server /.:/hosts/fl_server2 -aggregate lfs_aggr2
+> Removed replication site fl_server2 2 for fileset epi.1
+x> %fts rmsite -fileset epi.1 -server /.:/hosts/fl_server1 -aggregate lfs_aggr1
+> Removed replication site fl_server1 1 for fileset epi.1
+
+Verify by:
+x> %fts lsreplicas -fileset epi.1 -all
+>fts lsreplicas: No repserver-managed replicas exist for fileset 'epi.1'.
+
+x> %fts lsfldb -fileset epi.1
+>        readWrite   ID 0,,16  valid
+>        readOnly    ID 0,,17  invalid
+>        backup      ID 0,,18  invalid
+>number of sites: 1
+>  Release repl: maxAge=2:00:00; failAge=1d0:00:00; reclaimWait=18:00:00
+>   server           flags     aggr   siteAge principal      owner               
+>fl_server2.osf.org   RW       lfs_aggr2a 0:00:00 hosts/fl_server2<nil>           
+To remove a read-write lfs fileset (and its backup fileset if it exists):
+
+x> %fts delete -fileset epi.1 -server fl_server2 -aggregate lfs_aggr2a
+>Fileset 0,,16 on aggregate lfs_aggr2 server fl_server2 deleted
+
+Verify by:
+x> %fts lsheader -server fl_server2 -aggregate lfs_aggr2a
+>Total filesets on server fl_server2 aggregate lfs_aggr2a (id 5): 1
+>root.dfs                 0,,1 RW      9 K alloc      9 K quota On-line
+>Total filesets on-line 1; total off-line 0; total busy 0
+
+There are times when your fldb may be out of sync with your
+current set of file servers, for instance if you add a server to a cell 
+that has previously been configured in that cell with lfs filesets. In 
+this case, if the fldb is NOT updated during the configuration
+(note that dce_config only allows for one fileset).
+
+You can create this "out of sync" state artificially by doing
+a "fts delfdbentry" as follows:
+
+x> %fts delfldbentry -fileset root.dfs
+>Deleted FLDB entry for fileset root.dfs (0,,1)
+
+You can restore the fldb by:
+
+x> %fts syncfldb -server fl_server1
+>-- done processing entry 1 of total 2 --
+>Creating an entry for fileset 0,,1 in FLDB
+>        readWrite   ID 0,,1  valid
+>        readOnly    ID 0,,2  invalid
+>        backup      ID 0,,3  invalid
+>number of sites: 1
+>   server           flags     aggr   siteAge principal      owner               
+>fl_server1.osf.org   RW       lfs_aggr1 0:00:00 hosts/fl_server1  <nil>               
+>-- done processing entry 2 of total 2 --
+>FLDB synchronized with server fl_server1
+
+Verify by using fts lsfldb to see the additional lfs fileset.
+
+There is a corresponding command for when your file server may be out of sync 
+with your fldb. There are no normal administrative tasks that would lead to
+this state. The example below represents the output of the command when
+it is run on a sync'd server.
+
+x> %fts syncserv -server fl_server2
+>Server fl_server2 synchronized with FLDB
+
+To disable/remove a flserver from your cell, you must:
+- stop the flserver process
+- remove the machine principal from the /.:/fs group
+- update the view any other flserver machine has of the /.:/fs group
+(in this case, fl_server1 and fl_server3)
+- restart any other flserver processes (required workaround at 1.0.2)
+(in this case, fl_server1 and fl_server3)
+- remove the machine principal from the dfs-fs-servers group
+
+x> %bos stop -server /.:/hosts/fl_server2 -proc flserver -wait
+x> %rpccp remove member /.:/fs -m /.:/hosts/fl_server2/self
+
+>>> group member removed
+
+(on fl_server1 and fl_server3)
+x> %rpccp show group -u /.:/fs
+>group members:
+
+>  /.../admin_cell/hosts/fl_server1/self
+
+x> %bos restart -server /.:/hosts/fl_server1 -proc flserver
+
+x> %rgy_edit -update
+x> %rgy_edit=> domain group
+>Domain changed to: group
+x> %rgy_edit=> member
+>Enter group name: subsys/dce/dfs-fs-servers
+>Enter name to add: 
+>Enter name to remove: hosts/fl_server2/dfs-server
+>WARNING: any accounts for (hosts/fl_server2/dfs-server subsys/dce/dfs-fs-servers) will also be deleted.
+>Please confirm removal of "hosts/fl_server2/dfs-server" from membership list [y/n]? (n) y
+
+Disable/Remove a File Server.
+
+First, setup a configuration to use (these commands were described above):
+x> %fts create -ftname epi.1 -server fl_server2 -aggregate lfs_aggr2a
+>        readWrite   ID 0,,19  valid
+>        readOnly    ID 0,,20  invalid
+>        backup      ID 0,,21  invalid
+>number of sites: 0    number of addresses: 1
+>   server           flags     aggr   siteAge principal      owner               
+>fl_server1.osf.org   RW       lfs_aggr2a 0:00:00                <nil>               
+>Fileset 0,,19 created on aggregate lfs_aggr2a of fl_server2
+x> %fts crmount -dir /:/epi_1 -fileset epi.1
+x> %fts crmount -dir /:/fl_server2_u1 -fileset fl_server2.u1
+
+Now fl_server2 has 1 lfs fileset and 1 native fileset.
+
+To disable/remove a file server from your cell:
+- disable the native filesets
+- move the lfs filesets to another file server
+- stop the ftserver process
+- if the file server will not be a flserver, remove the machine's dfs-server principal 
+- delete the keys associated with the machine's dfs-server principal
+
+
+x> %fts delmount -dir /:/fl_server2_u2
+x> %fts delfldbentry -fileset fl_server2.u2 
+>Deleted FLDB entry for fileset fl_server2.u2 (0,,13)
+x> %dfsexport fl_server_u2 -detach
+>dfsexport: Revoking tokens for filesets on aggregate 4...
+
+x> %fts move -fileset epi.1 -fromserver /.:/hosts/fl_server2 -fromaggr lfs_aggr2a -toserver /.:/hosts/fl_server3 -toaggregate lfs_aggr3
+>Fileset 0,,16 moved from /.:/hosts/fl_server2 lfs_aggr2a to /.:/hosts/fl_server3 lfs_aggr3
+x> %fts move -fileset root.dfs -fromserver /.:/hosts/fl_server2 -fromaggr lfs_aggr2a -toserver /.:/hosts/fl_server3 -toaggregate lfs_aggr3
+>Fileset 0,,1 moved from /.:/hosts/fl_server2 lfs_aggr2 to /.:/hosts/fl_server3 lfs_aggr3 
+
+x> %bos stop -server /.:/hosts/fl_server2 -proc ftserver
+
+x> %rgy_edit -update
+>rgy_edit=> domain principal
+>Domain changed to: principal
+>rgy_edit=> delete hosts/fl_server2/dfs-server
+>Please confirm delete of name "hosts/fl_server2/dfs-server" [y/n]? (n) y
+
+To enable/add either a flserver or a fileserver, use dce_config.
+
+To enable/activate the setuid/setgid bits on executable files, you must execute
+the following command per fileset per cache manager (effectivley, per cache manager
+means per client machine): 
+
+x> %dce_login cell_admin -dce-
+>Password must be changed!
+x> %cm setsetuid -path /:/epi_1 -state on
+
+Note that the following verification uses the remote shell program (rsh
+on rios, remsh on hp). Any program that REQUIRES the setuid bit can be
+used. Not all programs that have the setuid bit set REQUIRE the bit
+to be set, however, so be sure the program you choose does.
+
+To verify:
+X> %ls -l /usr/bin/rsh
+>-r-sr-xr-x   1 root     system      8858 May 18 1993  /usr/bin/rsh
+x> %cp -p /usr/bin/rsh /:/epi_1
+x> %ls -l /:/epi_1/rsh
+>-r-sr-xr-x   1 root     system      8858 May 18 1993  /:/epi_1/rsh
+X> %su gmd
+x> %dce_login gmd blah
+x> %cd /:/epi_1
+x> %./rsh fl_server2 date
+>Mon Jan 17 19:28:58 EST 1994
+
+Without setuid:
+x> %dce_login cell_admin -dce-
+>Password must be changed!
+x> %cm setsetuid -path /:/epi_1 -state off
+x> %ls -l /:/epi_1/rsh
+>-r-xr-xr-x   1 root     system      8858 May 18 1993  /:/epi_1/rsh
+(note that the "s" bit is now seen as just "x")
+
+X> %su gmd
+x> %dce_login gmd blah
+x> %cd /:/epi_1
+x> %./rsh fl_server2 date
+>rcmd: socket: The file access permissions do not allow the specified action.
+
+An unrecommended but powerful option is the following one which allows
+you to disable authorization checking:
+
+x> %bos setauth -server /.:/hosts/fl_server1 -authchecking off
+
+To verify:
+As a non-admin user,
+x> %bos restart -server fl_server1 -proc flserver
+>bos: WARNING: short name for server used; no authentication information will be sent to the bosserver
+
+To reenable authorization checking:
+
+x> %bos setauth -server /.:/hosts/fl_server1 -authchecking on
+
+To verify:
+As a non-admin user,
+x> %bos restart -server fl_server1 -proc flserver
+>bos: WARNING: short name for server used; no authentication information will be sent to the bosserver
+>bos: failed to restart instance flserver (you are not authorized for this operation (dfs / bbs))
+
+################################################################################
+# E. Update/Modify
+################################################################################
+Initial configuration:
+servers		aggregates
+-------		----------
+
+fl_server1	lfs_aggr1
+		/u1.fl_server1 -- native
+fl_server2	/u1.fl_server2 -- native
+fl_server3	lfs_aggr3
+
+The only options for updating or modifying a lfs aggregate are to create
+or delete filesets (see above) or to increase its size. Unless you've
+increased the size of the logical volume containing the aggregate OR
+you deliberately created the aggregate smaller than the partition/logical
+volume, you're aggregate is as large as it can be.
+
+On fl_server1:
+x> %growaggr -aggregate lfs_aggr1 -noaction
+>aggregate /dev/rz1a holds 102400 (1024B) blocks, 102400 assigned
+
+To modify a lfs fileset, you can change its quota (see fts setquota above),
+move it from one aggregate to another (see fts move above), or rename it.
+Note that the mount points for a fileset are associated with the name
+so old mount points must be deleted and new mount points created to
+successfully access the renamed fileset.
+
+x> %fts rename -oldname epi.1 -newname lfs.1
+>Renamed fileset epi.1 to lfs.1
+
+Verify by:
+x> %fts lsft -fileset lfs.1
+>_____________________________________________
+>lfs.1 0,,19 RW LFS Release  states 0x10014105 On-line
+>    fl_server3.osf.org, aggregate lfs_aggr3 (ID 3)
+>    Parent 0,,0       Clone 0,,23      Backup 0,,24
+>    llBack 0,,0       llFwd 0,,0       Version 0,,81     
+>    1048576 K alloc limit;      97 K alloc usage
+>       5000 K quota limit;      97 K quota usage
+>    Creation Wed Mar 17 16:35:54 1993
+>    Last Update Fri Mar 19 17:28:33 1993
+>
+>
+>lfs.1  
+>        readWrite   ID 0,,19  valid
+>        readOnly    ID 0,,20  invalid
+>        backup      ID 0,,21  invalid
+>number of sites: 1
+>  Release repl: maxAge=2:00:00; failAge=1d0:00:00; reclaimWait=18:00:00
+>   server           flags     aggr   siteAge principal      owner               
+>fl_server3.osf.org        RW       lfs_aggr3 0:00:00 hosts/fl_server3     <nil>               
+>_____________________________________________
+x> % fts delmount -dir /:/epi_1
+x> % fts crmount -dir /:/lfs_1 -fileset lfs.1
+
+Like passwords, server encryption keys should be updated every once
+in awhile for security reasons. Note that if the current keys are older
+than client ticket lifetimes, old keys will be garbage collected when
+you generate the new key. In this case, you must renew your credentials.
+
+x> %bos lskeys -server /.:/hosts/fl_server2
+>key 1 has cksum 3414994552
+>key 2 has cksum 1263349278
+>Keys last changed (at the registry server) on Fri Mar 19 11:30:11 1993.
+>All done.
+
+x> %bos genkey -server /.:/hosts/fl_server2 -kvno +
+x> %bos lskeys -server /.:/hosts/fl_server1
+>key 1 has cksum 3414994552
+>key 2 has cksum 1263349278
+>key 3 has cksum 3613274898
+>Keys last changed (at the registry server) on Fri Mar 19 11:29:03 1993.
+>All done.
+
+x> %bos lskeys -server /.:/hosts/fl_server1
+>key 3 has cksum 545661195
+>Keys last changed (at the registry server) on Thu Mar 18 17:20:15 1993.
+>All done.
+x> %bos genkey -server /.:/hosts/fl_server1 -kvno +
+x> %bos lskeys -server /.:/hosts/fl_server1
+>bos: communications failure (dce / rpc) error encountered while listing keys
+x> %kinit
+>Enter password:
+x> %bos lskeys -server /.:/hosts/fl_server1
+>key 4 has cksum 4039273589
+>Keys last changed (at the registry server) on Fri Mar 19 14:52:01 1993.
+>All done.
+
+To modify cache size:
+
+x> %cm getcachesize
+>DFS is using 9555 of the cache's available 10000 1K byte (disk) blocks.
+x> %cm setcachesize -size 10500
+>cm: New cache size set: 10500.
+x> %cm getcachesize 
+>DFS is using 9555 of the cache's available 10500 1K byte (disk) blocks.
+
+To have the cache size set to a non-default value with every reboot, edit the
+/opt/dcelocal/etc/CacheInfo file's third field (fields designated by colons).
+
+/...:/opt/dcelocal/var/adm/dfs/cache:10500
+
+To change cache location, edit the /opt/dcelocal/etc/CacheInfo file's second
+field to contain the new directory and reboot the machine. 
+
+/...:/cache_dev:10500
+
+To change ACLs:
+(Note that this example DOES NOT use default principals or groups but uses 
+principals and groups that have previously been set up in /etc/passwd, /etc/group 
+and the registry and have NO SPECIAL PRIVILEGES.)
+
+x> %ls -ld /:/dfs_test
+>drwxr-xr-x   2 gmd      osf           256 Mar 22 17:53 /:/dfs_test
+
+x> %acl_edit /:/dfs_test
+x>sec_acl_edit> list
+
+># SEC_ACL for /:/dfs_test:
+># Default cell = /.../fl_server1_cell
+>user_obj:rwxcid
+>group_obj:r-x---
+>other_obj:r-x---
+
+>sec_acl_edit> modify group_obj:rwxcid
+>sec_acl_edit> list
+>
+># SEC_ACL for /:/dfs_test:
+># Default cell = /.../fl_server1_cell
+>mask_obj:rwxcid
+>user_obj:rwxcid
+>group_obj:rwxcid
+>other_obj:r-x---
+
+Note that by modifying the group_obj permissions, a mask_obj set of permissions
+was created. The mask_obj applies to all entry types EXCEPT user_obj, other_obj
+and unauthenticated users. 
+
+Verify by:
+x> %ls -ld /:/dfs_test
+>drwxrwxr-x   2 gmd      osf          256 Mar 23 15:30 /:/dfs_test
+
+Note that the write bit for group is now set. Login as another member of the group
+osf and attempt write access to the directory. This should succeed since the
+group has both insert and write privileges.
+
+x> %su pellis
+x> %dce_login pellis -dce-
+x> %touch /:/dfs_test/file
+x> %mkdir /:/dfs_test/dir
+x> %ls -l /:/dfs_test
+>total 2
+>drwxr-xr-x   2 pellis   osf          256 Mar 23 15:54 dir
+>-rw-r--r--   1 pellis   osf            0 Mar 23 15:54 file
+
+Check that the ACLs for the file and directory created match the initial object
+and container ACLs (respectively) filtered through the umask of the unix user. 
+Check also that the unix mode bits for the file and directory match their respective ACLs.
+
+x> %umask
+>022
+
+x> %acl_edit /:/dfs_test -io -l
+># Initial SEC_ACL for objects created under: /:/dfs_test:
+># Default cell = /.../fl_server1_cell
+>user_obj:rwxc--
+>group_obj:rwx---
+>other_obj:rwx---
+
+x> %acl_edit /:/dfs_test/file -l
+># SEC_ACL for /:/dfs_test/file:
+># Default cell = /.../fl_server1_cell
+>user_obj:rw-c--
+>group_obj:r-----
+>other_obj:r-----
+
+x> %ls -l /:/dfs_test/file
+-rw-r--r--   1 pellis   osf            0 Mar 23 15:54 /:/dfs_test/file
+
+x> %acl_edit /:/dfs_test -ic -l
+># Initial SEC_ACL for directories created under: /:/dfs_test:
+># Default cell = /.../fl_server1_cell
+>user_obj:rwxcid
+>group_obj:rwx-id
+>other_obj:rwx-id
+
+x> %acl_edit /:/dfs_test/dir -l
+># SEC_ACL for /:/dfs_test/dir:
+># Default cell = /.../fl_server1_cell
+>user_obj:rwxcid
+>group_obj:r-x---
+>other_obj:r-x---
+
+x> %ls -ld /:/dfs_test/dir
+>drwxr-xr-x   2 pellis   osf          256 Mar 23 15:54 /:/dfs_test/dir
+
+################################################################################
+# F. Start/Stop
+################################################################################
+Initial configuration:
+servers		aggregates
+-------		----------
+
+fl_server1	lfs_aggr1
+		/u1.fl_server1 -- native
+fl_server2	/u1.fl_server2 -- native
+fl_server3	lfs_aggr3
+
+To start and stop user-space processes, use the bos commands. The
+BosConfig file should reflect the desired status for processes.
+
+To stop and immediately restart:
+
+x> %bos restart -server /.:/hosts/fl_server2 -proc ftserver
+
+To temporarily stop (ie. without altering the BosConfig file):
+
+x> %bos shutdown -server /.:/hosts/fl_server2 -proc repserver -wait
+x> %bos status -server /.:/hosts/fl_server2 -proc repserver
+>Instance repserver, temporarily disabled, currently shutdown.
+
+To start a process temporarily stopped:
+
+x> %bos startup -server /.:/hosts/fl_server2 -proc repserver
+x> %bos status -server /.:/hosts/fl_server2 -proc repserver
+>Instance repserver, currently running normally.
+
+To stop and alter its BosConfig flag to NotRun:
+
+x> %bos stop -server /.:/hosts/fl_server2 -proc repserver -wait
+x> %bos status -server /.:/hosts/fl_server2 -proc repserver
+>Instance repserver, disabled, currently shutdown.
+
+To start a process and alter its BosConfig flag to RUN:
+
+x> %bos start -server /.:/hosts/fl_server2 -proc repserver
+x> %bos status -server /.:/hosts/fl_server2 -proc repserver
+>Instance repserver, currently running normally.
+
+To remove from BosConfig:
+x> %bos stop -server /.:/hosts/fl_server2 -proc repserver -wait
+x> %bos delete -server /.:/hosts/fl_server2 -proc repserver
+x> %bos status -server /.:/hosts/fl_server2 -proc repserver
+>bos: failed to get instance info for 'repserver' (no such entity (dfs / bbs))
+
+################################################################################
+# G. Backup 
+################################################################################
+NOT INCLUDED IN THIS CHECKLIST!
+
+################################################################################
+# H. Cleanup
+################################################################################
+
+Initial configuration:
+servers		aggregates
+-------		----------
+
+fl_server1	lfs_aggr1
+		/u1.fl_server1 -- native
+fl_server2	/u1.fl_server2 -- native
+fl_server3	lfs_aggr3
+
+To see how much cache is being used :
+
+x> %cm getcachesize
+>DFS is using 16 of the cache's available 10000 1K byte (disk) blocks.
+
+To cleanup or clear out the cache of a single file or directory:
+
+x> %cm flush /:/dfs_test
+
+To cleanup or clear out the cache of a whole fileset:
+
+x> %cm flushfileset /:/epi_1
+
+To verify, in an inactive cell, you MAY be able to see the number of blocks
+being used decrease:
+
+x> %cm getcachesize
+>DFS is using 0 of the cache's available 10000 1K byte (disk) blocks.
+
+################################################################################
+# I. Monitoring
+################################################################################
+Initial configuration:
+servers		aggregates
+-------		----------
+
+fl_server1	lfs_aggr1
+		/u1.fl_server1 -- native
+fl_server2	/u1.fl_server2 -- native
+fl_server3	lfs_aggr3
+
+You can monitor file exporters with the scout process. The scout process 
+creates and updates a display based on your TERM environment variable. 
+Use "ctl-c" to exit.
+
+x> %scout -server fl_server1 fl_server3
+>Conn      Fetch      Store    Ws                Disk attn: > 95% used
+>----   --------   -------- -----                ----------
+   2          3          0     4     fl_server1   lfs_aggr1:70592:*
+   3          5        457     3     fl_server3   lfs_aggr3:636318:*
+
+
+You can check the status of processes overseen by the bosserver with:
+
+x> %bos status -server /.:/hosts/fl_server1 -long
+>Instance ftserver, (type is simple) currently running normally.
+>    Process last started at Tue Mar 23 18:31:38 1993 (1 proc starts)
+>    Parameter 1 is '/opt/dcelocal/bin/ftserver'
+
+>Instance repserver, (type is simple) currently running normally.
+>    Process last started at Tue Mar 23 18:31:39 1993 (1 proc starts)
+>    Parameter 1 is '/opt/dcelocal/bin/repserver'
+
+>Instance flserver, (type is simple) currently running normally.
+>    Process last started at Tue Mar 23 18:31:40 1993 (1 proc starts)
+>    Parameter 1 is '/opt/dcelocal/bin/flserver'
+
+You can also review the new and old logs in /opt/dcelocal/var/dfs/adm for 
+messages logged by the bosserver and processes overseen by the bosserver.
+
+You can check the current viewpoint of the Cache Manager with respect to 
+servers with:
+
+x> %cm statservers
+>These servers are still down:  fl_server2.osf.org.
+
+or, when all servers are visible:
+
+x> %cm statservers
+>All servers are running.
+
+You can check the current status of flservers with the udebug test tool 
+(installed with dcetest/bin). This will output information on which machine 
+is currently serving as the sync site, voting and beacon status.
+
+(on non-sync site machine:)
+x> %udebug -rpcgroup /.:/fs
+>Host 130.105.202.31, his time is 0
+>Vote: Last yes vote for 130.105.202.25 at -8 (sync site); Last vote started at -8
+>Local db version is 732930542.1
+>I am not sync site
+>Lowest host 130.105.202.25 at -8
+>Sync host 130.105.202.25 at -8
+>Sync site's db version is 732930542.1
+>0 locked pages, 0 of them for write
+>This server started at -732933235
+
+(on sync-site machine:)
+x> %udebug -rpcgroup /.:/fs
+>Host 130.105.202.25, his time is 0
+>Vote: Last yes vote for 130.105.202.25 at -14 (sync site); Last vote started at -14
+>Local db version is 732930542.1
+>I am sync site until 76 (2 servers)
+>Recovery state 1f
+>Sync site's db version is 732930542.1
+>0 locked pages, 0 of them for write
+>This server started at -2744
+
+>Server 31.202.105.130: (db 732930542.1)
+>    last vote rcvd at -15, last beacon sent at -15, last vote was yes
+>    dbcurrent=1, up=1 beaconSince=1
+
+
+##############################################################################
+# J.  Dump/Restore
+##############################################################################
+Initial configuration:
+servers		aggregates
+-------		----------
+
+fl_server1	lfs_aggr1
+		/u1.fl_server1 -- native
+fl_server2	/u2.fl_server2 -- native
+fl_server3	lfs_aggr3
+
+Setup:
+x> %fts create epi.1 /.:/hosts/fl_server1 lfs_aggr1
+x> %fts crmount /:/epi_1 epi.1
+x> %cd /:/epi_1
+x> %cp /etc/passwd .
+x> %mkdir etc
+x> %cp passwd etc
+x> %ls -l
+>total 2
+>drwxr-xr-x   2 guest    12           320 Dec 14 11:14 etc
+>-rw-r--r--   1 guest    12           412 Dec 14 10:54 passwd
+
+First we must do a full backup from one LFS fileset to another.  The
+target fileset must be offline (no crmount) while the restore is being
+done.  Note that we're restoring the dump from epi.1 to a non-existant
+fileset epi.2.  The restore operation creates the epi.2 fileset.  You
+must create the mount point for it.
+
+x> %fts dump -fileset epi.1 -time 0 -file /tmp/epi.1.dump
+>Dumped fileset epi.1 to file /tmp/epi.1.dump
+x> %fts restore -ftname epi.2 -server fl_server3 -aggr lfs_aggr3 -file /tmp/epi.1.dump
+>Fileset epi.2 does not exist, creating it in lfs_aggr3 of fl_server3.osf.org
+>        readWrite   ID 0,,421  valid
+>        readOnly    ID 0,,422  invalid
+>        backup      ID 0,,423  invalid
+>number of sites: 1
+>   server           flags     aggr   siteAge principal      owner
+>
+>fl_server3.osf.org       RW       lfs__aggr3 0:00:00 hosts/vodka    <nil>
+>
+>Fileset 0,,421 created on aggregate lfs_aggr3 of fl_server3
+>Restored fileset epi.2 on fl_server3 lfs__aggr3 from /tmp/epi.1.dump
+x> %fts crmount -dir /:/epi_2 -fileset epi.2
+x> %cd /:
+x> %ls
+>epi_1  epi_2
+x> %ls epi_2
+>etc     passwd
+x> %diff -r epi_1 epi_2
+>
+
+
+An incremental dump/restore is done into a fileset which has first had a 
+full dump of the source fileset into it.  It should not have changed since
+the last full or incremental dump.  Incrementals are done to LFS filesets
+either using the version number, or a date/time beginning the interval
+between then, and the present time, during which incremental changes have
+been made to the source fileset.  First, we do a version-based incremental
+dump/restore to the same fileset; note that we take the target fileset 
+offline via the fts delmount option before restoring to it:
+
+
+x> %cd /:/epi_2/etc
+x> %ls     
+>passwd
+x> %fts lsft -fileset epi.2 -verbose
+_____________________________________________
+epi.2 0,,313 RW LFS     states 0x10010005 On-line
+    fl_server3.osf.org, aggregate lfs_aggr3 (ID 3)
+    Parent 0,,0       Clone 0,,314     Backup 0,,315
+    llBack 0,,0       llFwd 0,,0       Version 0,,3812
+    4294967232 K alloc limit;         76 K alloc usage
+          5000 K quota limit;         76 K quota usage
+    Maximum *node index: 254
+    Creation Mon Dec 13 16:36:23 1993
+    Last Update Mon Dec 13 16:43:57 1993
+    Last Access Mon Dec 13 16:43:57 1993
+
+
+epi.2
+        readWrite   ID 0,,421  valid
+        readOnly    ID 0,,422  invalid
+        backup      ID 0,,423  invalid
+number of sites: 1
+   server           flags     aggr   siteAge principal      owner
+
+fl_server3.osf.org       RW       lfs_aggr3 0:00:00 hosts/dce11    <nil>
+_____________________________________________
+x> %fts dump -fileset epi.1 -version 3812 -file /tmp/epi.1.dump
+Dumped fileset epi.1 (incr from version 0,,3812) to file /tmp/epi.1.dump
+x> %fts delmount -dir /:/epi_2
+x> %cd /:
+x> %ls
+epi_1
+x> %fts restore -ftname epi.2 -server /.:/hosts/fl_server3 -aggr lfs_aggr3 -file /tmp/epi.1.dump -overwrite
+>fts restore: The fileset epi.2 (0,,313) already exists in the FLDB.
+>fts restore: Overwriting the existing entry...
+>Restored fileset epi.2 on /.:/hosts/fl_server3 lfs_aggr3 from /tmp/epi.1.dump
+x> %fts crmount -dir /:/epi_2 -fileset epi.2
+x> %cd /:
+x> %diff -r epi_1 epi_2
+>
+
+Here's the -time version of an LFS dump/restore:
+
+x> %cd /:/epi_1/etc
+x> %ls  
+total 1
+-rw-r--r--   1 guest    12           412 Dec 14 10:54 passwd
+x> %cat >> woof
+>woof woof woof woof  
+x> %ls -l woof
+>-rw-r--r--   1 guest    12            20 Dec 14 11:14 woof
+x> %date                              
+>Tue Dec 14 11:15:09 EST 1993
+x> %fts dump -fileset epi.1 -time "12/14/93 11:00" -file /tmp/epi.1.dump
+Dumped fileset epi.1 (incr from 14-Dec-1993 11:00) to file /tmp/epi.1.dump
+x> %fts delmount /:/epi_2
+x> %fts restore -ftname epi.2 -aggr lfs_aggr3 -server /.:/hosts/fl_server3 -file /tmp/epi.1.dump -overwrite
+>fts restore: The fileset epi.2 (0,,421) already exists in the FLDB.
+>fts restore: Overwriting the existing entry...
+>Restored fileset epi.2 on /.:/hosts/fs_server3 lfs_aggr3 from /tmp/epi.1.dump
+x> %fts crmount -dir epi_2 -fileset epi.2
+x> %cd /:/epi_2/etc
+x> %ls -l
+>total 32
+>-rw-r--r--   1 guest    12           412 Dec 14 10:54 passwd
+>-rw-r--r--   1 guest    12            20 Dec 14 11:14 woof
+x> %more woof
+>woof woof woof woof
+>
+ 
+
+
+     A UFS dump/restore sequence is identical to that performed upon
+LFS filesystems -- only the preparation is different.  A UFS filesystem
+is mounted in UFS, and exported via dfsexport.  After a restore, the
+UFS fileset can then be mounted via fts crmount.  Note that only the
+-time option works for incremental restores.  Doing the sequence of operations
+above on UFS filesets, with a -time incremental restore,  will test 
+Dump/Restore over native filesystems. 
+
+
+
+
+
+
+ 

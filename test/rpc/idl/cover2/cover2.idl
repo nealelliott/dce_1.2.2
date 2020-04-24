@@ -1,0 +1,194 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: cover2.idl,v $
+ * Revision 1.1.6.2  1996/03/11  02:11:34  marty
+ * 	Update OSF copyright years
+ * 	[1996/03/10  19:52:24  marty]
+ *
+ * Revision 1.1.6.1  1995/12/11  20:01:13  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/11  19:29:47  root]
+ * 
+ * Revision 1.1.4.2  1993/01/07  19:51:05  bbelch
+ * 	Embedding copyright notice
+ * 	[1993/01/06  13:30:55  bbelch]
+ * 
+ * Revision 1.1.2.2  1992/05/26  19:04:31  harrow
+ * 	Remove test for [represent_as] on a conformant struct as it is
+ * 	unsupported.
+ * 	[1992/05/26  19:02:37  harrow]
+ * 
+ * Revision 1.1  1992/01/19  03:31:45  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+[uuid(b8f94ed0-f1bc-11c9-a5fe-08002b107359),
+ pointer_default(ptr),
+ version(0)]
+interface cover2
+{
+    const long FDIM = 20;
+    const long DIM2 = 2;
+
+    typedef struct inner {
+        short i1;
+        short i2;
+    } inner;
+
+    typedef struct outer {
+        small o_small;
+        inner o_inner;
+        short o_short;
+    } outer;
+
+    void a_op0(
+        [in] handle_t h,
+        [in,out] outer *p_o,
+        [in,out] long h_a[FDIM][FDIM]
+    );
+/*
+    typedef struct pastring {
+        short char_count;
+        [size_is(char_count)] char chars[];
+    } pastring;
+
+    void a_op1(
+        [in] handle_t h,
+        [in,out] pastring *p_is
+    );
+*/
+    typedef [ref] char *r_p_c;
+
+    void a_op2(
+        [in] handle_t h,
+        [in] long s,
+        [in,out] long *f,
+        [in,size_is(s),first_is(*f)] r_p_c ap[*][DIM2],
+        [out,size_is(s),first_is(*f)] char a[*][DIM2]
+    );
+
+    typedef struct op3_elt {
+        long a;
+        [ref] long *p_a;
+        [ref] long *p_b;
+        long b;
+    } op3_elt;
+
+    void a_op3(
+        [in] handle_t h,
+        [in,out] op3_elt b[FDIM]
+    );
+
+    void a_op4(
+        [in] handle_t h,
+        [in] long ln,
+        [in, length_is(ln), v1_array] long a[FDIM],
+        [in] long m,
+        [in, out] long *f,
+        [in, out, max_is(m), first_is(*f)] long b[],
+        [in] long s,
+        [in] long f2,
+        [in, size_is(s), first_is(f2)] long c[],
+        [in, out] long *f3,
+        [in, out] long *lt,
+        [in, out, first_is(*f3), last_is(*lt)] long d[FDIM] 
+    );
+
+    /*
+     * Test the various "escape characters" supported by the IDL compiler.
+     */
+    const char AUDIBLE_BELL = '\a';
+    const char BACKSPACE    = '\b';
+    const char FORMFEED     = '\f';
+    const char NEWLINE      = '\n';
+    const char RETURN       = '\r';
+    const char TAB          = '\t';
+    const char VERTICAL_TAB = '\v';
+    const char BACKSLASH    = '\\';
+    const char QUOTE        = '\"';
+    const char APOSTROPHE   = '\'';
+    const char XON          = '\x11';
+    const char XOFF         = '\023';
+
+    const char *ESCAPECHARS = "\a\b\f\n\r\t\v\\\"\'\x11\023";
+
+    const void *NIL = NULL; /* Also check spelling of NULL constant */
+
+    typedef union switch(char sw) {
+        case AUDIBLE_BELL:
+        case BACKSPACE:
+        case FORMFEED:
+        case NEWLINE:
+        case RETURN:
+        case TAB:
+        case VERTICAL_TAB:
+        case BACKSLASH:
+        case QUOTE:
+        case APOSTROPHE:
+        case XON:
+        case XOFF:
+            long l;
+    } op5_union;
+
+    void a_op5(
+        [in] handle_t h,
+        [in,out] op5_union *up
+    );
+
+    /*
+     * Test the code path for strings that have to spell the string size
+     * expression like: sizeof(struct tagname)
+     */
+    typedef struct
+    {
+        [string] struct stringtag {byte c;} s[27];
+    } op6_string;
+
+    void a_op6(
+        [in] handle_t h,
+        [in,out] op6_string *sp
+    );
+
+    /*
+     * Test the code path for spelling varying information
+     * in the 'P' routine for an out_of_line type.
+     */
+    typedef long * op7_array[FDIM];
+
+    void a_op7([in] handle_t h, [in,out] op7_array a);
+
+    /*
+     * Cover a tough-to-reach codepath in nodesupp.c BE_clone_anonymous_pa_types
+     * It requires an anonymous pointed-at type inside a self-pointing type,
+     * where the latter type is not used in any parameters in the IDL.  The last
+     * condition means the anonymous pa type is not on the pa_types list, but
+     * it is on the sp_types list so in this special case the assigning of a
+     * name to the anonymous type is via processing the sp_types list.
+     */
+    typedef struct sp_t {
+        struct sp_t *next;
+        struct sp_pa_t {long l;} *p;
+    } sp_t;
+
+    /*
+     * Test the code path for allocating storage for an [out]-only conformant
+     * array containing [ref] pointers not as the array element type.
+     */
+    typedef struct {
+        [ref] long *lp;
+    } op8_struct;
+
+    typedef op8_struct op8_array[];
+
+    void a_op8([in] handle_t h, [in] long s, [out,size_is(s)] op8_array a);
+}

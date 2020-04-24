@@ -1,0 +1,449 @@
+*
+* ORIGINS: Transarc Corp.
+*
+* Copyright Transarc Corp. 1996, 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+*  basic.pioctl.scr --
+*	This script checks the functionality of pioctl function call interface.
+*  The purpose of the test is simply ensuring that everything works fine
+*  concerning the ITL code (pioctl_test).
+* 
+
+* Note:
+* Set following variables before run the script.
+* If there is no file set then you have to create one.
+* Variables need to be set:
+*      cellName, fileSet
+
+
+* Usage: pioctl_test -I basic.scr
+*        pioctl_test -I basic.scr -D
+*        or
+*        pioctl_test <basic.scr
+*        or
+*        See pioctl_test -help
+
+**********************************************************************o*
+!*                  PIOCTL FUNCTIONALITY CHECKING
+************************************************************************
+
+*
+* Set varibales.
+*
+* You have to have an exported aggregate.
+set aggrName string epi1
+set fileSet string fset.pioctl
+set mountPoint string pioctl.mnt
+
+
+set testDir tdir
+set testFile tfile
+set linkFile lfile
+
+* Get the cell name by pioctl call
+pioctl $VIOC_FILE_CELL_NAME FALSE . cellName
+
+*
+* Define clearDir procedure.
+*
+
+set clearDir_Proc proc 1 dirName string proc_END
+  echo Clear @dirName directory.
+  verifyStatus false
+  chmod . 0777
+  chmod @dirName 0777
+  opendir @dirName dirPtr
+  readdir @dirPtr dirInfo
+  readdir @dirPtr dirInfo
+  do
+    readdir @dirPtr dirInfo
+    set readFlag @CommandResult
+    if ( @dirInfo.d_name != ".." && @dirInfo.d_name != "." && @readFlag == 0 ) {
+      set var int 0
+      set fname (@dirName+"/"+@dirInfo.d_name)
+      chmod @fname 0777
+      remove @fname
+      if ( @ITL_Status != 0 ) {
+        stat @fname var
+        if ( @ITL_Status != 0 ) {
+          if ( @var == 0 ) {
+            echo The file is special file, use fts to remove it.
+            set commd ("fts delmount "+@fname)
+            shellexec commd
+          }
+        }
+        else {
+          if ( @var.st_mode & $S_IFDIR ) {
+            exec clearDir_Proc @fname
+            verifyStatus false
+          }
+        }
+      }
+    }
+  while ( @readFlag == 0 )
+  closedir @dirPtr
+  rmdir @dirName
+  verifyStatus true
+proc_END
+
+************************************************************************
+*
+* Define errorMessage procedure
+*
+
+set err_Process proc proc_END
+*****
+	echo @errorMessage
+	set errorCounter (@errorCounter + 1)
+*****
+proc_END
+
+
+************************************************************************
+*
+* This procedure requires two parameters param.0 is the script name and
+* param.1 is the errorCounter.
+*
+
+set report_Proc proc 2 arg1 string arg2 int proc_END
+* This procedure reports the results of the script execution.
+if ( @arg2 != 0 ) {
+   echo @arg1 FAILED with @arg2 errors."
+}
+else {
+   echo @arg1 PASSED.
+}
+proc_END
+
+set errorMessage ""
+set errorCounter 0
+getwd currentDir
+echo The current directory is $currentDir
+echo
+
+* Prepare the test dir.
+if ( $ITL_SystemType == solaris ) {
+  set accessFlagE  $F_OK
+}
+else {
+  set accessFlagE  $E_ACC
+}
+verifyStatus false
+access $testDir $accessFlagE
+if ( $ITL_Status == 0 ) {
+  exec clearDir_Proc $testDir
+}
+verifyStatus true
+mkdir $testDir 0777
+
+echo
+echo Running basic.scr
+echo
+
+set commd ( "fts aggrinfo " + $ITL_HostName + " " + $aggrName )
+shellexe commd
+
+chdir $testDir
+
+
+* Create two test files.
+
+open $testFile ($O_CREAT|$O_RDWR) 0777 fId
+write $fId "This is a test file"
+close $fId
+
+symlink $testFile $linkFile
+
+!* Test VIOCACCESS command. Those tests will not be checked.
+*  Just want to see if PIOCTL returns with no error.
+*  Test this command on a regular file.
+
+pioctl $VIOCACCESS FALSE $testFile $sec_acl_perm_read
+pioctl $VIOCACCESS FALSE $testFile $sec_acl_perm_write
+pioctl $VIOCACCESS FALSE $testFile $sec_acl_perm_execute
+pioctl $VIOCACCESS FALSE $testFile $sec_acl_perm_control
+pioctl $VIOCACCESS FALSE . $sec_acl_perm_insert
+pioctl $VIOCACCESS FALSE . $sec_acl_perm_delete
+
+* Test link files. 
+* Here again am not sure if the link flag is used this way or not.
+pioctl $VIOCACCESS FALSE $testFile $sec_acl_perm_read
+pioctl $VIOCACCESS FALSE $testFile $sec_acl_perm_write
+pioctl $VIOCACCESS FALSE $testFile $sec_acl_perm_execute
+pioctl $VIOCACCESS FALSE $testFile $sec_acl_perm_control
+
+* Creat a mount point and try to delete it by VIOC_AFS_DELETE_MT_PT.
+!* Create a test mount point.
+
+set commd ("fts create " + $fileSet + " " + $ITL_HostName + " " + $aggrName)
+shellexe commd
+set commd ("fts crmount " + $mountPoint+" "+$fileSet)
+shellexe commd
+
+stat $mountPoint var
+if ( $ITL_Status != 0 ) {
+  set errorMessage ("FAILED : "+$mountPoint+" has not been created.")
+  exec err_Process 
+}
+
+
+!* Test delete the mount point. VIOC_AFS_DELETE_MT_PT TRUE. 
+pioctl $VIOC_AFS_DELETE_MT_PT TRUE . $mountPoint
+
+verifyStatus false
+stat $mountPoint var
+if ( $ITL_Status == 0 ) {
+  set errorMessage "FAILED : testmnt has not been removed."
+  exec err_Process 
+}
+
+!* Create it again.
+shellexec commd
+
+verifyStatus true
+!* Test stat mount point command. VIOC_AFS_STAT_MT_PT TRUE.
+pioctl $VIOC_AFS_STAT_MT_PT TRUE . $mountPoint typeVar cellName fsVar
+echo $typeVar
+echo $cellName
+echo $fsVar
+
+!* Delete it again.
+pioctl $VIOC_AFS_DELETE_MT_PT TRUE . $mountPoint
+
+!* Test VIOC_AFS_SYSNAEM command.
+
+* Try to get current sysname.
+pioctl $VIOC_AFS_SYSNAME FALSE GET sysName
+echo $sysName 
+* Try to set sysname.
+pioctl $VIOC_AFS_SYSNAME FALSE SET junksysname
+pioctl $VIOC_AFS_SYSNAME FALSE GET sysNameNew
+
+* Compare them to see if they are same.
+if ( $sysNameNew != junksysname ) {
+  set errorMessage "FAILED: set sysname for @sys variable."
+  exec err_Process 
+}
+
+!* Set it back to the original.
+pioctl $VIOC_AFS_SYSNAME FALSE SET $sysName
+
+!* Test VIOC_CLOCK_MGMT
+* Test read and do not set the cm time.
+pioctl $VIOC_CLOCK_MGMT FALSE 0 READ NO currTimeVar lastSocckVar lastSetTimeVar
+
+* Test read and do not set the cm time.
+pioctl $VIOC_CLOCK_MGMT FALSE 0 WRITE NO 0 0 currTimeVar lastSocckVar lastSetTimeVar
+
+!* Test VIOCCKBACK command.
+* Flushing the mapping between filesets name and IDs.
+pioctl $VIOCCKBACK FALSE 
+
+!* Test VIOCCKSERV for local cell servers only
+* Checks for functioning servers.
+* Check the local cell 
+echo Found $numServs down.
+pioctl $VIOCCKSERV FALSE 0x2 "" numServs var
+if ( $numServs != 0 ) {
+  echo $numServs servers are down.
+  loop x 0 1 ($numServs-1)
+    show var[$x]
+  endloop 
+}
+
+!* Test VIOCCKSERV for all cells and servers
+* Check servers known in all  cells.
+pioctl $VIOCCKSERV FALSE 0x1 "" numServs var
+echo Found $numServs down.
+if ( $numServs != 0 ) {
+  echo $numServs servers are down.
+  loop x 0 1 ($numServs-1)
+    show var[$x]
+  endloop 
+}
+
+!* Test VIOCCKSERV for local cell by name
+* Check server by name.
+pioctl $VIOCCKSERV FALSE 0x0 $cellName numServs var
+echo Found $numServs down.
+if ( $numServs != 0 ) {
+  echo $numServs servers are down.
+  loop x 0 1 ($numServs-1)
+    show var[$x]
+  endloop 
+}
+
+!* Test VIOC_FILE_CELL_NAME -- get the cell for the pathname
+pioctl $VIOC_FILE_CELL_NAME FALSE $testFile var
+if ( $var != $cellName ) {
+  set errorMessage "FAILED: wrong cell name."
+  exec err_Process 
+}
+
+!* Test flushing file.
+pioctl $VIOCFLUSH FALSE $testFile
+pioctl $VIOCFLUSH TRUE $linkFile
+
+!* Test flushing volume.
+pioctl $VIOC_FLUSHVOLUME FALSE $testFile
+pioctl $VIOC_FLUSHVOLUME TRUE $linkFile
+
+!* Test SETCACHESIZE and GETCACHEPARMS
+
+set cacheSizeNew 512
+* Get cache size first.
+pioctl $VIOCGETCACHEPARMS FALSE permVar useVar cachePlaceVar
+if ( $cachePlaceVar == 0 ) {
+  echo The current cache is in DISK.
+}
+else {
+  echo The current cache is in memeory.
+}
+echo The permitted cache size is $permVar
+echo The used cache size is $useVar
+
+pioctl $VIOCSETCACHESIZE FALSE $cacheSizeNew
+pioctl $VIOCGETCACHEPARMS FALSE permVarNew useVarNew currVarNew
+assert ($permVarNew == $cacheSizeNew)
+
+!* Set the cache size back to the original.
+pioctl $VIOCSETCACHESIZE FALSE $permVar
+
+!* Test VIOCGETCELL -- Lists the known cell configurations
+* Need to iterate over all cells found in the CM to verify membership
+* in local cell.
+set x int 0
+set found string "false"
+set endOfCells string "false"
+do
+  verifyStatus false
+  pioctl $VIOCGETCELL FALSE $x numVar sockVar cellVar
+
+  if ($ITL_Status != 0) {
+    verifyStatus true
+    set endOfCells "true"
+  } else {
+    verifyStatus true
+    * Should find at least one cell server for each cell
+    if ( $numVar == 0 ) { 
+      set errorMessage "FAILED: did not get the cell server name."
+      exec err_Process 
+    } else {
+
+      loop server 0 1 ($numVar - 1) 
+        * Should export AF_FAMILY flags (2).
+        if ( $sockVar[$server].sa_family != 2 ) {
+          set errorMessage "FAILED: got an unsupported family address."
+          exec err_Process 
+        }
+      endloop
+    }
+    * Must eventually find our local cell here.
+    if ( $cellVar == $cellName ) {
+      set found "true"
+    }
+    echo Found a cell called: $cellVar
+  }
+  set x ($x + 1)
+while ( $endOfCells != "true" )
+
+if ( $found == "true" ) {
+  echo Found a match for our local cell: $cellName
+} else {
+  set errorMessage "FAILED: did not find our local cell name."
+  exec err_Process 
+}
+
+
+!* VIOCGETFID - Gtes the file handle for the file or directory.
+!* Test try to get afsFid for a regular file
+pioctl $VIOCGETFID FALSE $testFile fidVar
+!* Test try to get afsFid for a link file
+pioctl $VIOCGETFID TRUE $linkFile lfidVar
+!* The two fids should be same.
+echo Just want to see what is the defference.
+*assert ( $fidVar.Cell == $lfidVar.Cell )
+*assert ( $fidVar.Volume == $lfidVar.Volume )
+*assert ( $fidVar.Vnode == $lfidVar.Vnode )
+*assert ( $fidVar.Unique == $lfidVar.Unique )
+
+!* Test VIOCLISTSTORES - lists files waiting to be written.
+pioctl $VIOCLISTSTORES FALSE numVar hyperVar
+if ( $numVar != 0 ) {
+  show hyperVar
+}
+
+!* SETVOLSTAT and GETVOLSTAT.
+!* Test get and set volume status.
+set status1 $VIOC_DEF_SGIDOK
+set status2 $VIOC_DEF_DEVOK
+pioctl $VIOCGETVOLSTAT FALSE $testFile statusVar
+pioctl $VIOCSETVOLSTAT FALSE $testFile $status1
+pioctl $VIOCGETVOLSTAT FALSE $testFile statusVarNew
+if ( ($statusVarNew & $status1) == 0 ) {
+  set errorMessage "FAILED: inconsistent result for set and get (sgidok) volume status."
+  exec err_Process 
+}
+pioctl $VIOCSETVOLSTAT FALSE $testFile $status2
+pioctl $VIOCGETVOLSTAT FALSE $testFile statusVarNew
+if ( ($statusVarNew & $status2) == 0 ) {
+  set errorMessage "FAILED: inconsistent result for set and get (devok) volume status."
+  exec err_Process 
+}
+pioctl $VIOCSETVOLSTAT FALSE $testFile ($status2|$status1)
+pioctl $VIOCGETVOLSTAT FALSE $testFile statusVarNew
+if ( $statusVarNew !=  ($status2|$status1) ) {
+  set errorMessage "FAILED: inconsistent result for set and get (2) volume status."
+  exec err_Process 
+}
+* set it back to the original.
+pioctl $VIOCSETVOLSTAT FALSE $testFile $statusVar
+
+!* Test VIOCPREFETCH prefetch a file.
+pioctl $VIOCPREFETCH FALSE $testFile
+pioctl $VIOCPREFETCH TRUE $linkFile
+
+!* VIOCRESETSTORES -- Stops trying file store.
+pioctl $VIOCRESETSTORES FALSE
+
+!* Test VIOCWHEREIS -- Finds address of servers containing fileset
+pioctl $VIOCWHEREIS TRUE $testFile numVar sockVar1 filesetVar
+pioctl $VIOCWHEREIS TRUE $testFile numVar sockVar2 filesetVar
+assert ( $sockVar1[0] == $sockVar2[0] ) 
+assert ( $sockVar1[0].sa_family == $sockVar2[0].sa_family )
+assert ( $sockVar1[0].sa_data == $sockVar2[0].sa_data )
+assert ( $numVar != 0 )
+assert ( $filesetVar != "" ) 
+
+************************************************************************
+!* Cleaning up.
+************************************************************************
+*
+*
+
+set commd ("fts delete " + $fileSet + " " + $ITL_HostName + " " + $aggrName)
+shellexe commd
+verifyStatus false
+stat $mountPoint var
+if ( $ITL_Status == 0 ) {
+  verifyStatus true
+  set commd ("fts delmount " + $mountPoint )
+  shellexe commd
+}
+verifyStatus true
+
+remove $testFile
+remove $linkFile
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+exec report_Proc "pioctl functionality test basic.scr" $errorCounter
+echo
+quit

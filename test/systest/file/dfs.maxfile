@@ -1,0 +1,163 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dfs.maxfile,v $
+# Revision 1.1.6.2  1996/03/11  02:43:56  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:07:21  marty]
+#
+# Revision 1.1.6.1  1995/12/11  21:59:30  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:58:46  root]
+# 
+# Revision 1.1.4.2  1994/07/19  13:20:16  rdl
+# 	Made command line interface uniform with the other automated DFS system tests.
+# 	[1994/07/19  13:17:31  rdl]
+# 
+# Revision 1.1.4.1  1994/06/10  20:49:12  devsrc
+# 	cr10872 - fixed copyright
+# 	[1994/06/10  17:19:06  devsrc]
+# 
+# Revision 1.1.2.2  1993/07/30  15:43:43  gmd
+# 	Initial version.
+# 	[1993/07/30  14:50:11  gmd]
+# 
+# $EndLog$
+############################################################################
+# TITLE: dfs.maxfile
+# SYNTAX:
+#       dfs.maxfile <datafile>
+# OBJECTIVE:
+#       Test the ability of dfs to handle a large file.
+# DESCRIPTION:
+# 	Write, read and delete a file of size BLOCKSIZE X NUMFILEWRITES
+#	If TESTSITE=LFS, create and delete the lfs fileset to contain it
+#	as well.
+############################################################################
+# use input args
+SCRIPT=`basename $0`
+
+USAGE="Usage: `basename $0` [-f] data_file"
+
+DATAFILE=
+while getopts :f: ARG
+do
+	case ${ARG} in
+		f)	if [ -n "$DATAFILE" ]	# multiple -f's?
+			then
+				echo $USAGE
+				exit 1
+			fi
+			DATAFILE=$OPTARG;;
+
+		*)	echo $USAGE
+			exit 1;;
+	esac
+done
+shift $(($OPTIND - 1))
+
+if [ -n "$DATAFILE" ]	# has DATAFILE been specified yet?
+then
+	if [ $# -gt 0 ]
+	then
+		echo $USAGE
+		exit 1
+	fi
+elif [ $# -ne 1 ]	# no DATAFILE anywhere
+then
+	echo $USAGE
+	exit 1
+else
+	DATAFILE=$1	# DATAFILE without -f
+fi
+
+if [ ! -r $DATAFILE ]	# DATAFILE exist and have read permission?
+then
+	echo "`basename $0`: Cannot open $DATAFILE for reading"
+	exit 2
+fi
+
+echo "Data file: $DATAFILE"
+
+# setup
+# source in configuration data
+. $DATAFILE
+
+# source in routine to check return codes
+. ./check_RC.ksh
+
+# keep track of when we started
+START_DATE=`date`
+echo "START DATE AND TIME IS $START_DATE"
+
+# check for space
+echo "$SCRIPT: fts aggrinfo -server $SERVER -aggr $AGGR"
+fts aggrinfo -server $SERVER -aggr $AGGR
+
+let FREESPACE=`fts aggrinfo -server $SERVER -aggr $AGGR | awk '{print $5}'`
+if (( FREESPACE < SETSIZE ))
+then
+        echo "Not enough room on $AGGR for a fileset of $SETSIZE kbytes"
+        exit 1
+fi
+
+# if LFS, do additional setup
+if [ "$TESTSITE" = "LFS" ]
+then
+	echo "$SCRIPT: Creating $FILESET and $MOUNTPOINT"
+	# create fileset and set the fileset's quota
+	fts create $FILESET -aggr $AGGR -server $SERVER
+	check_RC "$?" "create"
+	fts setquota -fileset $FILESET -size $SETSIZE
+	check_RC "$?" "setquota"
+	# create a mountpoint in dfs for accessing the lfs fileset
+	fts crmount -dir $MOUNTPOINT -fileset $FILESET
+	check_RC "$?" "crmount"
+	cm check
+fi
+
+# test
+cd $MOUNTPOINT
+echo "$SCRIPT: Attempting to write, read and delete a file of $BLOCKSIZE X $NUMFILEWRITES bytes"
+$TROOT/systest/file/filewnr -n $NUMFILEWRITES -b $BLOCKSIZE -p $PATTERN -f $FILE
+
+# verify
+echo "$SCRIPT: ls -l $MOUNTPOINT"
+ls -l $MOUNTPOINT
+echo "$SCRIPT: fts aggrinfo -server $SERVER -aggr $AGGR"
+fts aggrinfo -server $SERVER -aggr $AGGR
+
+# cleanup
+$TROOT/systest/file/filewnr -n $NUMFILEWRITES -b $BLOCKSIZE -p $PATTERN -f $FILE -r -d
+
+# verify
+echo "$SCRIPT: ls -l $MOUNTPOINT"
+ls -l $MOUNTPOINT
+echo "$SCRIPT: fts aggrinfo -server $SERVER -aggr $AGGR"
+fts aggrinfo -server $SERVER -aggr $AGGR
+
+echo "$SCRIPT: Successfully wrote, read and deleted a file of $BLOCKSIZE X $NUMFILEWRITES bytes"
+
+# if LFS, do additional cleanup
+if [ "$TESTSITE" = "LFS" ]
+then
+	echo "$SCRIPT: Deleting $FILESET and $MOUNTPOINT"
+	fts delmount -dir $MOUNTPOINT
+	check_RC "$?" "delmount"
+	fts delete $FILESET -aggr $AGGR -server $SERVER
+	check_RC "$?" "delete"
+fi
+
+echo "$SCRIPT: START DATE AND TIME WAS $START_DATE"
+echo "$SCRIPT: END DATE AND TIME IS `date`"
+echo "$SCRIPT: PASSED"
+
+
+
+
+

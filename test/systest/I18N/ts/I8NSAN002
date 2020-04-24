@@ -1,0 +1,105 @@
+#!/bin/dcecp
+#
+# FILE: I18N002
+#
+# USAGE:
+#
+# DESCRIPTION:
+#      This test will test the I18N support in security.
+#
+# PREREQUISITS:
+#      The OS on which this test is to run should have 
+#      the NLS support for the locales to be tested. 
+#
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+# The TET_ROOT environment variable should be set prior to running the test.
+# TET_ROOT is set to /dcetest/dcelocal/test/tet
+
+if {([catch {set TET_ROOT $env(TET_ROOT)}]) ||
+    ([string length $env(TET_ROOT)] == 0)} {
+    puts stderr "$argv0: TET_ROOT is not defined."
+    exit
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# PROCEDURE NAME: I18N_sec_001
+#	This procedure creates user accounts. 
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+proc I18N_sec_001 {} {
+
+    global TET_ROOT
+
+# Test purpose common routines
+    source $TET_ROOT/system/I18N/lib/test_common.tcl
+
+# Create user accounts
+create_rgy_accts
+}
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# PROCEDURE NAME: I18N_sec_002
+#	This procedure deletes user accounts.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+proc I18N_sec_002 {} {
+
+  global TET_ROOT
+
+# Test purpose common routines
+#    source $TET_ROOT/system/I18N/lib/test_common.tcl
+delete_rgy_accts
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# PROCEDURE NAME: test_begin
+#	Inititalizes the environment to run the test.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+proc test_begin_good {} {
+
+   global TET_ROOT CELL_ADMIN CELL_PW LOCALE_NAME MESSAGE_CAT
+
+   source $TET_ROOT/system/I18N/lib/test_common.tcl
+   set procname [lindex [info level 0] 0]
+
+# Login as cell_admin
+   if { [run_cmd {login $CELL_ADMIN -password $CELL_PW}] != 0 } {
+      tet_infoline Test Failed: It could not login as cell_admin.
+      tet_result FAIL
+   }
+   tet_infoline Logged in as cell_admin.
+
+# Set LANG and NLSPATH for the test
+   set_locale $LOCALE_NAME $MESSAGE_CAT
+   tet_infoline LANG and NLSPATH have been set.
+}
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# PROCEDURE NAME: test_terminate
+#
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+proc test_terminate_good {} {
+   global TET_ROOT LANG NLSPATH
+
+   source $TET_ROOT/system/I18N/lib/test_common.tcl
+
+#logout
+   if { [run_cmd {logout}] != 0 } {
+      tet_infoline User was unable to logout.
+   }
+
+# Return LANG and NLSPATH to the original values
+   reset_locale
+   tet_infoline LANG and NLSPATH were set back to the original values.   
+}
+
+# List of procedures for TET to run
+
+set iclist "ic1 ic2 "
+set ic1 "I18N_sec_001"
+set ic2 "I18N_sec_002"
+set tet_startup test_begin
+set tet_cleanup test_terminate
+
+# Source the TET main script into our script. The TET main
+# script is what will do the actual function calling.
+source $TET_ROOT/lib/tcl/tcm.tcl

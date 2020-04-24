@@ -1,0 +1,118 @@
+#
+#      SCCS:  @(#)makefile	1.2 (92/09/30) 
+#
+#	UniSoft Ltd., London, England
+#
+# (C) Copyright 1992 X/Open Company Limited
+#
+# All rights reserved.  No part of this source code may be reproduced,
+# stored in a retrieval system, or transmitted, in any form or by any
+# means, electronic, mechanical, photocopying, recording or otherwise,
+# except as stated in the end-user licence agreement, without the prior
+# permission of the copyright owners.
+#
+# X/Open and the 'X' symbol are trademarks of X/Open Company Limited in
+# the UK and other countries.
+#
+#
+# ************************************************************************
+#
+# SCCS:   	@(#)makefile	1.2 92/09/30
+# NAME:		makefile
+# PRODUCT:	DTET (Distributed Test Environment Toolkit) release 1.0b
+# AUTHOR:		Andrew Dingwall, UniSoft Ltd.
+# DATE CREATED:	June 1992
+#
+# DESCRIPTION:
+#	xresd makefile
+# 
+# MODIFICATIONS:
+# 
+# ************************************************************************
+
+include ../defines.mk
+LCDEFS = $(DTET_CDEFS)
+include ../common.mk
+
+# generic xresd .o files
+OFILES_GN = xresd.o cfname.o codesfile.o tfproc.o xresproc.o xtab.o fake.o rescode.o
+
+# INET xresd .o files
+OFILES_IN = xresd_in.o xresd_bs.o
+
+OFILES = $(OFILES_GN) $(OFILES_IN)
+
+ALL = tetxresd
+
+TARGETS = $(BIN)/tetxresd
+
+all: $(ALL)
+
+install: $(TARGETS)
+
+$(TARGETS): $$(@F)
+	cp $(@F) $@
+
+tetxresd: $P $(OFILES) $(LIBDAPI)
+	$(CC) $(LDFLAGS) -o $@ $(OFILES) $(LIBDAPI) $(SYSLIBS)
+	$(MCS) -c $@
+
+CFILES = $(OFILES_GN:.o=.c) $(OFILES_IN:.o=.c) \
+	../servlib/*.c ../inetlib/*.c ../dtetlib/*.c
+
+LLIBS = $(LLIB)/llib-lserv.ln $(LLIB)/llib-linet.ln $(LLIB)/llib-ldtet.ln
+
+lint:
+	lint -x $(CDEFS) $(OFILES_GN:.o=.c) $(OFILES_IN:.o=.c) \
+		lint.c lint_in.c $(LLIBS) $(LINTLIBS)
+
+tags: $(CFILES)
+	ctags $(CFILES)
+
+scope: $(CFILES)
+	ls -d $(CFILES) | sort -t/ +1 -o $@
+
+CLEAN clean:
+	rm -f $(ALL) $(OFILES)
+
+CLOBBER clobber: clean
+	rm -f $(TARGETS)
+
+FORCE FRC: clobber all
+
+
+# dependencies
+
+cfname.o: $(INC)/avmsg.h $(INC)/dtetlib.h $(INC)/dtmac.h $(INC)/dtmsg.h \
+	$(INC)/ltoa.h $(INC)/ptab.h xresd.h
+
+codesfile.o: $(INC)/avmsg.h $(INC)/dtetlib.h $(INC)/dtmac.h $(INC)/dtmsg.h \
+	$(INC)/ltoa.h $(INC)/ptab.h xresd.h
+
+rescode.o: $(INC)/error.h xresd.h
+
+fake.o: $(INC)/dtmsg.h $(INC)/error.h $(INC)/ptab.h $(INC)/server.h xresd.h
+
+tfproc.o: $(INC)/avmsg.h $(INC)/bstring.h $(INC)/btmsg.h $(INC)/dtetlib.h \
+	$(INC)/dtmac.h $(INC)/dtmsg.h $(INC)/error.h $(INC)/llist.h \
+	$(INC)/ltoa.h $(INC)/ptab.h $(INC)/valmsg.h xresd.h
+
+xresd.o: $(INC)/dtetlib.h $(INC)/dtmsg.h $(INC)/error.h $(INC)/ltoa.h \
+	$(INC)/ptab.h $(INC)/server.h $(INC)/servlib.h xresd.h xtab.h
+
+xresd_bs.o: $(INC)/avmsg.h $(INC)/btmsg.h $(INC)/dtetlib.h $(INC)/dtmac.h \
+	$(INC)/dtmsg.h $(INC)/error.h $(INC)/ptab.h $(INC)/server_bs.h \
+	$(INC)/valmsg.h
+
+xresd_in.o: $(INC)/dtmsg.h $(INC)/inetlib_in.h $(INC)/ptab.h \
+	$(INC)/server_in.h
+
+xresproc.o: $(INC)/avmsg.h $(INC)/dtetlib.h $(INC)/dtmac.h $(INC)/dtmsg.h \
+	$(INC)/error.h $(INC)/ltoa.h $(INC)/ptab.h $(DINC)/dtet/tet_api.h \
+	$(DINC)/dtet/tet_jrnl.h $(INC)/valmsg.h xresd.h xtab.h
+
+xtab.o: $(INC)/bstring.h $(INC)/dtetlib.h $(INC)/dtmac.h $(INC)/dtmsg.h \
+	$(INC)/error.h $(INC)/llist.h $(INC)/ltoa.h $(INC)/ptab.h \
+	$(INC)/valmsg.h xresd.h xtab.h
+
+

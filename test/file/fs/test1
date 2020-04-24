@@ -1,0 +1,385 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: test1,v $
+# Revision 1.1.12.1  1996/10/17  18:20:01  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:50:39  damon]
+#
+# Revision 1.1.5.4  1993/01/11  18:26:40  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  16:59:54  htf]
+# 
+# Revision 1.1.5.3  1992/10/28  16:12:57  jaffe
+# 	Transarc delta: fred-ot5472-use-testhome-variable 1.1
+# 	  Selected comments:
+# 	    Fixed the fs and low tests to correctly use TESTTOP.  We were setting a
+# 	    variable, testhome, as the location for the test scripts and executables,
+# 	    but we did not use it to execute C programs.
+# 	    (I checked out some scripts which did not need this change.)
+# 	    Use testhome when referencing C executables.
+# 	Transarc delta: jess-add-dumpkernel-in-fs-tests 1.3
+# 	  Selected comments:
+# 	    The icldump command and debug option for the tests have been added in the
+# 	    fs test scripts. You can run fs/tests with -debug to dump kernel in case
+# 	    of error. The delta also adds the icl_DumpKernel function in the C programm.
+# 	    Add icldump commands in each error case.
+# 	    Put the debug option in test1.
+# 	    See above.
+# 	    When the debug is set the dumpfile is always created eventhough
+# 	    there is no error.
+# 	Transarc delta: jess-ot5320-fix-fs-low-testhome 1.1
+# 	  Selected comments:
+# 	    The fs and low test shell scripts have the following if statement
+# 	    if [ "$TESTTOP" = "`pwd`" ]
+# 	    then
+# 	    UTIL_DIR=../util
+# 	    testhome=$TESTTOP
+# 	    else
+# 	    UTIL_DIR=$TESTTOP/util
+# 	    testhome=$TESTTOP/$testSuiteType
+# 	    fi
+# 	    The problem is that variable testSuiteType is not defined at this time.
+# 	    See above.
+# 	[1992/10/27  18:12:33  jaffe]
+# 
+# Revision 1.1.5.2  1992/08/28  18:11:38  jaffe
+# 	Transarc delta: rajesh-clean-fs-tests 1.6
+# 	  Selected comments:
+# 	    To remove make, clean options from fs tests
+# 	    Remove make and clean options
+# 	    Make the scripts modular, structured.
+# 	    The variable names are changed to follow coding standards.
+# 	    See above.
+# 	    Apply modification mentioned in revision 1.2 to 2 missed test file
+# 	    err1 and err2.
+# 	    Some bug fixes, and revision of tests err1 and err2. Introduction of
+# 	    a common functions ProcessResult to analyse the result.
+# 	    See above.
+# 	    Further changes to some utility functions.
+# 	    Added error test err2 to the Makefile
+# 	[1992/08/28  12:17:25  jaffe]
+# 
+# Revision 1.1.3.3  1992/05/29  22:58:07  mason
+# 	Transarc delta: fred-3754-change-script-name 1.1
+# 	  Selected comments:
+# 	    To clean up a number of defects with the tests.  In addition to defect
+# 	    3754, the changes also fix defects 3750 and 3748.
+# 	    Fixed setting of TESTTOP variable.
+# 	Transarc delta: fred-remove-fs-make-clean 1.1
+# 	  Selected comments:
+# 	    I originally created it to remove the make and clean options from the
+# 	    test1 and test5 scripts.  However I fixed a bug in test1 and closed it.  This
+# 	    keeps the make/clean fixes separate from the actual bug.  We may not want
+# 	    the make/clean fixes to go out until after 1.0.1.
+# 	    Removed source of fsSetSysName.  Now source script in util directory.
+# 	[1992/05/28  22:17:13  mason]
+# 
+# Revision 1.1.3.2  1992/05/21  12:39:54  jaffe
+# 	Transarc delta: fred-2980-and-2981-fix-sys 1.1
+# 	  Files modified:
+# 	    fs: Makefile, err1, err2, half_meg, test1, test10, test2
+# 	    fs: test2b, test2s, test3, test4, test5, test6, test7, test8
+# 	    fs: test9
+# 	  Selected comments:
+# 	    To fix reported defects indicating files could not be found.  Added two
+# 	    shell scripts, one to issue the correct command to get the system type
+# 	    (either AFS or DFS), and a second to generate a file from a string.
+# 	    Change variable sys to dfs_fsSysName and use fsSetSysName shell script.
+# 	Transarc delta: fred-merge-tests 1.1
+# 	  Selected comments:
+# 	    Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	    the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	    should be looking at the same test code.
+# 	    Changes to facilitate merge of local DFS test code with the OSF's.
+# 	Transarc delta: rajesh-fs-test1-fix-object-filename 1.1
+# 	  Files modified:
+# 	    fs: test1
+# 	  Selected comments:
+# 	    Make the binary name independent of the system type i.e. call it prog1
+# 	    and not prog1.pmax_u13 for example.
+# 
+# 	$TALog: test1,v $
+# 	Revision 4.24  1994/11/01  22:23:02  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r4.23 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	[1992/05/20  18:56:54  jaffe]
+# 
+# $EndLog$
+#
+###############################################################################
+#     Copyright (C) 1990, 1991 Transarc Corporation - All rights reserved     #
+###############################################################################
+
+# This script runs up to 9 simultaneous copies of prog1, all of which will
+# modify different parts of the same file at the same time.
+
+# Usage: test1 [-np #-processes] [-nt #-times] [-f filename] [-base number]
+#              [-debug]
+# the debug flag is not used in this script. It is for consistent purpose now.
+
+# Notes: default is test1 -np 1 -nt 1 -f shortfox -base 1
+#        -nt 0 means loop forever (i.e., #-times is infinite)
+#        the named file is copied to  tfile
+#        total number of processes must be <= 26
+
+# To run this from multiple client machines:
+# Start each client with a different -base, such that none of the letter
+# numbers collide. Start one client about 5 seconds before the others, to
+# allow it to copy tf.proto (or whatever) from $testhome.
+
+# Highest error number is: 2.
+
+###############################################################################
+
+#
+# PrintUsage() -
+#   Prints the usage message for this script.
+
+PrintUsage()
+{
+    echo "$programName runs multiple processes which write to one file"
+    echo "Usage: $programName [-np #-procs] [-nt #-times] [-f filename] [-base #]"
+}
+
+#
+# Initialise some variables. UTIL_DIR is the directory containing 
+# the script fs_FunctionsScript with common functions.
+#
+
+TESTTOP=${TESTTOP:="`pwd`"}
+
+if [ "$TESTTOP" = "`pwd`" ]
+then
+    UTIL_DIR=../util
+    testhome=$TESTTOP
+else
+    UTIL_DIR=$TESTTOP/util
+    testhome=$TESTTOP/fs
+fi
+
+. $UTIL_DIR/fs_FunctionsScript
+. $UTIL_DIR/fs_SetSysVar
+createFileCmd="$UTIL_DIR/fs_GenerateFile"
+
+trap '
+    cd $currentDir
+    rm -f tfile $programName.$$.out $programName.$$.running
+    echo "$programName killed; returning $scriptErrorExit" | tee -a $logFile
+    exit $scriptErrorExit
+     ' 2 3 15
+
+#
+# Initialise setup variables
+#
+
+fs_InitSetup fs
+
+#
+# Default option argument values
+#
+
+base=1
+file=tf.proto
+processCount=1
+iterationCount=1
+
+#
+# Parse the command line
+#
+
+while [ "$1" != "" ]
+do 
+    case $1 in 
+        help|-help) PrintUsage
+                    exit $successExit
+                    ;;
+
+        base|-base) CheckOptionValue "base" $testSuiteType $programName $*
+                    base=$2
+                    shift 2
+                    ;;
+
+        f|-f)       CheckOptionValue "f" $testSuiteType $programName $*
+                    file=$2
+                    shift 2
+                    ;;
+
+        np|-np)     CheckOptionValue "np" $testSuiteType $programName $*
+                    processCount=$2
+                    shift 2
+                    ;;
+
+        nt|-nt)     CheckOptionValue "nt" $testSuiteType $programName $*
+                    iterationCount=$2
+                    shift 2
+                    ;;
+        debug|-debug)
+                    dumpkernel="true"
+                    shift
+                    ;;
+
+        *)          echo "ERROR $testSuiteType/$programName: invalid argument \"$1\"" | tee -a $logFile
+                    exit $scriptErrExit
+                    ;;
+    esac
+done
+
+#
+# Validate arguments
+#
+
+if [ $base -lt 1 -o $base -gt 26 ]
+then 
+    echo "$programName: base must be from 1 to 26" | tee -a $logFile
+    exit $scriptErrorExit
+elif [ $processCount -lt 1 ]
+then 
+    echo "$programName: number of processes must be >= 1" | tee -a $logFile
+    exit $scriptErrorExit
+elif [ $processCount -gt 26 ]
+then 
+    echo "$programName: number of processes must be <= 26" | tee -a $logFile
+    exit $scriptErrorExit
+elif [ $iterationCount -lt 0 ]
+then 
+    echo "$programName: number of times must be >= 0" | tee -a $logFile
+    exit $scriptErrorExit
+fi
+
+###############################################################################
+
+if [ ! -f tfile ]
+then
+    if [ ! -f $file -a ! -f $testhome/$file ]
+    then
+        file=tf.proto
+        cat > $file <<==END==
+the quick brown fox jumps over the lazy dog
+the quick brown fox jumps over the lazy dog
+the quick brown fox jumps over the lazy dog
+the quick brown fox jumps over the lazy dog
+==END==
+    fi
+    if [ -f $file ]
+    then 
+        cp $file tfile; echo "copied $file" | tee -a $logFile
+    else 
+        cp $testhome/$file tfile
+        echo "copied $testhome/$file" | tee -a $logFile
+    fi
+    chmod 666 tfile
+fi
+
+fs_CheckBinaryExistence $testhome/$cProgramName
+
+#
+# Start test
+#
+
+(
+    echo "$programName (thumper) starting in $currentDir"
+    echo "Host `hostname` ($dfs_fsSysName)"
+    date
+) | tee -a $logFile
+
+echo "$processCount processes, base $base, parent process number $$; $iterationCount times" | tee -a $logFile
+
+(
+    echo "Size of data file:"
+    wc tfile
+) | tee -a $logFile
+
+fs_DetermineFSType
+
+echo "" | tee -a $logFile
+echo "" > $programName.$$.running
+
+processNum=1
+while [ $processNum -le $processCount ]
+do
+    q=`expr $processNum + $base - 1`
+    echo "$programName starting process number $processNum (letter number $q)" | tee -a $logFile
+    $testhome/$cProgramName $iterationCount $q > $programName.$q.out &
+    processNum=`expr $processNum + 1`
+done
+
+wait
+
+###############################################################################
+
+rm -f $programName.$$.running
+if [ $iterationCount -ne 0 ]
+then
+    echo "done modifying; waiting for others" | tee -a $logFile
+    while [ `ls $programName.[0-9]*.running 2>/dev/null | wc -l` -gt 0 ]
+    do 
+        date
+        sleep 10
+    done
+    echo "done waiting for others" | tee -a $logFile
+    echo "" | tee -a $logFile
+
+    if [ -f $file ]
+    then 
+        cp $file $programName.$$.out; else cp $testhome/$file $programName.$$.out
+    fi
+    diff $programName.$$.out tfile > /dev/null 2> /dev/null
+    if [ $? -ne 0 ]
+    then 
+        echo "- data file is incorrect (E1)" | tee -a $logFile; errorCount=`expr $errorCount + 1`
+    else 
+        echo "data file is correct" | tee -a $logFile
+    fi
+
+    processNum=1
+    while [ $processNum -le $processCount ]
+    do
+        q=`expr $processNum + $base - 1`
+        correct=TRUE
+
+        grep -s ERROR $programName.$q.out
+        if [ $? -ne 1 ]
+        then
+            echo "- $programName process $processNum failed (E2)" | tee -a $logFile
+            grep ERROR $programName.$q.out | sed 's/^/- /' | tee -a $logFile
+            errorCount=`expr $errorCount + 1`
+            correct=FALSE
+        fi
+
+        if [ $correct = TRUE ]
+        then 
+            echo "Process $processNum results OK" | tee -a $logFile
+        fi
+
+        processNum=`expr $processNum + 1`
+    done
+
+    echo "" | tee -a $logFile
+fi
+
+#
+# Remove temporary file created by the test. (Previously done in -clean option)
+#
+
+rm -f tfile $programName.$$.out $programName.$$.running tf.proto
+
+(
+    echo ""
+    echo "$testSuiteType/$programName returning $errorCount in $currentDir"
+    date
+) | tee -a $logFile
+
+exit $errorCount
+
+
+
+

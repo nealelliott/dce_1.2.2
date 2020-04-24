@@ -1,0 +1,210 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: new-block-security.test,v $
+# Revision 1.1.12.1  1996/10/02  17:18:27  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:28:31  damon]
+#
+# $EndLog$
+
+# /* Copyright (C) 1994, 1992 Transarc Corporation - All rights reserved */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/new-block-security.test,v 1.1.12.1 1996/10/02 17:18:27 damon Exp $
+
+# new-block-security.test -- sets up various cases to test the new block
+#     security code.  The basic idea is to try cases where the user-data
+#     is written before the metadata is committed, and the reverse.  For
+#     completeness we also try neither being written nor committed and
+#     both written and committed.  Also try this with fragments and with
+#     blocks.  Also try cases where the reused storage used to be
+#     metadata and user-data.
+#
+#     To force metadata updates no to commit we use a special mechanism
+#     invoked by the command "modify_afsdb anode on 28" which prevents
+#     any new transactions from committing.  For details see the comment
+#     in block_alloc.c:epib_EndTran.
+#
+#     To force user data we use "quiesce fsync" and to commit
+#     transactions we use "quiesce commit".
+
+new-block-security 1
+
+open_device 1 4096 1024 300
+
+# Make a large log.  Min size is 21 blks.  Need about 4X trans so the
+# DEFER tran can start.
+create_aggregate 100
+
+# initialize all space in aggregate to something non-zero
+create_vol space 0,,0 1000
+
+create_file file
+write_file 0 4096 4148762262
+fsync
+
+create_file frag-file
+write_file 0 1000 4148762263
+fsync
+
+create_dir dir
+write_file 0 4096 4148762264
+fsync
+
+create_dir frag-dir			# don't really need this, but symmetry
+write_file 0 1000 41487622645
+fsync
+
+# scribble on all the rest of the space
+create_file big
+(code = AGGREGATEFULL) write_file 0 1000000 4148762266
+fsync					# make sure data gets to disk
+aggr_info f=6
+create_file spare-frag
+write_file 0 3000 4148762267
+fsync
+aggr_info f=3
+create_dir spare-frag-logged
+write_file 0 2000 4148762268
+fsync
+aggr_info f=1
+create_dir bogus-spare-frag-logged
+write_file 0 1000 4148762268
+fsync
+
+aggr_info f=0
+open_file big
+truncate_file 0
+
+create_vol test 0,,0 100
+create_file test-file
+fsync
+quiesce fsync				# clean up any lingering dirty bufs
+save /tmp/new-block-security.fn
+
+# case: NULL
+(var=1) write_file 0 1000
+(var=1) abort
+
+# case: USER-DATA/any
+(var=2) modify_afsdb anode on 28	# defer trans
+(var=2) fork sync.int.test		# this can sometimes deadlock so wait
+(var=2)					# 60 seconds then sync
+(var=2) write_file 0 1000
+(var=2) get_info l=1000
+(var=2) quiesce fsync
+(var=2) abort
+
+# case: META-DATA/any
+(var=3) write_file 0 1000
+(var=3) quiesce commit
+(var=3) abort
+
+# case: BOTH/any
+(var=4) write_file 0 1000
+(var=4) quiesce commit fsync
+(var=4) abort
+
+# disk space contrained cases
+
+open_file big
+(code = AGGREGATEFULL) write_file 0 1000000 4148762269
+quiesce fsync				# defer trans needs undo-zeros flushed
+aggr_info f=0
+
+# case: NULL/dir
+#    Test existing freed block code.
+(var=5) open_file dir
+(var=5) truncate 0
+(var=5) aggr_info f=4
+(var=5) open_file test-file
+(var=5) write_file 0 1000
+(var=5) abort
+
+# case: NULL/file
+#    Test existing freed block code's protection of unlogged to unlogged
+#    transitions.
+(var=6) open_file file
+(var=6) truncate 0
+(var=6) aggr_info f=4
+(var=6) open_file test-file
+(var=6) write_file 0 1000
+(var=6) abort
+
+# case: NULL/frag-file
+#    This will test new freed block code which extends protection to
+#    fragments, following tests could check this but in practice
+#    flushing dirty user-data ususally generates a log force which
+#    commits the deallocating transaction even if the freed block code
+#    doesn't force it to.
+(var=7) open_file frag-file
+(var=7) truncate 0
+(var=7) aggr_info f=1
+(var=7) open_file test-file
+(var=7) write_file 0 1000
+(var=7) abort
+
+# case: USER-DATA/dir
+(var=8) open_file dir
+(var=8) truncate 0
+(var=8) aggr_info f=4
+(var=8) open_file test-file
+(var=8) modify_afsdb anode on 28	# defer trans from now on
+(var=8) write_file 0 1000
+(var=8) get_info l=1000
+(var=8) quiesce fsync
+(var=8) abort
+
+# case: USER-DATA/file
+(var=9) open_file file
+(var=9) truncate 0
+(var=9) aggr_info f=4
+(var=9) open_file test-file
+(var=9) modify_afsdb anode on 28	# defer trans from now on
+(var=9) write_file 0 1000
+(var=9) get_info l=1000
+(var=9) quiesce fsync
+(var=9) abort
+
+# case: USER-DATA/frag-file
+(var=10) open_file frag-file
+(var=10) truncate 0
+(var=10) aggr_info f=1
+(var=10) open_file test-file
+(var=10) modify_afsdb anode on 28	# defer trans from now on
+(var=10) write_file 0 1000
+(var=10) get_info l=1000
+(var=10) quiesce fsync
+(var=10) abort
+
+# case: META-DATA/dir
+(var=11) open_file dir
+(var=11) truncate 0
+(var=11) aggr_info f=4
+(var=11) open_file test-file
+(var=11) write_file 0 1000
+(var=11) quiesce commit
+(var=11) abort
+
+# case: META-DATA/file
+(var=12) open_file file
+(var=12) truncate 0
+(var=12) aggr_info f=4
+(var=12) open_file test-file
+(var=12) write_file 0 1000
+(var=12) quiesce commit
+(var=12) abort
+
+# case: META-DATA/frag-file
+(var=13) open_file frag-file
+(var=13) truncate 0
+(var=13) aggr_info f=1
+(var=13) open_file test-file
+(var=13) write_file 0 1000
+(var=13) quiesce commit
+(var=13) abort
+
+end

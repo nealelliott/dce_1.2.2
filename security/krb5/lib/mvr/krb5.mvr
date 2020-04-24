@@ -1,0 +1,542 @@
+--
+-- @OSF_COPYRIGHT@
+-- COPYRIGHT NOTICE
+-- Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+-- ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+-- src directory for the full copyright text.
+--
+-- HISTORY
+-- $Log: krb5.mvr,v $
+-- Revision 1.1.18.2  1996/10/03  15:06:08  arvind
+-- 	add etype, sam ASN.1 crud.
+-- 	Bring into agreement with latest pre-draft of pk-init.
+-- 	[1996/09/16  21:29 UTC  sommerfeld  /main/DCE_1.2.2/sommerfeld_pk_kdc_1/1]
+--
+-- 	EncTicketPart: make caddr field OPTIONAL as defined in RFC1510.
+-- 	Add comment about sname variance in KDC-REQ-BODY
+-- 	[1996/03/09  23:29:52  marty  1.1.16.3]
+--
+-- Revision 1.1.18.1  1996/07/08  18:37:27  arvind
+-- 	Merge PSM, sec_pvtkey, sec_pubkey, dced, base defs for Public Key Login
+-- 	[1996/06/11  17:57 UTC  aha  /main/DCE_1.2.2/1]
+-- 
+-- 	Merge ASN.1 code and encoding functions for public key login
+-- 	[1996/05/16  19:54 UTC  aha  /main/DCE12_PK/1]
+-- 
+-- 	Additions for public key login
+-- 	[1996/04/16  20:03 UTC  aha  /main/aha_pk2/1]
+-- 
+-- 	EncTicketPart: make caddr field OPTIONAL as defined in RFC1510.
+-- 	Add comment about sname variance in KDC-REQ-BODY
+-- 	[1996/03/09  23:29:52  marty  1.1.16.3]
+-- 
+-- Revision 1.1.16.3  1996/03/09  23:29:52  marty
+-- 	Update OSF copyright year
+-- 	[1996/03/09  22:45:14  marty]
+-- 
+-- Revision 1.1.16.2  1995/12/08  18:02:58  root
+-- 	Submit OSF/DCE 1.2.1
+-- 	[1995/12/08  17:00:27  root]
+-- 
+-- Revision 1.1.12.1  1994/10/25  22:11:38  mullan_s
+-- 	[OT12495] Plaintext third party preauth fixes
+-- 	[1994/10/25  22:11:13  mullan_s]
+-- 
+-- Revision 1.1.6.2  1994/08/26  18:41:24  mullan_s
+-- 	[OT11557] Add data structures to subtype DCE preauth data
+-- 	[1994/08/25  18:12:40  mullan_s]
+-- 
+-- Revision 1.1.6.1  1994/05/11  19:25:16  ahop
+-- 	hp_sec_to_osf_2 drop
+-- 	Add support for encoding/decoding krb5_pa_third_party struct.
+-- 	Add support for encoding and decoding krb5_time_and_key.
+-- 	[1994/04/29  21:22:37  ahop]
+-- 
+-- Revision 1.1.4.2  1992/12/29  16:00:42  zeliff
+-- 	Embedding copyright notice
+-- 	[1992/12/28  21:16:56  zeliff]
+-- 
+-- Revision 1.1.2.2  1992/04/16  15:10:29  pato
+-- 	*** empty log message ***
+-- 	[1992/04/16  15:03:42  pato]
+-- 
+-- 	-- Fix OT2756
+-- 	-- Update definition of an authenticator to include optional
+-- 	-- authorization data (conformant with revision 5 of the Kerberos
+-- 	-- V5 spec).  This change does not affect compatibility with
+-- 	-- earlier releases of the DCE.
+-- 	[1992/04/14  21:17:08  pato]
+-- 
+-- $EndLog$
+
+
+--
+-- Copyright (c) Hewlett-Packard Company 1991, 1994
+-- Unpublished work. All Rights Reserved.
+--
+-- $Source: /u0/rcs_trees/dce/rcs/security/krb5/lib/mvr/krb5.mvr,v $
+-- $Author: arvind $
+-- $Id: krb5.mvr,v 1.1.18.2 1996/10/03 15:06:08 arvind Exp $
+--
+-- Based on:
+-- Source: /afs/athena.mit.edu/astaff/project/krb5/src/lib/asn.1/RCS/KRB5-asn.py,v
+-- Author: jtkohl
+-- Id: KRB5-asn.py,v 5.18 90/12/19 13:48:42 jtkohl Exp
+--
+-- Copyright 1989 by the Massachusetts Institute of Technology.
+--
+-- For copying and distribution information, please see the file
+-- <krb5/copyright.h>.
+--
+-- ASN.1 definitions for the kerberos network objects
+--
+
+KRB5 DEFINITIONS ::=
+BEGIN
+
+-- the order of stuff in this file matches the order in the draft RFC
+
+Realm ::= GeneralString
+
+PrincipalName ::=  SEQUENCE {
+    	name-type[0]        INTEGER,
+    	name-string[1]      SEQUENCE OF GeneralString
+}
+
+HostAddress ::= SEQUENCE  {
+	addr-type[0]			INTEGER,
+	address[1]			OCTET STRING
+}
+
+HostAddresses ::=	SEQUENCE OF SEQUENCE {
+	addr-type[0]	INTEGER,
+	address[1]	OCTET STRING
+}
+
+AuthorizationData ::=	SEQUENCE OF SEQUENCE {
+	ad-type[0]	INTEGER,
+	ad-data[1]	OCTET STRING
+}
+
+KDCOptions ::= BIT STRING
+
+LastReq ::=	SEQUENCE OF SEQUENCE {
+	lr-type[0]	INTEGER,
+	lr-value[1]	KerberosTime
+}
+
+KerberosTime ::=	GeneralizedTime -- Specifying UTC time zone (Z)
+
+Ticket ::=	[APPLICATION 1] SEQUENCE {
+	tkt-vno[0]	INTEGER,
+	realm[1]	Realm,
+	sname[2]	PrincipalName,
+	enc-part[3]	EncryptedData	-- EncTicketPart
+}
+
+TransitedEncoding ::= SEQUENCE {
+	tr-type[0]	INTEGER, -- Only supported value is 1 == DOMAIN-COMPRESS
+	contents[1]	OCTET STRING
+}
+
+-- Encrypted part of ticket
+EncTicketPart ::=	[APPLICATION 3] SEQUENCE {
+	flags[0]	TicketFlags,
+	key[1]		EncryptionKey,
+	crealm[2]	Realm,
+	cname[3]	PrincipalName,
+	transited[4]	TransitedEncoding,
+	authtime[5]	KerberosTime,
+	starttime[6]	KerberosTime OPTIONAL,
+	endtime[7]	KerberosTime,
+	renew-till[8]	KerberosTime OPTIONAL,
+	caddr[9]	HostAddresses OPTIONAL,
+	authorization-data[10]	AuthorizationData OPTIONAL
+}
+
+-- Unencrypted authenticator
+Authenticator ::=	[APPLICATION 2] SEQUENCE  {
+	authenticator-vno[0]	INTEGER,
+	crealm[1]	Realm,
+	cname[2]	PrincipalName,
+	cksum[3]	Checksum OPTIONAL,
+	cusec[4]	INTEGER,
+	ctime[5]	KerberosTime,
+	subkey[6]	EncryptionKey OPTIONAL,
+	seq-number[7]	INTEGER OPTIONAL,
+        authorization-data[8]   AuthorizationData OPTIONAL
+}
+
+TicketFlags ::= BIT STRING 
+
+-- the following two sequences MUST be the same except for the
+-- APPLICATION identifier
+AS-REQ ::= [APPLICATION 10] SEQUENCE {
+	pvno[1]	INTEGER,
+	msg-type[2]	INTEGER,
+	padata[3]	PA-DATA OPTIONAL,
+	req-body[4]	KDC-REQ-BODY
+}
+TGS-REQ ::= [APPLICATION 12] SEQUENCE {
+	pvno[1]	INTEGER,
+	msg-type[2]	INTEGER,
+	padata[3]	PA-DATA OPTIONAL, -- encoded AP-REQ, not optional
+	req-body[4]	KDC-REQ-BODY
+}
+-- the preceding two sequences MUST be the same except for the
+-- APPLICATION identifier
+
+-- Note that the RFC specifies that PA-DATA is just a SEQUENCE, and when
+-- it appears in the messages, it's a SEQUENCE OF PA-DATA.
+-- However, this has an identical encoding to the data defined here,
+-- which has PA-DATA as SEQUENCE OF SEQUENCE, and the messages use a
+-- straight PA-DATA. This has the advantage (at least under ISODE) of
+-- giving a "known" name to the PA-DATA array, making it more easily
+-- manipulated by "glue code".
+
+PA-DATA ::=	SEQUENCE OF SEQUENCE {
+	padata-type[1]	INTEGER,
+	pa-data[2]	OCTET STRING -- might be encoded AP-REQ
+}
+
+INTSEQ ::= SEQUENCE OF INTEGER
+
+--
+-- RFC 1510 (as of 6/10/96) currently marks the sname field of a
+-- KDC-REQ-BODY as optional. DCE however, does not. Moreover, MIT's
+-- current KRB5 implementation does not follow RFC 1510, which
+-- states that the sname can only be absent when the ENC-TKT-IN-SKEY
+-- option is specified. We have suggested changing the RFC to make
+-- sname a mandatory field; this change will probably be in the
+-- next revision.
+--
+KDC-REQ-BODY ::=	SEQUENCE {
+	 kdc-options[0]	KDCOptions,
+	 cname[1]	PrincipalName OPTIONAL, -- Used only in AS-REQ
+	 realm[2]	Realm, -- Server's realm  Also client's in AS-REQ
+	 sname[3]	PrincipalName,
+	 from[4]	KerberosTime OPTIONAL,
+	 till[5]	KerberosTime,
+	 rtime[6]	KerberosTime OPTIONAL,
+	 nonce[7]	INTEGER,
+	 etype[8]	INTSEQ, -- SEQUENCE OF INTEGER, EncryptionType, in preference order
+	 addresses[9]	HostAddresses OPTIONAL,
+	 enc-authorization-data[10]	EncryptedData OPTIONAL, -- AuthorizationData
+	 additional-tickets[11]	SEQUENCE OF Ticket OPTIONAL
+}
+
+-- the following two sequences MUST be the same except for the
+-- APPLICATION identifier
+AS-REP ::= [APPLICATION 11] SEQUENCE {
+	pvno[0]				INTEGER,
+	msg-type[1]			INTEGER,
+	padata[2]			PA-DATA OPTIONAL,
+	crealm[3]			Realm,
+	cname[4]			PrincipalName,
+	ticket[5]			Ticket,		-- Ticket
+	enc-part[6]			EncryptedData	-- EncKDCRepPart
+}
+TGS-REP ::= [APPLICATION 13] SEQUENCE {
+	pvno[0]				INTEGER,
+	msg-type[1]			INTEGER,
+	padata[2]			PA-DATA OPTIONAL,
+	crealm[3]			Realm,
+	cname[4]			PrincipalName,
+	ticket[5]			Ticket,		-- Ticket
+	enc-part[6]			EncryptedData	-- EncKDCRepPart
+}
+-- the preceding two sequences MUST be the same except for the
+-- APPLICATION identifier
+
+-- the following two sequences MUST be the same except for the
+-- APPLICATION identifier
+EncASRepPart ::=	[APPLICATION 25] SEQUENCE {
+	key[0]	EncryptionKey,
+	last-req[1]	LastReq,
+	nonce[2]	INTEGER,
+	key-expiration[3]	KerberosTime OPTIONAL,
+	flags[4]	TicketFlags,
+	authtime[5]	KerberosTime,
+	starttime[6]	KerberosTime OPTIONAL,
+	endtime[7]	KerberosTime,
+	renew-till[8]	KerberosTime OPTIONAL,
+	srealm[9]	Realm,
+	sname[10]	PrincipalName,
+	caddr[11]	HostAddresses OPTIONAL
+}
+EncTGSRepPart ::=	[APPLICATION 26] SEQUENCE {
+	key[0]	EncryptionKey,
+	last-req[1]	LastReq,
+	nonce[2]	INTEGER,
+	key-expiration[3]	KerberosTime OPTIONAL,
+	flags[4]	TicketFlags,
+	authtime[5]	KerberosTime,
+	starttime[6]	KerberosTime OPTIONAL,
+	endtime[7]	KerberosTime,
+	renew-till[8]	KerberosTime OPTIONAL,
+	srealm[9]	Realm,
+	sname[10]	PrincipalName,
+	caddr[11]	HostAddresses OPTIONAL
+}
+-- the preceding two sequences MUST be the same except for the
+-- APPLICATION identifier
+
+AP-REQ ::= [APPLICATION 14] SEQUENCE {
+	pvno[0]				INTEGER,
+	msg-type[1]			INTEGER,
+	ap-options[2]			APOptions,
+	ticket[3]			Ticket,
+	authenticator[4]		EncryptedData	-- Authenticator
+}
+
+APOptions ::= BIT STRING 
+
+AP-REP ::= [APPLICATION 15] SEQUENCE {
+	pvno[0]				INTEGER,
+	msg-type[1]			INTEGER,
+	enc-part[2]			EncryptedData	-- EncAPRepPart
+}
+
+EncAPRepPart ::= [APPLICATION 27] SEQUENCE {
+	ctime[0]			KerberosTime,
+	cusec[1]			INTEGER,
+	subkey[2]			EncryptionKey OPTIONAL,
+	seq-number[3]			INTEGER OPTIONAL
+}
+
+KRB-SAFE ::= [APPLICATION 20] SEQUENCE {
+	pvno[0]				INTEGER,
+	msg-type[1]			INTEGER,
+	safe-body[2]			KRB-SAFE-BODY,
+	cksum[3]			Checksum			
+}
+
+KRB-SAFE-BODY ::=	SEQUENCE {
+	user-data[0]			OCTET STRING,
+	timestamp[1]			KerberosTime OPTIONAL,
+	usec[2]				INTEGER OPTIONAL,
+	seq-number[3]			INTEGER OPTIONAL,
+	s-address[4]			HostAddress,	-- sender's addr
+	r-address[5]			HostAddress OPTIONAL -- recip's addr
+}
+
+KRB-PRIV ::=	[APPLICATION 21] SEQUENCE {
+	pvno[0]		INTEGER,
+	msg-type[1]	INTEGER,
+	enc-part[3]	EncryptedData	-- EncKrbPrivPart
+}
+
+EncKrbPrivPart ::=	[APPLICATION 28] SEQUENCE {
+	user-data[0]	OCTET STRING,
+	timestamp[1]	KerberosTime OPTIONAL,
+	usec[2]		INTEGER OPTIONAL,
+	seq-number[3]	INTEGER OPTIONAL,
+	s-address[4]	HostAddress,	-- sender's addr
+	r-address[5]	HostAddress OPTIONAL	-- recip's addr
+}
+
+KRB-ERROR ::=	[APPLICATION 30] SEQUENCE {
+	pvno[0]		INTEGER,
+	msg-type[1]	INTEGER,
+	ctime[2]	KerberosTime OPTIONAL,
+	cusec[3]	INTEGER OPTIONAL,
+	stime[4]	KerberosTime,
+	susec[5]	INTEGER,
+	error-code[6]	INTEGER,
+	crealm[7]	Realm OPTIONAL,
+	cname[8]	PrincipalName OPTIONAL,
+	realm[9]	Realm, -- Correct realm
+	sname[10]	PrincipalName, -- Correct name
+	e-text[11]	GeneralString OPTIONAL,
+	e-data[12]	OCTET STRING OPTIONAL
+}
+
+EncryptedData ::=	SEQUENCE {
+	etype[0]	INTEGER, -- EncryptionType
+	kvno[1]		INTEGER OPTIONAL,
+	cipher[2]	OCTET STRING -- CipherText
+}
+
+EncryptionKey ::= SEQUENCE {
+	keytype[0]			INTEGER,
+	keyvalue[1]			OCTET STRING
+}
+
+Checksum ::= SEQUENCE {
+	cksumtype[0]			INTEGER,
+	checksum[1]			OCTET STRING
+}
+
+METHOD-DATA ::= SEQUENCE {
+	method-type[0]	INTEGER,
+	method-data[1]	OCTET STRING OPTIONAL
+}
+
+TimeAndKey ::= SEQUENCE {
+        time[0]         KerberosTime,
+        key[1]          EncryptionKey
+}
+
+PAThirdParty ::= SEQUENCE {
+        machine-tgt-data[0]     OCTET STRING,
+        single-ebuf-data[1]     OCTET STRING,
+        double-ebuf-data[2]     OCTET STRING
+}
+
+SubPaData ::=   SEQUENCE {
+        sub-type[0]     INTEGER,
+        sub-data[1]     OCTET STRING
+}
+
+SubErrData ::=  SEQUENCE {
+        sub-type[0]     INTEGER,
+        sub-data[1]     OCTET STRING
+}
+
+DcePAKeys ::= SEQUENCE {
+	user-key[0]	OCTET STRING,
+	reply-key[1]	EncryptionKey
+}
+
+DcePAErrInfo ::= SEQUENCE {
+        err[0]		INTEGER OPTIONAL,
+	type[1]		INTEGER OPTIONAL,
+	subtype[2]	INTEGER OPTIONAL,
+	salt[3]		OCTET STRING OPTIONAL
+}
+
+
+--
+-- additions from v5b6
+-- !!! asn.1 is approximate..
+--
+
+ETYPE-INFO-ENTRY ::= SEQUENCE {
+	etype[0]	INTEGER,
+	salt[1]		OCTET STRING OPTIONAL
+}
+
+ETYPE-INFO ::= SEQUENCE OF ETYPE-INFO-ENTRY
+
+PA-ENC-TS-ENC   ::= SEQUENCE {
+       patimestamp[0]               KerberosTime, -- client's time
+       pausec[1]                    INTEGER OPTIONAL
+}
+
+-- encodings from 
+-- Integrating Single-use Authentication Mechanisms with Kerberos
+
+PA-SAM-CHALLENGE ::= SEQUENCE {
+    sam-type[0]                 INTEGER,
+    sam-flags[1]                SAMFlags,
+    sam-type-name[2]            GeneralString OPTIONAL,
+    sam-track-id[3]             GeneralString OPTIONAL,
+    sam-challenge-label[4]      GeneralString OPTIONAL,
+    sam-challenge[5]            GeneralString OPTIONAL,
+    sam-response-prompt[6]      GeneralString OPTIONAL,
+    sam-pk-for-sad[7]           EncryptionKey OPTIONAL,
+    sam-nonce[8]                INTEGER OPTIONAL,
+    sam-cksum[9]                Checksum OPTIONAL
+}
+
+-- these are [0].. [2] in the draft
+SAMFlags ::= BIT STRING {
+    use-sad-as-key(0),
+    send-encrypted-sad(1),
+    must-pk-encrypt-sad(2)
+}
+
+PA-SAM-RESPONSE ::= SEQUENCE {
+    sam-type[0]                 INTEGER,
+    sam-flags[1]                SAMFlags,
+    sam-track-id[2]             GeneralString OPTIONAL,
+    -- sam-enc-key is reserved for future use, so I'm making it OPTIONAL - mwe
+    sam-enc-key[3]              EncryptedData,
+                                   -- PA-ENC-SAM-KEY
+    sam-enc-nonce-or-ts[4]      EncryptedData,
+                                   -- PA-ENC-SAM-RESPONSE-ENC
+    sam-nonce[5]                INTEGER OPTIONAL,
+    sam-patimestamp[6]          KerberosTime OPTIONAL
+}
+
+PA-ENC-SAM-KEY ::= SEQUENCE {
+             sam-key[0]                 EncryptionKey
+}
+
+PA-ENC-SAM-RESPONSE-ENC ::= SEQUENCE {
+     sam-nonce[0]               INTEGER OPTIONAL,
+     sam-timestamp[1]           KerberosTime OPTIONAL,
+     sam-usec[2]                INTEGER OPTIONAL,
+     sam-passcode[3]            GeneralString OPTIONAL
+}
+
+--
+-- Additions for Public Key Authentication --
+--
+   PA-PK-AS-ROOT ::= SEQUENCE {
+           rootCert[0]         SEQUENCE OF OCTET STRING,
+           signedAuth[1]       SignedPKAuthenticator
+   }
+
+   SignedPKAuthenticator ::= SEQUENCE {
+           authent[0]          PKAuthenticator,
+           authentSig[1]       Signature
+   }
+
+   PKAuthenticator ::= SEQUENCE {
+           cksum[0]            Checksum OPTIONAL,
+           cusec[1]            INTEGER,
+           ctime[2]            KerberosTime,
+           nonce[3]            INTEGER,
+           kdcRealm[4]         Realm,
+           kdcName[5]          PrincipalName
+   }
+
+   Signature ::= SEQUENCE {
+           sigType[0]          INTEGER,
+           kvno[1]             INTEGER OPTIONAL,
+           sigHash[2]          OCTET STRING
+   }
+   PA-PK-AS-REP ::= SEQUENCE {
+           kdcCert[0]          SEQUENCE OF Certificate,
+           encryptShell[1]     EncryptedData, -- EncPaPkAsRepPartShell
+                                              -- encrypted by encReplyPartKey
+           encryptKey[2]       EncryptedData  -- EncPaPkAsRepTmpKey
+                                              -- encrypted by userPubliKey
+   }
+
+   EncPaPkAsRepPartShell ::= SEQUENCE {
+           encReplyPart[0]     EncPaPkAsRepPart,
+           encReplyPartSig[1]  Signature -- encReplyPart
+                                         -- signed by kdcPrivateKey
+   }
+
+   EncPaPkAsRepPart ::= SEQUENCE {
+           encReplyKey[0]      EncryptionKey,
+           nonce[1]            INTEGER
+   }
+
+   EncPaPkAsRepTmpKey ::= SEQUENCE {
+           encReplyTmpKey[0]   EncryptionKey
+   }
+
+   Certificate ::= SEQUENCE {
+-- !!! large chunks diked out; this is not intended to be permanent..
+--           version             [0]  Version, --  DEFAULT v1,
+--           serialNumber        CertificateSerialNumber,
+--           signature           AlgorithmIdentifier,
+           issuer              PrincipalName,
+--           validity            Validity,
+           subjectRealm        Realm,
+           subject             PrincipalName,
+--           subjectPublicKeyInfo SubjectPublicKeyInfo,
+--           issuerUniqueID      [1]  IMPLICIT UniqueIdentifier OPTIONAL,
+--           subjectUniqueID     [2]  IMPLICIT UniqueIdentifier OPTIONAL,
+           authentSig          Signature
+   }
+
+--
+-- End of Additions for Public Key Authentication --
+--
+
+END

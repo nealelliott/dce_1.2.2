@@ -1,0 +1,182 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: fldb_data.idl,v $
+ * Revision 1.1.66.1  1996/10/02  17:46:01  damon
+ * 	Newest DFS from Transarc
+ * 	[1996/10/01  18:37:01  damon]
+ *
+ * Revision 1.1.61.2  1994/06/09  14:07:07  annie
+ * 	fixed copyright in src/file
+ * 	[1994/06/09  13:22:17  annie]
+ * 
+ * Revision 1.1.61.1  1994/02/04  20:18:01  devsrc
+ * 	Merged from 1.0.3a to 1.1
+ * 	[1994/02/04  15:12:43  devsrc]
+ * 
+ * Revision 1.1.59.1  1993/12/07  17:23:37  jaffe
+ * 	1.0.3a update from Transarc
+ * 	[1993/12/03  15:17:07  jaffe]
+ * 
+ * Revision 1.1.4.5  1993/01/21  19:34:18  zeliff
+ * 	Embedding copyright notices
+ * 	[1993/01/19  19:47:51  zeliff]
+ * 
+ * Revision 1.1.4.4  1993/01/13  17:28:39  shl
+ * 	Transarc delta: cfe-ot6054-genl-and-i18n-spares 1.1
+ * 	  Selected comments:
+ * 	    Add spares to several RPC structures, with two goals:
+ * 	    - general future usage
+ * 	    - allow for at least some internationalization designs
+ * 	    The only tricky part of this work is that the on-the-wire representation for
+ * 	    directory contents is expanded.
+ * 	[1993/01/12  20:43:43  shl]
+ * 
+ * Revision 1.1.4.3  1992/11/24  17:01:45  bolinger
+ * 	Change include file install directory from .../afs to .../dcedfs.
+ * 	[1992/11/22  17:56:49  bolinger]
+ * 
+ * Revision 1.1.4.2  1992/08/31  19:43:00  jaffe
+ * 	Transarc delta: cfe-ot4029-portable-rpc-data-types 1.2
+ * 	  Selected comments:
+ * 	    If ``long'' could possibly mean ``64 bits'' any time soon, we need to keep
+ * 	    our RPC interfaces from breaking.
+ * 	    see above
+ * 	    More of the same.  Forgot a couple of .idl files, and needed to change
+ * 	    a couple of procedure signatures to match.
+ * 	[1992/08/30  02:19:54  jaffe]
+ * 
+ * Revision 1.1.2.2  1992/04/14  04:08:19  mason
+ * 	Transarc delta: vijay-ot1077-fts-delserverentry 1.4
+ * 	  Files modified:
+ * 	    flserver: fl_errors.et, fldb_data.idl, flprocs.c
+ * 	    userInt/fts: fts_userint.c, fts_userint.h, volc_main.c
+ * 	  Selected comments:
+ * 	    add the fts delserverentry command to the fts command suite
+ * 	    flags for fts_delserverentry
+ * 	    tested, ready to be checked in
+ * 	    These were manually fixed (rns).
+ * 	[1992/04/13  16:01:53  mason]
+ * 
+ * Revision 1.1  1992/01/19  02:48:48  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+/* Copyright (C) Transarc Corporation 1991--All Rights Reserved */
+
+interface fldb_data
+{
+
+	import "dcedfs/afsvl_data.idl";
+
+	/* value stored in siteDesc.DeletedFlag when that site has been deleted */
+	const long	SITEDELETEDSP1 = 0xde1e7ed;
+
+	/*typedef	string volumename<MAXFTNAMELEN>;*/
+
+	const long	DEFAULTBULK	=	10000;
+/*  Structure used by the VLListAttributes routine */
+	typedef struct VldbListByAttributes {
+		unsigned32	Mask;
+		afsNetAddr	site;
+		unsigned32	partition;
+		unsigned32	volumetype;
+		afsHyper	volumeid;
+		unsigned32	flag;
+		unsigned32	spare1;
+		unsigned32	spare2;
+		unsigned32	spare3;
+		unsigned32	spare4;
+		unsigned32	spare5;
+	} VldbListByAttributes;
+
+/* struct VldbListByAttributes Mask bit values */
+	const long	VLLIST_SITE	=	0x1;
+	const long	VLLIST_PARTITION =	0x2;
+	const long	VLLIST_VOLUMETYPE =	0x4;
+	const long	VLLIST_VOLUMEID =		0x8;
+	const long	VLLIST_FLAG =		0x10;
+
+/* Leading section of the vldb header (vlheader); contains frequently used globals and general statistics information */
+	typedef struct vital_vlheader {
+	    unsigned32    vldbversion;		    /* vldb version number--must be 1st */
+	    unsigned32    headersize;		    /* total bytes in header */
+	    unsigned32    freePtr;		    /* first (if any) free enry in freelist */
+	    unsigned32    eofPtr;			    /* first free byte in file */
+	    unsigned32    allocs;			    /* total calls to AllocBlock */
+	    unsigned32    frees;			    /* total calls to FreeBlock */
+	    afsHyper    MaxVolumeId;	    /* Global volume id holder */
+	    unsigned32    sitesPtr;		/* Pointer to first Sites structure */
+	    unsigned32    numSites;		/* Total number of sites allocated in the vldb */
+	    unsigned32    totalEntries[MAXVOLTYPES];    /* Total entries by voltype in vldb */
+	    afsHyper    theCellID;		/* hyper CellID for all */
+	    unsigned32    spare0;
+	    unsigned32    spare1;
+	    unsigned32    spare2;
+	    unsigned32    spare3;
+	    unsigned32    spare4;
+	    unsigned32    spare5;
+	    unsigned32    spare6;
+	    unsigned32    spare7;
+	    unsigned32    spare8;
+	    unsigned32    spare9;
+	    unsigned32    spare10;
+	    unsigned32    spare11;
+	    unsigned32    spare12;
+	} vital_vlheader;
+
+/* General stats on opcode hit frequency */
+	const short	MAX_NUMBER_OPCODES	= 45;
+	typedef struct vldstats {
+	    unsigned32 start_time;			/* Time statistics were last cleared */
+	    unsigned32 requests[MAX_NUMBER_OPCODES];	/* requests of each type */
+	    unsigned32 aborts[MAX_NUMBER_OPCODES];	/* aborts of each type */
+	    unsigned32 spare0;				/* for future use */
+	    unsigned32 spare1;
+	    unsigned32 spare2;
+	    unsigned32 spare3;
+	    unsigned32 spare4;
+	} vldstats;
+
+	typedef struct {
+		unsigned32 bulkentries_len;
+		[length_is(bulkentries_len)] vldbentry bulkentries_val[MAXBULKLEN];
+	} bulkentries;
+
+	typedef struct bulkSites{
+	    siteDesc Sites[9];
+	} bulkSites;
+
+	typedef struct {
+		unsigned32 bulkIDs_len;
+		[length_is(bulkIDs_len)] afsHyper bulkIDs_val[MAXBULKLEN];
+	} bulkIDs;
+
+	typedef struct siteAlter {
+		unsigned32 Mask;
+		byte KerbPrin[MAXKPRINCIPALLEN];
+		afsUUID Owner;
+		afsUUID ObjID;
+		unsigned32 CreationQuota;
+		unsigned32 CreationUses;
+		unsigned32 spare1;
+		unsigned32 spare2;
+	} siteAlter;
+/* struct siteAlter Mask bit values */
+	const long	SITEALTER_PRINCIPAL	=	0x0001;
+	const long	SITEALTER_OWNER	=	0x0002;
+	const long	SITEALTER_OBJID	=	0x0004;
+	const long	SITEALTER_CREATIONQUOTA=	0x0008;
+	const long	SITEALTER_CREATIONUSES=	0x0010;
+	/* must be the only bits set in the mask */
+	const long	SITEALTER_DELETEME = 	0x3000;
+}

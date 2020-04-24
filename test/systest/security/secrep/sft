@@ -1,0 +1,657 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: sft,v $
+# Revision 1.1.2.2  1996/03/09  20:52:08  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:46  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:28  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:08 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  20:05 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:54 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  19:36 UTC  gordon_l
+# 	Fixes for change_master/becom
+# 	e_master
+# 	[1995/12/11  22:22:30  root]
+# 
+# Revision 1.1.2.4  1993/08/11  13:24:38  sekhar
+# 	Increment loop counter in sft_lookup_upd_host .
+# 	[1993/08/11  13:18:26  sekhar]
+# 
+# Revision 1.1.2.3  1993/08/03  20:45:56  sekhar
+# 	In sft_upd_readfile, don't attempt to read the
+# 	sft_upd_logent file if no of entries is zero
+# 	[1993/08/03  20:45:33  sekhar]
+# 
+# Revision 1.1.2.2  1993/08/02  17:40:55  sekhar
+# 	Replication system test. Initial version
+# 	[1993/08/02  17:31:00  sekhar]
+# 
+# $EndLog$
+#
+
+#  History of changes
+#      sft_v_update - no longer dumps the log of the update test on failure
+#                     The callers should dump this. Due to change_master testing.
+
+if [ -z "${SFT_DEFINED}" ] ; then
+
+SFT_DEFINED=1
+
+. $PHOME/profile
+. $PHOME/replog
+
+#-----------------------------------------------------------------------
+#  sft_x_update - run the update functional test on a given slave
+#                 and either create or delete principals, org etc.
+#  
+#  IN  : arg1 ... hostname of the slave 
+#        arg2 ... num of principals to create/delete.
+#        arg3 ... Basename to be appended to princ, groups etc
+#        arg4 ... update flag ( -a to update ; -r to remove)
+#-----------------------------------------------------------------------
+
+sft_x_update()
+{
+    typeset bname
+
+    #   Set state variables which can be used to perform
+    #   error recovery.
+
+    bname=$3
+
+    sft_set_upd_state $1 $2 $bname $4
+
+    replog_msg "Starting update on $1 with following parameters: "
+    let IL=IL+1
+    replog_msg "Number of principals = $2"
+    replog_msg "Base name            = $bname"
+    replog_msg "Update type          = $4"
+    let IL=IL-1
+    $RSH_COMM $1 -n "  rm -f $LOGS_DIR/$1/update.status ;                 \
+                 rm -f $LOGS_DIR/$1/update.log    ;                 \
+                 $PHOME/update $4                                \
+                 -p $CELLADMIN -pw $CELLPW $2                       \
+                 /.:/$MASTER_NAME p_$bname g_$bname o_$bname         \
+                 > $LOGS_DIR/$1/update.log  2>&1;                   \
+              "                                                     \
+              'echo $?'" > $LOGS_DIR/$1/update.status" &
+}
+
+#-----------------------------------------------------------------------
+#   sft_x_update_hosts - starts up the update test specified hosts
+#
+#   IN : arg1 .... list of host names
+#        arg2 .... number of principals to add/remove 
+#        arg3 .... -a to add and -r to remove princs, grps, orgs and accts.
+# 
+#-----------------------------------------------------------------------
+
+sft_x_update_hosts()
+{
+    typeset i h_list h
+
+    set -A h_list $1
+    replog_msg "Starting update test on hosts ( ${h_list[*]} )"
+    
+    let IL=IL+1
+    for h in ${h_list[*]}
+    do
+        sft_x_update $h $2 $h $3
+    done
+    let IL=IL-1
+}
+
+#-----------------------------------------------------------------------
+#   sft_v_update : Verifies the result of update test on a given slave
+#
+#   in  : arg1 ..... hostname of the slave 
+#         arg2 ..... $SFT_UPDATE_ADD   - update was run with -a option
+#                    $SFT_UPDATE_DEL   - update was run with -r option
+#  
+#   returns ........ status of update
+#-----------------------------------------------------------------------
+
+sft_v_update()
+{
+    typeset st str
+
+    if [ "$2 " = "$SFT_UPDATE_ADD" ] ; then
+        str="(add)"
+    else
+        str="(delete)"
+    fi
+
+    st=`cat $LOGS_DIR/$1/update.status`
+    
+    if [ $st -ne 0 ] ; then
+        replog_error "update test $str on $1 : ** FAILED **"
+        replog_blank
+#        replog_error "Log of update execution on $1 ===="
+#        replog_dumpfile_fmt $LOGS_DIR/$1/update.log
+#        replog_blank
+    else
+        replog_msg "Update test $str on $1 Passed"
+        replog_blank
+    fi
+   
+#     sft_clr_upd_state $1 $2
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#   sft_v_update_hosts - Verifies the result of update test on specified hosts.
+#
+#   IN : arg1 ........... List of host names.
+#        arg2 ........... $SFT_UPDATE_ADD  - update was run with -a option
+#                         $SFT_UPDATE_DEL  - update was run with -r option
+#
+#   returns ............. 0 if all update passed on all specified host ; else 1
+#-----------------------------------------------------------------------
+
+sft_v_update_hosts()
+{
+    typeset i err st h h_list
+
+    set -A h_list $1
+
+    replog_msg "Verifying result of update on hosts ( ${h_list[*]} ) "
+    err=0
+    let IL=IL+1 ;
+    for h in ${h_list[*]}
+    do
+        sft_v_update $h $2 ; st=$?
+        if [ $st -ne 0 ] ; then
+            err=1
+        fi
+    done
+    let IL=IL-1
+    return $err
+}
+
+#-----------------------------------------------------------------------
+#   sft_x_query - runs the query test on a given slave
+#  
+#   args :  arg1 - hostname of the slave 
+#           arg2 - replica name (i.e. subsys/dce/sec/<slave_name> )
+#-----------------------------------------------------------------------
+
+sft_x_query()
+{
+    replog_msg "Starting query test on $1 "
+    $RSH_COMM $1 -n " rm -f $LOGS_DIR/$1/query.status ; \
+                rm -f $LOGS_DIR/$1/query.log    ; \
+                $PHOME/query /.:/$2 > $LOGS_DIR/$1/query.log 2>&1 ; " \
+              'echo $?' " > $LOGS_DIR/$1/query.status" &
+}
+
+#-----------------------------------------------------------------------
+#   sft_x_query_hosts - starts up the query test on specified hosts
+#
+#   IN arg1 ........... List of hostnames
+#      arg2 ........... List of replica names.
+#
+#-----------------------------------------------------------------------
+
+sft_x_query_hosts()
+{
+    typeset i st h h_list
+
+    set -A h_list $1 ; set -A h_name $2
+
+    replog_msg "Starting query test on hosts ( ${h_list[*]} )"
+    let IL=IL+1 ;
+
+    i=0 
+    while [ $i -lt ${#h_list[*]} ] 
+    do
+        sft_x_query ${h_list[i]} ${h_name[i]}
+        i=`expr $i + 1`
+    done
+    let IL=IL-1
+}
+
+#-----------------------------------------------------------------------
+#   sft_v_query : Checks the result of query test on the given replica
+#
+#   in  :  arg1 - hostname of the slave 
+#  
+#   returns ........ status of query
+#-----------------------------------------------------------------------
+
+sft_v_query()
+{
+    typeset st
+
+    st=`cat $LOGS_DIR/$1/query.status`
+    if [ $st -ne 0 ] ; then
+        replog_error "query test on $1 : ** FAILED **"
+        replog_blank
+        replog_blank
+        replog_error "==== log of query execution on $1 ===="
+        cat $LOGS_DIR/$1/query.log
+        replog_blank
+
+    else
+        replog_msg "query test on $1 passed"
+        replog_blank
+    fi
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#   sft_v_query_hosts - Checks result of query test on specified hosts
+#
+#   IN arg1 ........... List of host names.
+#-----------------------------------------------------------------------
+
+sft_v_query_hosts()
+{
+    typeset i err st h h_list
+
+    set -A h_list $1 
+    replog_msg "Verifying result of query test on hosts ( ${h_list[*]} )"
+    err=0
+    let IL=IL+1
+
+    for h in ${h_list[*]} 
+    do
+        sft_v_query $h ; st=$?
+        if [ $st -ne 0 ] ; then
+            err=1 
+        fi
+    done
+    let IL=IL-1 
+    return $err
+}
+
+#-----------------------------------------------------------------------
+#   sft_x_rgylogin - runs the rgylogin test on a given host
+#  
+#   args :  arg1 - hostname where rgylogin should be run
+#           arg2 - number of principals to login
+#-----------------------------------------------------------------------
+
+sft_x_rgylogin()
+{
+    let IL=IL+1
+    replog_msg "Starting rgylogin test on $1 : (no of princ = $2) "
+    $RSH_COMM $1 -n "  rm -f $LOGS_DIR/$1/rgylogin.status ;     \
+                 rm -f $LOGS_DIR/$1/rgylogin.log    ;     \
+                 $PHOME/rgylogin -p p_$1 $2          \
+                 > $LOGS_DIR/$1/rgylogin.log 2>&1 ;       \
+              "                                        \
+              'echo $?' " > $LOGS_DIR/$1/rgylogin.status" &
+    let IL=IL-1 
+}
+
+#-----------------------------------------------------------------------
+#   sft_x_rgylogin_hosts - starts up rgylogin test on specified hosts.
+#   
+#   IN  : arg1 ........ List of host names
+#         arg2 ........ number of principals to login
+#-----------------------------------------------------------------------
+
+sft_x_rgylogin_hosts()
+{
+    typeset i st h h_list
+
+    set -A h_list $1 
+    let IL=IL+1
+    replog_msg "Starting rgylogin test on hosts ( ${h_list[*]} )"
+    for h in ${h_list[*]}
+    do
+        sft_x_rgylogin $h $2
+    done
+    let IL=IL-1
+}
+
+#-----------------------------------------------------------------------
+#   sft_v_rgylogin : Checks result of rgylogin on a given slave
+#
+#   in  : arg1 ....... hostname of the slave 
+#
+#   returns .......... status of rgylogin test
+#-----------------------------------------------------------------------
+
+sft_v_rgylogin()
+{
+    typeset st
+
+    let IL=IL+1
+    st=`cat $LOGS_DIR/$1/rgylogin.status`
+    if [ $st -ne 0 ] ; then
+        replog_error "rgylogin on $1 : ** FAILED **"
+        replog_blank
+        replog_error "==== log of rgylogin execution on $1 ===="
+        cat $LOGS_DIR/$1/rgylogin.log
+        replog_blank
+    else
+        replog_msg "rgylogin test on $1 passed"
+        replog_blank
+    fi
+    let IL=IL-1 ; return $st
+}
+
+#-----------------------------------------------------------------------
+#   sft_v_rgylogin_hosts - checks result of rgylogin on specified  hosts
+#
+#   IN arg1 .............. List of hostnames
+#-----------------------------------------------------------------------
+
+sft_v_rgylogin_hosts()
+{
+    typeset i st err h h_list
+
+    set -A h_list $1
+    let IL=IL+1
+    replog_msg "checking result of rgylogin test on hosts ( ${h_list[*]} )"
+    err=0
+    for h in ${h_list[*]} 
+    do
+        sft_v_rgylogin $h ; st=$?
+        if [ $st -ne 0 ] ; then
+            err=1
+        fi
+    done
+    let IL=IL-1
+    return $err
+}
+
+# sft_lookup_upd_host()
+# {
+#    typeset found i
+#
+#    i=1
+#    while [ $i -le $sft_upd_index ]
+#    do
+#        if [ ${sft_upd_hostname[i]} = "$1" ] ; then
+#            return $i
+#        fi
+#        i=`expr $i + 1`
+#    done
+#    return 0
+# }
+
+#-----------------------------------------------------------------------
+#  sft_upd_dumpfile - Dumps the state information to a file
+#
+#-----------------------------------------------------------------------
+
+sft_upd_dumpfile()
+{
+    typeset i logent_f logind_f
+
+    logind_f=$LOGS_DIR/`hostname`/upd_state_indlog  #  Used to store the index
+    logent_f=$LOGS_DIR/`hostname`/upd_state_entlog  #  Used to store the state
+
+    rm -f $logind_f $logent_f   #  Remove the file to remove the old state information
+
+    #  First write the number of elements of the array
+    echo $sft_upd_index > $logind_f
+    tet_infoline "sft_upd_index is $sft_upd_index from $0 "
+    tet_infoline "$logind_f is `cat $logind_f"
+
+    # Next write the information about each element
+    i=0
+    while [ $i -le $sft_upd_index ] 
+    do
+        cat >> $logent_f <<- EOF
+	${sft_upd_hostname[i]} ${sft_upd_nprinc[i]} ${sft_upd_bname[i]}	${sft_upd_state[i]}
+	EOF
+	i=`expr $i + 1`
+    done
+}
+
+#-----------------------------------------------------------------------
+#  sft_upd_readfile - Reads the state information from a file.
+#
+#-----------------------------------------------------------------------
+
+sft_upd_readfile()
+{
+    typeset i logind_f logent_f
+
+    logind_f=$LOGS_DIR/`hostname`/upd_state_indlog  #  Used to store the index
+    #  First Read the number of elements of the array
+    read sft_upd_index < $logind_f
+
+    if [ $sft_upd_index -eq -1 ] ; then 
+        return  #  upd_state_entlog is not written if the index is -1
+    fi
+
+    logent_f=$LOGS_DIR/`hostname`/upd_state_entlog  #  Used to store the state
+
+    #   Next read the information about each element.
+    #   The order is significant
+
+    i=0
+    while [ $i -le $sft_upd_index ] 
+    do
+        read sft_upd_hostname[i] sft_upd_nprinc[i] \
+                sft_upd_bname[i] sft_upd_state[i]
+	i=`expr $i + 1`
+    done < $logent_f
+}
+
+sft_set_upd_state()
+{
+    typeset i found
+
+    #  If the state information corresponding to the
+    #  host is already entered (e.g. in a prior run
+    #  of the test, use that entry; othewise create
+    #  a new entry
+
+    repdb_getind "${sft_upd_hostname[*]}" $1 ; st=$?
+    if [ $st -ne 0 ] ; then
+        # Entry not found ; make a new entry
+        sft_upd_index=`expr $sft_upd_index + 1`
+        i=$sft_upd_index
+    else
+        i=$REPDB_STRIND
+    fi
+
+    sft_upd_hostname[i]=$1
+    sft_upd_nprinc[i]=$2
+    sft_upd_bname[i]=$3
+    sft_upd_state[i]=$4
+    sft_upd_dumpfile
+}
+
+# sft_clr_upd_state()
+# {
+#     typeset i
+# 
+#     sft_lookup_upd_host $1 ; i=$?
+#     if [ $i -eq 0 ] ; then
+#         replog_error "Host $1 not found in internal database"
+#         return 1
+#     fi
+#     if [ $2 = $SFT_UPDATE_ADD ] ; then
+#         sft_upd_state[i]=$sft_upd_add_end
+#     elif [ $2 = $SFT_UPDATE_DEL ] ; then
+#         sft_upd_state[i]=$sft_upd_del_end
+#     fi
+#     sft_upd_dumpfile
+# }
+
+sft_reset_upd_state()
+{
+    typeset i
+
+    sft_upd_index=-1
+    sft_upd_dumpfile
+    unset sft_upd_hostname sft_upd_nprinc  sft_upd_bname sft_upd_state
+}
+
+# sft_v_upd_state()
+# {
+#     typeset i
+#    
+#     i=1
+#     while [ $i -le $sft_upd_index ] 
+#     do
+#         if [[  ${sft_upd_state[i]} = $sft_upd_add_begin
+#             || ${sft_upd_state[i]} = $sft_upd_del_begin ]] ; then
+#             This implies that update test is in progress. So 
+#             return 1 and the caller will wait for completion.
+#             return 1 
+#         fi
+#         i=`expr $i + 1`
+#     done
+#   At this point no update test is in progress. 
+#     return 0
+# }
+
+
+sft_print_upd_state()
+{
+    typeset i
+   
+    if [ $sft_upd_index -eq -1 ] ; then
+        replog_blank
+        replog_msg "Update test was never run"
+        return
+    fi
+
+    replog_blank
+    replog_msg "The update test run with the parameters as shown below:"
+    replog_blank
+    let IL=IL+1
+
+    i=0
+    while [ $i -le $sft_upd_index ] 
+    do
+        replog_msg "Hostname = ${sft_upd_hostname[i]} "
+        replog_msg "Nprinc   = ${sft_upd_nprinc[i]} "
+        replog_msg "Basename = ${sft_upd_bname[i]} "
+#        state=${sft_upd_state[i]}
+        replog_msg "State    = ${sft_upd_state[i]} "
+        i=`expr $i + 1`
+    done
+    let IL=IL-1
+}
+
+sft_x_cleanup()
+{
+    typeset i hostlist
+ 
+    replog_msg "Cleaning up registry entries"
+
+    let IL=IL+1
+   
+    i=0
+    while [ $i -le $sft_upd_index ] 
+    do
+        if [ ${sft_upd_state[i]} = $SFT_UPDATE_ADD ] ; then
+            #  Update test was run to add the princs, groups
+            #  etc to the registry and hence must be removed
+            #  by running the update test with the -r option.
+            replog_msg "Deleting entries added to registry"
+            sft_x_update ${sft_upd_hostname[i]} \
+                         ${sft_upd_nprinc[i]}   \
+                         ${sft_upd_bname[i]}    \
+                         $SFT_UPDATE_DEL
+            sft_upd_verify[i]=1   #  The update on this will need to be verified.
+        else
+            sft_upd_verify[i]=0   #  The update on this will need to be verified.
+        fi
+        i=`expr $i + 1`
+    done
+#  
+#   Wait for all the update tests to complete
+#
+    wait
+
+#
+#   Now check and print the status of running the update test.
+#
+    i=0
+    while [ $i -le $sft_upd_index ] 
+    do
+        if [ ${sft_upd_verify[i]} = 1 ] ; then
+            #  Verify the status of update.
+            sft_v_update ${sft_upd_hostname[i]} \
+                         $SFT_UPDATE_DEL
+        fi
+        i=`expr $i + 1`
+    done
+    let IL=IL-1
+    replog_msg "Cleaned up registry entries"
+} 
+
+
+
+#-----------------------------------------------------------------------
+#   sft_cleanup.
+#       Must be called to cleanup the registries which may have been
+#       modified during the running of the functional tests. For this
+#       to work, the master must be up. Hence slv_cleanup() must be
+#       called prior to this which will restart master if stopped.
+#-----------------------------------------------------------------------
+
+sft_cleanup()
+{
+    typeset i st
+
+    replog_msg "Checking and cleaning up registry (if required)"
+    let IL=IL+1
+    sft_upd_readfile  # Reads the state information from the file
+    sft_print_upd_state
+    sft_x_cleanup
+    sft_reset_upd_state
+    let IL=IL-1
+    replog_msg "End of cleanup of registry"
+}
+#    i=1
+#    while [ $i -le 120 ]
+#    do
+#        sft_v_upd_state ; st=$?
+#        if [ $st -eq 0 ] ; then
+#            sft_x_cleanup    # Execute the cleanup code 
+#            return 
+#        fi
+#        replog_msg "Updates to registry in progress"
+#        replog_msg "Sleeping 5 seconds and retrying"
+#        sleep 5 
+#    done
+#    replog_error "Cleanup not attempted - updates to registry still pending"
+# }
+
+sft_init()
+{
+    sft_upd_index=-1
+#    sft_upd_add_begin="1"
+#    sft_upd_add_end="2"
+#    sft_upd_del_begin="3"
+#    sft_upd_del_end="4"
+#
+#   Define string for logging purposes
+#
+#    sft_upd_str[0]="**** ERROR ****"
+#    sft_upd_str[1]="sft_upd_add_begin"
+#    sft_upd_str[2]="sft_upd_add_end"
+#    sft_upd_str[3]="sft_upd_del_begin"
+#    sft_upd_str[4]="sft_upd_del_end"
+}
+
+fi
+
+

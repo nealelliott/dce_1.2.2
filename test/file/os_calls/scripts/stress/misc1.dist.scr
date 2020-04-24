@@ -1,0 +1,396 @@
+*
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+* 
+* USAGE: ./file_test -l /.:/dfs_test/a    (for hub)
+*        ./file_test -c /.:/dfs_test/a    (for two spokes)
+*
+
+* Note:
+*      There should be two dfs users to run the test.
+*      "test_Proc" should be running for another dfs user other than stress 
+*      procedure.
+
+*
+* misc.dist.scr.
+*    This script implements the followings.
+*
+
+*
+* Try to get cm_GetAccessBits to run through several iterations.  Have
+* one test process do a lot of access calls, on a non-publicly readable
+* file, while several stress processes do a lot of updates to the file,
+* for example, chmods.
+
+* The following check points have not been done yet. XXXXXXX
+*
+* Test cellular mount points (naming cells, which can be tested using
+* the local cell).  Test '#', '%' mount points, preferably with a RO
+* fileset, but test it anyway.  Test all combinations (cellular syntax X
+* mount point type).  Also, test references that name non-existent
+* cells, and that name cells that exist, but that name filesets that
+* don't exist.
+*
+* Try mountpoints by fileset ID instead of name.  Try all three
+* syntaxes: "low", "high.low" and "high,,low".
+*
+* Run tests for at least 5 hours so as to test token lifetime
+* expiration code.  That is, probably best for at least one test to open
+* a file and not close it again for > 5 hours.
+*
+* Test running after a "cm checkfilesets" call, which will force
+* re-evaluation of the vdir mount point info.
+*
+
+!* Include config file.
+include config
+include common3.env
+umask 0
+
+* Set the mount points here which are at dfsroot.
+
+* for # mount point.
+set mountPoint1 mountPointName1
+* for % mount point.
+set mountPoint2 mountPointName2
+set dfsRoot string "/:"
+
+set loopTimes 2
+
+* Set those dfs users ID and Passwd first
+set dfsUser1 "jess1"
+set user1Passwd "jess1"
+set dfsUser2 "fred1"
+set user2Passwd "fred1"
+
+* Those call create user ID and passwd by using the base name jess and fred
+exec addUser_Proc jess 1
+exec addUser_Proc fred 1
+
+* 
+* The procedure will check the result of chmod .
+* This procedure should be running with a different dce user (other than 
+* the user for stress_Proc.
+*
+set test_Proc proc END_PROC
+
+  echo
+  echo Test process (check accessibilty to the test file).
+
+* dce_login as a different dfs user
+  dce_login $dfsUser1 $user1Passwd
+
+if ( $ITL_SystemType == aix ) {
+  set accessFlagE @E_ACC
+  set accessFlagR @R_ACC
+  set accessFlagW @W_ACC
+  set accessFlagX @X_ACC
+}
+else {
+  if ( $ITL_SystemType == solaris ) {
+    set accessFlagE @F_OK
+    set accessFlagR @R_OK
+    set accessFlagW @W_OK
+    set accessFlagX @X_OK
+  }
+  else {
+    if ( $ITL_SystemType == sparc ) {
+      set accessFlagE @F_OK
+      set accessFlagR @R_OK
+      set accessFlagW @W_OK
+      set accessFlagX @X_OK
+    }
+    else {
+      if ( $ITL_SystemType == osf1 ) {
+        set accessFlagE @E_ACC
+        set accessFlagR @R_ACC
+        set accessFlagW @W_ACC
+        set accessFlagX @X_ACC
+      }
+      else {
+        echo WARNING: Do not know the current system type.
+      }
+    }
+  }
+}
+
+
+  chdir $testDir
+
+  sync_join "begin_sync" $timeout
+
+* Test other bits.
+  set syncName chmod
+  loop x 1 1 $loopTimes
+    set baseBit 007
+      set syncVar (@syncName+@x+@baseBit)
+      sync_join @syncVar $timeout
+      set syncVar (@syncVar+"done")
+      sync_join @syncVar $timeout
+
+!* Does the file exists
+      access $testFile $accessFlagE
+
+      verifyStatus false
+
+!* Can I read it 
+      access $testFile $accessFlagR
+      if ( @ITL_Status == 0 ) {
+        echo FAILED: I should not have read permission.
+      }
+!* Can I write it 
+      access $testFile $accessFlagW
+      if ( @ITL_Status == 0 ) {
+        echo FAILED: I should not have write permission.
+      }
+!* Can I execute it 
+      access $testFile $accessFlagX
+      if ( @ITL_Status == 0 ) {
+        echo FAILED: I should not have execute permission.
+      }
+      verifyStatus true
+
+      stat $testFile var
+      if ( @var.st_mode & 0777 & ~(@baseBit) ) {
+        echo FAILED: access bit is not right.
+      }
+  endloop
+
+* Test group bits.
+  set syncName chmod
+  loop x 1 1 $loopTimes
+    set baseBit 070
+      set syncVar (@syncName+@x+@baseBit)
+      sync_join @syncVar $timeout
+      set syncVar (@syncVar+"done")
+      sync_join @syncVar $timeout
+
+!* Does the file exists
+      access $testFile $accessFlagE
+
+!* Can I read it 
+      access $testFile $accessFlagR
+!* Can I write it 
+      access $testFile $accessFlagW
+!* Can I execute it 
+      access $testFile $accessFlagX
+
+      stat $testFile var
+      if ( @var.st_mode & 0777 & ~(@baseBit) ) {
+        echo FAILED: access bit is not right.
+      }
+  endloop
+
+* Test owner bits.
+  set syncName chmod
+  loop x 1 1 $loopTimes
+    set baseBit 0700
+      set syncVar (@syncName+@x+@baseBit)
+      sync_join @syncVar $timeout
+      set syncVar (@syncVar+"done")
+      sync_join @syncVar $timeout
+
+!* Does the file exists
+      access $testFile $accessFlagE
+
+      verifyStatus false
+
+!* Can I read it 
+      access $testFile $accessFlagR
+      if ( @ITL_Status == 0 ) {
+        echo FAILED: I sould not have the read permission.
+      }
+!* Can I write it 
+      access $testFile $accessFlagW
+      if ( @ITL_Status == 0 ) {
+        echo FAILED: I sould not have the write permission.
+      }
+!* Can I execute it 
+      access $testFile $accessFlagX
+      if ( @ITL_Status == 0 ) {
+        echo FAILED: I sould not have the execution permission.
+      }
+      verifyStatus true
+
+      stat $testFile var
+      if ( @var.st_mode & 0777 & ~(@baseBit) ) {
+        echo FAILED: access bit is not right.
+      }
+  endloop
+
+  sync_join "finish_sync" $timeout
+  chdir ..
+
+  echo End test process.
+  echo
+
+END_PROC
+
+* 
+* The procedure will chmod the testfile .
+*
+set stress_Proc proc END_PROC
+
+  echo
+  echo Stress process (update the test file).
+
+  umask 0
+
+* dec_login 
+
+  dce_login $dfsUser2 $user2Passwd
+
+  chdir $testDir
+
+* Create the test file by dfs user2. The file is not publicly accessible.
+  open $testFile (@O_CREAT|@O_RDWR) 0700 fileId
+  write @fileId $testFile
+  close @fileId
+
+
+  sync_join "begin_sync" $timeout
+
+  set syncName chmod
+  loop x 1 1 $loopTimes
+    set baseBit 007
+      set syncVar (@syncName+@x+@baseBit)
+      sync_join @syncVar $timeout
+      chmod $testFile @baseBit
+      set syncVar (@syncVar+"done")
+      sync_join @syncVar $timeout
+  endloop
+
+  set syncName chmod
+  loop x 1 1 $loopTimes
+    set baseBit 070
+      set syncVar (@syncName+@x+@baseBit)
+      sync_join @syncVar $timeout
+      chmod $testFile @baseBit
+      set syncVar (@syncVar+"done")
+      sync_join @syncVar $timeout
+  endloop
+
+  set syncName chmod
+  loop x 1 1 $loopTimes
+    set baseBit 0700
+      set syncVar (@syncName+@x+@baseBit)
+      sync_join @syncVar $timeout
+      chmod $testFile @baseBit
+      set syncVar (@syncVar+"done")
+      sync_join @syncVar $timeout
+  endloop
+
+  sync_join "finish_sync" $timeout
+
+  chmod $testFile 0777 
+  chdir ..
+
+  echo End stress process.
+  echo
+
+END_PROC
+
+
+***********************************************************************
+echo
+* Check if there are enogh spokes.
+if ( $ITL_nspokes < 2 ) {
+  echo To run the test you have to have at least 2 spokes.
+}
+
+chdir $testDir
+
+* This loop will do more stress test.
+loop loopVar 1 1 $loopTimes
+
+!* Dispatch procedure among spokes.
+rexec_async $ITL_spoke[0] test_Proc result[0] fsyncId[0]
+loop x 1 1 ($ITL_nspokes-1)
+  rexec_async $ITL_spoke[$x] stress_Proc result[$x] fsyncId[$x]
+endloop
+
+sync_create "begin_sync" $ITL_nspokes  $timeout
+sync_release "begin_sync"
+
+set syncName chmod
+loop x 1 1 $loopTimes
+  set baseBit 007
+    set syncVar ($syncName+$x+$baseBit)
+    sync_create $syncVar $ITL_nspokes  $timeout
+    sync_release $syncVar
+
+    set syncVar ($syncVar+"done")
+    sync_create $syncVar $ITL_nspokes  $timeout
+    sync_release $syncVar
+endloop
+
+set syncName chmod
+loop x 1 1 $loopTimes
+  set baseBit 070
+    set syncVar ($syncName+$x+$baseBit)
+    sync_create $syncVar $ITL_nspokes  $timeout
+    sync_release $syncVar
+
+    set syncVar ($syncVar+"done")
+    sync_create $syncVar $ITL_nspokes  $timeout
+    sync_release $syncVar
+endloop
+
+set syncName chmod
+loop x 1 1 $loopTimes
+  set baseBit 0700
+    set syncVar ($syncName+$x+$baseBit)
+    sync_create $syncVar $ITL_nspokes  $timeout
+    sync_release $syncVar
+
+    set syncVar ($syncVar+"done")
+    sync_create $syncVar $ITL_nspokes  $timeout
+    sync_release $syncVar
+endloop
+
+sync_create "finish_sync" $ITL_nspokes  $timeout
+sync_release "finish_sync"
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $fsyncId[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+echo
+
+remove $testFile
+
+endloop
+
+exec deleteUser_Proc jess 1
+exec deleteUser_Proc fred 1
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+
+echo
+
+echo Hub done.

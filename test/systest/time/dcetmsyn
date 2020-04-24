@@ -1,0 +1,201 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: dcetmsyn,v $
+# Revision 1.1.13.2  1996/03/11  02:49:13  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:09:53  marty]
+#
+# Revision 1.1.13.1  1995/12/11  22:50:18  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  13:41 UTC  bell_d
+# 	Correct path to dcetm.ksh
+# 
+# 	HP revision /main/HPDCE01/1  1994/01/31  21:02  bissen
+# 	merge kk and hpdce01
+# 	[1995/12/11  22:23:25  root]
+# 
+# Revision 1.1.10.2  1993/07/09  15:30:36  root
+# 	Initial King Kong branch
+# 	[1993/07/09  15:30:09  root]
+# 
+# Revision 1.1.8.5  1993/04/05  13:38:44  truitt
+# 	Modifications to work in new systest environment.
+# 	[1993/04/05  13:38:25  truitt]
+# 
+# Revision 1.1.8.4  1993/03/30  19:40:12  truitt
+# 	Change from /bin/sh to /bin/ksh.
+# 	[1993/03/30  19:39:50  truitt]
+# 
+# Revision 1.1.8.3  1993/03/26  16:06:19  truitt
+# 	Error reporting improvements.
+# 	[1993/03/26  16:05:59  truitt]
+# 
+# Revision 1.1.8.2  1993/03/17  19:47:01  truitt
+# 	Merge Hp_dce1_0_1 with DCE1_0_2
+# 	[1993/03/17  19:46:11  truitt]
+# 
+# Revision 1.1.1.7  1993/03/11  22:15:30  osfrcs
+# 	    Loading drop DCE1_0_2B18
+# 
+# Revision 1.1.3.3  1992/11/03  20:25:33  mgm
+# 	Ported to TET by Bob Fritz.  Bci'd and bsubmit'd by Mary MacGregor
+# 	[1992/11/03  20:24:59  mgm]
+# 
+# Revision 1.1.5.2  1993/02/05  15:27:40  cjd
+# 	Embedded copyright notice
+# 	[1993/02/05  14:48:44  cjd]
+# 
+# Revision 1.1.3.2  1993/02/05  13:15:51  cjd
+# 	Embedded copyright notice
+# 
+# Revision 1.1.2.3  1992/07/17  20:23:31  pellis
+# 	Spelling correction.
+# 	[1992/07/17  19:57:01  pellis]
+# 
+# Revision 1.1.3.2  1992/06/11  20:05:16  mcfarland
+# 	changed files from test_latest
+# 	[1992/06/09  13:11:44  mcfarland]
+# 
+# Revision 1.1.2.2  1992/05/08  15:21:07  bmw
+# 	new systest changes
+# 	[1992/05/08  15:18:04  bmw]
+# 
+# Revision 1.1.1.2  1992/05/28  15:18:22  root
+# 	    Loading drop Dce1_0_1b15
+# 
+# $EndLog$
+#
+#   TEST_NAME: dcetmsyn
+#
+#   COMPONENT_NAME: dce.systest
+#
+#   FUNCTIONS: check_RC_severe
+#	       setup_dcetmsyn
+#	       synch_time
+#	       wait_for_on
+#	       verify_synch
+#
+#   ORIGINS: 27
+#
+#
+#   (C) COPYRIGHT International Business Machines Corp. 1991
+#   All Rights Reserved
+#
+#   FILES: dcetmsyn (this file)
+#
+#   REQUIREMENTS:
+#      
+#	DTS installed and running on the system.
+#
+#	Note:  It is highly recommended that this test be started
+#	from the its driver (see $TET_ROOT/time/bin/run.time).
+#
+#   RESTRICTIONS:
+#      
+#	The state of DTS must not be off in order to run the test.
+#
+#   USAGE:  dcetmsyn
+#
+#   OVERVIEW:
+#
+#	The purpose of this testcase is to test that a synchronize
+#	occurs when  the "dtscp synchronize" command is executed.
+#
+#	The state is tested to see if a synchronize is occuring, and
+#	if so the test will enter a loop to wait for the state to be "on"
+#	which occurs when the synchronize finishes.
+#	The "dtscp show last synchronization" command is executed
+#	and the output is saved.  The current time is saved.  A
+#	synchronize command is executed.  A loop occurs to wait for
+#	the synchronization to complete.  Execute the "dtscp show
+#	last synchronization" command again, and compare to the
+#	previous saved output to verify that a synchronize did occur
+#	after the "dtscp synchronize" command was entered.
+#
+#
+#  CHANGE HISTORY
+#  11/5/90	Clissold/Flake 	Initial design.  
+#  12/6/90	Leslie Flake	Design complete 
+#  12/7/90	Leslie Flake	Initial code 
+#  03/12/92   			Update dtscp command to current interface
+#  11/03/92	Bob Fritz	Ported to TET
+#		Mary MacGregor  bci'd and bsubmit'd
+
+#dcetmsyn : test case for time
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="dcetmsyn"
+
+# preparation of DCE time suite
+startup() {
+
+	print "START DCE time systest: dcetmsyn; DATE: `date`"
+	tet_infoline "START DCE time systest: ${TET_PNAME}; DATE: `date`"
+
+	#-----------------------------------------------------------------------
+	# WPHI:       combination/substition - $WS.$PID.$HOST.$ITERATION
+	# WSTMPDIR:   the workstation temporary directory
+	# WSLOGDIR:   directory where our JOURNALs are kept during the run
+	# JOURNAL:    file containing output from the standard library commands
+	# CMDFILE:    file containing all output from workstation commands
+	# STATUSFILE: file containing other log information from the workstation
+	# SPOOLFILE:  file containing all information written to stdout
+	#-----------------------------------------------------------------------
+	WSTMPDIR=/tmp
+	export WSTMPDIR
+        return
+}
+
+dcetmsyn() {
+#set -x
+	sleep 5
+	setup_dcetmsyn
+        if (( $? == 0 )); then
+		synch_time
+	else
+		tet_result FAIL
+		print "ERROR: dcetmsyn failed in function setup_dcetmsyn"
+		tet_infoline "ERROR: dcetmsyn failed in function setup_dcetmsyn"
+		return
+	fi
+
+        if (( $? == 0 )); then
+		verify_synch
+	else
+		tet_result FAIL
+		print "ERROR: dcetmsyn failed in function synch_time"
+		tet_infoline "ERROR: dcetmsyn failed in function synch_time"
+		return
+	fi
+
+        if (( $? == 0 )); then
+		tet_result PASS
+		print "PASS: dcetmsyn passed"
+		tet_infoline "PASS: dcetmsyn passed"
+	else
+		tet_result FAIL
+		print "ERROR: dcetmsyn failed in function verify_synch"
+		tet_infoline "ERROR: dcetmsyn failed in function verify_synch"
+	fi
+}
+
+# cleanup of DCE time test
+cleanup() {
+
+	print "END DCE time systest: dcetmsyn; DATE: `date`"
+	tet_infoline "END DCE time systest: ${TET_PNAME}; DATE: `date`"
+}
+
+#source tcm
+. ${TET_ROOT}/profile.dcest
+. ${TET_ROOT}/systest/$OS_VER/time/ts/dcetm.ksh
+. ${TCM}

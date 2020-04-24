@@ -1,0 +1,416 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: bbos_ncs_interface.idl,v $
+ * Revision 1.1.12.1  1996/10/02  17:03:53  damon
+ * 	Newest DFS from Transarc
+ * 	[1996/10/01  18:04:49  damon]
+ *
+ * Revision 1.1.6.1  1994/06/09  13:52:03  annie
+ * 	fixed copyright in src/file
+ * 	[1994/06/08  21:25:41  annie]
+ * 
+ * Revision 1.1.4.6  1993/01/18  19:55:19  cjd
+ * 	Embedded copyright notice
+ * 	[1993/01/18  19:31:12  cjd]
+ * 
+ * Revision 1.1.4.5  1993/01/13  15:53:06  shl
+ * 	Transarc delta: cfe-ot6054-genl-and-i18n-spares 1.1
+ * 	  Selected comments:
+ * 	    Add spares to several RPC structures, with two goals:
+ * 	    - general future usage
+ * 	    - allow for at least some internationalization designs
+ * 	    The only tricky part of this work is that the on-the-wire representation for
+ * 	    directory contents is expanded.
+ * 	[1993/01/12  18:34:58  shl]
+ * 
+ * Revision 1.1.4.4  1992/11/24  15:40:26  bolinger
+ * 	Change include file install directory from .../afs to .../dcedfs.
+ * 	[1992/11/22  16:08:17  bolinger]
+ * 
+ * Revision 1.1.4.3  1992/10/27  20:08:46  jaffe
+ * 	Transarc delta: bab-ot5471-bbos-uninstall-all 1.2
+ * 	  Selected comments:
+ * 	    The bos command and bosserver will now support a -all flag for
+ * 	    removing all versions of the specified file.
+ * 	    ot 5471
+ * 	    Added flag to uninstall interface.
+ * 	    Cosmetic cleanup.
+ * 	    Make sure flags are unsigned.
+ * 	Transarc delta: bab-ot5474-bbos-report-noauth 1.1
+ * 	  Selected comments:
+ * 	    Changes to make the bosserver report the authorization checking status
+ * 	    of the machine on which it is running and to make the bos command make
+ * 	    use of that information.
+ * 	    ot 5474
+ * 	    Added overall server status RPC interface, BOSSVR_GetServerStatus.
+ * 	Transarc delta: bab-ot5475-bbos-dacl-clearlist 1.2
+ * 	  Selected comments:
+ * 	    Added support for a -clearlist option to the bos command, without
+ * 	    actually activating it inthe user interface.
+ * 	    ot 5475
+ * 	    Changed the binary options in the addadmin and remove admin commands to
+ * 	    be general flags.
+ * 	    Needed to handle cases in which clearlist may have been specified
+ * 	    alone or with more than one user or group.
+ * 	[1992/10/27  13:55:00  jaffe]
+ * 
+ * Revision 1.1.4.2  1992/08/31  18:23:49  jaffe
+ * 	Transarc delta: bab-ot4755-bbos-remove-exec 1.1
+ * 	  Selected comments:
+ * 	    Removed bosserver exec funcitionality and the bos command that invokes it.
+ * 	    ot 4755
+ * 	    See above.
+ * 	Transarc delta: cfe-ot4029-portable-rpc-data-types 1.2
+ * 	  Selected comments:
+ * 	    If ``long'' could possibly mean ``64 bits'' any time soon, we need to keep
+ * 	    our RPC interfaces from breaking.
+ * 	    see above
+ * 	    More of the same.  Forgot a couple of .idl files, and needed to change
+ * 	    a couple of procedure signatures to match.
+ * 	[1992/08/28  20:47:10  jaffe]
+ * 
+ * Revision 1.1.2.2  1992/04/14  03:02:42  mason
+ * 	Removed references to bos salvage in bos and the bosserver,
+ * 	put references to bos setdebug in appropriate ifdefs (but
+ * 	it is always a part of the bosserver interface, it just will
+ * 	return BZNOTIMPL if it hasn't been activated) and some general
+ * 	code cleanup.
+ * 	Remove dead code and remove BOSSVR_ServerPlaceHolder from the interface
+ * 	since it serves no useful prupose any longer.
+ * 	OT 2194
+ * 	[1992/04/10  21:48:56  mason]
+ * 
+ * Revision 1.1  1992/01/19  02:49:38  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+/*
+ * bbos_ncs_interface.idl -- the interface definition file for bosserver
+ *
+ *	Copyright (C) 1991, 1990 Transarc Corporation
+ *	All rights reserved.
+ */
+
+[
+ uuid(4d37f2dd-ed43-0000-02c0-37cf1e000001),
+ version(0),
+ pointer_default(ref)
+ /* provider_version(1) */
+]
+interface BOSSVR
+{
+  import "dcedfs/common_data.idl";
+
+  const short int BOSSVR_BSSIZE = 256;
+
+  typedef struct bossvr_netKTime {
+    signed32 mask;
+    signed16 hour;	    /* 0 - 23 */
+    signed16 min;	    /* 0 - 60 */
+    signed16 sec;	    /* 0 - 60 */
+    signed16 day;	    /* 0 is sunday */
+    signed16 spare1;
+    signed16 spare2;
+  } bossvr_netKTime;
+  
+  typedef struct bossvr_key {
+    byte data[8];
+  } bossvr_key;
+  
+  typedef struct bossvr_keyInfo {
+    signed32 mod_sec;
+    signed32 mod_usec;
+    unsigned32 keyCheckSum;
+    unsigned32 spare1;
+    unsigned32 spare2;
+    unsigned32 spare3;
+    unsigned32 spare4;
+  } bossvr_keyInfo;
+  
+  typedef struct bossvr_status {
+    signed32 goal;		/* the short-term goal */
+    signed32 fileGoal;		/* the goal field in the file  */
+    signed32 procStartTime;	/* last time a process was started */
+    signed32 procStarts;	/* process starts */
+    signed32 lastAnyExit;	/* time process exited, any reason */
+    signed32 lastErrorExit;	/* time process exited unexpectedly */
+    signed32 errorCode;		/* last exit return code */
+    signed32 errorSignal;	/* last proc terminating signal */
+    unsigned32 flags;		/* flags (see below) */
+    unsigned32 spare1;
+    unsigned32 spare2;
+    unsigned32 spare3;
+    unsigned32 spare4;
+    unsigned32 spare5;
+    unsigned32 spare6;
+    unsigned32 spare7;
+    unsigned32 spare8;
+  } bossvr_status;
+  
+  /* useful flags */
+  const long int BOSSVR_HASCORE =		1;	/* core file exists */
+  const long int BOSSVR_ERRORSTOP	= 	2;	/* stopped due to too many errors */
+
+  /* the server status flags */
+  const long int BOSSVR_BADDIRACCESS =	1;	/* bad mode bits on $DCELOCAL/var/dfs dirs */
+  const long int BOSSVR_SERVER_NOAUTH =	2;	/* machine not checking authorization */
+	
+  /* prune command flags */
+  const long int BOSSVR_PRUNEOLD =	1;	/* prune .OLD files */
+  const long int BOSSVR_PRUNEBAK =	2;	/* prune .BAK files */
+  const long int BOSSVR_PRUNECORE =	4;	/* prune core files */
+  
+  /* uninstall command flags */
+  const long int BOSSVR_UNINSTALL_ALL =	1;	/* uninstall all versions of file */
+
+  /* addadmin command flags */
+  const long int BOSSVR_ADDADMIN_CREATELIST =	1;
+  
+  /* rmadmin command flags */
+  const long int BOSSVR_RMADMIN_REMOVELIST =	1;
+  const long int BOSSVR_RMADMIN_CLEARLIST =	2;
+  
+/* unused types as of 4 Dec 1992
+  typedef [string] byte bossvr_string[BOSSVR_BSSIZE];
+
+  typedef [string, ptr] byte * bossvr_stringP;
+*/
+  
+  typedef struct bossvr_out_string {
+    unsigned32				strLen;
+    [ptr, string, max_is(strLen)] char *	theString;
+  } bossvr_out_string;
+  
+  /* the actual routines */
+  signed32 BOSSVR_GetServerStatus (	/* provider_version(1) */
+				   [in] handle_t		bosserverBinding,
+				   [out] unsigned32 *		serverStatusP,
+				   [out] error_status_t *	theCommStatus
+				  );
+  signed32 BOSSVR_CreateBnode (	/* provider_version(1) */
+			     [in] handle_t		bosserverBinding,
+			     [in, string] char		type [BOSSVR_BSSIZE],
+			     [in, string] char		instance [BOSSVR_BSSIZE],
+			     [in, string] char		p1 [BOSSVR_BSSIZE],
+			     [in, string] char		p2 [BOSSVR_BSSIZE],
+			     [in, string] char		p3 [BOSSVR_BSSIZE],
+			     [in, string] char		p4 [BOSSVR_BSSIZE],
+			     [in, string] char		p5 [BOSSVR_BSSIZE],
+			     [in, string] char		p6 [BOSSVR_BSSIZE],
+			     [out] error_status_t *	theCommStatus
+			     );
+  signed32 BOSSVR_DeleteBnode (	/* provider_version(1) */
+			     [in] handle_t		bosserverBinding,
+			     [in, string] char		instance [BOSSVR_BSSIZE],
+			     [out] error_status_t *	theCommStatus
+			     );
+  signed32 BOSSVR_SetStatus (	/* provider_version(1) */
+			   [in] handle_t		bosserverBinding,
+			   [in, string] char		instance [BOSSVR_BSSIZE],
+			   [in] signed32 		status,
+			   [out] error_status_t *	theCommStatus
+			   );
+  signed32 BOSSVR_GetStatus (	/* provider_version(1) */
+			   [in] handle_t		bosserverBinding,
+			   [in, string] char		instance [BOSSVR_BSSIZE],
+			   [out] signed32 *		intStat,
+			   [out] bossvr_out_string *	statdescrP,
+			   [out] error_status_t *	theCommStatus
+			   );
+  signed32 BOSSVR_EnumerateInstance (	/* provider_version(1) */
+				   [in] handle_t		bosserverBinding,
+				   [in] signed32		instanceNum,
+				   [out] bossvr_out_string *	inameP,
+				   [out] error_status_t *	theCommStatus
+				   );
+  signed32 BOSSVR_GetInstanceInfo (	/* provider_version(1) */
+				 [in] handle_t			bosserverBinding,
+				 [in, string] char		instance [BOSSVR_BSSIZE],
+				 [out] bossvr_out_string *	typeP,
+				 [out] struct bossvr_status *	status,
+				 [out] error_status_t *		theCommStatus
+				 );
+  signed32 BOSSVR_GetInstanceParm (	/* provider_version(1) */
+				 [in] handle_t			bosserverBinding,
+				 [in, string] char		instance [BOSSVR_BSSIZE],
+				 [in] signed32		num,
+				 [out] bossvr_out_string *	parmP,
+				 [out] error_status_t *		theCommStatus
+				 );
+  signed32 BOSSVR_AddSUser (	/* provider_version(1) */
+			  [in] handle_t			bosserverBinding,
+			  [in, string] char		filename [BOSSVR_BSSIZE],
+			  [in, string] char		typeStr [BOSSVR_BSSIZE],
+			  [in, string] char		name [BOSSVR_BSSIZE],
+			  [in, string] char		permsStr [BOSSVR_BSSIZE],
+			  [in] unsigned32		flags,
+			  [out] error_status_t *	theCommStatus
+			  );
+  signed32 BOSSVR_DeleteSUser (	/* provider_version(1) */
+			     [in] handle_t		bosserverBinding,
+			     [in, string] char		filename [BOSSVR_BSSIZE],
+			     [in, string] char		typeStr [BOSSVR_BSSIZE],
+			     [in, string] char		name [BOSSVR_BSSIZE],
+			     [in] unsigned32		flags,
+			     [out] error_status_t *	theCommStatus
+			     );
+  signed32 BOSSVR_ListSUsers (	/* provider_version(1) */
+			    [in] handle_t		bosserverBinding,
+			    [in, string] char		filename [BOSSVR_BSSIZE],
+			    [in] signed32		an,
+			    [out] bossvr_out_string *	nameP,
+			    [out] bossvr_out_string *	typeStrP,
+			    [out] bossvr_out_string *	permStrP,
+			    [out] error_status_t *	theCommStatus
+			    );
+  signed32 BOSSVR_ListKeys (	/* provider_version(1) */
+			  [in] handle_t			bosserverBinding,
+			  [in, string] char		prinNameP [BOSSVR_BSSIZE],
+			  [in] signed32		an,
+			  [out] signed32 *		kvno,
+			  [out] struct bossvr_key *	key,
+			  [out] struct bossvr_keyInfo *	keyinfo,
+			  [out] error_status_t *	theCommStatus
+			  );
+  signed32 BOSSVR_AddKey (	/* provider_version(1) */
+			[in] handle_t		bosserverBinding,
+			[in, string] char	prinNameP [BOSSVR_BSSIZE],
+			[in] signed32	kvno,
+			[in, string] char	passwdP [BOSSVR_BSSIZE],
+			[in] signed32	localOnly,
+			[out] error_status_t *	theCommStatus
+			);
+  signed32 BOSSVR_DeleteKey (	/* provider_version(1) */
+			   [in] handle_t		bosserverBinding,
+			   [in, string] char		prinNameP [BOSSVR_BSSIZE],
+			   [in] signed32		kvno,
+			   [out] error_status_t *	theCommStatus
+			   );
+  signed32 BOSSVR_GenerateKey (	/* provider_version(1) */
+				[in] handle_t		bosserverBinding,
+				[in, string] char	prinNameP [BOSSVR_BSSIZE],
+				[in] signed32		kvno,
+				[out] error_status_t *	theCommStatus
+			      );
+  signed32 BOSSVR_GarbageCollectKeys (	/* provider_version(1) */
+					[in] handle_t		bosserverBinding,
+					[in, string] char	prinNameP [BOSSVR_BSSIZE],
+					[out] error_status_t *	theCommStatus
+				     );
+  signed32 BOSSVR_GetCellName (	/* provider_version(1) */
+			     [in] handle_t		bosserverBinding,
+			     [out] bossvr_out_string *	nameP,
+			     [out] error_status_t *	theCommStatus
+			     );
+  signed32 BOSSVR_SetTStatus (	/* provider_version(1) */
+			    [in] handle_t		bosserverBinding,
+			    [in, string] char		instance [BOSSVR_BSSIZE],
+			    [in] signed32		status,
+			    [out] error_status_t *	theCommStatus
+			    );
+  signed32 BOSSVR_ShutdownAll (	/* provider_version(1) */
+			     [in] handle_t		bosserverBinding,
+			     [out] error_status_t *	theCommStatus
+			     );
+  signed32 BOSSVR_RestartAll (	/* provider_version(1) */
+			    [in] handle_t		bosserverBinding,
+			    [out] error_status_t *	theCommStatus
+			    );
+  signed32 BOSSVR_StartupAll (	/* provider_version(1) */
+			    [in] handle_t		bosserverBinding,
+			    [out] error_status_t *	theCommStatus
+			    );
+  signed32 BOSSVR_SetNoAuthFlag (	/* provider_version(1) */
+			       [in] handle_t		bosserverBinding,
+			       [in] signed32		flag,
+			       [out] error_status_t *	theCommStatus
+			       );
+  signed32 BOSSVR_ReBossvr (	/* provider_version(1) */
+			[in] handle_t			bosserverBinding,
+			[out] error_status_t *		theCommStatus
+			);
+  signed32 BOSSVR_Restart (	/* provider_version(1) */
+			 [in] handle_t		bosserverBinding,
+			 [in, string] char	instance [BOSSVR_BSSIZE],
+			 [out] error_status_t *	theCommStatus
+			 );
+  signed32 BOSSVR_Install (	/* provider_version(1) */
+			 [in] handle_t			bosserverBinding,
+			 [in, string] char		path [BOSSVR_BSSIZE],
+			 [in] signed32			size,
+			 [in] unsigned32		flags,
+			 [in] signed32	 		date,
+			 [in] pipe_t *			thePipeP,
+			 [out] error_status_t *		theCommStatus
+			 );
+  signed32 BOSSVR_UnInstall (	/* provider_version(1) */
+			   [in] handle_t		bosserverBinding,
+			   [in, string] char		path [BOSSVR_BSSIZE],
+			   [in] unsigned32		flags,
+			   [out] error_status_t *	theCommStatus
+			   );
+  signed32 BOSSVR_GetDates (	/* provider_version(1) */
+			  [in] handle_t			bosserverBinding,
+			  [in, string] char		path [BOSSVR_BSSIZE],
+			  [out] signed32 *		newtime,
+			  [out] signed32 *		baktime,
+			  [out] signed32 *		oldtime,
+			  [out] error_status_t *	theCommStatus
+			  );
+  signed32 BOSSVR_Prune (	/* provider_version(1) */
+		       [in] handle_t			bosserverBinding,
+		       [in] unsigned32			flags,
+		       [out] error_status_t *		theCommStatus
+		       );
+  signed32 BOSSVR_SetRestartTime (	/* provider_version(1) */
+				[in] handle_t			bosserverBinding,
+				[in] signed32			type,
+				[in] struct bossvr_netKTime *	restartTime,
+				[out] error_status_t *		theCommStatus
+				);
+  signed32 BOSSVR_GetRestartTime (	/* provider_version(1) */
+				[in] handle_t			bosserverBinding,
+				[in] signed32			type,
+				[out] struct bossvr_netKTime *	restartTime,
+				[out] error_status_t *		theCommStatus
+				);
+  signed32 BOSSVR_GetLog (	/* provider_version(1) */
+			[in] handle_t			bosserverBinding,
+			[in, string] char		name [BOSSVR_BSSIZE],
+			[out] pipe_t *			thePipeP,
+			[out] error_status_t *		theCommStatus
+			);
+  signed32 BOSSVR_WaitAll (	/* provider_version(1) */
+			 [in] handle_t			bosserverBinding,
+			 [out] error_status_t *		theCommStatus
+			 );
+  signed32 BOSSVR_SetDebug (	/* provider_version(1) */
+			  [in] handle_t			bosserverBinding,
+			  [in, ptr] signed32 *		newDebugValP,
+			  [out] signed32 *			longDebugValP,
+			  [out] error_status_t *	theCommStatus
+			 );
+
+  /* BOSSVR_GetServerInterfaces
+   * 
+   * This exported procedure is called by the client to fetch the interfaces
+   * supported by the server. A bulk parameter of upto MAXINTERFACES number
+   * of interfaces are returned.
+   *
+   */
+  signed32 BOSSVR_GetServerInterfaces (	/* provider_version(1) */
+				       [in]  handle_t		bosserverBinding,
+				       [in, out] dfs_interfaceList *	serverInterfacesP,
+				       [out] error_status_t *	theCommStatus
+				     );
+}

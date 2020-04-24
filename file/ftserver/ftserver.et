@@ -1,0 +1,192 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# Fix missing RCS id.
+# HISTORY
+# $Log: ftserver.et,v $
+# Revision 1.1.92.1  1996/10/02  17:47:33  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:37:52  damon]
+#
+# Revision 1.1.86.2  1994/06/09  14:08:15  annie
+# 	fixed copyright in src/file
+# 	[1994/06/09  13:23:08  annie]
+# 
+# Revision 1.1.86.1  1994/02/04  20:19:01  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:13:13  devsrc]
+# 
+# Revision 1.1.84.1  1993/12/07  17:24:41  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  15:25:20  jaffe]
+# 
+# Revision 1.1.5.6  1993/01/21  19:36:44  zeliff
+# 	Embedding copyright notices
+# 	[1993/01/19  19:50:40  zeliff]
+# 
+# Revision 1.1.5.5  1992/10/28  21:45:19  jaffe
+# 	Fixed missing RCSID
+# 	[1992/10/28  21:17:30  jaffe]
+# 
+# Revision 1.1.5.4  1992/10/27  21:14:08  jaffe
+# 	Transarc delta: vijay-ot5224-fts-dump-handle-pipe-errors 1.3
+# 	  Selected comments:
+# 	    fts dump uses NCS pipes to dump contents of a fileset to a file. The push
+# 	    routine calls abort upon write syscall failure. This kills the client thread
+# 	    and the corresponding server thread resulting several bad things including
+# 	    a transaction whose ref count is high, a fldb entry that is locked and the
+# 	    fileset state busy. One way to handle pipe errors gracefully would be to
+# 	    store the errno after a syscall failure in the pipe state, and continue pipe
+# 	    data transfer until completion. Once the dump RPC completes, the client
+# 	    could look at the pipe state to determine what error occurred and take
+# 	    appropriate recovery action necessary. The restore case can also utilize a
+# 	    similar mechanism.
+# 	    A new error code for pipe errors.
+# 	    There were some places in the ftserver RPC routines where FTSERVER_UNLOCK
+# 	    is called in the middle of these routines when segments of code were
+# 	    considered thread safe. The FTSERVER_{LOCK|UNLOCK} macros also disable and
+# 	    enable thread cancels. So we add some conditionality that disables thread
+# 	    cancels through all ftserver RPCs, but allows unlock of mutexes around thread
+# 	    safe code regions.
+# 	    Fix compiler warning on PMAX.
+# 	[1992/10/27  14:26:20  jaffe]
+# 
+# Revision 1.1.5.3  1992/09/25  18:14:09  jaffe
+# 	Transarc delta: vijay-ot5395-fts-fix-bad-error-message 1.1
+# 	  Selected comments:
+# 	    fts aggrinfo generates a bad error message when aggregate parameter is
+# 	    invalid.
+# 	    A new error code for a bad server address.
+# 	[1992/09/23  19:11:25  jaffe]
+# 
+# Revision 1.1.5.2  1992/08/31  19:54:32  jaffe
+# 	Replace missing RCS id
+# 	[1992/08/31  14:30:19  jaffe]
+# 
+# 	Transarc delta: cfe-ot1134-fts-move-support 1.9
+# 	  Selected comments:
+# 	    Will house the fts mods necessary to support moving token state.
+# 	    continuing work; stopping to upgrade
+# 	    Needed codes for missing volids in fldb entries.
+# 	    Another checkpoint of the code (to work on another delta)
+# 	    another checkpoint
+# 	    still another checkpoint
+# 	    another checkpoint.
+# 	    Support both ZLC and TSR in fts.  Set VOL_MOVE_TARGET and VOL_MOVE_SOURCE
+# 	    and keep them there via a thread.  Also, grab TKN_SPOT_THERE token as
+# 	    appropriate.  Set the parentId in the target volume for ZLC.
+# 	    actually, this fixes a diagnostic necessary for debugging...
+# 	    Forgot to clear the off-line type status bits from the move target
+# 	    in the same-server case.
+# 	Transarc delta: vijay-ot2674-fileset-states-cleanup 1.6
+# 	  Selected comments:
+# 	    The file system independent layer passes information about fileset operations
+# 	    to the fileset dependent layer to facilitate improved concurrency in vnode
+# 	    operations. Error codes that are more descriptive of the blocking operation
+# 	    is returned to the caller of fileset and vnode operations.
+# 	    temporary close to work on a different delta
+# 	    temporary close to work on a different delta
+# 	    Temporary close to upgrade. Will reopen soon.
+# 	    close to upgrade to dfs-new
+# 	    misc fixes and cleanup
+# 	    Put in some AFSLOG statements to help debugging
+# 	Transarc delta: vijay-ot4020-fts-error-handling-cleanup 1.4
+# 	  Selected comments:
+# 	    Minor cleanups to fts error message printing. fts prints many lines of messages
+# 	    for simple errors such as invalid server name, but sometimes does not print
+# 	    an understandable error message for cases such as lack of permission to invoke
+# 	    a particular operation. These cases have been fixed. Some messages are now
+# 	    printed only in verbose mode.
+# 	    In connToServer and CacheServerConnection, use a lru scheme in caching server
+# 	    connections. This way we don't return NULL binding just because we have no
+# 	    space to store our connection.
+# 	    Changes made as a result of testing
+# 	    define FTS_ERR_BADCONN that is used when connToServer returns a NULL binding.
+# 	    accidentally deleted an error code during a merge. Putting it back
+# 	    put back FTS_ERR_BADCONN
+# 	[1992/08/30  02:29:40  jaffe]
+# 
+# Revision 1.1.2.2  1992/04/01  23:10:08  mason
+# 	My understanding is that the first error in an .et file needs to be a dummy
+# 	error code.  The files file/ftserver/ftserver.et and
+# 	file/ncscompat/compat_errs.et used to have such a dummy error code, but
+# 	those codes must have appeared to be malformed and they were eliminated.
+# 	[1992/04/01  23:06:04  mason]
+# 
+# Revision 1.1  1992/01/19  19:42:02  devrcs
+# 	Initial revision
+# 
+# $EndLog$
+#
+# /*
+#  * (C) Copyright Transarc Corporation 1990.  ALL RIGHTS RESERVED.
+# */
+
+error_table 2 fts
+	ec FTS_ERR_RCSID, "$Header: /u0/rcs_trees/dce/rcs/file/ftserver/ftserver.et,v 1.1.92.1 1996/10/02 17:47:33 damon Exp $"
+	ec FTS_ERR_ATTACH, "could not attach fileset"
+	ec FTS_ERR_DETACH, "could not detach fileset"
+	ec FTS_ERR_BADAGGREGATE, "illegal aggregate"
+	ec FTS_ERR_BADNAME, "bad fileset name"
+	ec FTS_ERR_BADACCESS, "insufficient privilege for fileset operation"
+	ec FTS_ERR_VLDB, "error from fileset location database"
+	ec FTS_ERR_MOVED, "fileset moved"
+	ec FTS_ERR_BADOP, "illegal fileset operation"
+	ec FTS_ERR_DUMP, "badly formatted dump"
+	ec FTS_ERR_BADDUMP, "restoring bad format dump"
+	ec FTS_ERR_BADRELEASE, "fileset release failed"
+	ec FTS_ERR_BUSY, "fileset still in use by ftserver"
+	ec FTS_ERR_NOMEM, "out of virtual memory in ftserver"
+	ec FTS_ERR_NOVOL, "no such fileset"
+	ec FTS_ERR_MULTIRWVOL, "more than one read/write fileset"
+	ec FTS_ERR_FAILEDOP, "not all entries successfully processed"
+	ec FTS_ERR_IO, "I/O error"
+	ec FTS_ERR_NOTIMP, "the operation is not yet implemented"
+	ec FTS_ERR_INTERNAL_FLDB, "FLDB client not initialized"
+	ec FTS_ERR_NEED_RW, "fldb entry is missing its R/W ID"
+	ec FTS_ERR_NEED_RO, "fldb entry is missing its R/O ID"
+	ec FTS_ERR_NEED_BK, "fldb entry is missing its backup ID"
+	ec FTS_ERR_BADCONN, "bad rpc binding handle returned"
+	ec FTS_ERR_BADSERVADDR, "malformed server address"
+	ec FTS_ERR_PIPE, "I/O error in pipe"
+	ec FTS_ERR_INCONSISTENT, "source fileset is inconsistent"
+	ec FTS_ERR_BADGROUP, "specified group not in specified cell"
+	ec FTS_ERR_FLDBENT_INCONSISTENT, "fldb entry inconsistency"
+	ec FTS_ERR_FSET_EXISTS, "fileset already exists in a different site"
+	ec FTS_ERR_FSET_REPLICATED, "cannot restore replicated filesets"
+	ec FTS_ERR_SPARE3, "fts spare3"
+	ec FTS_ERR_SPARE4, "fts spare4"
+
+	ec FTSERVER_ERR_ATTACH, "could not attach fileset"
+	ec FTSERVER_ERR_DETACH, "could not detach fileset"
+	ec FTSERVER_ERR_BADAGGREGATE, "aggregate not present and exported"
+	ec FTSERVER_ERR_BADNAME, "bad fileset name"
+	ec FTSERVER_ERR_BADACCESS, "insufficient privilege for fileset operation"
+	ec FTSERVER_ERR_VLDB, "error from fileset location database"
+	ec FTSERVER_ERR_MOVED, "fileset moved"
+	ec FTSERVER_ERR_BADOP, "illegal fileset operation"
+	ec FTSERVER_ERR_DUMP, "badly formatted dump"
+	ec FTSERVER_ERR_BADDUMP, "restoring bad format dump"
+	ec FTSERVER_ERR_BADRELEASE, "fileset release failed"
+	ec FTSERVER_ERR_BUSY, "fileset still in use by ftserver"
+	ec FTSERVER_ERR_OFFLINE, "fileset is offline"
+	ec FTSERVER_ERR_NOMEM, "out of virtual memory in ftserver"
+	ec FTSERVER_ERR_NOVOL, "no such fileset"
+	ec FTSERVER_ERR_MULTIRWVOL, "more than one read/write fileset"
+	ec FTSERVER_ERR_IO, "I/O error"
+	ec FTSERVER_ERR_TRANSEXISTS, "Transaction already exists"
+	ec FTSERVER_ERR_NOTRANS, "Transaction doesn't exist"
+	ec FTSERVER_ERR_TRELE, "internal error releasing transaction"
+	ec FTSERVER_ERR_DELETED, "Fileset already deleted"
+	ec FTSERVER_ERR_LCLMOUNT, "Fileset locally mounted"
+	ec FTSERVER_ERR_DISJOINT_DATE, "incremental dump date begins after target completes"
+	ec FTSERVER_ERR_DISJOINT_VV, "incremental dump version begins after target completes"
+	ec FTSERVER_ERR_DISJOINT2_DATE, "incremental dump completes before target does"
+	ec FTSERVER_ERR_DISJOINT2_VV, "incremental dump decreases target's version"
+	ec FTSERVER_ERR_BAD_ACL_RESTORE, "dump contains a bad ACL"
+	ec FTSERVER_ERR_BAD_ACL_ENTRYTYPE_RESTORE, "dump contains an ACL with an unknown entry type"
+	ec FTSERVER_ERR_BAD_PROTOCOL, "unsupported data transfer protocol"
+end

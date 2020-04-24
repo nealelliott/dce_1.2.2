@@ -1,0 +1,178 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: misc.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:27:57  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:26  marty]
+ *
+ * Revision 1.1.4.1  1995/12/08  17:31:44  root
+ * 	Submit OSF/DCE 1.2.1
+ * 
+ * 	HP revision /main/HPDCE02/1  1994/12/08  17:29 UTC  hanfei
+ * 	merge
+ * 
+ * 	HP revision /main/hanfei_cpi_bl2/1  1994/12/07  19:31 UTC  hanfei
+ * 	merge
+ * 
+ * 	HP revision /main/hanfei_cpi_bl1/2  1994/12/07  17:09 UTC  hanfei
+ * 	change sec_rgy_checkpt_reset_interval interface
+ * 
+ * 	HP revision /main/hanfei_cpi_bl1/1  1994/12/05  14:48 UTC  hanfei
+ * 	work for rgy checkpoint to be configurable
+ * 	[1995/12/08  16:54:59  root]
+ * 
+ * Revision 1.1.2.2  1992/12/29  13:29:24  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:16:44  zeliff]
+ * 
+ * Revision 1.1  1992/01/19  14:55:32  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+
+/*  misc.idl V=9 11/21/91 //littl/prgy/src/idl
+**
+** Copyright (c) Hewlett-Packard Company 1991
+** Unpublished work. All Rights Reserved.
+**
+*/
+/* User Registry - Miscellaneous functions - client agent
+ * 
+ */
+
+[local]
+
+interface sec_rgy_misc
+
+{
+    import "dce/rgybase.idl";
+    import "dce/oride_base.idl";
+
+    /*
+     * s e c _ r g y _ l o g i n _ g e t _ i n f o 
+     *
+     * Returns login info for the specified account 
+     * Overrides may be applied.
+     *
+     * Errors 
+     *  Object not found 
+     */
+    [idempotent] void sec_rgy_login_get_info (
+        [in]        sec_rgy_handle_t        context,
+        [in, out]   sec_rgy_login_name_t    *login_name,
+        [out]       sec_rgy_acct_key_t      *key_parts,
+        [out]       sec_rgy_sid_t           *sid,
+        [out]       sec_rgy_unix_sid_t      *unix_sid,
+        [out]       sec_rgy_acct_user_t     *user_part,
+        [out]       sec_rgy_acct_admin_t    *admin_part,
+        [out]       sec_rgy_plcy_t          *policy_data,
+        [in]        signed32                max_number,
+        [out]       signed32                *supplied_number,
+        [out, length_is(*supplied_number), size_is(max_number)] 
+                    uuid_t                  id_projlist[],
+        [out, length_is(*supplied_number), size_is(max_number)] 
+                    signed32                unix_projlist[],
+        [out]       signed32                *num_projects,
+        [out]       sec_rgy_name_t          cell_name,
+        [out]       uuid_t                  *cell_uuid,
+        [out]       error_status_t          *status
+    );
+
+
+    /*
+     * s e c _ r g y _ l o g i n _ g e t _ e f f e c t i v e
+     *
+     * Returns login info for the specified account 
+     * Overrides may be applied, and the overridden argument will be set,
+     * so it can be determined which fields have been overridden.
+     *
+     * Errors 
+     *  Object not found 
+     */
+    [idempotent] void sec_rgy_login_get_effective (
+        [in]        sec_rgy_handle_t        context,
+        [in, out]   sec_rgy_login_name_t    *login_name,
+        [out]       sec_rgy_acct_key_t      *key_parts,
+        [out]       sec_rgy_sid_t           *sid,
+        [out]       sec_rgy_unix_sid_t      *unix_sid,
+        [out]       sec_rgy_acct_user_t     *user_part,
+        [out]       sec_rgy_acct_admin_t    *admin_part,
+        [out]       sec_rgy_plcy_t          *policy_data,
+        [in]        signed32                max_number,
+        [out]       signed32                *supplied_number,
+        [out, length_is(*supplied_number), size_is(max_number)] 
+                    uuid_t                  id_projlist[],
+        [out, length_is(*supplied_number), size_is(max_number)] 
+                    signed32                unix_projlist[],
+        [out]       signed32                *num_projects,
+        [out]       sec_rgy_name_t          cell_name,
+        [out]       uuid_t                  *cell_uuid,
+        [out]       sec_override_fields_t   *overridden,
+        [out]       error_status_t          *status
+    );
+
+
+    /*
+     * s e c _ r g y _ w a i t _  u n t i l _ c o n s i s t e n t 
+     *
+     * block until all prior updates have propagated to all live replicas.  If
+     * the function returns true then all replicas received the updates,
+     * otherwise at least one replica was incommunicado. 
+     *
+     * Errors 
+     *
+     * readonly             specified site is not the master, or the master is in
+     *                      maintenance mode 
+     * server unavailable 
+     *
+     *
+     *
+     */
+    boolean32 sec_rgy_wait_until_consistent (
+        [in]        sec_rgy_handle_t    context,
+        [out]       error_status_t      *status
+    );
+
+
+    /*
+     * s e c _ r g y _ c u r s o r _ r e s e t 
+     *
+     * reset the database cursor to return the first suitable entry. 
+     *
+     */
+    void sec_rgy_cursor_reset (
+        [in, out]   sec_rgy_cursor_t    *cursor
+    );
+
+    /*
+     * r s _ c h e c k p t _ r e s e t _ i n t e r v a l
+     *
+     * For reset rgy database checkpoint interval.  Expected operation
+     * can be one of the following :
+     * 	  - do a checkpoint now, no change for interval.
+     *    - change interval with or without checkpointing immediately
+     *    - changed interval based on time of the day
+     *
+     * Errors
+     *  operation failure ...
+     *  server_unavailable
+     */
+    void sec_rgy_checkpt_reset_interval (
+	[in]	    sec_rgy_handle_t		h,
+	[in]	    boolean32		do_checkpt_now,
+	[in]	    signed32            new_checkpt_interval,
+	[in, string, ptr] char		*at_time_str,
+	[out]	    error_status_t	*status
+    );
+
+}

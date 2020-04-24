@@ -1,0 +1,970 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#  
+# All Rights Reserved
+#    
+# HISTORY
+# $Log: psm.sams,v $
+# Revision 1.1.2.3  1996/11/13  18:00:26  arvind
+# 	Merge of cuti_pk_fix
+# 	[1996/10/16  19:04 UTC  cuti  /main/DCE_1.2.2/cuti_pk_fix/2]
+#
+# 	Paraphrase the wording.
+# 	[1996/10/10  12:24 UTC  cuti  /main/DCE_1.2.2/cuti_pk_fix/1]
+#
+# 	Add passphrase check error msg
+# 	[1996/09/10  16:39 UTC  cuti  /main/DCE_1.2.2/4]
+#
+# 	Change key modulus range
+# 	[1996/08/14  17:33 UTC  cuti  /main/DCE_1.2.2/cuti_pk_bugfix/1]
+#
+# 	Add sec_pvtkey_same_domain_and_usage_key_exist_with_diff_pwd
+# 	[1996/06/30  21:59 UTC  cuti  /main/DCE_1.2.2/2]
+#
+# Revision 1.1.2.2  1996/10/03  14:50:23  arvind
+# 	Merge
+# 
+# 	PKSS drop from DEC (DCE1.2.2)
+# 	[1996/08/30  15:34 UTC  arvind  /main/DCE_1.2.2/arvind_pkss/1]
+# 
+# 	OSF DCE 1.2.2 Drop3
+# 	psm.sams,v
+# 	[1996/07/08  20:19:10  arvind  1.1.2.1]
+# 
+# 	#
+# 
+# 	Change low modulus size
+# 	[1996/06/14  15:06 UTC  cuti  /main/DCE12_PK/cuti_pk_new/6]
+# 
+# 	Change key modulus range
+# 	[1996/08/14  17:33 UTC  cuti  /main/DCE_1.2.2/cuti_pk_bugfix/1]
+# 
+# 	Add sec_pvtkey_same_domain_and_usage_key_exist_with_diff_pwd
+# 	[1996/06/30  21:59 UTC  cuti  /main/DCE_1.2.2/2]
+# 
+# Revision 1.1.2.1  1996/07/08  20:19:10  arvind
+# 	OSF DCE 1.2.2 Drop3
+# 	psm.sams,v
+# 	Revision /main/DCE_1.2.2/2  1996/06/30  21:59 UTC  cuti
+# 	Merge from cuti_pk_export to DCE_1.2.2
+# 	[1996/07/08  20:16:08  arvind]
+# 
+# Revision /main/DCE122_PK/cuti_pk_export/3  1996/06/27  19:50 UTC  cuti
+# 	Change te typo using spell check
+# 
+# Revision /main/DCE122_PK/cuti_pk_export/1  1996/06/19  18:37 UTC  cuti
+# 	Merge out from cuti_pk_new to cuti_pk_export
+# 
+# 	Merge PK work from DCE12_PK off of DCE_1.2 to DCE122_PK off of DCE_1.2.2.
+# 	[1996/06/04  18:53 UTC  psn  /main/DCE122_PK/1]
+# 
+# 	Merge psm, pvtkey work
+# 
+# 	Merge udpated pvtkey stuff
+# 
+# 	Add bsafe into msg
+# 	[1996/05/13  20:45 UTC  cuti  /main/DCE12_PK/cuti_pk_new/1]
+# 	Revision /main/DCE12_PK/cuti_pk_new/6  1996/06/14  15:06 UTC  cuti
+# 	Change low modulus size
+# 
+# Revision /main/DCE12_PK/cuti_pk_new/5  1996/06/14  15:01 UTC  cuti
+# 	Add sec_s_bsafe_mod_size_out_of_range
+# 
+# Revision /main/DCE12_PK/cuti_pk_new/4  1996/05/24  20:37 UTC  cuti
+# 	Review change
+# 
+# Revision /main/DCE12_PK/cuti_pk_new/3  1996/05/24  19:25 UTC  cuti
+# 	Add sec_psm_unsupported_algorithm_id
+# 
+# Revision /main/DCE12_PK/cuti_pk_new/2  1996/05/23  18:37 UTC  cuti
+# 	Add psm error
+# 
+# Revision /main/DCE12_PK/cuti_pk_new/1  1996/05/13  20:45 UTC  cuti
+# 	Add bsafe into msg
+# 
+# Revision /main/DCE12_PK/1  1996/05/08  15:05 UTC  cuti
+# 	Add psm components
+# 
+# Revision /main/cuti_pk_work/2  1996/05/08  13:50 UTC  cuti
+# 	Prepare for review of pvtkey.
+# 
+# Revision /main/cuti_pk_work/1  1996/04/12  18:47 UTC  cuti
+# 	First working version.
+# 
+# 	      Security personal security module (PSM) card error message creation
+# 
+# $EndLog$
+#
+
+component      psm
+table          psm__table
+technology     dce
+
+serviceability table psm_svc_table handle psm_svc_handle
+start
+    sub-component psm_s_user            "psm_user"               psm_i_svc_user
+    sub-component psm_s_bsafe             "psm_bsafe"                psm_i_svc_bsafe
+    sub-component psm_s_pvtkey          "psm_pvtkey"             psm_i_svc_pvtkey
+    sub-component psm_s_psm             "psm_psm"                psm_i_svc_psm
+    sub-component psm_s_general         "psm_general"            psm_i_svc_general
+end
+
+
+# Comments:
+# The explanation, action and attributes of error messages need
+# some more work.  Especial the action field.
+#
+
+#
+## Message for RSA BSAFE 2.1 error code 
+#
+
+start
+code            sec_s_bsafe_algorithm_already_set   
+text            "BSAFE2: Algorithm object has already been set with algorithm info"    
+explanation 	"Algorithm object has already been set with algorithm info"
+action          "?"
+sub-component   psm_s_bsafe
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code        	sec_s_bsafe_algorithm_info    
+text            "BSAFE2: Invalid algorithm info format"     
+explanation	"Invalid algorithm info format"
+action          "?"
+sub-component  	psm_s_bsafe 
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code     	sec_s_bsafe_algorithm_not_initialized       
+text            "BSAFE2: Algorithm object has not been initialized"	    
+explanation 	"Algorithm object has not been initialized"
+action          "?"
+sub-component   psm_s_bsafe
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code        	sec_s_bsafe_algorithm_not_set    
+text           	"Algorithm object has not been set with algorithm info"  
+explanation    	"Algorithm object has not been set with algorithm info"
+action          "?"
+sub-component   psm_s_bsafe
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code       	sec_s_bsafe_algorithm_obj     
+text            "BSAFE2: Invalid algorithm object"    
+explanation	"Invalid algorithm object"
+action          "?"
+sub-component  	psm_s_bsafe 
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code     	sec_s_bsafe_alg_operation_unknown       
+text            "BSAFE2: Unknown operation for an algorithm or algorithm info type"    
+explanation 	"Unknown operation for an algorithm or algorithm info type"
+action          "?"
+sub-component 	psm_s_bsafe  
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code      	sec_s_bsafe_alloc      
+text            "BSAFE2: Insufficient memory"   
+explanation  	"Insufficient memory"
+action          "?"
+sub-component 	psm_s_bsafe  
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code       	sec_s_bsafe_cancel
+text            "BSAFE2: Operation was canceled by the surrender function"
+explanation     "Operation was canceled by the surrender function"
+action          "?"
+sub-component 	psm_s_bsafe  
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_s_bsafe_data          
+text            "BSAFE2: Generic data error"    
+explanation 	"Generic data error"
+action          "?"
+sub-component	psm_s_bsafe   
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code 		sec_s_bsafe_exponent_even           
+text            "BSAFE2: Public exponent in key pair generation is not allowed to be even"    
+explanation 	"Invalid even value for public exponent in key pair generation"
+action          "?"
+sub-component	psm_s_bsafe   
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_s_bsafe_exponent_len          
+text            "BSAFE2: Invalid exponent length for public exponent in key pair generation"
+explanation     "Invalid exponent length for public exponent in key pair generation"
+action          "?"
+sub-component 	psm_s_bsafe  
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code        	sec_s_bsafe_hardware
+text            "BSAFE2: Cryptographic hardware error"   
+explanation	"Cryptographic hardware error" 
+action          "?"
+sub-component 	psm_s_bsafe  
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code 		sec_s_bsafe_input_data          
+text            "BSAFE2: Invalid format for input data"    
+explanation	"Invalid format for input data"
+action          "?"
+sub-component 	psm_s_bsafe  
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code 		sec_s_bsafe_input_len           
+text            "BSAFE2: Invalid length for input data"     
+explanation	"Invalid length for input data"
+action          "?"
+sub-component 	psm_s_bsafe 
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code            sec_s_bsafe_key_already_set
+text            "BSAFE2: Key object has already been set with key info"    
+explanation 	"Key object has already been set with key info"
+action          "?"
+sub-component	psm_s_bsafe   
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code 		sec_s_bsafe_key_info           
+text            "BSAFE2: Invalid key info format"   
+explanation	"Invalid key info format"
+action          "?"
+sub-component	psm_s_bsafe   
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code		sec_s_bsafe_key_len            
+text            "BSAFE2: Invalid key length"
+explanation     "Invalid key length"
+action          "?"
+sub-component 	psm_s_bsafe  
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code		sec_s_bsafe_key_not_set            
+text            "BSAFE2: Key object has not been set with key info"    
+explanation 	"Key object has not been set with key info"
+action          "?"
+sub-component  	psm_s_bsafe 
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code            sec_s_bsafe_key_obj
+text            "BSAFE2: Invalid key object"   
+explanation  	"Invalid key object"
+action          "?"
+sub-component 	psm_s_bsafe  
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code 		sec_s_bsafe_key_operation_unknown          
+text            "BSAFE2: Unknown operation for a key info type"
+explanation     "Unknown operation for a key info type"
+action          "?"
+sub-component 	psm_s_bsafe 
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code 		sec_s_bsafe_memory_obj           
+text            "BSAFE2: Invalid internal memory object"    
+explanation 	"Invalid internal memory object"
+action          "?"
+sub-component 	psm_s_bsafe 
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code            sec_s_bsafe_modulus_len
+text            "BSAFE2: Invalid modulus length in public or private key"    
+explanation 	"Invalid modulus length in public or private key"
+action          "?"
+sub-component	psm_s_bsafe   
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code   		sec_s_bsafe_not_initialized         
+text            "BSAFE2: Algorithm is not properly initialized" 
+explanation 	"Algorithm is not properly initialized"    
+action          "?"
+sub-component 	psm_s_bsafe  
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code   		sec_s_bsafe_not_supported         
+text            "BSAFE2: Unsupported operation requested"
+explanation     "Unsupported operation requested"
+action          "?"
+sub-component   psm_s_bsafe
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code		sec_s_bsafe_output_len            
+text            "BSAFE2: Output data is larger than supplied buffer"    
+explanation 	"Output data is larger than supplied buffer"
+action          "?"
+sub-component	psm_s_bsafe   
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code            sec_s_bsafe_over_32k
+text            "BSAFE2: Data block exceeds 32,767 bytes"    
+explanation 	"Data block exceeds 32,767 bytes"
+action          "?"
+sub-component 	psm_s_bsafe  
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code 		sec_s_bsafe_random_not_initialized           
+text            "BSAFE2: Random algorithm has not been initialized"
+explanation     "Random algorithm has not been initialized"
+action          "?"
+sub-component 	psm_s_bsafe  
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_s_bsafe_random_obj          
+text            "BSAFE2: Invalid algorithm object for the random algorithm"    
+explanation 	"Invalid algorithm object for the random algorithm"
+action          "?"
+sub-component 	psm_s_bsafe  
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code            sec_s_bsafe_signature
+text            "BSAFE2: Invalid signature"    
+explanation 	"Invalid signature"
+action          "?"
+sub-component	psm_s_bsafe   
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code 		sec_s_bsafe_wrong_algorithm_info           
+text            "BSAFE2: Wrong type of algorithm info"
+explanation     "Wrong type of algorithm info"
+action          "?"
+sub-component	psm_s_bsafe   
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code 		sec_s_bsafe_wrong_key_info           
+text            "BSAFE2: Wrong type of key info"
+explanation 	"Wrong type of key info"
+action          "?"
+sub-component 	psm_s_bsafe  
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code            sec_s_bsafe_input_count
+text            "BSAFE2: Update called an invalid number of times for inputting data"
+explanation     "Update called an invalid number of times for inputting data"
+action          "?"
+sub-component 	psm_s_bsafe  
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_s_bsafe_method_not_in_chooser         
+text           	"Algorithm method required by the specified algorithm not in algorithm chooser"
+explanation     "Algorithm method required by the specified algorithm not in algorithm chooser"
+action          "?"
+sub-component	psm_s_bsafe   
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_s_bsafe_output_count          
+text            "BSAFE2: Update called an invalid number of times for outputting data"
+explanation     "Update called an invalid number of times for outputting data"
+action          "?"
+sub-component 	psm_s_bsafe 
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_s_bsafe_unknown_error          
+text            "BSAFE2: Unknown bsafe error"
+explanation     "Unknown bsafe error"
+action          "?"
+sub-component	psm_s_bsafe   
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start          
+code           sec_s_bsafe_decryption_failure 
+text           "BSAFE2: decryption failure" 
+explanation    "Wrong password or key supplied in decryption or verification" 
+action         "Get the right password or key" 
+sub-component  psm_s_psm 
+attributes     "svc_c_sev_error | svc_c_action_exit_bad" 
+end
+
+start          
+code           sec_s_bsafe_mod_size_out_of_range
+text           "BSAFE2: key modulus length should be between 256 - 1024" 
+explanation    "key modulus length is too small or too big for public key generation"
+action         "Get the right modulus length" 
+sub-component  psm_s_psm 
+attributes     "svc_c_sev_error | svc_c_action_exit_bad" 
+end
+
+
+
+#
+## private key accessing mechanism errors.
+#
+
+start
+code  		sec_pvtkey_mechanism_not_init
+text            "private key storage mechanism hasn't been initialized"
+explanation     "sec_pvtkey_open was not called before this operation."
+action          "?"
+sub-component	psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_pvtkey_invalid_handle
+text            "invalid sec_pvtkey_handle"
+explanation     "Pvtkey handle is invalid, could be caused by memory corruption."
+action          "?"
+sub-component	psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_pvtkey_same_domain_and_usage_key_already_exist
+text            "same domain and usage key already exist"
+explanation     "There is a private key with same domain, usage existent in the key storage mechanism"
+action          "?"
+sub-component	psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_pvtkey_same_domain_and_usage_key_exist_with_diff_pwd
+text            "Unable to update same_domain_and_usage_key_already_exist key because of different pwd"
+explanation     "Either recreate the user account or use the right password."
+action          "?"
+sub-component	psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_pvtkey_no_matched_private_key
+text            "couldn't find a matched private key in the file"
+explanation     "No private key is matched to the requested name, domain, and key usage"
+action          "?"
+sub-component	psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_pvtkey_key_generation_not_supported
+text            "key generation is not supported"
+explanation     "private key generation is done in psm level for file based key storage"
+action          "?"
+sub-component	psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_pvtkey_invalid_pwd
+text            "invalid password"
+explanation     "illegal password for fetching private key."
+action          "?"
+sub-component	psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_pvtkey_no_more_memory
+text            "ran out of memory"
+explanation     "Malloc failed because of no more memory"
+action          "?"
+sub-component	psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_pvtkey_key_deletion_not_supported
+text            "private key deletion functionality is not supported."
+explanation     "private key deletion functionality is not supported."
+action          "?"
+sub-component	psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_pvtkey_private_key_is_not_supplied
+text            "private key is required fro admin to update user's private key"
+explanation     "For admin to update user's private key record, private key has to supplied."
+action          "?"
+sub-component	psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_pvtkey_new_password_required
+text            "new password is required for updating the password"
+explanation     "New password is required for updating the password of th private key"
+action          "?"
+sub-component	psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_pvtkey_internal_error
+text            "sec_pvtkey module internal error.  Please inform the developer."
+explanation     "This is a developer coding error." 
+action          "?"
+sub-component	psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code            sec_pvtkey_file_locked
+text            "pvtkey file is locked by other process."
+explanation     "Only one process, one thread can do a write access to the pvtkey file at a time"
+action          "Wait a while and try it later"
+sub-component   psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code            sec_pvtkey_file_cannot_open_key_file
+text            "pvtkey file cannot be opened."
+explanation     "pvtkey file cannot be opened."
+action          "Check the permission of the file"
+sub-component   psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_pvtkey_privileged
+text            "Not file owner or root"
+explanation     "Must be the file owner or root account to access pvtkey file"
+action          "?"
+sub-component	psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_pvtkey_capability_not_supported
+text            "specified capability not supported"
+explanation     "specified capability not supported in this private key storage mechanism"
+action          "?"
+sub-component	psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_pvtkey_unsupported_capability_name
+text            "specified capability name not supported"
+explanation     "specified capability name not supported in this private key storage mechanism"
+action          "?"
+sub-component	psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_pvtkey_multiple_key_usages
+text            "too many key usages supplied"
+explanation     "Multiple key usages supplied while only one key usage allowed"
+action          "?"
+sub-component	psm_s_pvtkey
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code  		sec_pvtkey_no_more_data
+text            "read reach the end of file"
+explanation     "No more data in the file"
+action          "?"
+sub-component	psm_s_pvtkey
+attributes      "svc_c_sev_warning"
+end
+
+
+start
+code            sec_pvtkey_wrong_passwd 
+text            "New passphrase doesn't match  other key pairs' passphrase"
+explanation     "The passphrases for all key pairs must be the same"
+action          "Change to the same passphrase and try it again"
+sub-component   psm_s_pvtkey
+attributes      "svc_c_sev_warning"
+end
+
+start
+code            sec_pvtkey_version_not_exist
+text            "The correct private key version not found"
+explanation     "The correct private key version not found"
+action          "Use version 0 to indicate using the most recent one, or
+                 use the correct key version number"
+sub-component   psm_s_pvtkey
+attributes      "svc_c_sev_warning"
+end
+
+start
+code            sec_pvtkey_old_pass_required
+text            "Old passphrase required for this update"  
+explanation     "This is owner updating his key pair.  Old passphrase is required to
+                 verify the passphrase"
+action          "Supply the correct old passphrase"                     
+sub-component   psm_s_pvtkey
+attributes      "svc_c_sev_warning"
+end
+
+
+
+
+#
+## psm
+#
+
+start
+code           sec_psm_unable_to_open_pvtkey 
+text           "Unable to access private key storage mechanism" 
+explanation    "open a file or make a connection to private key mechanism failed." 
+action         "?" 
+sub-component  psm_s_psm 
+attributes     "svc_c_sev_error | svc_c_action_exit_bad" 
+end
+
+
+start
+code            sec_psm_not_init
+text            "PSM was not initialized"
+explanation     "PSM need to be initialized before calling any psm operations"
+action          "Please call sec_psm_open before any other psm operation"
+sub-component   psm_s_psm 
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code            sec_psm_invalid_handle
+text            "Invalid psm handle"
+explanation     "psm handle was corrupted"
+action          "Check the memory corruption"
+sub-component   psm_s_psm 
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code             sec_psm_no_more_memory
+text             "system ran out of memory"
+explanation      "system ran our of memory during malloc"
+action           "Increase the swap space or memory"
+sub-component    psm_s_psm 
+attributes       "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code             sec_psm_wrong_pub_key_type
+text             "wrong public key type. The only supported public key type is RSA_PKCS"
+explanation      "The only supported public key type is RSA_PKCS"
+action           "Use the right public key type"
+sub-component    psm_s_psm  
+attributes       "svc_c_sev_error | svc_c_action_exit_bad" 
+end
+
+start
+code             sec_psm_internal_error
+text             "psm internal error"
+explanation      "psm internal error"
+action           "Please inform engineer"
+sub-component    psm_s_psm  
+attributes       "svc_c_sev_error | svc_c_action_exit_bad" 
+end
+
+start
+code             sec_psm_unsupported_algorithm_id
+text             "unsupported crypto algorithm"
+explanation      "unsupported crypto algorithm"
+action           "Please choose supported one"
+sub-component    psm_s_psm  
+attributes       "svc_c_sev_error | svc_c_action_exit_bad" 
+end
+
+#
+# Messages added by Digital
+#
+
+start
+code             sec_psm_keystore_not_found
+text             "Keystore not found"
+explanation      "A keystore could not be found for the specified principal"
+action           "Register a keystore for the principal"
+sub-component    psm_s_psm  
+attributes       "svc_c_sev_error | svc_c_action_exit_bad" 
+end
+
+start
+code             sec_psm_keystore_list_corrupt
+text             "Keystore list corrupt"
+explanation      "Internal error - the list of registered keystores is corrupt"
+action           "Submit a problem report"
+sub-component    psm_s_psm  
+attributes       "svc_c_sev_error | svc_c_action_exit_bad" 
+end
+
+
+start
+code            sec_psm_invalid_keystore_handle
+text            "Invalid keystore handle"
+explanation     "The sec_pvtkey_mechanism_handle_t was corrupt"
+action          "Check for an error in the calling program"
+sub-component   psm_s_psm 
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code            sec_psm_keystore_attr_read_failed
+text            "Keystore ERA retrieval failed"
+explanation     "An attempt to retrieve a principal's keystore ERA failed"
+action          "Register a keystore for the principal"
+sub-component   psm_s_psm 
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code            sec_psm_keystore_already_registered
+text            "Keystore already registered."
+explanation     "The specified keystore is already registered"
+action          "To change an existing keystore, set the replace flag"
+sub-component   psm_s_psm 
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+start
+code            sec_psm_keystore_list_full
+text            "No space for a new keystore"
+explanation     "There is no space left in the keystore list"
+action          "None."
+sub-component   psm_s_psm 
+attributes      "svc_c_sev_error | svc_c_action_exit_bad"
+end
+
+
+
+#
+# Digital debugging messages
+#
+
+
+start
+code            sec_psm_i_lookup_keystore
+text            "Entering sec_pvtkey__lookup_keystore(%s)"
+explanation     "Debugging message"
+action          "None - Debugging message"
+sub-component   psm_s_psm 
+attributes      svc_c_debug9
+end
+
+start
+code            sec_psm_i_bad_domain
+text            "sec_pvtkey__lookup_keystore(%s) failed - Bad domain"
+explanation     "Debugging message"
+action          "None - Debugging message"
+sub-component   psm_s_psm 
+attributes      svc_c_debug8
+end
+
+start
+code            sec_psm_i_no_prin_keystore_era
+text            "sec_pvtkey__lookup_keystore(%s) - No principal keystore ERA"
+explanation     "Debugging message"
+action          "None - Debugging message"
+sub-component   psm_s_psm 
+attributes      svc_c_debug8
+end
+
+start
+code            sec_psm_i_no_def_keystore_era
+text            "sec_pvtkey__lookup_keystore(%s) - No default keystore ERA"
+explanation     "Debugging message"
+action          "None - Debugging message"
+sub-component   psm_s_psm 
+attributes      svc_c_debug8
+end
+
+start
+code            sec_psm_i_bad_keystore_list
+text            "Keystore entry %d is corrupt"
+explanation     "Internal error - The specified entry in the registered keystore list is invalid"
+action          "Submit a problem report"
+sub-component   psm_s_psm 
+attributes      svc_c_sev_error
+end
+
+start
+code            sec_psm_i_def_keystore
+text            "sec_pvtkey__lookup_keystore(%s) - Using default keystore %d (%.32s)"
+explanation     "Debugging message"
+action          "None - Debugging message"
+sub-component   psm_s_psm 
+attributes      svc_c_debug8
+end
+
+start
+code            sec_psm_i_no_keystore
+text            "sec_pvtkey__lookup_keystore(%s) failed - No appropriate keystore"
+explanation     "Debugging message"
+action          "None - Debugging message"
+sub-component   psm_s_psm 
+attributes      svc_c_debug8
+end
+
+start
+code            sec_psm_i_era_lookup_failure
+text            "sec_pvtkey__lookup_keystore(%s) failed - Bad ERA lookup (0x%x)"
+explanation     "Debugging message"
+action          "None - Debugging message"
+sub-component   psm_s_psm 
+attributes      svc_c_debug8
+end
+
+start
+code            sec_psm_i_chosen_keystore
+text            "sec_pvtkey__lookup_keystore(%s) - Returning keystore %d (%.32s)"
+explanation     "Debugging message"
+action          "None - Debugging message"
+sub-component   psm_s_psm 
+attributes      svc_c_debug8
+end
+
+start
+code            sec_psm_i_matchall_keystore
+text            "sec_pvtkey__lookup_keystore(%s) - Returning matchall keystore %d (%.32s)"
+explanation     "Debugging message"
+action          "None - Debugging message"
+sub-component   psm_s_psm 
+attributes      svc_c_debug8
+end
+
+start
+code            sec_psm_i_searching_explicit
+text            "sec_pvtkey__lookup_keystore(%s) - Searching for ERA-match keystore %s"
+explanation     "Debugging message"
+action          "None - Debugging message"
+sub-component   psm_s_psm 
+attributes      svc_c_debug9
+end
+
+start
+code            sec_psm_i_searching_matchall
+text            "sec_pvtkey__lookup_keystore(%s) - Searching for matchall keystore"
+explanation     "Debugging message"
+action          "None - Debugging message"
+sub-component   psm_s_psm 
+attributes      svc_c_debug9
+end
+
+
+start
+code            sec_psm_i_discarded_keystore
+text            "sec_pvtkey__lookup_keystore(%s) - Discarded keystore %d (%.32s, uuid %s)"
+explanation     "Debugging message"
+action          "None - Debugging message"
+sub-component   psm_s_psm 
+attributes      svc_c_debug9
+end
+
+start
+code            sec_psm_i_bad_keystore_id
+text            "sec_pvtkey__lookup_keystore(%s) - Bad UUID in keystore %d (%.32s)"
+explanation     "Internal error - The specified entry in the registered keystore list is invalid"
+action          "Submit a problem report"
+sub-component   psm_s_psm 
+attributes      svc_c_sev_error
+end
+
+start
+code            sec_psm_i_bad_keystore_id1
+text            "sec_pvtkey__register_keystore - Bad UUID in keystore %d (%.32s)"
+explanation     "Internal error - The specified entry in the registered keystore list is invalid"
+action          "Submit a problem report"
+sub-component   psm_s_psm 
+attributes      svc_c_sev_error
+end
+
+
+
+
+#
+## Messages for serviceability table
+#
+
+start           !intable undocumented
+code            psm_i_svc_user
+text            "PSM user operations\n"
+end
+
+start           !intable undocumented
+code            psm_i_svc_bsafe
+text            "BSAFE 2.1 (RSA) library operations"
+end
+
+start           !intable undocumented
+code            psm_i_svc_pvtkey
+text            "Private key accessing mechanism"
+end
+
+start           !intable undocumented
+code            psm_i_svc_psm
+text            "Personal security module framework"
+end
+
+start           !intable undocumented
+code            psm_i_svc_general
+text            "Personal security module general"
+end
+
+

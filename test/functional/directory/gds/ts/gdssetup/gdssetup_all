@@ -1,0 +1,134 @@
+#!/bin/ksh
+# 
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: gdssetup_all,v $
+# Revision 1.1.4.2  1996/03/11  01:34:26  marty
+# 	Update copyright years
+# 	[1996/03/10  19:36:35  marty]
+#
+# Revision 1.1.4.1  1995/12/11  15:28:22  root
+# 	Submit
+# 	[1995/12/11  14:37:09  root]
+# 
+# Revision 1.1.2.4  1994/08/19  14:54:05  keutel
+# 	OT 11525, 11526
+# 	[1994/08/19  14:30:55  keutel]
+# 
+# Revision 1.1.2.3  1994/07/20  14:06:31  marrek
+# 	Exit codes are passed to error checking routine
+# 	[1994/07/20  13:13:34  marrek]
+# 
+# Revision 1.1.2.2  1994/07/15  16:58:21  keutel
+# 	OT 11316: unsetting of XDS_LOG and D2_LOG removed
+# 	[1994/07/15  15:29:43  keutel]
+# 
+# Revision 1.1.2.1  1994/06/21  14:32:15  marrek
+# 	Created in June 1994 code submission.
+# 	[1994/06/20  13:01:30  marrek]
+# 
+# $EndLog$
+#
+#  (c) Copyright 1994 Siemens-Nixdorf Information Systems
+#  Munich, Germany
+#  All Rights Reserved
+#
+#
+# gdssetup_all
+# NAME gdssetup_all
+#
+# DESC
+# {
+# gdssetup_all administration testcase
+# Each invocable component runs the 'gdssetup' executable using as standard
+# input the batch file specified in each strategy statement.
+# }
+#
+export TET_EXECUTE="$TET_ROOT/functional/directory/gds/ts"
+export TP_PATH="$TET_EXECUTE/gdssetup/lib"
+
+tet_startup="Startup"			# no startup function
+tet_cleanup="Cleanup"			# cleanup function
+
+iclist="ic1 ic2"
+
+ic1="tp1"				# functions for ic1
+ic2="tp2"				# functions for ic2
+
+tp1() {
+        while read xfile
+        do
+          func_name=`echo $xfile | awk '{print $1}'`
+          testcase=`echo $xfile | awk '{print $NF}'`
+          tet_infoline "GDSSETUP: TEST CASE $testcase"
+
+          eval "$xfile > $testcase.log 2>&1"
+          exit_code=$?
+
+	  check_ERROR_gdssetup $testcase.log 0 $exit_code $func_name
+
+        done <  $TP_PATH/valid/TESTCASES 
+}
+
+tp2() {
+        while read xfile
+        do
+          exp_exit_code=`echo $xfile | awk '{print $1}'`
+          func_name=`echo $xfile | awk '{print $2}'`
+          cmd_line=`echo $xfile | awk '
+                                  {
+                                    line=$2
+                                    for (i=3; i<=NF; i++)
+                                       line = line " " $i
+                                    print line
+                                  } '`
+          testcase=`echo $xfile | awk '{print $NF}'`
+          tet_infoline "GDSSETUP: TEST CASE $testcase"
+
+          eval "$cmd_line > $testcase.log 2>&1"
+          exit_code=$?
+
+	  check_ERROR_gdssetup $testcase.log $exp_exit_code $exit_code $func_name
+
+        done <  $TP_PATH/invalid/TESTCASES
+}
+
+Cleanup() {
+        rm -f ${TET_EXECUTE}/gdssetup/save*
+        rm -f ${TET_EXECUTE}/gdssetup/out.*
+        rm -f ${TET_EXECUTE}/gdssetup/tet1.*
+        rm -f $OUTDIR/gdssetup_valid.log
+        rm -f $OUTDIR/gdssetup_invalid.log
+        while read xfile
+        do
+           testcase=`echo $xfile | awk '{print $NF}'`
+           echo "\n\n---> Start of  $testcase.log\n" >> $OUTDIR/gdssetup_valid.log 
+           cat -s $testcase.log >> $OUTDIR/gdssetup_valid.log
+           rm -f $testcase.log
+        done <  $TP_PATH/valid/TESTCASES
+        while read xfile
+        do
+           testcase=`echo $xfile | awk '{print $NF}'`
+           echo "\n\n---> Start of  $testcase.log\n" >> $OUTDIR/gdssetup_invalid.log
+           cat -s $testcase.log >> $OUTDIR/gdssetup_invalid.log
+           rm -f $testcase.log
+        done <  $TP_PATH/invalid/TESTCASES
+	tet_infoline "GDSSETUP TEST ENDED"
+}
+
+Startup() {
+	export_paths
+        rm -f ${TET_EXECUTE}/tet.log
+	tet_infoline "GDSSETUP TEST START"
+}
+
+#source shell common functions
+. ${TET_EXECUTE}/lib/shfuncs
+
+#execute shell test case manager - must be last line
+. ${TET_ROOT}/lib/xpg3sh/tcm.sh

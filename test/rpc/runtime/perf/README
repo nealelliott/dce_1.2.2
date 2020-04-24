@@ -1,0 +1,70 @@
+
+Perf Test Suite
+============================================
+
+The perf tests has to be run as two different processes - 
+a perf server and a perf client. The perf server need to be started
+before a perf client process can be invoked.
+
+Various RPC request combinations can be tested as input to
+perf client process.
+
+The following scripts are provided to execute a minimal set
+of perf tests:
+	run_client.sh (can be run with both tcp and udp).
+	perf_udp.sh
+	perf_tcp.sh
+
+Usage of these scripts:
+run_client.sh `string binding returned by server`
+perf_udp.sh server_host_name client_program_directory
+perf_tcp.sh server_host_name client_program_directory
+
+Before executing any of these scripts, a server need to started
+with appropriate protseq_spec.
+
+An example run  of these scripts involve starting the server:
+
+        ./server 1 ncadg_ip_udp
+              ==> returns binding, such as ncadg_ip_udp:130.105.4.102[2001]
+         run_client.sh 'ncadg_ip_udp:130.105.4.102[2001]'
+	 perf_udp.sh server_host_name .
+or 
+        ./server 1 ncacn_ip_tcp
+              ==> returns binding, such as ncacn_ip_tcp:130.105.4.102[2001]
+         run_client.sh 'ncacn_ip_tcp:130.105.4.102[2001]'
+	 perf_tcp.sh server_host_name .
+
+The alternate methods of executing the perf tests are provided 
+in the DCE Porting and Testing Guide.
+
+=========
+
+As of OSFDCE1.2.2, servers may register with the "User to User" protocol,
+where they only need access to a login context, not a keytable, to be the
+receivers of authenticated RPCs.
+
+To use perf with "User to User":
+
+  1) Create an account for the server: (eg: perf_svr)
+  2) Set the dupkey and usertouser flags to yes, with dcecp for this account.
+  3) dce_login to perf_svr, then run the server:
+
+    ./server -u perf_svr 1 ncadg_ip_udp
+
+  4) Log in to any client account and run the client:
+
+    ./client -p default,dce,pkt_integrity 0 ncadg_ip_udp:<ipaddr>\[<port>\] 1 1 yes no
+
+  5) To verify ticket refresh with u2u, set the max ticket lifetime on the
+     dce-ptgt account to 7 minutes and run the client with the following
+     arguments:
+
+    ./client -p default,dce,pkt_integrity 0 ncadg_ip_udp:<ipaddr>\[<port>\] 10000 100 yes no
+
+    This should run for a long time, and you can verify that it makes it
+    through several ticket lifetimes (which you set to 7 mins each) before
+    killing it.
+
+
+

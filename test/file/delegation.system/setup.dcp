@@ -1,0 +1,204 @@
+proc verbose_exec {args} {
+    global verbose
+    if { [info exists verbose] && [string compare $verbose "y"] == 0} {
+	puts "Execing: $args"
+    }
+    if {[catch {eval $args} msg ]} {
+	set result 0
+    } else {
+	set result 1
+    }
+    if { [info exists verbose] && [string compare $verbose "y"] == 0} {
+	puts "Execed($result): $args"
+    }
+}
+
+proc add_to_group {user group args} {
+    if {[catch {group show $group} msg]} {
+	if {[catch [eval group create -inprojlist y $args $group] msg2]} {
+	    puts "Failed - $msg2"
+	}
+    }
+    if {[catch {group add $group -member $user} msg]} {
+	puts "Failed - $msg"
+    }
+}
+
+proc add_to_groups {user groups args} {
+    foreach group $groups {
+	eval ee add_to_group $user $group $args
+    }
+}
+
+proc add_to_org {user org args} {
+    if {[catch {organization show $org} msg]} {
+	if {[catch [eval organization create $args $org] msg2]} {
+	    puts "Failed - $msg2"
+	}
+    }
+    if {[catch {organization add $org -member $user} msg]} {
+	puts "Failed - $msg"
+    }
+}
+
+proc add_to_orgs {user orgs args} {
+    foreach org $orgs {
+	eval ee add_to_org $user $org $args
+    }
+}
+
+proc create_princ {user args} {
+    if {[catch {eval principal show $user} msg]} {
+	if {[catch [eval principal create $args $user] msg2]} {
+	    puts "Failed2 - $msg2"
+	}
+    }
+}
+
+proc add_account {user args} {
+    set orgargsloc [lsearch $args "-_o*"]
+    if {$orgargsloc >= 0} {
+	set args [lreplace $args $orgargsloc $orgargsloc]
+	set orgargs [lindex $args $orgargsloc]
+	set args [lreplace $args $orgargsloc $orgargsloc]
+    } else {
+	set orgargs ""
+    }
+
+    set groupargsloc [lsearch $args "-_g*"]
+    if {$groupargsloc >= 0} {
+	set args [lreplace $args $groupargsloc $groupargsloc]
+	set groupargs [lindex $args $groupargsloc]
+	set args [lreplace $args $groupargsloc $groupargsloc]
+    } else {
+	set groupargs ""
+    }
+
+    set princargsloc [lsearch $args "-_p*"]
+    if {$princargsloc >= 0} {
+	set args [lreplace $args $princargsloc $princargsloc]
+	set princargs [lindex $args $princargsloc]
+	set args [lreplace $args $princargsloc $princargsloc]
+    } else {
+	set princargs ""
+    }
+
+    set grouploc [lsearch $args "-gr*"]
+    set orgloc [lsearch $args "-o*"]
+    
+    incr grouploc
+    incr orgloc
+    
+
+    eval ee create_princ $user $princargs
+    eval ee add_to_org $user [lindex $args $orgloc] $orgargs
+    eval ee add_to_group $user [lindex $args $grouploc] $groupargs
+
+    eval ee account create $user $args
+}
+
+proc create_keytab { mach name users } {
+    global _c
+
+    eval {set keytabname $_c/hosts/$mach/config/keytab/$name}
+    foreach user $users {
+	if {[catch {keytab show $keytabname} msg]} {
+	    puts "keytab create $keytabname -annotation \
+		 {Delegation keytab file} -storage /krb5/delegation \
+		 -data {$user plain 1 $user}"
+	    ee keytab create $keytabname -annotation \
+		 {Delegation keytab file} -storage /krb5/delegation \
+		 -data [eval list $user plain 1 $user]
+	} else {
+	    ee keytab add $keytabname -member $user -version 1 \
+		 -key $user
+	}
+    }
+}
+
+proc cleanup {} {
+    global _c
+    global M1
+    global M2
+    global M3
+
+    for {set i 0} {$i < 6} {incr i} {
+	ee [eval list principal delete delegation$i]
+	ee [eval list principal delete dtest$i]
+    }
+    for {set i 0} {$i < 7} {incr i} {
+	ee [eval list group delete delegation_s$i]
+    }
+    ee organization delete testers
+    ee [eval list keytab delete $_c/hosts/$M1/config/keytab/delegation]
+    ee [eval list keytab delete $_c/hosts/$M2/config/keytab/delegation]
+    ee [eval list keytab delete $_c/hosts/$M3/config/keytab/delegation]
+    ee directory delete /.:/delegation -tree
+    ee exec rm -rf /dfs/delegation
+}
+
+set VERBOSE y
+
+source "./template.tcl";
+
+login $CELL_ADMIN -password $CELL_ADMIN_PASSWD
+
+if { $CLEANUP == 1} {
+	puts "Do cleanup."
+	cleanup
+}
+
+puts "Create server users."
+
+#Create the server users
+for {set i 0} {$i < 8} {incr i} {
+    ee add_account delegation$i \
+	-description "Delegation Server $i" -group delegation_sc \
+	-org none -home / -mypwd $CELL_ADMIN_PASSWD \
+	-password delegation$i
+}
+
+puts "Add to groups."
+
+ee add_to_groups delegation0 {delegation_s0}
+ee add_to_groups delegation1 {delegation_s0 delegation_s1}
+ee add_to_groups delegation2 {delegation_s0 delegation_s1 delegation_s2}
+ee add_to_groups delegation3 {delegation_s0 delegation_s1 delegation_s2 \
+				  delegation_s3}
+ee add_to_groups delegation4 {delegation_s0 delegation_s1 delegation_s2 \
+				  delegation_s3 delegation_s4}
+ee add_to_groups delegation5 {delegation_s0 delegation_s1 delegation_s2 \
+				  delegation_s3 delegation_s4 delegation_s5}
+ee add_to_groups delegation6 {delegation_s0 delegation_s1 delegation_s2 \
+				  delegation_s3 delegation_s4 delegation_s5 \
+				  delegation_s6}
+ee add_to_groups delegation7 {delegation_s0 delegation_s1 delegation_s2 \
+				  delegation_s3 delegation_s4 delegation_s5 \
+				  delegation_s6 delegation_s7}
+
+#Set up keytab file for the servers...
+ee create_keytab $M1 delegation {delegation0 delegation3 delegation6}
+ee create_keytab $M2 delegation {delegation1 delegation4 delegation7}
+ee create_keytab $M3 delegation {delegation2 delegation5}
+
+#Create the test users
+for {set i 0} {$i < 6} {incr i} {
+    ee add_account dtest$i -description "Delegation Tester $i" \
+	-group testers -org testers -home / \
+	-mypwd $CELL_ADMIN_PASSWD -password dtest$i
+}
+
+# CDS initialization 
+ee directory create /.:/delegation
+ee directory create /.:/delegation/servers
+ee directory create /.:/delegation/objects
+ee acl modify /.:/delegation/servers -add group:delegation_s0:rwdtcia
+ee acl modify /.:/delegation/objects -add group:testers:rwdtcia
+ee acl modify /.:/delegation/objects -ic -add group:testers:rwdtcia
+ee acl modify /.:/delegation/objects -io -add group:testers:rwdtcia
+ee directory create /.:/delegation/objects/dir0
+ee object create /.:/delegation/objects/object0
+
+logout
+
+

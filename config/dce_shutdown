@@ -1,0 +1,324 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# @HP_DCE_VERSION@
+# @(#)Module: dce_shutdown $Revision: 1.1.7.1 $ $Date: 1996/10/03 17:59:37 $
+#
+# HISTORY
+# $Log: dce_shutdown,v $
+# Revision 1.1.7.1  1996/10/03  17:59:37  arvind
+# 	PKSS drop (2) from DEC (DCE1.2.2)
+# 	[1996/09/04  14:59 UTC  arvind  /main/arvind_pkss/1]
+#
+# Revision 1.1.4.3  1996/03/09  23:10:06  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:28:08  marty]
+# 
+# Revision 1.1.4.2  1996/02/07  17:47:56  parul
+# 	DCE 1.2.1 final drop from HP
+# 	[1996/02/07  16:13:42  parul]
+# 
+# 	DCE 1.2.1 final drop from HP
+# 
+# Revision 1.1.2.4  1994/08/08  14:23:23  mdf
+# 	Hewlett Packard Security Code Drop
+# 	[1994/08/04  19:56:52  mdf]
+# 
+# Revision 1.1.2.3  1994/06/27  20:17:03  tom
+# 	Don't do a dce_login, since root will work just fine.
+# 	[1994/06/27  20:10:47  tom]
+# 
+# Revision 1.1.2.2  1994/06/23  16:56:27  tom
+# 	Bug 11053 - don't remove dce_login_noexec link unless we made it.
+# 	[1994/06/23  16:55:57  tom]
+# 
+# Revision 1.1.2.1  1994/06/21  16:55:43  tom
+# 	Initial checkin - copied from dce.clean.
+# 	Modify to shutdown component with control programs.
+# 	[1994/06/21  16:44:59  tom]
+# 
+# $EndLog$
+#
+#
+####################################################################
+# dce_shutdown - 
+#	stops DCE daemons
+#
+# Option:
+#	-f: force a shutdown using kill without attempting to
+#           shutdown some daemons with the control programs.
+#
+####################################################################
+set -- `getopt f $*`
+if [ $? != 0 ]
+then
+        echo "Usage: dce_shutdown [-f]"
+        exit 1
+fi
+while [ $1 != -- ]
+do
+        case $1 in
+        -f) force=y;;
+	esac
+	shift
+done
+
+if [ "$D" = "D" ]
+then
+         set -x
+fi
+
+ID=`id -u`
+if [ ${ID} -ne 0 ]; then
+    echo "You must have root permission to run \"dce_shutdown\"."
+    exit 1
+fi
+
+: ${DCE_ETC:="/etc"}
+export DCE_ETC
+
+
+if [ -z "$SOURCE_COM_UTILS" ]
+then
+	if [ -f ${DCE_ETC}/dce_com_utils ]
+	then
+		. ${DCE_ETC}/dce_com_utils
+	else
+		echo Cannot source "${DCE_ETC}/dce_com_utils"
+		exit 1
+	fi
+fi
+
+####################################################################
+#
+# This function is only used when killing the daemons gracefully
+# without passing the -f option.
+#
+####################################################################
+waitfor()
+{
+        who=$1
+        count=1
+        if [ "`get_pid $who`" -ne "-2" ]
+        then
+                log_msg VERBOSE "Waiting for $who to exit."
+                while [ $count -lt 4 -a "`get_pid $who`"  -ne "-2" ]
+                do
+                        sleep 5
+                        count=`expr $count + 1`
+                done
+                if [ $count -eq 4 ]
+                then
+                        log_msg WARNING "$who did not shutdown via the control programs"
+                fi
+        fi
+}
+
+
+####################################################################
+#
+# Stop all the daemons
+#
+####################################################################
+
+err_found=0
+
+if [ -x ${DCE_BIN}/dfs.clean ]; then
+	log_msg DEBUG "dce_shutdown: Executing: ${DCE_BIN}/dfs.clean"
+	${DCE_BIN}/dfs.clean
+	if [ $? != 0 ]; then
+		log_msg WARNING "dce_shutdown: dfs.clean returned with an error."
+		err_found=1
+	fi
+fi
+
+log_msg DEBUG "Stopping DCE daemons...\c"
+ps $PSARGS > $PSFILE
+
+# gds is a special case, but we could/should put it below with the others.
+#
+# Checking for gds in PSFILE
+( grep -q gds $PSFILE ) && \
+if [ -f $DCELOCAL/bin/gdssysadm -a -f $DCELOCAL/bin/gdsdeact ]
+then
+	log_msg DETAIL "dce_shutdown: Executing gdssysadm -fd -p"
+	gdssysadm -fd -p
+fi
+
+if [ "$force" != "y" ]
+then
+
+	#
+	# Try to be nice and shutdown things with the control programs.
+	# Note that not all daemons can be killed with the control
+	# programs.  These daemons are killed later via the kill command.
+	#
+
+	# DTS
+	grep -q dtsd $PSFILE > /dev/null
+	if [ $? -eq 0 ]
+	then
+		grep -q "dtsd -s -g" $RC_DCE > /dev/null
+		global_server=$?
+
+		if [ "$global_server" = 0 ]
+		then
+		    log_msg DETAIL "dce_shutdown: Execuring dcecp -c \"dts configure -notglobal\""
+		    dcecp -c "dts configure -notglobal" 2>&1 > /dev/null
+		fi
+		log_msg DETAIL "dce_shutdown: Executing dcecp -c \"dts deactivate ; dts stop\""
+		dcecp -c "dts deactivate ; dts stop" 2>&1 > /dev/null
+		if [ $? -eq 0 ]
+		then
+			waitfor dtsd
+		fi
+	fi
+
+	# Audit
+	grep -q auditd $PSFILE > /dev/null
+	if [ $? -eq 0 ]
+	then
+		log_msg DETAIL "dce_shutdown: Executing dcecp -c aud stop"
+		dcecp -c aud stop 2>&1 > /dev/null
+		if [ $? -eq 0 ]
+		then
+			waitfor auditd
+		fi
+	fi
+
+	# CDS
+
+	# clerk goes first
+	grep -q cdsadv $PSFILE > /dev/null
+	if [ $? -eq 0 ]
+	then
+		log_msg DETAIL "dce_shutdown: Executing cdscp disable clerk"
+		cdscp disable clerk 2>&1 > /dev/null
+		if [ $? -eq 0 ]
+		then
+			waitfor cdsadv
+		fi
+	fi
+
+	# then server
+	grep -q cdsd $PSFILE > /dev/null
+	if [ $? -eq 0 ]
+	then
+		log_msg DETAIL "dce_shutdown: Executing cdscp disable server"
+		cdscp disable server 2>&1 > /dev/null
+		if [ $? -eq 0 ]
+		then
+			waitfor cdsd
+		fi
+	fi
+
+	#
+	# Shutdown PKSSD
+	#
+
+	ps -ef | grep pkssd | grep -v grep | awk '{print $2}'\; | xargs kill
+
+	# SEC
+	grep -q secd $PSFILE > /dev/null
+	if [ $? -eq 0 ]
+	then
+		log_msg DETAIL "dce_shutdown: Executing dcecp -c registry stop ncacn_ip_tcp:localhost"
+		dcecp -c registry stop ncacn_ip_tcp:localhost 2>&1 > /dev/null
+		if [ $? -eq 0 ]
+		then
+			waitfor secd
+		fi
+	fi
+
+	#
+	# update our ps file
+	#
+	ps $PSARGS > $PSFILE
+
+fi # if not force
+
+if [ -d ${DCELOCAL}/var/security/creds/. ]; then
+	log_msg DEBUG "dce_shutdown: Removing ${DCELOCAL}/var/security/creds/*"
+	find ${DCELOCAL}/var/security/creds/. -type f -print | xargs rm -f
+fi
+
+PWD_MGMT=`basename ${PWD_MGMT_SVR}`
+# Note: have to kill ${PWD_MGMT} before killing secd
+
+restart_rpcd=0
+llbd_running=1
+if [ -f /etc/netncsrc ]; then
+	grep -q "^START_LLBD=1" /etc/netncsrc
+	llbd_running=$?
+fi
+if [ $llbd_running -eq 1 ]
+then
+	# dced is not being used by any NCS application
+       	DAEMONS1="${PWD_MGMT} dtsd dtstimed dts_.* gdad auditd cdsadv cdsd secd $EPMAP"
+else
+	# dced is being used by NCS
+	log_msg SUMMARY "Daemon dced is being used by NCS.  It will be restarted \
+as rpcd."
+	DAEMONS1="${PWD_MGMT} dtsd dtstimed dts_.* gdad auditd cdsadv cdsd secd $EPMAP"
+	restart_rpcd=1
+fi
+
+log_msg DEBUG "dce_shutdown: daemon_slaying $DAEMONS1"
+for daemon in $DAEMONS1
+do 
+        daemon_slayer $daemon
+done
+
+# Redo ps in case clerks exit when cdsadv is killed.
+ps $PSARGS > $PSFILE
+DAEMONS2="cdsclerk"
+daemon_slayer $DAEMONS2
+
+# Make sure that all daemons are killed.
+ps $PSARGS > $PSFILE
+DAEMONS="${DAEMONS1} ${DAEMONS2}"
+for daemon in ${DAEMONS}
+do
+	grep -q ${daemon} $PSFILE
+	if [ $? -eq 0 ]
+	then
+		log_msg WARNING "${daemon} not killed"
+		err_found=1
+	fi
+done
+
+#
+# Restart rpcd if restart_rpcd == 1
+#
+if [ $restart_rpcd -eq 1 ]
+then
+	${DCE_DAEMONS}/rpcd
+fi
+
+#
+# Clean up auditing client cache files.
+#
+log_msg DETAIL "dce_shutdown: Executing: rm -rf ${DCELOCAL}/var/audit/client/*"
+rm -rf ${DCELOCAL}/var/audit/client/*
+
+# This is AIX specific.  This command will unmap the libdce.a shared
+# library from the system.  This free's up filesystem and paging space.
+
+if [ "$UNAME" = "AIX" ]; then
+	slibclean
+fi
+
+if [ "$err_found" -eq 0 ]
+then
+    log_msg VERBOSE "dce_shutdown: Successfully stopped all DCE daemons."
+else
+    log_msg WARNING "dce_shutdown: Failed to stop all DCE daemons."
+fi
+
+rm -f $PSFILE
+

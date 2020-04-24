@@ -1,0 +1,338 @@
+#!/bin/ksh
+
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+#
+# HISTORY
+# $Log: ggstrs,v $
+# Revision 1.1.2.1  1996/10/16  14:09:47  arvind
+# 	OSF DCE 1.2.2 Drop 4.5
+# 	[1996/10/16  14:01:08  arvind]
+#
+# $EndLog$
+#
+
+#
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1 ic2 ic3"
+ic1="check_ggstrs_1"
+ic2="check_ggstrs_2"
+ic3="check_ggstrs_3"
+test_purp_list="check_ggstrs_1 check_ggstrs_2 check_ggstrs_3"
+
+. $TET_ROOT/test/functional/security/lib/gg.functions
+
+startup ()
+{
+        tet_infoline "Prepare for testing GGSTRS"
+
+	if [ ! -f /usr/bin/dce_login_noexec ]; then
+	        ln -s /usr/bin/dce_login /usr/bin/dce_login_noexec 2>/dev/null
+	fi
+
+        dce_auth $CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in startup"
+		del_test_purp
+		return
+        fi
+
+	setup_for_cdscache available
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	setup_for_registry_connect available /.../$cR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	setup_pgo_for_local_cell create
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	setup_acl_object_for_local_cell create
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        dce_unauth $CELL_ADMIN
+
+        dce_auth /.../$cR/$CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in startup"
+		del_test_purp
+		return
+        fi
+
+	setup_pgo_for_remote_cell create /.../$cR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	setup_many_principals_for_remote_cell create /.../$cR $NUMBER_OF_ENTRIES
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        dce_unauth /.../$cR/$CELL_ADMIN
+
+        unset REGISTRY_SITE_NAME
+        tet_infoline "default registry site will be used..."
+
+	# Authenticate the cell
+	dce_auth /.../$cL/$CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+}	# end startup ()
+
+# Ensure test accounts are not left in the registry
+cleanup ()
+{
+        dce_auth /.../$cR/$CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in cleanup"
+        fi
+
+	setup_pgo_for_remote_cell clean /.../$cR
+	setup_many_principals_for_remote_cell clean /.../$cR $NUMBER_OF_ENTRIES
+
+        dce_unauth /.../$cR/$CELL_ADMIN
+
+        dce_auth $CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in cleanup"
+        fi
+
+	setup_pgo_for_local_cell clean
+	setup_acl_object_for_local_cell clean
+	setup_for_registry_connect unavailable /.../$cR
+	setup_for_cdscache unavailable
+
+        dce_unauth $CELL_ADMIN
+
+        rm -f /usr/bin/dce_login_noexec
+
+        rm -f ${GG_INPUT} ${GG_OUTPUT}
+
+}	# end cleanup
+
+check_ggstrs_1 ()
+{
+#set -x
+	tet_infoline "(1) Verify adding - deleting remote principal in combined operations for many times"
+
+	fails_of_01=0
+	fails_of_02=0
+	fails_of_03=0
+	fails_of_04=0
+	cnt=1
+	while [ $cnt -le $NUMBER_OF_ITERATION ]; do
+		# operation for GGSTRS-01-01
+		add_to_group_by_dcecp $gG -m /.../$cR/$pR
+		if [ $? -ne 0 ]; then
+			fails_of_01=`expr $fails_of_01 + 1`
+		fi
+		# operation for GGSTRS-01-02
+		view_group_members_by_dcecp $gG -m /.../$cR/$pR
+		if [ $? -ne 0 ]; then
+			fails_of_02=`expr $fails_of_02 + 1`
+		fi
+		# operation for GGSTRS-01-03
+		remove_from_group_by_dcecp $gG -m /.../$cR/$pR
+		if [ $? -ne 0 ]; then
+			fails_of_03=`expr $fails_of_03 + 1`
+		fi
+		# operation for GGSTRS-01-04
+		view_group_members_by_dcecp $gG
+		if [ $? -ne 0 ]; then
+			fails_of_04=`expr $fails_of_04 + 1`
+		fi
+
+		cnt=`expr $cnt + 1`
+	done
+
+	check_item_begin "GGSTRS-01-01"
+	tet_infoline "Verify adding member operation in combined operations for $NUMBER_OF_ITERATION times"
+	check_item_done "$fails_of_01"
+	check_item_begin "GGSTRS-01-02"
+	tet_infoline "Verify viewing member operation in combined operations for $NUMBER_OF_ITERATION times"
+	check_item_done "$fails_of_02"
+	check_item_begin "GGSTRS-01-03"
+	tet_infoline "Verify removing member operation in combined operations for $NUMBER_OF_ITERATION times"
+	check_item_done "$fails_of_03"
+	check_item_begin "GGSTRS-01-04"
+	tet_infoline "Verify viewing no members operation in combined operations for $NUMBER_OF_ITERATION times"
+	check_item_done "$fails_of_04"
+}
+
+check_ggstrs_2 ()
+{
+#set -x
+	tet_infoline "(2) Verify adding/deleting remote principal operation for consecutive many times in each"
+
+	fails_of_01=0
+	cnt=1
+	while [ $cnt -le $NUMBER_OF_ITERATION ]; do
+		# operation for GGSTRS-02-01
+		add_to_group_by_dcecp $gG -m /.../$cR/$pR
+		if [ $? -ne 0 ]; then
+			fails_of_01=`expr $fails_of_01 + 1`
+		fi
+		cnt=`expr $cnt + 1`
+	done
+	check_item_begin "GGSTRS-02-01"
+	tet_infoline "Verify adding member operation for consecutive $NUMBER_OF_ITERATION times"
+	check_item_done "$fails_of_01"
+
+	fails_of_02=0
+	cnt=1
+	while [ $cnt -le $NUMBER_OF_ITERATION ]; do
+		# operation for GGSTRS-02-02
+		view_group_members_by_dcecp $gG -m /.../$cR/$pR
+		if [ $? -ne 0 ]; then
+			fails_of_02=`expr $fails_of_02 + 1`
+		fi
+		cnt=`expr $cnt + 1`
+	done
+	check_item_begin "GGSTRS-02-02"
+	tet_infoline "Verify viewing member operation for consecutive $NUMBER_OF_ITERATION times"
+	check_item_done "$fails_of_02"
+
+	fails_of_03=0
+	cnt=1
+	while [ $cnt -le $NUMBER_OF_ITERATION ]; do
+		# operation for GGSTRS-02-03
+		remove_from_group_by_dcecp $gG -m /.../$cR/$pR
+		if [ $? -ne 0 ]; then
+			fails_of_03=`expr $fails_of_03 + 1`
+		fi
+		cnt=`expr $cnt + 1`
+	done
+	check_item_begin "GGSTRS-02-03"
+	tet_infoline "Verify removing member operation for consecutive $NUMBER_OF_ITERATION times"
+	check_item_done "$fails_of_03"
+
+	fails_of_04=0
+	cnt=1
+	while [ $cnt -le $NUMBER_OF_ITERATION ]; do
+		# operation for GGSTRS-02-04
+		view_group_members_by_dcecp $gG
+		if [ $? -ne 0 ]; then
+			fails_of_04=`expr $fails_of_04 + 1`
+		fi
+		cnt=`expr $cnt + 1`
+	done
+	check_item_begin "GGSTRS-02-04"
+	tet_infoline "Verify viewing no members operation for consecutive $NUMBER_OF_ITERATION times"
+	check_item_done "$fails_of_04"
+}
+
+check_ggstrs_3 ()
+{
+#set -x
+	tet_infoline "(3) Verify adding/deleting many of remote principals consecutively"
+
+	fails_of_01=0
+	cnt=1
+	while [ $cnt -le $NUMBER_OF_ENTRIES ]; do
+		# operation for GGSTRS-03-01
+		add_to_group_by_dcecp $gG -m /.../$cR/${pR}${cnt}
+		if [ $? -ne 0 ]; then
+			fails_of_01=`expr $fails_of_01 + 1`
+		fi
+		cnt=`expr $cnt + 1`
+	done
+	check_item_begin "GGSTRS-03-01"
+	tet_infoline "Verify adding $NUMBER_OF_ENTRIES members consecutively"
+	check_item_done "$fails_of_01"
+
+	fails_of_02=0
+	cnt=1
+	while [ $cnt -le $NUMBER_OF_ENTRIES ]; do
+		# operation for GGSTRS-03-02
+		view_group_members_by_dcecp $gG -m /.../$cR/${pR}${cnt}
+		if [ $? -ne 0 ]; then
+			fails_of_02=`expr $fails_of_02 + 1`
+		fi
+		cnt=`expr $cnt + 1`
+	done
+	check_item_begin "GGSTRS-03-02"
+	tet_infoline "Verify viewing $NUMBER_OF_ENTRIES members consecutively"
+	check_item_done "$fails_of_02"
+
+
+	add_acl_entry_by_dcecp ${aclName} "{group ${gG} rc-------}"
+
+	dce_unauth $CELL_ADMIN
+
+	fails_of_03=0
+	cnt=1
+	while [ $cnt -le $NUMBER_OF_ENTRIES ]; do
+		# operation for GGSTRS-03-03
+
+		# Authenticate the cell as a remote principal in the group
+		dce_auth /.../$cR/${pR}${cnt} ${pR}${cnt}
+		if [ $? -ne 0 ]; then
+			del_test_purp
+			return
+		fi
+
+		check_acl_entry_by_dcecp ${aclName} "rc-------"
+		if [ $? -ne 0 ]; then
+			fails_of_03=`expr $fails_of_03 + 1`
+		fi
+		dce_unauth /.../$cR/${pR}${cnt}
+
+		cnt=`expr $cnt + 1`
+	done
+	check_item_begin "GGSTRS-03-03"
+	tet_infoline "Verify if all the $NUMBER_OF_ENTRIES of remote principals can access to the ACL entry as a group member"
+	check_item_done "$fails_of_03"
+
+	# Authenticate the cell
+	dce_auth $CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	fails_of_04=0
+	cnt=1
+	while [ $cnt -le $NUMBER_OF_ENTRIES ]; do
+		# operation for GGSTRS-03-04
+		remove_from_group_by_dcecp $gG -m /.../$cR/${pR}${cnt}
+		if [ $? -ne 0 ]; then
+			fails_of_04=`expr $fails_of_04 + 1`
+		fi
+		cnt=`expr $cnt + 1`
+	done
+	check_item_begin "GGSTRS-03-04"
+	tet_infoline "Verify removing $NUMBER_OF_ENTRIES members consecutively"
+	check_item_done "$fails_of_04"
+
+	# operation for GGSTRS-03-05
+	check_item_begin "GGSTRS-03-05"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+
+	dce_unauth $CELL_ADMIN
+}
+
+. $TET_ROOT/lib/ksh/tetapi.ksh
+. $TET_ROOT/lib/ksh/tcm.ksh

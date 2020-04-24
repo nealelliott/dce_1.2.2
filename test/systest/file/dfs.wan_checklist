@@ -1,0 +1,336 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dfs.wan_checklist,v $
+# Revision 1.1.79.2  1996/03/11  02:44:18  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:07:30  marty]
+#
+# Revision 1.1.79.1  1995/12/11  21:59:44  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:58:57  root]
+# 
+# Revision 1.1.77.1  1994/02/04  20:48:47  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:26:14  devsrc]
+# 
+# Revision 1.1.75.3  1994/01/21  19:46:14  cmckeen
+# 	Merged with changes from 1.1.75.2
+# 	[1994/01/21  19:46:09  cmckeen]
+# 
+# 	Fixed OT number
+# 	[1994/01/21  19:45:00  cmckeen]
+# 
+# 	For OT 9246:
+# 	Added note about installing and starting gdad.
+# 	Added steps to setup foreign ACLs.
+# 	[1994/01/21  19:43:18  cmckeen]
+# 
+# Revision 1.1.75.2  1994/01/20  18:44:27  annie
+# 	added copyright header
+# 	[1994/01/20  18:40:51  annie]
+# 
+# Revision 1.1.75.1  1993/12/28  20:15:42  sally
+# 	Changed comment leader from #<tab> to #<space>
+# 	[1993/12/28  20:11:34  sally]
+# 
+# Revision 1.1.5.2  1993/07/30  15:43:50  gmd
+# 	Added tip about trying cdscp show dir of foreign
+# 	cell as an UNAUTHENTICATED user.
+# 	[1993/07/30  15:06:17  gmd]
+# 
+# 	Added instructions for using gda_clerk to determine if
+# 	inter-cell problems are bind problems.
+# 	[1993/07/07  18:16:58  gmd]
+# 
+# Revision 1.1.2.3  1993/04/09  20:30:50  gmd
+# 	Added more details.
+# 	[1993/04/09  20:30:19  gmd]
+# 
+# Revision 1.1.2.2  1993/02/12  21:38:48  gmd
+# 	Placeholder - incomplete.
+# 	[1993/02/12  20:56:17  gmd]
+# 
+# $EndLog$
+############################################################################
+# TITLE: dfs.wan_checklist
+# SYNTAX:
+# Not Applicable - Read-only file.
+# OBJECTIVE:
+# Document procedures used to setup and verify Wide Area
+# Network access to dfs.
+# DESCRIPTION:
+# Examples of commands to be typed in are preceeded by "> ". 
+# Example output is preceeded by "< ".
+# Order of procedures is:
+# 	A. Setup Remote Client - Server Cell
+# 	B. Verify
+# 	C. Setup Remote Intercell Connection
+# 	D. Verify
+############################################################################
+
+	A. Setup Remote Client - Server Cell
+
+		1. Open neccessary ports on either end of
+		the WAN connection. This may require re-programming
+		routers that restrict access to ports from outside
+		the local area network.
+
+		The necessary ports are:
+
+		udp 88				For Kerberos
+		udp 135 			For the rpc daemon
+		tcp 135 			For the rpc daemon
+		all udp and tcp ports > 1024 	For DCE daemons and
+						applications
+
+		2. Run dce_config machines at either end
+		of the WAN connection.
+		Be sure to answer "no" to the CDS broadcast
+		question so that the defined cached server command
+		is used.
+
+	B. Verify
+
+		1. On each of the machines at either end of the WAN, verify
+		that the DCE CDS and Security services are working.
+
+		> dce_login cell_admin -dce-
+		> klist
+
+	You should see output indicating that you are the
+	dce principal cell_admin and that you have credentials.
+
+		> cdscp list dir /.:/hosts/*
+
+	You should see all machines in the cell listed.
+
+		2.On each of the machines at either end of the WAN, verify
+		that you have read and write access to files and directories
+		in dfs.
+
+		Test for read access:
+
+		> fts lsfldb
+		> cd /:
+		> ls
+
+		Test write access from the client:
+
+		client> mkdir /:/wan_testdir
+		client> cd /:/wan_testdir
+		client> test/systest/file/filewnr -p client -f client.file
+		client> test/file/cache_mgr/spoke 		
+
+		Test that the server can read what the client has written:
+
+		server> cd /:/wan_testdir
+		server> test/systest/file/filewnr -p client -f client.file -r
+		server> test/file/cache_mgr/spoke &
+		server> test/file/cache_mgr/hub client/5555 server/5555
+
+		The filewnr programs should output lines like:
+
+		< client_1234 : PASSED
+		< server_1234 : PASSED
+
+		The cache_mgr functional test hub should
+		output lines like:
+
+		<Rename checks return code 0
+		<Mode checks return code 0
+		<DirScan checks return code 0
+		<Testing 1 writers, 1 readers, 0 randomizers
+		<Data checks return code 0
+		<Overall tests returning 0 (success)
+		<Terminating FD 1 (code -1)
+
+		Test in the reverse direction. Note that spoke processes
+		hang around until you kill them so you can reuse them
+		for the client hub.
+
+		client> cd /:/wan_testdir
+		client> test/file/cache_mgr/hub client/5555 server/5555
+
+		server> cd /:/wan_testdir
+		server> test/systest/file/filewnr -p server -f server.file
+
+		client> cd /:/wan_testdir
+		client> test/systest/file/filewnr -p server -f server.file -r
+
+	C. Setup Remote Intercell Connection
+
+	1. Again, the same set of ports must be open at either end of
+	the WAN connection.
+
+	2. Configure your cells with legal ARPA Internet Domain
+	System conventions. See the DCE ADMIN GUIDE for Planning,
+	Configuring and Starting Up DCE.
+
+        Note: The gdad daemon must be running on one machine in each cell.
+	      To start the gdad daemon, type:
+
+			>% /opt/dcelocal/bin/gdad
+
+              The dce_config script installs the gdad binary with the CDS 
+	      server binaries in /opt/dcelocal/bin. The gdad daemon does 
+	      not HAVE to run on the CDS server machine. If you choose to 
+	      run gdad on another machine, you need to install the gdad binary 
+	      manually. 
+          
+	3. To establish an intercell connection using DNS:
+		a. Get the DNS cell data for each cell:
+
+		> cdscp show cell /.: as dns
+
+		The output for dns contains a TXT line.
+
+		b. Use this data to update the DNS database on your DNS
+		server machine.
+
+		c. Stop and restart the named daemon on your DNS server
+		machine in order for the database update to be seen.
+
+		d. In the local cell, login as cell_admin and create a
+		cross-cell authentication account. 
+
+		> dce_login cell_admin -dce-
+		<Password must be changed!
+		> rgy_edit
+		<Current site is: registry server at /.../local_cell.qadce.osf.org/subsys/dce/sec/master
+		<rgy_edit=>cell /.../foreign_cell.qadce.osf.org
+		<Enter group name of the local account for the foreign cell:> none
+		<Enter group name of the foreign account for the local cell:> none
+		<Enter org name of the local account for the foreign cell:> none
+		<Enter org name of the foreign account for the local cell:> none
+		<Enter your password:>   
+		<Enter account id to log into foreign cell with:> cell_admin
+		<Enter password for foreign account:> 
+		<Enter expiration date [yy/mm/dd or 'none']: (none)> 
+
+		If you receive an error at this point, the problem is most
+		likely a bind problem. Bind problems, in turn, are most likely
+		the result of an incorrect cell name or a typo in the database
+		file. You can verify whether it is a bind problem by:
+
+		1. Testing unauthenticated namespace read access:
+
+			- as an unauthenticated user:
+			cdscp show dir /.../foreign_cell.qadce.ofs.org
+
+		2. If the above fails, you may want to investigate further with:
+
+			- killing and restarting in debug/foreground mode
+			the gdad process in each cell
+
+			gdad -d7 -f
+
+			- using rpccp show mapping in each cell to get the 
+			string binding of each gdad process
+
+			- running the gda_clerk process (not installed,
+			see the object directory under directory/cds/gda).
+			When prompted for a string, provide the LOCAL gdad's
+			string binding. When prompted for a name, provide the
+			REMOTE cell name. Ignore the gda_clerk output but
+			watch the local gdad's output. If the gdad can NOT
+			resolve the remote cell name, there is a bind problem.
+
+		e. In the foreign cell, login as cell_admin and verify
+		that the account krbtgt/local_cell and krbtgt/foreign_cell
+		exist.
+
+		> rgy_edit
+		<Current site is: registry server at /.../foreign_cell.qadce.osf.org/subsys/dce/sec/master
+		<rgy_edit=>view
+		>[other accounts]
+		>krbtgt/foreign_cell [none none]:*:101:12::/::
+		>[other accounts]
+		>krbtgt/local_cell [none none]:*:105:12::::
+
+		
+	D. Verify 
+	1. Verify the ability to access the other cell's namespace as an authenticated user.
+		a. On local_cell:
+
+		> dce_login /.../foreign_cell/cell_admin -dce-
+		> cdscp show dir /.../foreign_cell
+
+		b. On foreign_cell:
+
+		> dce_login /.../local_cell/cell_admin -dce-
+		> cdscp show dir /.../local_cell
+
+	2. Verify the ability to read and write files in the other cell.
+		
+		First setup the acls to allow users from the local cell
+		to read and write in the foriegn cell.
+
+		On both cells:
+		dce_login cell_admin -dce-
+		> acl_edit /:
+		sec_acl_edit> m foreign_other:/.../foreign_cell.qadce.osf.org:rwxid
+		sec_acl_edit> m foreign_other:/.../local_cell.qadce.osf.org:rwxid
+		sec_acl_edit> commit
+		sec_acl_edit> exit
+		> acl_edit /: -ic
+		sec_acl_edit> m foreign_other:/.../foreign_cell.qadce.osf.org:rwxid
+		sec_acl_edit> m foreign_other:/.../local_cell.qadce.osf.org:rwxid
+		sec_acl_edit> commit
+		sec_acl_edit> exit
+		> acl_edit /: -io
+		sec_acl_edit> m foreign_other:/.../foreign_cell.qadce.osf.org:rwxid
+		sec_acl_edit> m foreign_other:/.../local_cell.qadce.osf.org:rwxid
+		sec_acl_edit> commit
+		sec_acl_edit> exit
+
+		a. On the local_cell:
+
+		> cd /.../foreign_cell/fs; ls
+		> mkdir local_cell_dir
+		> cd local_cell_dir
+		> test/systest/file/filewnr -p local_cell -f local_cell.file
+		> test/file/cache_mgr/spoke &
+
+		b. On the foreign_cell:
+
+		> cd /.../foreign_cell/fs/local_cell_dir
+		> test/systest/file/filewnr -p local_cell -f local_cell.file -r
+		> test/file/cache_mgr/spoke &
+		> test/file/cache_mgr/hub (local_cell_machine)/5555 (foreign_cell_machine)/5555
+
+		> cd /.../local_cell/fs
+		> mkdir foreign_cell_dir
+		> cd foreign_cell_dir
+		> test/systest/file/filewnr -p foreign_cell -f foreign_cell.file
+
+		where local_cell_machine and foreign_cell_machine are the
+		respective hostnames.
+
+		c. On the local_cell:
+
+		> cd /.../local_cell/fs/foreign_cell_dir
+		> test/systest/file/filewnr -p foreign_cell -f foreign_cell.file -r
+		> test/file/hub (local_cell_machine)/5555 (foreign_cell_machine)/5555
+		
+		Successful output of these tests will look the same as above.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

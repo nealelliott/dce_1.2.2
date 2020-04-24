@@ -1,0 +1,124 @@
+#!/bin/sh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: fs_SetSysVar,v $
+# Revision 1.1.15.1  1996/10/17  18:37:45  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:58:26  damon]
+#
+# Revision 1.1.10.1  1994/07/13  22:32:56  devsrc
+# 	merged with bl-10
+# 	[1994/06/29  12:17:14  devsrc]
+# 
+# 	Use /bin/pwd so shell built-in pwd that does not always
+# 	expand /: avoided (code depends on /.../<cell>/fs).
+# 	[1994/05/16  19:36:34  gmd]
+# 
+# Revision 1.1.4.5  1993/01/13  21:37:17  shl
+# 	Transarc delta: jaffe-cleanup-2.3-compiler-warnings 1.9
+# 	   tr -d takes one argument, not two.
+# 	[1993/01/13  15:09:23  shl]
+# 
+# 	Transarc delta: jaffe-cleanup-2.3-compiler-warnings 1.9
+# 	   tr -d takes one argument, not two.
+# 	[1993/01/13  15:07:26  shl]
+# 
+# Revision 1.1.4.4  1993/01/11  18:38:13  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:23:46  htf]
+# 
+# Revision 1.1.4.3  1992/10/28  18:16:27  jaffe
+# 	Transarc delta: rajesh-ot5367-salvage-recovery-authorization-check-tests 1.8
+# 	  Selected comments:
+# 	    To add authorization check tests for salvage/recovery. This is
+# 	    the initial checkpoint.
+# 	    Just a checkpoint.
+# 	    Another checkpoint.
+# 	    Checkpoint.
+# 	    This delta version has been tested.
+# 	    Changed permissions.
+# 	    Update makefiles.
+# 	    Fixed logical errors in the script pertaining to requiring read/write
+# 	    access to aggregate to perform salvage and/or recovery, handling
+# 	    of error counts generated in the AuthCheckTest.noroot script.
+# 	    Fix a build-time error.
+# 	[1992/10/28  15:12:08  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/28  18:42:38  jaffe
+# 	Transarc delta: bk-ot4454-util-fsSeySysVar 1.1
+# 	  Selected comments:
+# 	     To fix the bug in fs_SetSysVar utility test script.
+# 	    The fs_SetSysVar function was not stripping a period (.) that results from
+# 	    executing "cm sysname" command. So I added "sed ..." command to strip off
+# 	    the period.
+# 	Transarc delta: jess-change-default-system-setting-util 1.2
+# 	  Selected comments:
+# 	    It is more reasonable to set the default system as DFS in stead of AFS
+# 	    in the file fs_SetSysVar of dir 'util'. This delta is the change of it.
+# 	    Change the default system var as DFS.
+# 	    Change the comment in the echo line.
+# 	    "Assume DFS".
+# 	[1992/08/28  12:39:26  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/29  23:01:44  mason
+# 	Transarc delta: fred-3754-change-script-name 1.1
+# 	  Selected comments:
+# 	    To clean up a number of defects with the tests.  In addition to defect
+# 	    3754, the changes also fix defects 3750 and 3748.
+# 	    Correct name for old fs_SetSysName script.
+# 	[1992/05/29  19:33:06  mason]
+# 
+# $EndLog$
+#
+###############################################################################
+#    Copyright (C) 1992 Transarc Corporation - All rights reserved            #
+###############################################################################
+
+#
+#  fs_SetSysVar -
+#  	This script sets the variable fs_sysName correctly, taking into
+#  	account that the fs tests could be running under AFS of DFS.  It
+#  	is intended to be sourced (. command) into test scripts.
+#
+
+#
+#  Define global variables.
+#
+fs_sysName=""
+
+#
+#  Determine what file system we are working under, AFS or DFS, so we
+#  can issue the correct command to get the system type.
+#
+/bin/pwd | grep -s '^/\.\.\./' > /dev/null
+if [ $? -eq 0 ]
+then
+    fs_sysName=`cm sysname`
+else
+    #
+    #  Now check for AFS.  It is assumed we are running under AFS.  We
+    #  only check to validate this fact, and warn the user if it is not true.
+    #
+    /bin/pwd | grep -s '^/afs/' > /dev/null
+    if [ $? -ne 0 ]
+    then
+	echo "Warning:  File system type is expected to be either AFS or DFS,"
+	echo "          but current location appears to be outside of either"
+	echo "          of these.  Assuming file system to be DFS."
+        fs_sysName=`cm sysname`
+    else    
+        fs_sysName=`fs sysname`
+    fi
+fi
+
+#
+#  Strip extraneous stuff off of the fs_sysName variable.
+#
+fs_sysName=`echo $fs_sysName | sed "s/Current sysname is //" | sed s/.\$// | tr -d "'"`
+export fs_sysName
+

@@ -1,0 +1,178 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# @HP_COPYRIGHT@
+# 
+# HISTORY
+# $Log: utility.dcp,v $
+# Revision 1.1.2.2  1996/10/03  17:50:38  arvind
+# 	Add OSF copyright
+# 	[1996/09/09  14:43 UTC  truitt  /main/DCE_1.2.2/2]
+#
+# 	Merge changes.
+# 	[1996/09/09  14:42 UTC  truitt  /main/DCE_1.2.2/truitt_dcecp_pk4/1]
+#
+# 	Modify _dcp_upgrade_rootdir() to verify each clearinghouse in the
+# 	local cell and not accept an input clearinghouse name.
+# 	[1996/07/01  14:34 UTC  truitt  /main/DCE_1.2.2/1]
+#
+# 	Initial DCE_1.2.2 branch.
+# 	[1996/03/11  19:21 UTC  truitt  /main/HPDCE02/1]
+#
+# 	Initial HPDCE02 branch.
+# 	[1996/03/11  19:17 UTC  truitt  /main/truitt_dcecp_chf68/1]
+#
+# 	CHFts16972: Add new file to hold tcl scripts.
+# 	[1996/03/11  19:17 UTC  truitt  /main/truitt_dcecp_chf68/1]
+#
+# Revision 1.1.2.1  1996/08/13  18:11:42  arvind
+# 	Merge from DCE_1.2
+# 	[1996/08/13  18:08:24  arvind]
+# 
+# $EndLog$
+
+if {[info globals UTILITY_DEBUG] == ""} {
+    set UTILITY_DEBUG 0
+}
+
+#
+# _dcp_enumerate_namespace:
+#    This function will acquire all of the entries within the CDS
+#    namespace, starting at the level of the directories passed in.
+#
+#    Input: A list of one or more CDS directories to enumerate.
+#
+#    Output: A list of all CDS items in the specified directories, including
+#            objects, links and other directories.  The directory tree
+#            structures are traversed, and all CDS items in the entire tree
+#            are returned in the order found.
+#
+proc _dcp_enumerate_namespace {directory} {
+    set _namespace_entry ""
+
+    set entry_list [directory list $directory]
+    if {[llength $entry_list] > 0} {
+        foreach el $entry_list {
+            set _namespace_entry [format "%s %s" $_namespace_entry $el]
+        }
+    }
+    set _dcp_dirlist [directory list $directory -directories]
+    if {[llength $_dcp_dirlist] > 0} {
+        foreach name $_dcp_dirlist {
+            #
+            # Check if the directory to enumerate is a valid directory.
+            # If not, put out a warning message and skip to the next one.
+            #
+            if {[catch {directory list $name} msg] != 0} {
+                _dcp_utility_debug "The directory $name cannot be listed for some reason"
+                puts stdout "Warning: Unable to list directory $name. $msg"
+                puts stdout "Cell information may be incomplete."
+                continue
+            }
+            set _tmp_link [_dcp_enumerate_namespace $name]
+            if {[llength _tmp_link] > 0} {
+                set _namespace_entry [format "%s %s" $_namespace_entry $_tmp_link]
+            }
+        }
+    }
+    return [string trimright $_namespace_entry]
+}
+
+
+#
+# _dcp_enumerate_dirs:
+#    This function will acquire all of the directory entries within
+#    the CDS directories named in the argument.  Only the entries
+#    within the named directories that are themselves directories
+#    are returned.
+#
+#    Input: A list of one or more CDS directories to enumerate.
+#
+#    Output: A list of all CDS directory items in the named directories.
+#            The directory tree structure is traversed, and all CDS
+#            directory items in the entire tree are returned in the
+#            order found.
+#
+proc _dcp_enumerate_dirs {directory} {
+    set _namespace_entry ""
+
+    set _dcp_dirlist [directory list $directory -directories]
+    if {[llength $_dcp_dirlist] > 0} {
+        foreach name $_dcp_dirlist {
+            lappend _namespace_entry $name
+            set _tmp_link [_dcp_enumerate_dirs $name]
+            if {[llength _tmp_link] > 0} {
+                set _namespace_entry [format "%s %s" $_namespace_entry $_tmp_link]
+            }
+        }
+    }
+    return [string trimright $_namespace_entry]
+}
+
+
+#
+# _dcp_upgrade_rootdir:
+#    This function will upgrade the CDS_DirectoryVersion of the local
+#    cell's root directory to 4.0 (the default value is 3.0).  An
+#    upgrade to 4.0 is required for any users who wish to use cell
+#    aliasing.  Note this command is requesting CDS to upgrade to 4.0,
+#    it is not actually doing the work.  Thus, it is very possible,
+#    especially in cells which have CDS replication, that the output
+#    of this call will still be '3.0', not the '4.0' that is expected.
+#    It isn't necessarily a failure, however, since the request was
+#    made and CDS will eventually make the upgrade.
+#
+#    Input: None.
+#
+#    Output: The CDS_DirectoryVersion of the local root directory at
+#            the end of the command.
+#
+proc _dcp_upgrade_rootdir {} {
+    _dcp_utility_debug "Verify each clearinghouse in the local cell"
+    foreach clhouse [clearinghouse catalog] {
+        clearinghouse verify $clhouse
+    }
+    set current_level [attrlist getvalues [directory show /.:] -type CDS_DirectoryVersion]
+    if {$current_level == "4.0"} {
+        _dcp_utility_debug "Current level is already 4.0"
+        return $current_level
+    } else {
+        _dcp_utility_debug "Upgrade the root directory to 4.0"
+        directory modify /.: -add {CDS_UpgradeTo 4.0}
+        _dcp_utility_debug "Synchronize the root directory"
+        directory synchronize /.:
+        _dcp_utility_debug "Verify each clearinghouse in the local cell"
+        foreach clhouse [clearinghouse catalog] {
+            clearinghouse verify $clhouse
+        }
+        _dcp_utility_debug "Synchronize the root directory"
+        directory synchronize /.:
+        set new_level [attrlist getvalues [directory show /.:] -type CDS_DirectoryVersion]
+        return $new_level
+    }
+}
+
+
+#
+# _dcp_utility_debug:
+#    This function is used to print debug information to stderr that
+#    is generated by functions in this utility library.  If the
+#    correct DEBUG variable is set, then debug information is returned.
+#
+#    Input: The information to print, usually just a string.
+#
+#    Output: The same information, with variables expanded, the name
+#            of the calling function and the string 'DEBUG:' at the
+#             beginning of the line.
+#
+proc _dcp_utility_debug {args} {
+    global UTILITY_DEBUG
+    if {$UTILITY_DEBUG != 0} {
+        puts stderr "DEBUG: [lindex [info level [expr [info level] - 1]] 0]:\
+                            [string range $args 1 [expr [string length $args] - 2]]"
+    }
+}

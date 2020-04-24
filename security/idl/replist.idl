@@ -1,0 +1,222 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: replist.idl,v $
+ * Revision 1.1.6.2  1996/03/09  23:28:13  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:40  marty]
+ *
+ * Revision 1.1.6.1  1995/12/08  17:32:55  root
+ * 	Submit OSF/DCE 1.2.1
+ * 
+ * 	HP revision /main/HPDCE02/1  1995/08/02  20:04 UTC  aha
+ * 	CHFts15825: dced pe_site update thread does not rebind
+ * 
+ * 	HP revision /main/aha_mothra8/1  1995/08/02  18:40 UTC  aha
+ * 	CHFts15825: dced pe_site update thread doesn't rebind;
+ * 	 add new API's sec_rgy_replist_read_any() and sec_rgy_replist_read_full_any()
+ * 	 that can bind to any working replica.
+ * 	[1995/12/08  16:55:13  root]
+ * 
+ * Revision 1.1.4.1  1994/06/17  18:42:23  devsrc
+ * 	cr10872 - fix copyright
+ * 	[1994/06/17  18:09:02  devsrc]
+ * 
+ * Revision 1.1.2.2  1993/01/29  19:45:59  burati
+ * 	Initial revision
+ * 	[1993/01/14  23:17:23  burati]
+ * 
+ * $EndLog$
+ */
+
+/*
+ * Copyright (c) Hewlett-Packard Company 1992, 1993
+ * Unpublished work. All Rights Reserved.
+ *
+ *  NAME:
+ *      replist.idl
+ *
+ *  FACILITY:
+ *      Security
+ *
+ *  ABSTRACT:
+ *      Registry server replica list management interface, client agent
+ */
+
+[
+ local
+]
+
+interface sec_rgy_replist
+{
+    import "dce/rgynbase.idl";
+    import "dce/binding.idl";
+    import "dce/rplbase.idl";
+    
+    /*
+     *  sec_rgy_replist_add_replica
+     *
+     *  add a replica to the replica list.
+     *
+     *  master-only operation.
+     */
+    void sec_rgy_replist_add_replica(
+        [in]    sec_rgy_handle_t        context,
+        [in]    uuid_p_t                rep_id,
+        [in]    rs_replica_name_p_t     rep_name,
+        [in]    rs_replica_twr_vec_p_t  rep_twrs,
+        [out]   error_status_t          *status
+    );
+
+    /*
+     *  sec_rgy_replist_replace_replica
+     *
+     *  replace information about replica "rep_id" on the 
+     *  replica list.  
+     *
+     *  master-only operation.
+     */
+    void sec_rgy_replist_replace_replica(
+        [in]    sec_rgy_handle_t        context,
+        [in]    uuid_p_t                rep_id,
+        [in]    rs_replica_name_p_t     rep_name,
+        [in]    rs_replica_twr_vec_p_t  rep_twrs,
+        [out]   error_status_t          *status
+    );
+
+    /*
+     *  sec_rgy_replist_delete_replica
+     *
+     *  delete the replica identified by "rep_id".
+     *  If "force_delete" is false, send the delete
+     *  to the replica identified by "rep_id" as
+     *  well as the other replicas.
+     *  If "force_delete" is true, do not send the
+     *  delete to the replica identified by "rep_id";
+     *  it has been killed off some other way.
+     *
+     *  the master may NOT be deleted with this operation
+     *
+     *  master-only operation.
+     */
+    void sec_rgy_replist_delete_replica(
+        [in]    sec_rgy_handle_t        context,
+        [in]    uuid_p_t                rep_id,
+        [in]    boolean32               force_delete,
+        [out]   error_status_t          *status
+    );
+
+    /*
+     *  sec_rgy_replist_read 
+     *
+     *  read the replica list
+     *
+     *  To start reading at the beginning of the replica
+     *  list, set marker to uuid_nil.
+     *  To read information about a specific replica, set
+     *  marker to its uuid and max_ents to 1.
+     *
+     *  The returned marker contains the uuid of the next
+     *  replica on the list.  Marker contains uuid_nil
+     *  when there are no more replicas on the list.
+     */
+    void sec_rgy_replist_read(
+        [in]        sec_rgy_handle_t    context,
+        [in, out]   uuid_t              *marker,
+        [in]        unsigned32          max_ents,
+        [out]       unsigned32          *n_ents,
+        [out, length_is(*n_ents), size_is(max_ents)]
+                    rs_replica_item_t   replist[],
+        [out]       error_status_t      *status
+    );
+
+    /*
+     *  sec_rgy_replist_read_any
+     *
+     *  read the replica list
+     *
+     *  To start reading at the beginning of the replica
+     *  list, set marker to uuid_nil.
+     *  To read information about a specific replica, set
+     *  marker to its uuid and max_ents to 1.
+     *
+     *  The returned marker contains the uuid of the next
+     *  replica on the list.  Marker contains uuid_nil
+     *  when there are no more replicas on the list.
+     *
+     *  Unlike sec_rgy_replist_read(), bind to any working
+     *  replica.
+     */
+    void sec_rgy_replist_read_any(
+        [in]        sec_rgy_handle_t    context,
+        [in, out]   uuid_t              *marker,
+        [in]        unsigned32          max_ents,
+        [out]       unsigned32          *n_ents,
+        [out, length_is(*n_ents), size_is(max_ents)]
+                    rs_replica_item_t   replist[],
+        [out]       error_status_t      *status
+    );
+
+    /*
+     *  sec_rgy_replist_read_full
+     *
+     *  read the replica list getting additional
+     *  propagation information about each replica.
+     *
+     *  To start reading at the beginning of the replica
+     *  list, set marker to uuid_nil.
+     *  To read information about a specific replica, set
+     *  marker to its uuid and max_ents to 1.
+     *
+     *  The returned marker contains the uuid of the next
+     *  replica on the list.  Marker contains uuid_nil
+     *  when there are no more replicas on the list.
+     */
+    void sec_rgy_replist_read_full(
+        [in]        sec_rgy_handle_t    context,
+        [in, out]   uuid_t              *marker,
+        [in]        unsigned32          max_ents,
+        [out]       unsigned32          *n_ents,
+        [out, length_is(*n_ents), size_is(max_ents)]
+                    rs_replica_item_full_t   
+                                        replist[],
+        [out]       error_status_t      *status
+    );
+
+    /*
+     *  sec_rgy_replist_read_full_any
+     *
+     *  read the replica list getting additional
+     *  propagation information about each replica.
+     *
+     *  To start reading at the beginning of the replica
+     *  list, set marker to uuid_nil.
+     *  To read information about a specific replica, set
+     *  marker to its uuid and max_ents to 1.
+     *
+     *  The returned marker contains the uuid of the next
+     *  replica on the list.  Marker contains uuid_nil
+     *  when there are no more replicas on the list.
+     *
+     *  Unlike sec_rgy_replist_read_full(), bind to any working
+     *  replica.
+     */
+    void sec_rgy_replist_read_full_any(
+        [in]        sec_rgy_handle_t    context,
+        [in, out]   uuid_t              *marker,
+        [in]        unsigned32          max_ents,
+        [out]       unsigned32          *n_ents,
+        [out, length_is(*n_ents), size_is(max_ents)]
+                    rs_replica_item_full_t   
+                                        replist[],
+        [out]       error_status_t      *status
+    );
+
+}
+

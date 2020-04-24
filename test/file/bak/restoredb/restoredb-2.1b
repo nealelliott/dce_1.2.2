@@ -1,0 +1,180 @@
+#
+# ID: $Id: restoredb-2.1b,v 1.5 1996/01/21 09:47:22 hyer Exp $
+#
+# COMPONENT_NAME: bak
+#
+# The following functions list may not be complete.
+# Functions defined by/via macros may not be included.
+#
+# FUNCTIONS:
+#
+#
+# ORIGINS: Transarc Corp.
+#
+# (C) COPYRIGHT Transarc Corp. 1994
+# All Rights Reserved
+# Licensed Materials - Property of Transarc
+#
+# US Government Users Restricted Rights - Use, duplication or
+# disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+#
+# HISTORY
+# $TALog: restoredb-2.1b,v $
+# Revision 1.5  1996/01/21  09:47:22  hyer
+# Changes to make the backup test scripts with the callout routines for
+# mount and unmount in DCE 1.2.
+#
+# Added cm checkfilesets and cleaned up test to run with callout routines
+# [from r1.4 by delta hyer-7265-backup-test-mods-for-callout-routines, r1.1]
+#
+# Revision 1.4  1995/12/06  15:24:23  hyer
+# The backup test scripts were not working. Most of the tests either
+# failed or never ran. Made significant changes to all scripts to make
+# them work:
+#
+# Added function CATCHEXEC that does the same thing as catch "exec ..."
+# but also displays each command and the response as well as any error codes
+# that are returned from the exec.
+#
+# Added a loop in is_butc_ready to wait up to 200 seconds for the butc
+# process to start, sleeping 10 seconds between checks.
+#
+# Changed the expected command output to match the messages generated
+# by the current version of the code.
+#
+# Added sleeps around some of the tape I/O commands to keep them from
+# failing because the device wasn't ready.
+#
+# Added chmod ogu+rwx commands after each fts crmount to give the test
+# scripts access to the test filesets
+#
+#
+# [from r1.2 by delta hyer-7109-backup-test-changes, r1.1]
+#
+# Revision 1.3  1995/11/29  17:13:08  hyer
+# Delta for changes made to the backup scripts to get the backup tests running.
+# Several changes were made to get the tests to run:
+#
+# 1. A loop was added to is_butc_ready to retry the status command
+#    every 10 seconds, and time out after 200 seconds. The tests were
+#    not being run because it can take over 1 minute for butc to start.
+#
+# 2. The directory permissions needed to be changed to allow R/W access
+#    on the test filesets after they were created with fts crmount.
+#
+# 3. The error checking code in restore_disk and restore_ft, and dump
+#    was reworked to make sure that the success or failure of the
+#    operation was detected during the test.
+#
+# 4. The calls to "fts dump" and "fts restore" were returing error status
+#    even though the operation succeeded. Changed the script to read the
+#    response from the command to decide whether or not the command worked.
+#
+# 5. Added a EXEC routine that calls exec, but prints out each command and
+#    the response.
+#
+# 6. Several other minor changes were made to address verious problems
+#    with how the scripts were checking the success or failure of the
+#    tests. The tests have run successfully start to finish on
+#    Solaris with the changes reflected in this delta.
+#
+# see above
+# [from r1.2 by delta hyer_7109_fixes_to_backup_test_scripts, r1.1]
+#
+# Revision 1.2  1994/01/07  18:02:27  davecarr
+# Upgraded tests to work with expect-5.1.3.  Also moved some configuration
+# dependencies from restoredb-cmd to generic.exp.  In the process, some
+# variables had "dbr_" prepended to them to indicate that they are used only
+# for the restoredb tests.
+#
+# Upgraded test to work with expect-5.1.3.  Some variables had "dbr_"
+# prepended to them to indicate that they are used only for the restoredb
+# tests.
+# [from r1.1 by delta davecarr-db4736-bak-restoredb-tests, r1.2]
+#
+# Revision 1.1  1993/11/24  18:44:45  davecarr
+#    This the first pass at automating tests for the bak restoredb command.  They
+# work with expect-4.3.  They will need to be updated to work with expect,
+# version 5.
+#
+# Initial checkin.  Test works with expect-4.3.
+# [added by delta davecarr-db4736-bak-restoredb-tests, r1.1]
+#
+#
+
+# defined in generic.exp or restoredb-cmd:
+#     dbr_server, dbr_butc_tcid0, bak_id, butc_id, butc_host,
+#     lshosts_savedb, lsftfamilies_savedb, lsdumps_savedb
+#     prompt, dbr_fileset, dbr_butc_tcid0
+#
+
+TEST-SETUP
+
+    CATCHEXEC "cm checkfilesets"
+
+    # It should not be necessary to stop/start the bakservers.  The
+    # important thing is that the db is not corrupted and this is checked
+    # in the test preconditions.  This approach (if valid?) will save
+    # time.
+
+    # Remove most of the db info
+    if ![expr "[remove_host_info_p $bak_id] &&\
+               [remove_fileset_families_p $bak_id] &&\
+               [remove_dump_schedule_p $bak_id]"] {
+        send_user "Problem deleting db info.\n"
+        send_user "Test setup failed.\n"
+        unset run
+    }
+    # necessary to quit butc because the db entry for it has been deleted
+    # and it is now unreachable, even after you add the entry back to the db.
+    quit_butc $butc_id $butc_host
+    set tmp_list [list "$dbr_server $dbr_butc_tcid0"]
+    if ![add_host_info_p $bak_id $tmp_list] {
+        send_user "Problem adding host/tcid entry.\n"
+        send_user "Test setup failed.\n"
+        unset run
+    }
+    set butc_id [run_butc $butc_host $dbr_butc_tcid0]
+
+TEST-PRE
+    if ![expr "[verifydb_p $bak_id] &&\
+	       [is_butc_ready_p $bak_id $dbr_butc_tcid0]"] {
+        send_user "Test preconditions failed.\n"
+        unset run
+    }
+    if [info exists run] {
+        if ![string match "bak_db_dump.1"\
+                    [lindex [Read_label $bak_id $butc_id $dbr_butc_tcid0] 0]] {
+            send_user "Test preconditions failed.\n"
+            unset run
+        }
+    }
+
+TEST-EXEC
+    if ![Restore_db_p $bak_id $butc_id $dbr_butc_tcid0] {
+        unset pass
+    }
+
+TEST-POST
+
+TEST-EVAL
+    if [info exists pass] {
+	# At this point we know that the restore completed, now check the
+	# contents of the data base against what was saved in command setup
+	# to be sure it is correct.
+	if [string compare $lshosts_savedb [save_host_info $bak_id]] {
+	    send_user "Host info was restored incorrectly\n"
+	    unset pass
+	}
+	if [string compare $lsftfamilies_savedb\
+			   [save_fileset_families $bak_id]] {
+	    send_user "Fileset info was restored incorrectly\n"
+	    unset pass
+	}
+	if [string compare $lsdumps_savedb [save_dump_schedule $bak_id]] {
+	    send_user "Dump schedule info was restored incorrectly\n"
+	    unset pass
+	}
+    }
+
+TEST-CLEANUP

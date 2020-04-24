@@ -1,0 +1,104 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: README,v $
+# Revision 1.1.11.1  1996/10/02  17:25:51  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:32:58  damon]
+#
+# Revision 1.1.6.1  1994/06/09  14:01:38  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:36:55  annie]
+# 
+# Revision 1.1.2.3  1993/01/19  15:30:47  cjd
+# 	embedded copyright notice
+# 	[1993/01/19  13:51:47  cjd]
+# 
+# Revision 1.1.2.2  1992/10/27  20:51:10  jaffe
+# 	Initial drop of README file.
+# 	[1992/10/27  12:58:33  jaffe]
+# 
+# $EndLog$
+
+OVERVIEW
+
+This directory contains the "ravager" test tools for the Episode
+salvager.  The basic approach used by these tools is to damage a chunk
+of Episode meta-data before running the salvager.  The salvager's exit
+status is then checked to see if the salvager succeeded in repairing
+the problem or not.  The tools also notice if the salvager dumps core.
+
+The aggregate is damaged in one of four ways: by setting all the bits
+in a given meta-data region to 0; by setting all the bits in a given
+meta-data region to 1; by swapping adjacent meta-data regions; and by
+copying one meta-data region over the adjacent region.  This directory
+contains four scripts that damage an aggregate in each of these four
+ways.  The scripts are: zeroall, setall, swapall, and copyall.  Each
+script takes the name of an Episode aggregate and does its own brand
+of nasty thing to each region of meta-data in the aggregate, running
+the salvager after bashing each region.
+
+The basic steps for each of the scripts are:
+
+1.	find the list of meta-data regions in the original aggregate;
+	for each meta-data region do
+2.		copy the aggregate to a temporary location;
+3.		bash the region in the temporary aggregate;
+4.		run the salvager on the temporary aggregate;
+	end
+
+Step 1. above requires a preprocessing step in order to create the
+"original aggregate".  In order to find the list of meta-data regions,
+the aggregate has to have been processed with the metamucil program
+contained in this directory.  Metamucil takes the name of an aggregate
+and writes another version of the aggregate to its standard output,
+stripping out all of the user data (by writing it out as zeros) in the
+process.  This step is useful for a number of reasons.  First, a
+metamuciled aggregate can be compressed very nicely, since most of its
+contents are 0 bytes.  It can also be stored more efficiently in an
+uncompressed form with the help of a sparse copy program.  Just such a
+sparse copy program, scp, is also built in this directory, allowing
+commands of the form:
+	% metamucil /dev/epi0 | scp - /tmp/epi0.meta
+This command creates a copy of /dev/epi0 in the local file
+/tmp/epi0.meta.  The local file contains just the Episode meta-data
+and is created as a sparse file, so the places where there was user
+data are just "holes" in the file.  The upshot is that we only need
+space to store the meta-data, so a copy of an aggregate of several
+megabytes can be stored in a few kilobytes.  Finally, and more to the
+point of explaining Step 1, using metamucil allows the test scripts to
+find all of the meta-data regions by looking for regions that are not
+filled with zeros.
+
+RUNNING THE TESTS
+
+1. cd to the ravage object directory (.../obj/<machine>/file/episode/ravage)
+2. ensure that both "." and the directory containing the target
+   salvager are in your $PATH 
+3. copy an Episode aggregate to a sparse file:
+	% metamucil <aggregate's device> | scp - <sparse file>
+4. run a test:
+	% {zeroall|setall|swapall|copyall} <sparse file>
+
+CUSTOMIZATION
+
+The ravage tools use a number of environment variables to control
+their operation.  They are:
+
+Variable		Default	Purpose
+--------		-------	-------
+RVG_AGGR_TMP_DIR	/tmp	The directory to which the ravage scripts
+				will copy the aggregate before each
+				bash-salvage iteration.
+RVG_BLOCK_SIZE		8192	The block size of the aggregate.
+RVG_FRAG_SIZE		1024	The fragment size of the aggregate.
+RVG_BUF_SIZE		8192	The size of the region that is bashed.
+RVG_OUTPUT		.	Directory in which logs are written.
+
+Note that metamucil needs to know the correct block and fragment size
+to work properly, so any change to RVG_BLOCK_SIZE and RVG_FRAG_SIZE
+should be made before step 3 above.

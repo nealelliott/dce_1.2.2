@@ -1,0 +1,97 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: echeck,v $
+# Revision 1.1.618.1  1996/10/17  18:18:40  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:50:10  damon]
+#
+# Revision 1.1.5.2  1993/01/11  18:26:17  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  16:58:58  htf]
+# 
+# Revision 1.1.2.2  1992/05/21  12:37:16  jaffe
+# 	Transarc delta: fred-merge-tests 1.1
+# 	  Files modified:
+# 	    Makefile
+# 	    bos: Makefile, READ_ME, init_dce, kills, runc, runtests
+# 	    bos: setup, shows
+# 	    bos/tests: Makefile, test0, test1, test10, test11, test12
+# 	    bos/tests: test2, test3, test4, test5, test6, test7, test8
+# 	    bos/tests: test9; bos/tests/procs: Makefile
+# 	    cm: Makefile, runtests, test0, test1, test2, test3, test4
+# 	    cm: test5, test6; config: chk_errnr, echeck, environment
+# 	    fs: Makefile, READ_ME, err1, err2, longalpha, longfox
+# 	    fs: longmix, prog1.c, rtest1, shortalpha, shortfox, shortmix
+# 	    fs: test1, test10, test2, test2b, test2s, test3, test4
+# 	    fs: test5, test6, test7, test8, test9
+# 	    fts: Makefile, check, etest.sed, etest1, etest2, etest3
+# 	    fts: etest4, etest5, etest6, rtest1, rtest2, runrtests
+# 	    fts: runtests, test1, test10, test11, test12, test13, test2
+# 	    fts: test3, test4, test5, test6, test7, test8, test9
+# 	    low: Makefile, ctrl.asc, prog11.c, prog12.c, prog14.c
+# 	    low: prog3a.c, prog8.c, prog9.c, rtest1, rtest2, styl.asc
+# 	    low: test1, test10, test11, test12, test13, test14, test2
+# 	    low: test3, test4, test5, test6, test7, test8, test9
+# 	    naming: Makefile, bostest, fstest, ftstest
+# 	    scout: Makefile, test1, test2; setup: Makefile, environment
+# 	    ubik: Makefile, READ_ME, init, kills, runc, setup, shows
+# 	    ubik: udbg; util: Makefile, sys.c
+# 	  Selected comments:
+# 	    Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	    the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	    should be looking at the same test code.
+# 	    Changes to facilitate merge of local DFS test code with the OSF's.
+# 	[1992/05/20  18:16:58  jaffe]
+# 
+# $EndLog$
+
+# This script checks another script, and attempts to verify that all of
+# the environment variables in the other script appear in $efile as well.
+# The intention is that this be done to our test scripts, to verify that
+# they use only the proper, approved environment variables.
+
+# Output is a list of the variables which are assigned in $1 but are not
+# assigned in $efile.
+
+# Note: the script to be checked must be a Bourne-shell script, because
+# of the way that this script locates environment-variable assignments.
+# Note also that it assumes that $efile is a csh "source" script.
+
+p=`basename $0`
+efile=/afs/tr/de/qatest/test_plan/environment
+tmpfile=/tmp/$p.$$
+
+if test $# -ne 1; then echo "Usage: $p filename"; exit 1; fi
+if test ! -f $1; then echo "$p: cannot find file $1"; exit 1; fi
+
+grep setenv $efile | awk '{print $2}' | sort -u > $tmpfile.1
+
+sed -n 's/^\([a-zA-Z][a-zA-Z0-9_]*\)=[^ 	][^ 	]*.*$/\1/p' $1 \
+    > $tmpfile.2
+sed -n 's/^.*[^a-zA-Z0-9_]\([a-zA-Z][a-zA-Z0-9_]*\)=[^ 	][^ 	]*.*$/\1/p' $1 \
+    >> $tmpfile.2
+sort -u $tmpfile.2  | grep -v END > $tmpfile.3
+
+sed -n 's/^.*\$\([a-zA-Z][a-zA-Z0-9_]*\).*$/\1/p' $1 > $tmpfile.4
+sort -u $tmpfile.4 > $tmpfile.5
+
+echo ""
+echo "Variables which are assigned in '$1' but not in the environment file:"
+echo "==============================================================================="
+comm -13 $tmpfile.1 $tmpfile.3
+echo "==============================================================================="
+
+echo ""
+echo "Variables which are used in '$1' but are not in the environment file:"
+echo "==============================================================================="
+comm -13 $tmpfile.1 $tmpfile.5
+echo "==============================================================================="
+
+echo ""
+
+rm -f $tmpfile.[1-9]

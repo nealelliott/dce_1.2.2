@@ -1,0 +1,414 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: README,v $
+# Revision 1.1.6.2  1996/03/11  02:44:20  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:07:31  marty]
+#
+# Revision 1.1.6.1  1995/12/11  21:59:46  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:58:59  root]
+# 
+# Revision 1.1.4.2  1994/06/10  20:48:19  devsrc
+# 	cr10872 - fixed copyright
+# 	[1994/06/10  17:18:42  devsrc]
+# 
+# Revision 1.1.4.1  1994/06/03  16:22:40  annie
+# 	fixed incorrect comment leaders
+# 
+# 	 Revision 1.1.2.2  1993/02/27  00:28:01  ramb
+# 	 	Initial version
+# 	 	[1993/02/26  23:51:18  ramb]
+# 	[1994/06/03  15:44:18  annie]
+# 
+# $EndLog$
+
+This README file documents the 'dfsacltst' from the test executioner perspective
+
+How to run
+----------
+It is best to execute the test using the dcetest_config tool and select the
+menu item containing 'dfsacltst'. The following options can be used in 
+conjunction with 'dfsacltst':
+
+ -c          Do not clean up the workstation log files (default: TRUE)
+ -d          Directory containing the test data
+                (default: test/systest/file/dfsacltst/data)
+ -h          Show detailed usage for the workstation (default: FALSE)
+ -H	     Validate input parameters only (default: FALSE)
+ -l<LOOPS>   Times to execute the workstation (default: 1)
+ -t<HOURS>   Hours to execute the workstation 
+
+The following environment variables should be set before executing the program:
+
+ CELL_LOCAL = name of the local cell (without /.../ prefix)
+ CELL_FOREIGN1 = name of the 1st foreign cell (without /.../ prefix)
+ CELL_FOREIGN2 = name of the 2nd foreign cell (without /.../ prefix)
+ CELL_SYSTEMS_LOCAL = list of systems in local cell (space separated list)
+ CELL_SYSTEMS_FOREIGN1 = list of systems in foreign1 cell (space separated list)
+ CELL_SYSTEMS_FOREIGN2 = list of systems in foreign2 cell (space separated list)
+
+'dfsacltst' driver executes the following two scripts in succession for 
+each '.aclset' file found in the test data directory specified (option -d above)
+	
+	1. acltestgen.ksh
+	2. acldriver.ksh
+
+acltestgen.ksh
+--------------
+1st input parameter = testfilename (xxxx.aclset)
+
+This produces the following two files as output:
+
+	xxxx.acltest
+	xxxx.aclsetup
+
+acldriver.ksh
+-------------
+1st input parameter = testfilename (xxxx.acltest)
+
+This produces a temporary script file 'remotescript' and a number of other
+files that are copied to remote systems and are deleted at the end of the
+execution.  After producing the 'remotescript' file it executes it and 
+then continues with collecting the results and cleaning up.
+
+
+
+
+
+Problem Statement:
+-----------------
+Develop a method for testing that DFS operates correctly in terms of granting
+and denying access on its objects as described in DFS Administration Guide
+Chapter 3.  (Note: This problem does not address interaction with UNIX mode
+bits and inheritance.  They are dealt with separately).
+
+Summary
+-------
+We need to develop the following programs:
+dfs_acltest_registry_setup.ksh
+	acl_generator.ksh
+	acltest_generator.ksh
+	dfs_acltest_driver.ksh
+	dfs_acltest_log_analyzer.ksh
+
+The programs and their objectives are explained in the detail section of this
+report.
+
+Detail
+------
+The method for testing the above problem consists of a number of different
+phases. They are:
+
+
+
+
+	1. Test Generation
+	2. Test Execution
+	3. Test Result Analysis
+
+
+Test Generation in turn consists of two sub-phases. They are:
+
+	1. ACL Generation and
+	2. ACL Test Generation.
+
+	ACL Generation Phase
+	---------------------
+	There are 9 different types of acl entries that could be applied to 
+	an object and for each one of the 9 different types of acl entries
+	there are 6 different permissions that could be either granted or
+	denied.	 This leads to a combinatorial explosion of the different
+	set of acls that could be applied to any given object.	We need
+	to intelligently generate (either manually or automatically) a
+	subset of the set of acls that would be sufficient for our purposes.
+	The program to generate a full (or a subset) set of acls is the
+	ACL_GENERATOR.	
+        The input for the ACL_GENERATOR is a file containing
+	a list of objects and the type of the object. (one on each line)
+	The output of the ACL_GENERATOR is a series of files each containing a 
+	set of acls for an object.  The output files will be named as:
+		objectname_xxxxx.aclset
+	where 'xxxxx' is a sequentially generated number.
+
+	Each file will consists of one or more lines. Each line consists of
+	several fields delimited by ':'
+		aclentrytype:permission_set
+		(Note: acl entry key is not specified as it will be generated
+		       later).
+		where:
+			aclentrytype is one of:
+				user_obj
+				user
+				foreign_user
+				group_obj
+				group
+				foreign_group
+				other_obj
+				foreign_other
+				any_other
+			permission_set is a combination of:
+				r, w, x, c, i and d.
+	
+	Processing Logic: TBD
+
+	ACLTEST Generation Phase
+	------------------------
+	Given a subset of acls on a given object (the input data), we need
+	to generate a test that would test the access granted/denied for the
+	object by DFS.	This can be done automatically.	 The program to do
+	this is the ACLTEST_GENERATOR.	The input for this program is
+	a file whose contents identify the object and the set of acls for
+	that object. (objectname_xxxxx.aclset, above).
+	The program generates the following outputs:
+
+		objectname_xxxxx.aclsetup
+		objectname_xxxxx.acltest
+
+	The aclsetup file consists of UNIX commands to create the object and
+	acledit commands to set the acls on the object.
+
+	The acltest file consists of a series of lines each of which identifies
+	a specific DFS operation to be performed by a specific principal in a 
+	specific group in a specific cell on a specific object. It also 
+	specifies the expected result of the operation.	 Each line in the
+	file consists of several fields delimited by ':'.
+
+	aclentrytype:cell:groupname:principalname:DFSoperation:expected_outcome
+	where:
+		cellname is either 'local', or 'foreign1' or 'foreign2'.
+		groupname is one of:
+			user_obj_group
+			user_group
+			group_group
+			other_group
+		principal_name is one of:
+			user_obj_user
+			user_obj_dummy
+			user_user
+			user_dummy
+			group_user
+			group_dummy
+			other_user
+			other_dummy
+		DFSoperation is one of:
+			read
+			write
+			execute
+			control
+			insert
+			delete
+		expected_outcome is one of:
+			granted
+			denied
+
+
+Processing Logic:
+-----------------
+Set all global flags to 'unset' value.
+write to the 'objectname_xxxxx.aclsetup' output file the UNIX commands to
+create the object.
+For each entry in the input file,
+do
+  write the acledit commands to set the acl to the 'aclsetup' file.
+  write out to the 'acltest' file an entry for each permission bit. 
+  Each entry would specify the entrytype,cellname,groupname,username, 
+  operation and the expected outcome.
+  Also set global flags indicating the entrytypes processed.
+  Capture the permission set for entry types 'other_obj', 'foreign_other' and
+  'any_other'.
+  If the entry type is either 'group', or 'foreign_group' then generate
+  additional entries to check access with another member of the specified
+  group.
+enddo
+
+Depending on the global flags set, write a number of entries to the 'acltest'
+output file to ensure the denial or grant of access to the file.
+
+
+ACLTEST Generator Detailed Processing Logic:
+--------------------------------------------
+USER_OBJ_SEEN		= FALSE;
+USER_SEEN		= FALSE;
+FOREIGN_USER_SEEN	= FALSE;
+GROUP_OBJ_SEEN		= FALSE;
+GROUP_SEEN		= FALSE;
+FOREIGN_GROUP_SEEN	= FALSE;
+OTHER_OBJ_SEEN		= FALSE;
+FOREIGN_OTHER_SEEN	= FALSE;
+ANY_OTHER_SEEN		= FALSE;
+OTHER_OBJ_PERMISSION_SET = NULL;
+FOREIGN_OTHER_PERMISSION_SET = NULL;
+ANY_OTHER_PERMISSION_SET	= NULL;
+
+for each acl in the input file
+do
+   case aclentrytype in
+     user_obj:
+       user_obj:local:user_obj_group:user_obj_user:r:granted (or denied)
+       user_obj:local:user_obj_group:user_obj_user:w:granted (or denied)
+       user_obj:local:user_obj_group:user_obj_user:x:granted (or denied)
+       user_obj:local:user_obj_group:user_obj_user:c:granted (or denied)
+       user_obj:local:user_obj_group:user_obj_user:i:granted (or denied)
+       user_obj:local:user_obj_group:user_obj_user:d:granted (or denied)
+       USER_OBJ_SEEN = TRUE;
+     user:
+       user:local:user_group:user_user:r:granted (or denied)
+       user:local:user_group:user_user:w:granted (or denied)
+       user:local:user_group:user_user:x:granted (or denied)
+       user:local:user_group:user_user:c:granted (or denied)
+       user:local:user_group:user_user:i:granted (or denied)
+       user:local:user_group:user_user:d:granted (or denied)
+       USER_SEEN = TRUE;
+     foreign_user:
+       foreign_user:foreign1:user_group:user_user:r:granted (or denied)
+       foreign_user:foreign1:user_group:user_user:w:granted (or denied)
+       foreign_user:foreign1:user_group:user_user:x:granted (or denied)
+       foreign_user:foreign1:user_group:user_user:c:granted (or denied)
+       foreign_user:foreign1:user_group:user_user:i:granted (or denied)
+       foreign_user:foreign1:user_group:user_user:d:granted (or denied)
+       FOREIGN_USER_SEEN = TRUE;
+     group_obj:
+       group_obj:local:user_obj_group:user_obj_dummy:r:granted (or denied)
+       group_obj:local:user_obj_group:user_obj_dummy:w:granted (or denied)
+       group_obj:local:user_obj_group:user_obj_dummy:x:granted (or denied)
+       group_obj:local:user_obj_group:user_obj_dummy:c:granted (or denied)
+       group_obj:local:user_obj_group:user_obj_dummy:i:granted (or denied)
+       group_obj:local:user_obj_group:user_obj_dummy:d:granted (or denied)
+       GROUP_OBJ_SEEN = TRUE;
+     group:
+       group:local:group:group_user:r:granted (or denied)
+       group:local:group:group_user:w:granted (or denied)
+       group:local:group:group_user:x:granted (or denied)
+       group:local:group:group_user:c:granted (or denied)
+       group:local:group:group_user:i:granted (or denied)
+       group:local:group:group_user:d:granted (or denied)
+
+       group:local:group:group_dummy:r:granted (or denied)
+       group:local:group:group_dummy:w:granted (or denied)
+       group:local:group:group_dummy:x:granted (or denied)
+       group:local:group:group_dummy:c:granted (or denied)
+       group:local:group:group_dummy:i:granted (or denied)
+       group:local:group:group_dummy:d:granted (or denied)
+       GROUP_SEEN = TRUE;
+     foreign_group:
+       foreign_group:foreign1:group:group_user:r:granted (or denied)
+       foreign_group:foreign1:group:group_user:w:granted (or denied)
+       foreign_group:foreign1:group:group_user:x:granted (or denied)
+       foreign_group:foreign1:group:group_user:c:granted (or denied)
+       foreign_group:foreign1:group:group_user:i:granted (or denied)
+       foreign_group:foreign1:group:group_user:d:granted (or denied)
+
+       foreign_group:foreign1:group:group_dummy:r:granted (or denied)
+       foreign_group:foreign1:group:group_dummy:w:granted (or denied)
+       foreign_group:foreign1:group:group_dummy:x:granted (or denied)
+       foreign_group:foreign1:group:group_dummy:c:granted (or denied)
+       foreign_group:foreign1:group:group_dummy:i:granted (or denied)
+       foreign_group:foreign1:group:group_dummy:d:granted (or denied)
+       FOREIGN_GROUP_SEEN = TRUE;
+     other_obj:
+       if !(ANY_OTHER_SEEN) {
+          other_obj:local:other_group:other_user:r:granted (or denied)
+          other_obj:local:other_group:other_user:w:granted (or denied)
+          other_obj:local:other_group:other_user:x:granted (or denied)
+          other_obj:local:other_group:other_user:c:granted (or denied)
+          other_obj:local:other_group:other_user:i:granted (or denied)
+          other_obj:local:other_group:other_user:d:granted (or denied)
+       }
+       OTHER_OBJ_SEEN = TRUE;
+       OTHER_OBJ_PERMISSION_SET = ENTRY_PERMISSION_SET;
+     foreign_other:
+       foreign_other:foreign1:other_group:other_user:r:granted (or denied)
+       foreign_other:foreign1:other_group:other_user:w:granted (or denied)
+       foreign_other:foreign1:other_group:other_user:x:granted (or denied)
+       foreign_other:foreign1:other_group:other_user:c:granted (or denied)
+       foreign_other:foreign1:other_group:other_user:i:granted (or denied)
+       foreign_other:foreign1:other_group:other_user:d:granted (or denied)
+       FOREIGN_OTHER_SEEN = TRUE;
+       FOREIGN_OTHER_PERMISSION_SET = ENTRY_PERMISSION_SET;
+     any_other:
+       if !(OTHER_SEEN) {
+          other_obj:local:other_group:other_user:r:granted (or denied)
+          other_obj:local:other_group:other_user:w:granted (or denied)
+          other_obj:local:other_group:other_user:x:granted (or denied)
+          other_obj:local:other_group:other_user:c:granted (or denied)
+          other_obj:local:other_group:other_user:i:granted (or denied)
+          other_obj:local:other_group:other_user:d:granted (or denied)
+       }
+       ANY_OTHER_SEEN = TRUE;
+       ANY_OTHER_PERMISSION_SET = ENTRY_PERMISSION_SET;
+    esac;
+done
+Check the status of the 'SEEN' flags and based on them output a series of
+entries to check the denial of service.
+			
+Additional test entries will be generated based on the following logic:
+
+  if (OTHER_OBJ_SEEN) && (FOREIGN_OTHER_SEEN) && (ANY_OTHER_SEEN) {
+	local_cell dummy with other_obj_permission_set
+	foreign_cell dummy with foreign_other_permission_set
+	foreign_cell2 dummy with any_other_permission_set
+  }
+
+  if (OTHER_OBJ_SEEN) && (FOREIGN_OTHER_SEEN) && !(ANY_OTHER_SEEN) {
+	local_cell dummy with other_obj_permission_set
+	foreign_cell dummy with foreign_other_permission_set
+	foreign_cell2 dummy with null_permission_set
+  }
+
+  if (OTHER_OBJ_SEEN) && !(FOREIGN_OTHER_SEEN) && (ANY_OTHER_SEEN) {
+	local_cell dummy with other_obj_permission_set
+	foreign_cell dummy with any_other_permission_set
+  }
+		
+  if (OTHER_OBJ_SEEN) && !(FOREIGN_OTHER_SEEN) && !(ANY_OTHER_SEEN) {
+	local_cell dummy with other_obj_permission_set
+	foreign_cell dummy with null_permission_set
+  }
+	
+  if !(OTHER_OBJ_SEEN) && (FOREIGN_OTHER_SEEN) && (ANY_OTHER_SEEN) {
+	local_cell dummy with any_other_permission_set
+	foreign_cell dummy with foreign_other_permission_set
+  }
+
+  if !(OTHER_OBJ_SEEN) && (FOREIGN_OTHER_SEEN) && !(ANY_OTHER_SEEN) {
+	local_cell dummy with null_permission_set
+	foreign_cell dummy with foreign_other_permission_set
+  }
+
+  if !(OTHER_OBJ_SEEN) && !(FOREIGN_OTHER_SEEN) && (ANY_OTHER_SEEN) {
+	local_cell dummy with any_other_obj_permission_set
+	foreign_cell dummy with any_other_permission_set
+  }
+
+  if !(OTHER_OBJ_SEEN) && !(FOREIGN_OTHER_SEEN) && !(ANY_OTHER_SEEN) {
+	local_cell dummy with null_permission_set
+	foreign_cell dummy with null_permission_set
+  }
+
+Test execution consists of:
+   1. Logging in as 'dce-admin' and setting up the groups and principals in 
+      local cell and foreign cells. (This is a one-time setup. There is no 
+      need to clean out the registry at the end of a test as the same groups 
+      and principals will be used by all tests).
+   2. Logging in as 'dce-admin' and executing the objectname_xxxxx.aclsetup
+      script to create the object and setup the acls on the object.
+   3. Scan the 'objectname_xxxx.acltest' and for each principal of each cell
+      start a driver script which will read the 'acltest' input file, execute
+      the DFS operations that it is required to do and check the validity
+      of the access granted/denied against the expected_outcome listed in the
+      output file. Log the result of the operation to a central log file
+      (with timestamp and pass/fail).
+
+
+Test Result Analysis consists of:
+    1. Produce statistics of failures as well as sending mail messages of the
+       failed cases.
+
+
+

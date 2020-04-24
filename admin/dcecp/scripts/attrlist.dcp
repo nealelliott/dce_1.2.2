@@ -1,0 +1,424 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: attrlist.dcp,v $
+# Revision 1.1.4.2  1996/03/09  23:06:25  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:25:18  marty]
+#
+# Revision 1.1.4.1  1995/12/08  21:23:39  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/2  1995/03/31  18:56 UTC  truitt
+# 	Merge message work.
+# 
+# 	HP revision /main/HPDCE02/truitt_mothra_chfts24/1  1995/03/31  18:55 UTC  truitt
+# 	CHFts14890: Change the operations message.
+# 
+# 	HP revision /main/HPDCE02/1  1994/11/15  20:02 UTC  truitt
+# 	Initial HPDCE02 branch.
+# 
+# 	HP revision /main/truitt_dcecp_01/1  1994/11/15  20:00 UTC  truitt
+# 	Fix help and error messages.
+# 	[1995/12/08  17:57:33  root]
+# 
+# Revision 1.1.2.6  1994/09/29  19:11:45  coren
+# 	Adjustments in wording of verbose help.
+# 	[1994/09/29  19:10:35  coren]
+# 
+# 	Added verbose help message.
+# 	[1994/09/29  18:26:46  coren]
+# 
+# Revision 1.1.2.5  1994/08/03  21:00:38  kevins
+# 	OT 11478 Reworked help sub-processing
+# 	[1994/08/03  20:42:45  kevins]
+# 
+# Revision 1.1.2.4  1994/07/14  18:45:59  coren
+# 	Corrected return of getvalues to be a single list (CR 11229)
+# 	[1994/07/14  14:31:54  coren]
+# 
+# Revision 1.1.2.3  1994/06/27  22:17:53  coren
+# 	Fixed error messages for modify. (CR 11097)
+# 	[1994/06/27  20:02:05  coren]
+# 
+# Revision 1.1.2.2  1994/06/24  20:33:04  coren
+# 	Fixed to report correct error if required options omitted.
+# 	[1994/06/24  20:24:41  coren]
+# 
+# Revision 1.1.2.1  1994/06/23  18:28:05  coren
+# 	Added expanded copyright.
+# 	[1994/06/22  19:39:08  coren]
+# 
+# 	Initial version.
+# 	[1994/06/22  18:55:46  coren]
+# 
+# $EndLog$
+
+# attrlist: implement the dcecp "attrlist" object. Takes an arbitrary
+# attribute and preforms appopriate manipulations to produce a new
+# list.
+
+
+proc attrlist { args } {
+  set arg_table {
+    {add command function_call _dcp_attrlist_add
+       "Adds attributes to a list." }
+    {getvalues command function_call _dcp_attrlist_getvalues 
+       "Returns the values of specified attributes."}
+    {list command function_call _dcp_attrlist_list
+       "Returns the attribute types present in a list."}
+    {modify command function_call _dcp_attrlist_modify
+       "Modifies an attribute list."}
+    {remove command function_call _dcp_attrlist_remove
+       "Removes attributes from a list."}
+    {help help help_list        
+       "Prints a summary of command-line options."}
+    {operations operations operation_list 
+       "Returns a list of the valid operations for this command."}
+  }
+
+  set local_args $args
+
+  set verbose_prose \
+"This object allows the transformation or examination of an attribute
+list.  An attribute list is a list of attribute names, each with zero or
+more values, such as the result of a typical 'show' operation.  You can
+add or remove values or entire attributes, or you can extract the
+values for a specified attribute.  These commands are used for setting
+variables or displaying results within dcecp; no remote services are
+invoked, and no permissions are required."
+
+  parseargs $arg_table local_args -found_one
+
+  if { [info local help_prose ] > 0 } { return $help_prose }
+
+  if { [info local function_call ] > 0 } {
+    return [$function_call $local_args]
+  } else {
+    error "\"attrlist\" object requires a verb to form a command."
+  }
+
+}
+
+#
+# _dcp_attrlist_add:
+#         attrlist add {attribute_list} -member {attributes_to_add}
+#
+
+proc _dcp_attrlist_add { args } {
+  set arg_table {
+    {-member string member_list
+        "Attributes and values to be added."}
+  }
+
+    upvar 1 local_args cargs 
+    set local_args $cargs
+    set member_list ""
+
+    parseargs $arg_table local_args -no_leftovers
+
+    if { [info local help_prose ] > 0 } { return }
+
+    if { [llength $local_args] > 1 } {
+      error "Unrecognized argument [lindex $local_args 1]."  
+    } elseif { [llength $local_args] == 0 } { error "No input attribute list." 
+    } else { set attrlist [lindex $local_args 0] }
+
+    if { [llength $member_list] == 0 } { error "No attributes to add."}
+
+#   simply add the supplied members to the list
+#   puts "DBG: [llength $member_list] new members"
+    return [concat $attrlist $member_list]
+}
+
+
+#
+# _dcp_attrlist_getvalues:
+#         attrlist getvalues {attribute_list} -type attribute_type
+#
+# Return the values for the specified attribute. Separate lists are
+# returned for each instance of the attribute that appears in the
+# original list.
+
+proc _dcp_attrlist_getvalues { args } {
+  set arg_table {
+    {-type string type_name
+        "Attribute type whose value is to be returned."}
+  }
+
+    upvar 1 local_args cargs 
+    set local_args $cargs
+    set type_name ""
+
+    parseargs $arg_table local_args -no_leftovers
+
+    if { [info local help_prose ] > 0 } { return }
+
+    if { [llength $local_args] > 1 } {
+      error "Unrecognized argument [lindex $local_args 1]."  
+    } elseif { [llength $local_args] == 0 } { error "No input attribute list."
+    } else { set attrlist [lindex $local_args 0] }
+
+    if { [llength $type_name] == 0 } { error "No type specified." }
+    if { [llength $type_name] > 1} { error "-type cannot be a list." }
+
+    set value_list ""
+    foreach attr $attrlist {
+      if { [lindex $attr 0] == $type_name} {
+        if { $value_list != "" } {
+          set value_list "$value_list\n"
+        }
+        set value_list [format "%s%s" $value_list [lrange $attr 1 end]]
+      }
+    }
+
+    return $value_list
+}
+
+#
+# _dcp_attrlist_list:
+#         attrlist list {attribute_list}
+#
+# return the names of all attributes present in the list.
+#
+
+proc _dcp_attrlist_list { args } {
+  set arg_table {}
+
+    upvar 1 local_args cargs 
+    set local_args $cargs
+
+  parseargs $arg_table local_args -no_leftovers
+  
+  if { [info local help_prose ] > 0 } { return }
+
+    if { [llength $local_args] > 1 } {
+      error "Unrecognized argument [lindex $local_args 1]."  
+    } elseif { [llength $local_args] == 0 } { error "No input attribute list."
+    } else { set attrlist [lindex $local_args 0] }
+
+    set type_list ""
+    foreach attr $attrlist {
+      lappend type_list [lindex $attr 0]
+    }
+
+    return $type_list
+}
+
+#
+# _dcp_attrlist_modify:
+#   attrlist modify {attribute_list} [-add {attr_list}] [-change {attr_list}] \
+#      [-remove {attr_list}]
+#
+# modify the input list by adding and/or deleting attributes and/or values.
+
+proc _dcp_attrlist_modify { args } {
+  set arg_table {
+    {-add string add_list
+       "Attributes or values to add to the list."}
+    {-change string change_list
+       "Attributes or values to change in the list."}
+    {-remove string remove_list
+       "Attributes or values to remove from the list."}
+  }
+
+    upvar 1 local_args cargs 
+    set local_args $cargs
+    set add_list {}
+    set change_list {}
+    set remove_list {}
+
+    parseargs $arg_table local_args -no_leftovers
+  
+    if { [info local help_prose ] > 0 } { return }
+
+    if { [llength $local_args] > 1 } {
+      error "Unrecognized argument [lindex $local_args 1]."  
+    } elseif { [llength $local_args] == 0 } { error "No input attribute list."
+    } else { set attrlist [lindex $local_args 0] }
+
+#   must provide at least one of -add, -remove, or -change
+
+#   puts "DBG: llength add_list = [llength $add_list]; llength remove_list = [llength $remove_list]; llength change_list == [llength $change_list]"
+
+    if { [llength $add_list] == 0 && [llength $remove_list] == 0 && [llength $change_list] == 0 } {
+       error "No options specified."
+    }
+
+#   attributes to add: if the attribute is present, add the specified
+#   value(s); otherwise, add the attribute as specified.
+
+    if { [llength $add_list] > 0} {
+      foreach addattr $add_list {
+        set found_one 0
+        for {set i 0} {$i <= [llength $attrlist]} {incr i 1} {
+          set attr [lindex $attrlist $i]
+
+#         is this a matching attribute? if so, check for presence of
+#         each value
+
+          set added_val 0
+          if { [lindex $attr 0] == [lindex $addattr 0] } {
+            for { set j 1 } { $j < [llength $addattr] } { incr j 1 } {
+              set addval [lindex $addattr $j]
+              if { [lsearch -exact $attr $addval] != -1 } {
+                error "Value \"$addval\" already present for attribute \"[lindex $attr 0]\"."
+              } else {
+#               build up list of added values
+
+                lappend attr $addval
+                set added_val 1
+              }
+            }
+            if { $added_val == 1 } {
+#             replace attribute with new set of values
+
+              set attrlist [lreplace $attrlist $i $i $attr]
+              set found_one 1
+            }
+          }
+        }
+
+#       if no matching attribute found, just add the one from the
+#       -member list.
+
+        if { $found_one == 0 } {
+          lappend attrlist $addattr
+        }
+      }
+    }
+
+#   attributes to change: for each attribute, replace its existing set
+#   of values with the supplied set. If the attribute appears more
+#   than once, replace all of its instances.
+
+    if { [llength $change_list] > 0} {
+      foreach chattr $change_list {
+        set found_one 0
+        for { set i [expr [llength $attrlist] - 1] } { $i >= 0 } { incr i -1 } {
+          set attr [lindex $attrlist $i]
+          if { [lindex $attr 0] == [lindex $chattr 0] } {
+            set found_one 1
+            set attrlist [lreplace $attrlist $i $i $chattr]
+          }
+        }
+        if {$found_one == 0} {
+          error "Attribute \"[lindex $chattr 0]\" not present in list."
+        }
+      }
+    } 
+
+#   attributes to remove: if the option specifies a value, find that
+#   value and remove it from the input attribute list. If no value to
+#   remove is specified, remove the entire attribute.
+
+    if { [llength $remove_list] > 0 } {
+      foreach remattr $remove_list {
+        set rem_name [lindex $remattr 0]
+        set found_one 0
+        if { [llength $remattr] == 1 } {
+#         no value specified
+
+          set remvalue ""
+          set foundvalue 1
+        } elseif { [llength $remattr] > 2 } {
+          error "More than one value specified for \"$rem_name\"."
+        } else {
+          set remvalue [lindex $remattr 1]
+          set foundvalue 0
+        }
+
+#       search attribute list from end so index won't be disturbed if
+#       we remove an attribute
+
+        for { set i [expr [llength $attrlist] - 1] } { $i >= 0 } { incr i -1 } {
+          set attr [lindex $attrlist $i]
+          if { [lindex $attr 0] == $rem_name } {
+            set found_one 1
+            if { $remvalue == "" } {
+
+#             no value specified, remove entire attribute
+
+              set attrlist [lreplace $attrlist $i $i]
+            } else {
+              set valindex [lsearch $attr $remvalue]
+              if { $valindex != -1 } {
+
+#               remember that at least one instance of value was found
+
+                set foundvalue 1
+                if { [llength $attr] == 2 } {
+
+#                 if this was the only value, remove the whole attribute
+
+                  set attrlist [lreplace $attrlist $i $i]
+                } else {
+                  set newattr [lreplace $attr $valindex $valindex]
+                  set attrlist [lreplace $attrlist $i $i $newattr]
+                }
+              }
+            }
+          }
+        }
+        if { $found_one == 0 } {
+          error "Attribute \"$rem_name\" not found in list."
+        }
+        if { $foundvalue == 0 } {
+          error "Value \"$remvalue\" not found for attribute \"$rem_name\"."
+        }
+      }
+    }
+
+    return $attrlist
+}
+
+#
+# _dcp_attrlist_remove:
+#         attrlist remove {attribute_list} -member {attributes_to_remove}
+
+proc _dcp_attrlist_remove { args } {
+  set arg_table {
+    {-member string member_list
+        "Attributes and values to be removed."}
+  }
+
+    upvar 1 local_args cargs 
+    set local_args $cargs
+    set member_list ""
+
+  parseargs $arg_table local_args -no_leftovers
+  
+  if { [info local help_prose ] > 0 } { return }
+
+    if { [llength $local_args] > 1 } {
+      error "Unrecognized argument [lindex $local_args 1]."  
+    } elseif { [llength $local_args] == 0 } { error "No input attribute list." 
+    } else { set attrlist [lindex $local_args 0] }
+
+    if { [llength $member_list] == 0 } { error "No attributes to remove."}
+
+    foreach remattr $member_list {
+      set found_one 0
+
+#     search attribute list from end so indexes aren't disturbed if we
+#     remove one
+
+      for { set i [expr [llength $attrlist] - 1] } { $i >= 0 } { incr i -1 } {
+        if { [lindex [lindex $attrlist $i] 0] == $remattr } {
+          set found_one 1
+          set attrlist [lreplace $attrlist $i $i]
+        }
+      }
+      if { $found_one == 0 } {
+        error "Attribute \"$remattr\" not found in list." 
+      }
+
+    }
+
+    return $attrlist
+}

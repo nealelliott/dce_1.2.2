@@ -1,0 +1,166 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rsecidmap.idl,v $
+ * Revision 1.1.6.2  1996/03/09  23:28:56  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:44:20  marty]
+ *
+ * Revision 1.1.6.1  1995/12/08  17:36:35  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:55:50  root]
+ * 
+ * Revision 1.1.4.2  1993/08/04  13:38:55  cuti
+ * 	Insert dce/ in front of imported file name
+ * 	[1993/08/03  20:52:57  cuti]
+ * 
+ * Revision 1.1.2.3  1993/02/05  22:46:07  sommerfeld
+ * 	Add new operations which return cache hint information.
+ * 	[1993/02/04  22:33:28  sommerfeld]
+ * 
+ * Revision 1.1.2.2  1992/12/29  13:53:39  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:22:02  zeliff]
+ * 
+ * Revision 1.1  1992/01/19  14:55:06  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+
+/*  rsecidmap.idl V=3 08/22/91 //littl/prgy/src/idl
+**
+** Copyright (c) Hewlett-Packard Company 1991
+** Unpublished work. All Rights Reserved.
+**
+*/
+/* 
+ * Map between global principal names and principal/cell UUID and corresponding 
+ * name portions.
+ */
+
+[
+    uuid(0d7c1e50-113a-11ca-b71f-08001e01dc6c),
+    version(1.0)
+]
+
+interface secidmap
+
+{
+    import "dce/rgynbase.idl";
+    import "dce/rsbase.idl";
+
+    /*
+     * r s e c _ i d _ o u t p u t _ s e l e c t o r _ t
+     */
+    typedef bitset rsec_id_output_selector_t;
+
+        /* generate global name */
+        const unsigned32 rsec_id_output_select_gname    = 0x1;
+
+        /* generate cell name */
+        const unsigned32 rsec_id_output_select_cname    = 0x2;
+
+        /* generate principal name */
+        const unsigned32 rsec_id_output_select_pname    = 0x4;
+
+        /* generate cell uuid */
+        const unsigned32 rsec_id_output_select_cuuid    = 0x8;
+
+        /* generate principal uuid */
+        const unsigned32 rsec_id_output_select_puuid    = 0x10;
+
+
+    /*
+     * r s e c _ i d _ p a r s e _ n a m e            AKA redbox
+     *
+     * Parse a global principal name into a cell name and a cell relative
+     * principal name.  Return the IDs associated with each component.
+     * A NULL pointer for an output value will cause that portion of the
+     * translation to be skipped.
+     */
+     
+    void rsec_id_parse_name (
+        [in]        handle_t                    h,
+        [in]        sec_rgy_domain_t            name_domain,
+        [in]        sec_rgy_name_t              global_name,
+        [in]        rsec_id_output_selector_t   selector,
+        [out]       sec_rgy_name_t              cell_namep,
+        [out]       uuid_t                      *cell_idp,
+        [out]       sec_rgy_name_t              princ_namep,
+        [out]       uuid_t                      *princ_idp,
+        [out]       error_status_t              *status
+    );
+    
+    
+    /*
+     * r s e c _ i d _ g e n _ n a m e              AKA bluebox
+     *
+     * Generate a global name from the cell and principal uuids.  Also returns
+     * the name of the cell uuid and the principal uuid as independent units.
+     * A NULL pointer for an output value will cause that portion of the
+     * translation to be skipped.
+     */
+     
+    void rsec_id_gen_name (
+        [in]        handle_t                    h,
+        [in]        sec_rgy_domain_t            name_domain,
+        [in]        uuid_t                      *cell_idp,
+        [in]        uuid_t                      *princ_idp,
+        [in]        rsec_id_output_selector_t   selector,
+        [out]       sec_rgy_name_t              global_name,
+        [out]       sec_rgy_name_t              cell_namep,
+        [out]       sec_rgy_name_t              princ_namep,
+        [out]       error_status_t              *status
+    );
+
+	/* shim to avoid crashing old servers */
+    void rsec_id_avoid_cn_bug([in] handle_t h);
+
+    /*
+     * r s e c _ i d _ p a r s e _ n a m e _ c a c h e
+     *
+     * Parse a global principal name into a cell name and a cell relative
+     * principal name.  Return the IDs associated with each component.
+     * A NULL pointer for an output value will cause that portion of the
+     * translation to be skipped.
+     *
+     * This one also includes the cache_data_t so we can do cache 
+     * invalidates.
+     */
+     
+    void rsec_id_parse_name_cache (
+        [in]        handle_t                    h,
+        [in]        sec_rgy_domain_t            name_domain,
+        [in]        sec_rgy_name_t              global_name,
+        [in]        rsec_id_output_selector_t   selector,
+        [out]       sec_rgy_name_t              cell_namep,
+        [out]       uuid_t                      *cell_idp,
+        [out]       sec_rgy_name_t              princ_namep,
+        [out]       uuid_t                      *princ_idp,
+	[out]	    rs_cache_data_t		*cache_info,
+        [out]       error_status_t              *status
+    );
+
+    void rsec_id_gen_name_cache (
+        [in]        handle_t                    h,
+        [in]        sec_rgy_domain_t            name_domain,
+        [in]        uuid_t                      *cell_idp,
+        [in]        uuid_t                      *princ_idp,
+        [in]        rsec_id_output_selector_t   selector,
+        [out]       sec_rgy_name_t              global_name,
+        [out]       sec_rgy_name_t              cell_namep,
+        [out]       sec_rgy_name_t              princ_namep,
+	[out]	    rs_cache_data_t		*cache_info,
+        [out]       error_status_t              *status
+    );
+
+}

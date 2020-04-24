@@ -1,0 +1,303 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rs_repadm.idl,v $
+ * Revision 1.1.7.3  1996/03/09  23:28:43  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:44:09  marty]
+ *
+ * Revision 1.1.7.2  1995/12/08  17:35:42  root
+ * 	Submit OSF/DCE 1.2.1
+ * 
+ * 	HP revision /main/HPDCE02/1  1995/05/15  21:03 UTC  greg
+ * 	Create SEC_migrate_merge mainline from SEC_migrate and HPDCE02.
+ * 	[1995/04/22  13:35 UTC  greg  /main/SEC_migrate_merge/1]
+ * 
+ * 	Merge .../greg_sec_migrate/LATEST --> .../SEC_migrate/LATEST.
+ * 	[1995/02/11  22:14 UTC  greg  /main/SEC_migrate/1]
+ * 
+ * 	Add software versioning operations.
+ * 	[1995/02/05  19:50 UTC  greg  /main/SEC_migrate/greg_sec_migrate/1]
+ * 
+ * Revision 1.1.2.4  1992/12/29  13:52:56  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:49:10  zeliff]
+ * 
+ * Revision 1.1.2.3  1992/12/18  22:11:01  sekhar
+ * 	[OT 6540] Replication code drop bl6c
+ * 	[1992/12/18  21:47:18  sekhar]
+ * 
+ * Revision 1.1.3.2  1992/12/11  21:36:05  emartin
+ * 	bl6c: reset->destroy, init->init_replica
+ * 
+ * Revision 1.1.2.2  1992/08/31  18:21:38  sekhar
+ * 	First replication code drop.
+ * 	[1992/08/31  17:49:30  sekhar]
+ * 
+ * $EndLog$
+ */
+
+/*
+ * Copyright (c) Hewlett-Packard Company 1992
+ * Unpublished work. All Rights Reserved.
+ */
+/*
+ *      Registry server administration operations.
+ */
+/*
+ * Bump minor version to 2 because we're adding routines
+ * to query/manipulate software version information.
+ */
+[
+    uuid(5b8c2fa8-b60b-11c9-be0f-08001e018fa0),
+    version(1.2),
+    pointer_default(ptr)
+]
+interface rs_repadm {
+
+    import  "dce/rgynbase.idl";
+    import  "dce/rplbase.idl"; 
+
+    /*
+     *  r s _ r e p _ a d m i n  _ s t o p 
+     *
+     *  Stop the replica identified by this handle.
+     */
+    void rs_rep_admin_stop (
+        [in]    handle_t            h,
+        [out]   error_status_t      *status
+    );
+
+    /*
+     *  r s _ r e p _ a d m i n _ m a i n t
+     *
+     *  Put replica in or out of maintenance mode.
+     */
+    void rs_rep_admin_maint(
+        [in]    handle_t            h,
+        [in]    boolean32           in_maintenance,
+        [out]   error_status_t      *status
+    );
+
+    /*
+     *  r s _ r e p _ a d m i n _ m k e y
+     *
+     *  Change the master key and re-encrypt the database
+     */
+    void rs_rep_admin_mkey(
+        [in]    handle_t            h,
+        [out]   error_status_t      *status
+    );
+
+
+    /*
+     *  r s _ r e p _ a d m i n _ i n f o
+     *
+     *  Get basic information about a replica such
+     *  as its state, uuid, latest update sequence
+     *  number and timestamp, and whether it is the master.
+     *  Also get the replica's information about the master's 
+     *  uuid and the sequence number when the master was 
+     *  designated.
+     */
+    void rs_rep_admin_info(
+        [in]    handle_t            h,
+        [out]   rs_replica_info_t   *rep_info,
+        [out]   error_status_t      *status
+    );
+    
+    /*
+     *  r s _ r e p _ a d m i n _ i n f o _ f u l l
+     *
+     *  Get complete information about a replica such
+     *  as its state, uuid, protocol towers, latest
+     *  update sequence number and timestamp, and whether 
+     *  it is the master.  
+     *  Also get the replica's information about the master's 
+     *  uuid, protocol towers, and the sequence number when 
+     *  the master was designated.
+     */
+    void rs_rep_admin_info_full(
+        [in]    handle_t                h,
+        [out]   rs_replica_info_t       *rep_info,
+        [out]   rs_replica_twr_vec_p_t  *rep_twrs,
+        [out]   rs_replica_twr_vec_p_t  *master_twrs,
+        [out]   error_status_t          *status
+    );
+    
+    /*
+     *  r s _ r e p _ a d m i n _ d e s t r o y
+     *
+     *  a drastic operation which tells a replica
+     *  to destroy its database and exit
+     */
+    void rs_rep_admin_destroy(
+        [in]    handle_t            h,
+        [out]   error_status_t      *status
+    );
+
+    /*
+     *  r s _ r e p _ a d m i n _ i n i t _ r e p l i c a
+     *
+     *  (re-)initialize the slave identified by "rep_id"
+     *
+     *  master-only operation.
+     */
+    void rs_rep_admin_init_replica(
+        [in]    handle_t            h,
+        [in]    uuid_p_t            rep_id,
+        [out]   error_status_t      *status
+    );
+
+    /*
+     *  r s _ r e p _ a d m i n _ c h a n g e _ m a s t e r
+     *
+     *  change the master to "new_master_id".
+     *  The master gracefully passes its
+     *  replica list state and propq to
+     *  the new master.
+     *
+     *  master-only operation.
+     */
+    void rs_rep_admin_change_master(
+        [in]    handle_t            h,
+        [in]    uuid_p_t            new_master_id,
+        [out]   error_status_t      *status
+    );
+
+    /* 
+     *  r s _ r e p _ a d m i n _ b e c o m e _ m a s t e r
+     *
+     *  a drastic operation to make a slave
+     *  become the master because the master
+     *  has died.  
+     *  Normally the rs_rep_admin_change_master 
+     *  operation is used to designate a new 
+     *  master; this operation can cause updates 
+     *  to be lost.
+     */
+    void rs_rep_admin_become_master(
+        [in]    handle_t            h,
+        [out]   error_status_t      *status
+    );
+
+    /*
+     *  r s _ r e p _ a d m i n _ b e c o m e _ s l a v e
+     *
+     *  a drastic operation to make a replica
+     *  which thinks it's the master become a
+     *  slave.
+     */
+    void rs_rep_admin_become_slave(
+        [in]    handle_t            h,
+        [out]   error_status_t      *status
+    );
+
+
+/*
+ * New version(1.2) routines
+ */
+
+    /* 
+     * Master-only operation.
+     *
+     * Set the cell-wide software revision.
+     */
+    void  rs_rep_admin_set_sw_rev(
+        [in]    handle_t            h,  
+        [in]   unsigned32           sw_rev,
+        [out]  error_status_t      *status
+    );
+
+    /* 
+     * Any replica.
+     *
+     * Query replica regarding supported software
+     * versions. 
+     *
+     * IN Parameters:
+     *
+     * max_num_sw_vers  - conformancy attribute set by the client
+     *     to dynamically specify the size of the sw_vers_info array
+     *     provided to the server.
+     *
+     * OUT  Parameters:
+     *
+     * num_sw_vers - varying attribute set by the server to indicate 
+     *     how many of the max_num_sw_vers elements of the sw_vers_info
+     *     array were actually filled in by by the server.
+     *
+     * sw_vers_info - array of software version info.  The purpose of
+     *     this array is to allow a client to convert numeric 
+     *     software versions into printstrings without having to build
+     *     knowledge of said printstrinsg into the client.
+     *
+     * min_sw_vers - The lowest (earliest) software version supported
+     *     by the replica.
+     *
+     * max_sw_vers - The highest (latest) software version supported
+     *     by the replica.
+     *
+     * cur_sw_vers - The software version at which the replica is
+     *    currently running. 
+     *
+     * NOTE:  The previous three [out] parameters have *nothing* to do
+     *        with the conformancy or variability of the sw_vers_info
+     *        array.  Rather, they are actual software version specifications
+     *        that describe the range of software versions supported by the
+     *        server as well as the current software version in effect at
+     *        the server.   
+     *
+     *        Or, to put it another way, NEVER use any of the previous
+     *        three parameters as indices into the sw_vers_info array.
+     *
+     *        The min_sw_vers and max_sw_vers can be used to compute the
+     *        maximum size needed to accomodate the total number of software
+     *        versions supported by the servers as follows.
+     *
+     *           max_num_sw_vers = *max_sw_vers - *min_sw_vers + 1
+     *
+     *        However, since independent values in the above formula
+     *        are output-only, the caller must guess at a reasonable 
+     *        value for max_num_sw_vers on the first call and hope that the
+     *        value is large enough to  capture all software versions 
+     *        supported by the server.  If the guesstimate is inadequate,
+     *        the caller must adjust the value (including resizing of the 
+     *        conformant array) and reissue the call.  Of course, this is
+     *        never necessary when (*num_sw_vers < max_num_sw_vers), since the
+     *        server will never use less than max_num_sw_vers elements of the 
+     *        array when the server actually supports max_num_sw_vers or
+     *        more software versions.
+     *
+     *        Lastly, the restrictions on the sw_vers_info array returned
+     *        by the server are (1) that the software versions contained therein 
+     *        are ordered numerically from lowest to highest, (2) that within the
+     *        numerically ordered array there are no "missing" software versions
+     *        (i.e. the server doesn't leave out any supported versions within
+     *        that range, which is not to say the the supported versions within
+     *        that range increase monotonically), and (3) that the array will 
+     *        always contain the current software revision.  (3) means that,
+     *        should the max_num_sw_vers value chosen by the client be insufficient
+     *        to hold all software versions supported by the replica, the software
+     *        versions that the server fails to report will be at either the
+     *        low end, the high end, or both.  
+     */
+    void  rs_rep_admin_get_sw_vers_info(
+        [in]    handle_t                    h,  
+	[in]    unsigned32                  max_num_sw_vers,
+        [out]   unsigned32                 *num_sw_vers,             
+        [out, size_is(max_num_sw_vers), length_is(*num_sw_vers)] 
+                rs_replica_sw_vers_info_t  sw_vers_info[],
+	[out]   unsigned32                 *min_sw_vers,  
+	[out]   unsigned32                 *max_sw_vers,
+	[out]   unsigned32                 *cur_sw_vers,
+        [out]   error_status_t             *status
+    );
+    
+}

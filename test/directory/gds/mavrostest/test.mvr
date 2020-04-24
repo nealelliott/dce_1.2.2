@@ -1,0 +1,81 @@
+test DEFINITIONS ::=
+BEGIN
+EXPORTS entry;
+
+entry (VALUE x:table;n:int) ::= SET OF CHOICE x[i].i {
+	0: seq2 (x[i].o.s2),
+	1: set4 (x[i].o.s4),
+	2: bits1(x[i].o.b),
+	3: flags1(x[i].o.f),
+	4: import1(x[i].o.f),
+	5: REAL (x[i].o.r),
+	6: [128] variable_data(x[i].o.va)
+} INDEXED BY i UP TO n
+
+seq2 (A:seq2) ::=
+[0] IMPLICIT seq1(A.a,A.b,A.c)
+
+seq1 (a:seq1; VAR b,c:set1) ::=
+SEQUENCE {
+	BOOLEAN(a.b),
+	INTEGER(a.i),
+	OCTETS(a.o.v,a.o.l)
+	ALLOCATE(a.o.v:asn1_octet)
+	DEFAULT(a.o.v = 0),
+	[0] IMPLICIT set1(b),
+	set1(c)}
+
+set4 (VAR x:set4) ::= [APPLICATION 0] IMPLICIT SET {
+COMPONENTS OF set1(x.b),
+seq3 SEQUENCE {
+COMPONENTS OF seq3(x.a)}}
+INITIAL("/* This is the beginning of the SET4 decoding routine*/")
+FINAL("/* This is the end of the SET4 decoding routine*/";"/* FOO */")
+
+seq3 (a:seq3) ::=
+[APPLICATION 1] SEQUENCE {
+unimportant[0] IGNORE,
+oid OBJECT ID (a.oid.v, a.oid.l) DEFAULT (a.oid.l = 0),
+value [1] ANY(a.any.v,a.any.l) ALLOCATE(a.any.v:asn1_octet) DEFAULT(a.any.v = 0)}
+
+set1 (VAR b:set1) ::= 
+SET {
+	[0] INTEGER {I1A(0),I1B(1),I1C(2)}(b.i1) DEFAULT (b.i1 = I1A),
+	sequence [1] SEQUENCE OF choice1(b.c1[i])
+	    INDEXED BY i UP TO b.nc ALLOCATE(b.c1:choice1),
+	first choice1(b.c2),
+	secund [2] choice1(b.c3)}
+
+choice1(VAR c:choice1) ::=
+CHOICE c.x {
+0: INTEGER (c.o.i),
+1: implicit [1] IMPLICIT INTEGER (c.o.i),
+2: CHOICE c.o.s {
+0: hello NULL,
+DEFAULT: PrintableChars(c.o.s) ALLOCATE(c.o.s:char)},
+3: copy [UNIVERSAL 4] COPY(c.o.any.v,c.o.any.l)}
+
+bits1(b:field) ::= [APPLICATION 1] IMPLICIT BITS(b.v,b.l)
+
+flags1(f:int) ::= [APPLICATION 2] FLAGS {F0(0),F1(1),F2(2),F3(3)} (f,4)
+
+import1(f:int) ::= IMPORTS
+
+variable_data(VAR c:choice1) ::=
+SEQUENCE {
+	choicetag INTEGER(c.x),
+	ANY c.o DEFINED BY variable_article(c.x)}
+
+article_0 (VAR o: choice1_opt)
+::= INTEGER (o.i)
+
+article_1 (VAR o: choice1_opt)
+::= [1] IMPLICIT INTEGER (o.i)
+
+article_2 (VAR o: choice1_opt)
+::= PrintableChars(o.s) ALLOCATE(o.s:char)
+
+article_3 (VAR o: choice1_opt)
+::= ANY(o.any.v,o.any.l)
+
+END

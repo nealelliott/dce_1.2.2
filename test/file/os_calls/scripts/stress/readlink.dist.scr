@@ -1,0 +1,227 @@
+
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* Test simultaneous deletion and readlink, to ensure error paths are
+* fine.  Run two tests, one where delete comes from a stress process,
+* and one where it comes from another test process on the same client.
+* Need lots of iterations of this code to ensure that test has
+* encountered the desired race conditions.  Probably best is to create
+* *lots* of symlinks at the start, and then concurrently delete the
+* entries while other processes are doing the readlinks.  Hopefully will
+* generate *some* collisions.
+*
+
+*
+* Note: Try this test on both single machin cell and multi-machine cell.
+*       Try this from both DFS and local path so that it will also test 
+*       xvnode layer. This test realy needs to be run from the combination
+*       of DFS and local path (unlink a file via CM or unlink a file
+*       form local path.
+*       loopTime should not exceed 64 because there will be 64**3 files.
+*
+
+* 
+* USAGE: ./file_test -l {HUBNAME} -I {this_script} ; For HUB
+*        ./file_test -c {HUBNAME} : For other spokes
+*
+
+* Include config file.
+include config
+
+* Set loopTims 10 then there will be 1000 linkfiles to test and 
+* the 200s timeout is not enough.
+set loopTimes 5
+
+*
+* This procedure readlinks.
+*
+set test_Proc proc END_PROC
+  echo
+  echo readlink call test1.
+
+  getwd workDir
+  chdir $testDir
+
+  sync_join "begin_sync" $timeout
+
+  verifyStatus false
+
+  set syncName string "readlink"
+  loop x 1 1 $loopTimes
+    set compName1 (1..$loopTimes)
+    loop y 1 1 $loopTimes
+      set compName2 (1..$loopTimes)
+      loop z 1 1 $loopTimes
+        set compName3 (1..$loopTimes)
+echo @compName1 @compName2 @compName3
+        set linkName1 ( "linkfile" + @compName1+ "." + @compName2+ "." + @compName3 )
+        set linkName ( "linkfile" + @x+ "." + @y+ "." + @z )
+        readlink @linkName linkVar[@x+@y+@z]
+        if ( @ITL_Status != 0 ) {
+          echo FAILED: The readlink call failed.
+        }
+        echo @linkVar[@x+@y+@z]
+
+        set syncVar ( @syncName+@x+ "." + @y+ "." + @z )
+        sync_join @syncVar $timeout
+
+        set syncVar ( @syncVar + "done" )
+        sync_join @syncVar $timeout
+
+        readlink @linkName linkVar[@x+@y+@z]
+        if ( @ITL_Status == 0 ) {
+            echo FAILED: The linkname was not removed.
+        }
+        readlink @linkName1 linkVar[@x+@y+@z]
+        if ( @ITL_Status != 0 ) {
+          if ( @ITL_Status != @ENOENT ) {
+            echo FAILED: The readlink call return wrong errno.
+          }
+        }
+      endloop
+    endloop
+  endloop
+  verifyStatus true
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+ 
+  echo Test process done.
+  echo 
+END_PROC
+
+
+*
+* This procedure deletes symlinks.
+*
+
+set stress_Proc proc END_PROC
+
+  echo
+  echo stress test (delete symlinks).
+
+  getwd workDir
+  chdir $testDir
+
+  sync_join "begin_sync" $timeout
+
+  set syncName string "readlink"
+  loop x 1 1 $loopTimes
+    loop y 1 1 $loopTimes
+      loop z 1 1 $loopTimes
+        set linkName ( "linkfile" + @x+ "." + @y+ "." + @z )
+
+        set syncVar ( @syncName+@x+ "." + @y+ "." + @z )
+        sync_join @syncVar $timeout
+
+        remove @linkName
+        echo @linkName
+
+        set syncVar (@syncVar + "done")
+        sync_join @syncVar $timeout
+
+      endloop
+    endloop
+  endloop
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo Stress process done.
+  echo
+END_PROC
+
+
+****************************************************************************
+* Check spokes.
+if ( $ITL_nspokes < 2 ) {
+  echo FAILED: You need at least two spokes to run the test.
+  quit
+}
+
+chdir $testDir
+
+loop loopVar 1 1 $loopTimes
+
+* Create $loopTimes**3 files and symlinks.
+loop x 1 1 $loopTimes
+  loop y 1 1 $loopTimes
+    loop z 1 1 $loopTimes
+      set fileName ( $testFile + $x + "."+ $y+ "." + $z )
+      set linkName ( "linkfile" + $x+ "." + $y+ "." + $z )
+      open $fileName ($O_CREAT|$O_RDWR) 0777 fileId[$x]
+      write $fileId[$x] $fileName
+      close $fileId[$x]
+      symlink $fileName $linkName
+    endloop
+  endloop
+endloop
+
+
+!* Dispatch procedures among spokes.
+rexec_async $ITL_spoke[0] stress_Proc result[0] asyncVar[0]
+loop x 1 1 ($ITL_nspokes-1)
+  rexec_async $ITL_spoke[$x] test_Proc result[$x] asyncVar[$x]
+endLoop
+
+sync_create "begin_sync" $ITL_nspokes $timeout
+sync_release "begin_sync"
+
+set syncName string "readlink"
+loop x 1 1 $loopTimes
+  loop y 1 1 $loopTimes
+    loop z 1 1 $loopTimes
+
+      set syncVar ( $syncName + $x + "." + $y + "." + $z )
+      sync_create $syncVar $ITL_nspokes $timeout
+      sync_release $syncVar 
+    
+      set syncVar ( $syncVar + "done" )
+      sync_create $syncVar $ITL_nspokes $timeout
+      sync_release $syncVar 
+
+    endloop
+  endloop
+endloop
+
+sync_create "finish_sync" $ITL_nspokes $timeout
+sync_release "finish_sync"
+
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+exec clearDir_Proc .
+
+endloop
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+quit
+

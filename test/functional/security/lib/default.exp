@@ -1,0 +1,1160 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: default.exp,v $
+# Revision 1.1.2.1  1996/09/10  15:36:55  arvind
+# 	DCE 1.2.2 drop 3.5 (test) files left out
+# 	[1996/09/10  15:36:18  arvind]
+#
+# Revision /main/DCE_1.2.2/1  1996/07/16  16:03 UTC  psn
+# 	Merge KRB5 tests.
+# 
+# Revision /main/psn_krb5/1  1996/07/10  16:39 UTC  psn
+# 	Merge krb5 test work to DCE_1.2.2 base.
+# 
+# Revision /main/psn_k5_test/1  1996/06/05  19:50 UTC  psn
+# 	TETize KRB5 tests.
+# 
+# $EndLog$
+#
+
+# Basic expect script for Kerberos tests.
+# This is a DejaGnu test script.
+# Written by Ian Lance Taylor, Cygnus Support, <ian@cygnus.com>.
+# This script is automatically run by DejaGnu before running any of
+# the Kerberos test scripts.
+
+# This file provides several functions which deal with a local
+# Kerberos database.  We have to do this such that we don't interfere
+# with any existing Kerberos database.  We will create all the files
+# in the directory tmpdir, which will have been created by the
+# testsuite default script.  We will use KRBTEST.COM as our Kerberos
+# realm name.
+
+# We do everything in a temporary directory.
+if ![file isdirectory tmpdir] {catch "exec mkdir tmpdir" status}
+
+set tmppwd "[pwd]/tmpdir"
+
+# On Ultrix, use /bin/sh5 in preference to /bin/sh.
+if ![info exists BINSH] {
+    if [file exists /bin/sh5] {
+	set BINSH /bin/sh5
+    } else {
+	set BINSH /bin/sh
+    }
+}
+
+proc verbose {msg} {
+    puts "$msg"
+}
+
+proc untested {msg} {
+    tet_infoline UNTESTED: $msg
+    tet_result UNTESTED
+}
+
+proc unresolved {msg} {
+    tet_infoline Test failed inconclusively: $msg
+    tet_result UNRESOLVED
+}
+
+proc fail {msg} {
+    tet_infoline Test failed: $msg
+    tet_result FAIL
+}
+
+proc pass {msg} {
+    tet_infoline Test passed: $msg
+    tet_result PASS
+}
+
+set OPTDCELOCAL "/opt/dcelocal"
+set env(OPTDCELOCAL) "/opt/dcelocal"
+
+proc get_cellname {} {
+    global OPTDCELOCAL
+    global TET_CELLNAME
+    global TET_CELLNAME_SHORT
+
+    if ![info exists TET_CELLNAME] {
+	catch "exec grep cellname $OPTDCELOCAL/dce_cf.db" exec_out
+	if [string match "" $exec_out] {
+	   send_log "$exec_out\n"
+	   verbose $exec_out
+	   send_error "ERROR: can't get cellname from <optdcelocal>/dce_cf.db\n"
+	   return 0
+	}
+
+	set TET_CELLNAME [lindex $exec_out 1]
+	if [string match "" $TET_CELLNAME] {
+	   send_log "$TET_CELLNAME\n"
+	   verbose $TET_CELLNAME
+	   send_error "ERROR: invalid cellname $TET_CELLNAME"
+	   return 0
+	}
+	set TET_CELLNAME_SHORT [lindex "list [split $TET_CELLNAME '/']" 3]
+    }
+    return 1
+}
+
+proc get_realmname {} {
+    global TET_KRBREALM
+    global TET_CELLNAME_SHORT
+
+    if ![info exists TET_KRBREALM] {
+
+	if ![get_cellname] {
+	    return 0
+	}
+
+	catch "exec grep $TET_CELLNAME_SHORT /krb5/krb.realms" exec_out
+	if [string match "" $exec_out] {
+	   send_log "$exec_out\n"
+	   verbose $exec_out
+	   send_error "ERROR: can't get KRB5 realm name from /krb5/krb.realms\n"
+	   return 0
+	}
+
+	set TET_KRBREALM [lindex $exec_out 0]
+	if [string match "" $TET_KRBREALM] {
+	   send_log "$TET_KRBREALM\n"
+	   verbose $TET_KRBREALM
+	   send_error "ERROR: invalid realm name $TET_KRBREALM"
+	   return 0
+        }
+    }
+    return 1
+}
+
+proc dce_login { tester tester_pw } {
+    global env
+    global OPTDCELOCAL
+
+    # Create dce_login_noexec link
+    if ![file exists $OPTDCELOCAL/bin/dce_login_noexec] {
+       catch "exec ln -s $OPTDCELOCAL/bin/dce_login $OPTDCELOCAL/bin/dce_login_noexec" exec_out
+    }
+
+    set env(PATH) $OPTDCELOCAL/bin:$env(PATH)
+    catch "exec dce_login_noexec $tester $tester_pw" env(KRB5CCNAME)
+    if [string first "FILE:" $env(KRB5CCNAME)] {
+       verbose "dce_login $tester $tester_pw returned: $env(KRB5CCNAME)"
+       return 0
+    } else {
+       verbose "$env(USER) dce_login'ed as $tester"
+       return 1
+    }
+}
+
+# For security, we must not use generally known passwords.  This is
+# because some of the tests may be run as root.  If the passwords were
+# generally know, then somebody could work out the appropriate
+# Kerberos ticket to use, and come in when, say, the telnetd daemon
+# was being tested by root.  The window for doing this is very very
+# small, so the password does not have to be perfect, it just can't be
+# constant.
+if ![info exists KEY] {
+    catch {exec $BINSH -c "echo $$"} KEY
+    verbose "KEY is $KEY"
+}
+
+# Clear away any files left over from a previous run.
+# We can't use them now because we don't know the right KEY.
+# catch "exec rm -f tmpdir/db.ok tmpdir/srvtab"
+
+# Put the installed kerberos directories on PATH.
+# This needs to be fixed for V5.
+# set env(PATH) $env(PATH):/usr/kerberos/bin:/usr/kerberos/etc
+# verbose "PATH=$env(PATH)"
+
+# Some of the tests expect $env(USER) to be set.
+if ![info exists env(USER)] {
+    if [info exists env(LOGNAME)] {
+	set env(USER) $env(LOGNAME)
+    } else {
+	if [info exists logname] {
+	    set env(USER) $logname
+	} else {
+	    catch "exec whoami" env(USER)
+	}
+    }
+}
+
+# Find some programs we need.  We use the binaries from the build tree
+# if they exist.  If they do not, then they must be in PATH.  We
+# expect $objdir to be ...tests/dejagnu.
+
+# if ![info exists KDB5_CREATE] {
+#     set KDB5_CREATE [findfile $objdir/../../admin/create/kdb5_create]
+# }
+# 
+# if ![info exists KDB5_STASH] {
+#     set KDB5_STASH [findfile $objdir/../../admin/stash/kdb5_stash]
+# }
+# 
+# if ![info exists KDB5_EDIT] {
+#     set KDB5_EDIT [findfile $objdir/../../admin/edit/kdb5_edit]
+# }
+# 
+# if ![info exists KRB5KDC] {
+#     set KRB5KDC [findfile $objdir/../../kdc/krb5kdc]
+# }
+# 
+# if ![info exists KADMIND] {
+#     set KADMIND [findfile $objdir/../../kadmin.old/server/kadmind]
+# }
+# 
+# if ![info exists KADMIN] {
+#     set KADMIN [findfile $objdir/../../kadmin.old/client/kadmin]
+# }
+# 
+if ![info exists KINIT] {
+verbose "Setting KINIT"
+    set KINIT $OPTDCELOCAL/bin/kinit
+}
+# 
+# if ![info exists RESOLVE] {
+#     set RESOLVE [findfile $objdir/../resolve/resolve]
+# }
+
+# We use a couple of variables to hold shell prompts which may be
+# overridden by the user.
+
+if ![info exists ROOT_PROMPT] {
+    set ROOT_PROMPT "(%|#|>|\\$) $"
+}
+
+if ![info exists SHELL_PROMPT] {
+    set SHELL_PROMPT "(%|#|>|\\$) $"
+}
+
+# Add user to ~/.k5login if not present already
+proc add_k5login { user } {
+    global TET_CELLNAME_SHORT
+    global env
+
+    if [file exists $env(HOME)/.k5login] {
+       set loginfile [open $env(HOME)/.k5login r]
+       while {[gets $loginfile principal] != -1} {
+	   if {[string match $principal $user@$TET_CELLNAME_SHORT]} {
+	       close $loginfile
+	       return 1
+	   }
+       }
+       close $loginfile
+    }
+
+    # Add user to a ~/.k5login file.
+    set loginfile [open $env(HOME)/.k5login a]
+    puts $loginfile "$user@$TET_CELLNAME_SHORT"
+    close $loginfile
+    return 1
+}
+
+# check_k5login
+# Most of the tests won't work if the user has a .k5login file, unless
+# the user's name appears unadorned in .k5login (in which case kuserok
+# will assume a null instance and the local realm).  This procedure
+# returns 1 if the .k5login file appears to be OK, 0 otherwise.  This
+# check is not foolproof.
+
+proc check_user_k5login { testname user } {
+    global TET_CELLNAME_SHORT
+
+    if ![file exists ~/.k5login] {
+	return 1
+    }
+
+    set file [open ~/.k5login r]
+    while {[gets $file principal] != -1} {
+	if {[string match $principal $user@$TET_CELLNAME_SHORT]} {
+	    close $file
+	    return 1
+	}
+    }
+    close $file
+
+    untested "$testname test requires that $user appear in your ~/.k5login"
+    untested "file with format <user>@<cellname>."
+
+    return 0
+}
+
+proc check_k5login { testname } {
+    global env
+
+    return [check_user_k5login $testname $env(USER)]
+}
+
+# check_exit_status
+# Check the exit status of a spawned program.  Returns 1 if the
+# program succeeded, 0 if it failed.
+
+proc check_exit_status { testname } {
+    global spawn_id
+
+    set status_list [wait -i $spawn_id]
+    verbose "wait -i $spawn_id returned $status_list ($testname)"
+    catch "close -i $spawn_id"
+    if { [lindex $status_list 2] != 0 || [lindex $status_list 3] != 0 } {
+	send_log "exit status: $status_list\n"
+	verbose "exit status: $status_list"
+	fail "$testname"
+	return 0
+    } else {
+	return 1
+    }
+}
+
+# get_hostname
+# This procedure will get the local hostname.  It sets the global
+# variables hostname (the full name) and localhostname (the first part
+# of the name).  Returns 1 on success, 0 on failure.
+
+proc get_hostname { } {
+    global RESOLVE
+    global hostname
+    global localhostname
+
+    if {[info exists hostname] && [info exists localhostname]} {
+	return 1
+    }
+
+    catch "exec uname -n" localhostname
+    if [string match "" $localhostname] {
+        send_log "$localhostname\n"
+        verbose $localhostname
+        send_error "ERROR: can't get hostname\n"
+        return 0
+    }
+
+    catch "exec nslookup $localhostname | grep \"Name: \"" exec_out
+    if [string match "" $exec_out] {
+	send_log "$exec_out\n"
+	verbose $exec_out
+	send_error "ERROR: can't get hostname\n"
+	return 0
+    }
+
+    set hostname [string range $exec_out \
+                  [string first $localhostname $exec_out] \
+                  [string length $exec_out] ]
+
+    set hostname [string tolower $hostname]
+    set localhostname [string tolower $localhostname]
+    verbose "hostname: $hostname; localhostname: $localhostname"
+
+    return 1
+}
+
+# setup_kerberos_files
+# This procedure will create some Kerberos files which must be created
+# manually before trying to run any Kerberos programs.  Returns 1 on
+# success, 0 on failure.
+
+proc setup_kerberos_files { } {
+    global hostname
+
+    if ![get_hostname] { 
+	return 0
+    }
+
+    # Create a krb5.conf file.
+    if ![file exists tmpdir/krb5.conf] {
+    set conffile [open tmpdir/krb5.conf w]
+    puts $conffile "\[libdefaults\]"
+    puts $conffile "	default_realm = KRBTEST.COM"
+    puts $conffile ""
+    puts $conffile "\[realms\]"
+    puts $conffile "	KRBTEST.COM = \{"
+    puts $conffile "		kdc = $hostname:3088"
+    puts $conffile "		admin_server = $hostname:3750"
+    puts $conffile "	\}"
+    close $conffile
+    }
+
+    # Create ACL file.
+    if ![file exists tmpdir/acl] {
+	set aclfile [open tmpdir/acl w]
+	puts $aclfile "krbtest/admin@KRBTEST.COM *"
+	close $aclfile
+    }
+
+    return 1
+}
+
+# Save the original values of the environment variables we are going
+# to muck with.
+
+if [info exists env(KRB5_CONFIG)] {
+    set orig_krb_conf $env(KRB5_CONFIG)
+} else {
+    catch "unset orig_krb5_config"
+}
+
+if [info exists env(KRB5CCNAME)] {
+    set orig_krb5ccname $env(KRB5CCNAME)
+} else {
+    catch "unset orig_krb5ccname"
+}
+
+if [ info exists env(KRB5RCACHEDIR)] {
+    set orig_krb5rcachedir $env(KRB5RCACHEDIR)
+} else {
+    catch "unset orig_krb5rcachedir"
+}
+
+if [ info exists env(KERBEROS_SERVER)] {
+    set orig_kerberos_server $env(KERBEROS_SERVER)
+} else {
+    catch "unset orig_kerberos_server"
+}
+
+# setup_kerberos_env
+# Set the environment variables needed to run Kerberos programs.
+
+proc setup_kerberos_env { } {
+    global env
+    global tmppwd
+    global hostname
+    global OPTDCELOCAL
+
+    # Set the environment variable KRB5_CONFIG to point to our krb5.conf file.
+    # All the Kerberos tools check KRB5_CONFIG.
+    # Actually, V5 doesn't currently use this.
+    set env(KRB5_CONFIG) /krb5/krb5.conf
+    verbose "KRB5_CONFIG=$env(KRB5_CONFIG)"
+
+    # Direct the Kerberos programs at a local ticket file.
+    verbose "KRB5CCNAME=$env(KRB5CCNAME)"
+
+    # Direct the Kerberos server at a cache file stored in the
+    # temporary directory.
+    set env(KRB5RCACHEDIR) $OPTDCELOCAL/var/security/rcache
+    verbose "KRB5RCACHEDIR=$env(KRB5RCACHEDIR)"
+
+    # Tell the Kerberos tools how to contact the KRBTEST.COM server.
+    # set env(KERBEROS_SERVER) "KRBTEST.COM:$hostname:3088"
+    verbose "KERBEROS_SERVER=$env(KERBEROS_SERVER)"
+
+    return 1
+}
+
+# Restore the Kerberos environment, in case setup_kerberos_env was
+# already called by an earlier test.
+
+proc restore_kerberos_env { } {
+    global env
+    global orig_krb5_config
+    global orig_krb5ccname
+    global orig_krb5rcachedir
+    global orig_kerberos_server
+
+    if [info exists orig_krb5_config] {
+    set env(KRB5_CONFIG) $orig_krb5_config
+    } else {
+    catch "unset env(KRB5_CONFIG)"
+    }
+
+    if [info exists orig_krb5ccname] {
+	set env(KRB5CCNAME) $orig_krb5ccname
+    } else {
+	catch "unset env(KRB5CCNAME)"
+    }
+
+    if [info exists orig_krb5rcachedir] {
+	set env(KRB5RCACHEDIR) $orig_krb5rcachedir
+    } else {
+	catch "unset env(KRB5RCACHEDIR)"
+    }
+
+    if [info exists orig_kerberos_server] {
+	set env(KERBEROS_SERVER) $orig_kerberos_server
+    } else {
+	catch "unset env(KERBEROS_SERVER)"
+    }
+}
+
+# setup_kerberos_db
+# Initialize the Kerberos database.  If the argument is non-zero, call
+# pass at relevant points.  Returns 1 on success, 0 on failure.
+
+proc setup_kerberos_db { standalone } {
+    global KDB5_CREATE
+    global KDB5_STASH
+    global KDB5_EDIT
+    global KEY
+    global tmppwd
+    global spawn_id
+    global TET_KRBREALM
+
+    if {!$standalone && [file exists tmpdir/db.ok]} {
+	return 1
+    }
+
+    catch "exec rm -f [glob -nocomplain tmpdir/db*]"
+
+    # Creating a new database means we need a new srvtab.
+    catch "exec rm -f tmpdir/srvtab"
+
+    if { ![setup_kerberos_files] || ![setup_kerberos_env] } {
+	return 0
+    }
+
+    spawn $KDB5_CREATE -r $TET_KRBREALM -d $tmppwd/db
+    expect {
+	"Enter KDC database master key:" {
+	    verbose "kdb5_create started"
+	}
+	timeout {
+	    fail "kdb5_create"
+	    return 0
+	}
+	eof {
+	    fail "kdb5_create"
+	    return 0
+	}
+    }
+    send "masterkey$KEY\r"
+    set failed 0
+    expect {
+	"Re-enter KDC database master key to verify:" { }
+	timeout {
+	    fail "kdb5_create"
+	    return 0
+	}
+	eof {
+	    fail "kdb5_create"
+	    return 0
+	}
+    }
+    send "masterkey$KEY\r"
+    expect {
+	-re "\[Cc\]ouldn't" {
+	    fail "kdb5_create"
+	    return 0
+	}
+	timeout {
+	    fail "kdb5_create"
+	    return 0
+	}
+	eof { }
+    }
+    if ![check_exit_status kdb5_create] {
+	return 0
+    }
+
+    if {$standalone} {
+	pass "kdb5_create"
+    }
+
+    # Stash the master key in a file.
+    spawn $KDB5_STASH -f $tmppwd/stash -d $tmppwd/db -r KRBTEST.COM
+    expect {
+	"Enter KDC database master key:" {
+	    verbose "kdb5_stash started"
+	}
+	timeout {
+	    fail "kdb5_stash"
+	    if {!$standalone} {
+		catch "exec rm -f tmpdir/db.ok"
+	    }
+	    return 0
+	}
+	eof {
+	    fail "kdb5_stash"
+	    if {!$standalone} {
+		catch "exec rm -f tmpdir/db.ok"
+	    }
+	    return 0
+	}
+    }
+    send "masterkey$KEY\r"
+    expect {
+	eof { }
+	timeout {
+	    fail "kdb5_stash"
+	    if {!$standalone} {
+		catch "exec rm -f tmpdir/db.ok"
+	    }
+	    return 0
+	}
+    }
+    if ![check_exit_status kdb5_stash] {
+	return 0
+    }
+
+    if {$standalone} {
+	pass "kdb5_stash"
+    }
+
+    # Add an admin user.
+    spawn $KDB5_EDIT -m -d $tmppwd/db -r KRBTEST.COM
+    expect_after {
+	timeout {
+	    catch "expect_after"
+	    fail "kdb5_edit"
+	    if {!$standalone} {
+		catch "exec rm -f tmpdir/db.ok"
+	    }
+	    return 0
+	}
+	eof {
+	    catch "expect_after"
+	    fail "kdb5_edit"
+	    if {!$standalone} {
+		catch "exec rm -f tmpdir/db.ok"
+	    }
+	    return 0
+	}
+    }
+    expect {
+	"Enter KDC database master key" {
+	    verbose "kdb5_edit started"
+	}
+    }
+    send "masterkey$KEY\r"
+    expect "kdb5_edit:"
+    send "ank krbtest/admin@KRBTEST.COM\r"
+    expect "Enter password:"
+    send "adminpass$KEY\r"
+    expect "Re-enter password for verification:"
+    send "adminpass$KEY\r"
+    expect "kdb5_edit:"
+    send "ark kadmin/KRBTEST.COM@KRBTEST.COM\r"
+    expect "kdb5_edit:"
+    send "quit\r"
+    expect "\r"
+    expect_after
+    if ![check_exit_status kdb5_edit] {
+	if {!$standalone} {
+	    catch "exec rm -f tmpdir/db.ok"
+	}
+	return 0
+    }
+
+    if {$standalone} {
+	pass "kdb5_edit"
+    }
+
+    return 1
+}
+
+# start_kerberos_daemons
+# A procedure to build a Kerberos database and start up the kerberos
+# and kadmind daemons.  This sets the global variables kdc_pid,
+# kdc_spawn_id, kadmind_pid, and kadmind_spawn_id.  The procedure
+# stop_kerberos_daemons should be used to stop the daemons.  If the
+# argument is non-zero, call pass at relevant points.  Returns 1 on
+# success, 0 on failure.
+
+proc start_kerberos_daemons { standalone } {
+    global KRB5KDC
+    global KADMIND
+    global KEY
+    global kdc_pid
+    global kdc_spawn_id
+    global kadmind_pid
+    global kadmind_spawn_id
+    global tmppwd
+
+    if ![setup_kerberos_db 0] {
+	return 0
+    }
+
+    if {$standalone} {
+        catch "exec rm -f tmpdir/krb.log"
+	catch "exec rm -f tmpdir/kadmind.log"
+    }
+
+    # Start up the kerberos daemon
+    spawn $KRB5KDC -r KRBTEST.COM -p 3088 -d $tmppwd/db -m -n
+    set kdc_pid [exp_pid]
+    set kdc_spawn_id $spawn_id
+    expect {
+	"Enter KDC database master key" {
+	    send "masterkey$KEY\r"
+	}
+	timeout {
+	    fail "krb5kdc"
+	    stop_kerberos_daemons
+	    return 0
+	}
+	eof {
+	    fail "krb5kdc"
+	    stop_kerberos_daemons
+	    return 0
+	}
+    }
+    expect {
+	"\r" { }
+	timeout {
+	    fail "krb5kdc"
+	    stop_kerberos_daemons
+	    return 0
+	}
+	eof {
+	    fail "krb5kdc"
+	    stop_kerberos_daemons
+	    return 0
+	}
+    }
+
+    if {$standalone} {
+	pass "krb5kdc"
+    }
+
+    # Give the kerberos daemon a few seconds to get set up.
+    catch "exec sleep 2"
+
+    # Start up the kadmind daemon
+    spawn $KADMIND -d $tmppwd/db -p 3750 -a $tmppwd/acl -m -r KRBTEST.COM
+    set kadmind_pid [exp_pid]
+    set kadmind_spawn_id $spawn_id
+    expect {
+	"Enter KDC database master key:" {
+	    send "masterkey$KEY\r"
+	}
+	timeout {
+	    fail "kadmind"
+	    stop_kerberos_daemons
+	    return 0
+	}
+	eof {
+	    fail "krb5kdc"
+	    stop_kerberos_daemons
+	    return 0
+	}
+    }
+    expect {
+	"\r" { }
+	timeout {
+	    fail "kadmind"
+	    stop_kerberos_daemons
+	    return 0
+	}
+	eof {
+	    fail "kadmind"
+	    stop_kerberos_daemons
+	    return 0
+	}
+    }
+
+    if {$standalone} {
+	pass "kadmind"
+    }
+
+    # Give the kadmind daemon a few seconds to get set up.
+    catch "exec sleep 2"
+
+    return 1
+}
+
+# stop_kerberos_daemons
+# Stop the kerberos daemons.  Returns 1 on success, 0 on failure.
+
+proc stop_kerberos_daemons { } {
+    global kdc_pid
+    global kdc_spawn_id
+    global kadmind_pid
+    global kadmind_spawn_id
+
+    if [info exists kdc_pid] {
+	catch "close -i $kdc_spawn_id"
+	catch "exec kill $kdc_pid"
+	wait -i $kdc_spawn_id
+	unset kdc_pid
+    }
+
+    if [info exists kadmind_pid] {
+	catch "close -i $kadmind_spawn_id"
+	catch "exec kill $kadmind_pid"
+	wait -i $kadmind_spawn_id
+	unset kadmind_pid
+    }
+
+    return 1
+}
+
+# add_kerberos_key
+# Add an key to the Kerberos database.  start_kerberos_daemons must be
+# called before this procedure.  If the standalone argument is
+# non-zero, call pass at relevant points.  Returns 1 on success, 0 on
+# failure.
+
+proc add_kerberos_key { kkey standalone } {
+    global KADMIN
+    global KEY
+    global spawn_id
+
+    # Use kadmin to add an key.
+    spawn $KADMIN -p 3750 krbtest@KRBTEST.COM
+    expect_after {
+	timeout {
+	    fail "kadmin $kkey"
+	    catch "expect_after"
+	    return 0
+	}
+	eof {
+	    fail "kadmin $kkey"
+	    catch "expect_after"
+	    return 0
+	}
+    }
+    expect "Password for krbtest/admin@KRBTEST.COM:"
+    send "adminpass$KEY\r"
+    expect -re "Command (.*):"
+    send "add $kkey@KRBTEST.COM\r"
+    expect {
+	"Enter password:" { }
+	"Principal Already Exists" {
+	    expect -re "Command (.*):"
+	    send "q\r"
+	    expect "Have a Good Day.\r"
+	    catch "expect_after"
+	    if ![check_exit_status kadmin] {
+		return 0
+	    }
+	    return 1
+	}
+    }
+    send "$kkey"
+    send "$KEY\r"
+    expect "Re-enter password for verification:"
+    send "$kkey"
+    send "$KEY\r"
+    expect "Database Addition Successful"
+    expect -re "Command (.*):"
+    send "q\r"
+    expect "Have a Good Day.\r"
+    expect_after
+    if ![check_exit_status kadmin] {
+	return 0
+    }
+
+    if {$standalone} {
+	pass "kadmin $kkey"
+    }
+
+    return 1
+}
+
+# add_random_key
+# Add a key with a random password to the Kerberos database.
+# start_kerberos_daemons must be called before this procedure.  If the
+# standalone argument is non-zero, call pass at relevant points.
+# Returns 1 on success, 0 on failure.
+
+proc add_random_key { kkey standalone } {
+    global KADMIN
+    global KEY
+    global spawn_id
+
+    # Use kadmin to add an key.
+    spawn $KADMIN -p 3750 krbtest@KRBTEST.COM
+    expect_after {
+	timeout {
+	    fail "kadmin $kkey"
+	    catch "expect_after"
+	    return 0
+	}
+	eof {
+	    fail "kadmin $kkey"
+	    catch "expect_after"
+	    return 0
+	}
+    }
+    expect "Password for krbtest/admin@KRBTEST.COM:"
+    send "adminpass$KEY\r"
+    expect -re "Command (.*):"
+    send "addrnd $kkey@KRBTEST.COM\r"
+    expect "Database Addition Successful"
+    expect -re "Command (.*):"
+    send "q\r"
+    expect "Have a Good Day.\r"
+    expect_after
+    if ![check_exit_status kadmin] {
+	return 0
+    }
+
+    if {$standalone} {
+	pass "kadmin $kkey"
+    }
+
+    return 1
+}
+
+# setup_srvtab
+# Set up a srvtab file.  start_kerberos_daemons and add_random_key
+# host/$hostname must be called before this procedure.  If the
+# argument is non-zero, call pass at relevant points.  Returns 1 on
+# success, 0 on failure.
+
+proc setup_srvtab { standalone } {
+    global KDB5_EDIT
+    global KEY
+    global tmppwd
+    global hostname
+    global spawn_id
+
+    if {!$standalone && [file exists tmpdir/srvtab]} {
+	return 1
+    }
+
+    catch "exec rm -f tmpdir/srvtab tmpdir/srvtab.old"
+
+    if ![get_hostname] {
+	return 0
+    }
+
+    catch "exec rm -f $hostname-new-srvtab"
+
+    spawn $KDB5_EDIT -m -d $tmppwd/db -r KRBTEST.COM
+    expect_after {
+	timeout {
+	    fail "kdb5_edit srvtab"
+	    if {!$standalone} {
+		catch "exec rm -f tmpdir/srvtab"
+	    }
+	    catch "expect_after"
+	    return 0
+	}
+	eof {
+	    fail "kdb5_edit srvtab"
+	    if {!$standalone} {
+		catch "exec rm -f tmpdir/srvtab"
+	    }
+	    catch "expect_after"
+	    return 0
+	}
+    }
+    expect "Enter KDC database master key"
+    send "masterkey$KEY\r"
+    expect "kdb5_edit:"
+    send "xst $hostname host\r"
+    expect "'host/$hostname@KRBTEST.COM' added to keytab"
+    expect "kdb5_edit:"
+    send "quit\r"
+    expect "\r"
+    expect_after
+    if ![check_exit_status "kdb5_edit srvtab"] {
+	if {!$standalone} {
+	    catch "exec rm -f tmpdir/srvtab"
+	}
+	return 0
+    }
+
+    catch "exec mv -f $hostname-new-srvtab tmpdir/srvtab" exec_output
+    if ![string match "" $exec_output] {
+	send_log "$exec_output\n"
+	verbose $exec_output
+	send_error "ERROR: can't mv new srvtab\n"
+	return 0
+    }
+
+    if {$standalone} {
+	pass "kdb5_edit srvtab"
+    }
+
+    # Make the srvtab file globally readable in case we are using a
+    # root shell and the srvtab is NFS mounted.
+    catch "exec chmod a+r tmpdir/srvtab"
+
+    return 1
+}
+
+# kinit
+# Use kinit to get a ticket.  If the argument is non-zero, call pass
+# at relevant points.  Returns 1 on success, 0 on failure.
+
+proc kinit { name pass standalone } {
+    global KINIT
+    global spawn_id
+
+    # Use kinit to get a ticket.
+    spawn $KINIT $name@KRBTEST.COM
+    expect {
+	"Password for $name@KRBTEST.COM:" {
+	    verbose "kinit started"
+	}
+	timeout {
+	    fail "kinit"
+	    return 0
+	}
+	eof {
+	    fail "kinit"
+	    return 0
+	}
+    }
+    send "$pass\r"
+    # This last expect seems useless, but without it the test hangs on
+    # AIX.
+    expect {
+        "\r" { }
+    }
+    if ![check_exit_status kinit] {
+	return 0
+    }
+
+    if {$standalone} {
+	pass "kinit"
+    }
+
+    return 1
+}
+
+# Set up a root shell using rlogin $hostname -l root.  This is used
+# when testing the daemons that must be run as root, such as telnetd
+# or rlogind.  This sets the global variables rlogin_spawn_id and
+# rlogin_pid.  Returns 1 on success, 0 on failure.
+#
+# This procedure will only succeed if the person running the test has
+# a valid ticket for a name listed in the /.klogin file.  Naturally,
+# Kerberos must already be installed on this machine.  It's a pain,
+# but I can't think of a better approach.
+
+proc setup_root_shell { testname } {
+    global BINSH
+    global ROOT_PROMPT
+    global KEY
+    global hostname
+    global rlogin_spawn_id
+    global rlogin_pid
+    global tmppwd
+
+    # Make sure we are using the original values of the environment
+    # variables.  This means that the caller must call
+    # setup_kerberos_env after calling this procedure.
+
+    restore_kerberos_env
+
+    if ![get_hostname] {
+	return 0
+    }
+
+    # If you have not installed Kerberos on your system, and you want
+    # to run these tests, you can do it if you are willing to put your
+    # root password in this file (this is not a very good idea, but
+    # it's safe enough if you disconnect from the network and remember
+    # to remove the password later).  Change the rlogin in the next
+    # line to be /usr/ucb/rlogin (or whatever is appropriate for your
+    # system).  Then change the lines after "word:" a few lines
+    # farther down to be
+    #    send "rootpassword\r"
+    #    exp_continue
+
+    spawn rlogin $hostname -l root
+    set rlogin_spawn_id $spawn_id
+    set rlogin_pid [exp_pid]
+    expect {
+	"word:" {
+	    untested "$testname test requires ability to rlogin as root"
+	    stop_root_shell
+	    return 0
+	}
+	"Kerberos rlogin failed" {
+	    untested "$testname test requires ability to rlogin as root"
+	    stop_root_shell
+	    return 0
+	}
+	eof {
+	    untested "$testname test requires ability to rlogin as root"
+	    stop_root_shell
+	    return 0
+	}
+	-re "$ROOT_PROMPT" { }
+	timeout {
+	    send_error "ERROR: timeout from rlogin $hostname -l root\n"
+	    send_error "ERROR: If you have an unusual root prompt,\n"
+	    send_error "ERROR: try running with ROOT_PROMPT=\"regexp\"\n"
+	    stop_root_shell
+	    return 0
+	}
+    }
+
+    expect_after {
+	timeout {
+	    send_error "ERROR: timeout from rlogin $hostname -l root\n"
+	    stop_root_shell
+	    catch "expect_after"
+	    return 0
+	}
+	eof {
+	    send_error "ERROR: eof from rlogin $hostname -l root\n"
+	    stop_root_shell
+	    catch "expect_after"
+	    return 0
+	}
+    }
+
+    # Make sure the root shell is using /bin/sh.
+    send "$BINSH\r"
+    expect {
+	-re "$ROOT_PROMPT" { }
+    }
+
+    # Set up a shell variable tmppwd.  The callers use this to keep
+    # command line lengths down.  The command line length is important
+    # because we are feeding input to a shell via a pty.  On some
+    # systems a pty will only accept 255 characters.
+    send "tmppwd=$tmppwd\r"
+    expect {
+	-re "$ROOT_PROMPT" { }
+    }
+
+    # Move over to the right directory.
+    set dir [pwd]
+    send "cd $dir\r"
+    expect {
+	-re "$ROOT_PROMPT" { }
+	"$dir:" {
+	    send_error "ERROR: root shell can not cd to $dir\n"
+	    stop_root_shell
+	    return 0
+	}
+    }
+
+    expect_after
+
+    return 1
+}
+
+# Kill off a root shell started by setup_root_shell.
+
+proc stop_root_shell { } {
+    global rlogin_spawn_id
+    global rlogin_pid
+
+    catch "close -i $rlogin_spawn_id"
+    catch "exec kill $rlogin_pid"
+    catch "exec sleep 1"
+    catch "exec kill -9 $rlogin_pid"
+    catch "wait -i $rlogin_spawn_id"
+}
+
+# Check the date.  The string will be the output of date on this
+# system, and we must make sure that it is in the same timezone as the
+# output of date run a second time.  The first date will be run on an
+# rlogin or some such connection to the local system.  This is to test
+# to make sure that the TZ environment variable is handled correctly.
+# Returns 1 on sucess, 0 on failure.
+
+proc check_date { date } {
+    catch "exec date" ndate
+    set atz ""
+    set ntz ""
+    scan $date "%s %s %d %d:%d:%d %s %d" adow amon adom ahr amn asc atz ayr
+    scan $ndate "%s %s %d %d:%d:%d %s %d" ndow nmon ndom nhr nmn nsc ntz nyr
+    if { $atz != $ntz } {
+	verbose "date check failed: $atz != $ntz"
+	send_log "date check failed: $atz != $ntz\n"
+	return 0
+    }
+    return 1
+}

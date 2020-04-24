@@ -1,0 +1,147 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: tc_slv_delfrc,v $
+# Revision 1.1.2.2  1996/03/09  20:52:27  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:30:00  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:59  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:32 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  20:27 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:54 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  19:40 UTC  gordon_l
+# 	Fixes for change_master/becom
+# 	e_master
+# 	[1995/12/11  22:22:44  root]
+# 
+# Revision 1.1.2.2  1993/08/02  17:41:43  sekhar
+# 	Replication system test. Initial version
+# 	[1993/08/02  17:32:20  sekhar]
+# 
+# $EndLog$
+#
+
+if [ -z "${TC_SLV_DELFRC_DEFINED}" ] ; then
+
+TC_SLV_DELFRC_DEFINED=1
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  DESCRIPTION: 
+#      This test case is part of the security replication system test
+#      and tests the following:
+#
+#      This tests if a security slave can be deleted forcibly.
+#      A slave which is removed forcibly is removed from all
+#      the replica lists. However secd should still be running
+#      and the registry should still exist on the host where
+#      the slave is running. This also implies that queries
+#      to the slave registry should be successful.
+#
+#      The test first forcibly deletes a slave using the
+#      function slv_del.  slv_del() also verifies that
+#      the slave is removed from all replica lists and
+#      that secd is running and registry exists on the slave host.
+#
+#      Next the query test is started on the slave. The query
+#      test binds to the slave registry. This should pass .
+#      
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+tet_startup="tc_slv_delforce_init"
+tet_cleanup="tc_slv_delforce_cleanup"
+tet_testlist="tc_slv_delforce"
+
+iclist="ic1"
+ic1="tc_slv_delforce"
+
+tc_slv_delforce_init()
+{
+    typeset st
+    tet_infoline "............... Test: tc_slv_delfrc"
+    tc_common_init ; st=$?
+    if [ $st -ne 0 ] ; then
+        tet_delete $ic1 "tc_slv_delforce_init(): Initialization failed"
+        return 
+    fi
+    if [ $SLV_CNT -eq 0 ] ; then
+        tet_delete $ic1 "tc_slv_delforce(): Test requires at least one slave in the cell"
+        return 
+    fi
+}
+
+tc_slv_delforce_cleanup()
+{
+    tc_common_cleanup
+}
+
+tc_slv_delforce()
+{
+    typeset st slvhost slvnm
+
+    testdesc="Delete slave forcibly"
+    replog_testhdr "$testdesc"
+
+    slvhost=${SLV_HOSTNAMES[0]} ; slvnm=${SLV_NAMES[0]}
+
+    sa_delete $slvnm $DELREP_FORCE ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_abort "tc_slv_del()" "sa_delete()"
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    slv_v_del $slvhost $slvnm $DELREP_FORCE ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+    
+    #   query test should pass on the replica even though 
+    #   not on the replica list.
+
+    sft_x_query $slvhost $slvnm
+ 
+    tc_wait_bgjobs "query test"
+    sft_v_query $slvhost ; st=$?
+    replog_testresult "$testdesc" $st
+
+    #  Cleanup
+
+    secd_kill $slvhost ; st=$?    # Kill secd on $slvhost
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    rgy_delete $slvhost           # Delete registry
+    slv_config $slvhost $slvhost  # reconfigure the slave
+}
+
+. $TET_ROOT/profile.dcest 
+. ./profile
+. $PHOME/replog
+. $PHOME/tc_common
+. $PHOME/slv
+. $PHOME/sft
+. $TCM
+#. $TET_ROOT/lib/xpg3sh/tcm.sh
+
+fi

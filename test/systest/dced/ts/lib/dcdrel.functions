@@ -1,0 +1,358 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: dcdrel.functions,v $
+# Revision 1.1.4.2  1996/03/11  02:38:02  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:05:12  marty]
+#
+# Revision 1.1.4.1  1995/12/11  21:55:06  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:55:14  root]
+# 
+# Revision 1.1.2.7  1994/10/04  19:45:47  fadden
+# 	replace use of "rsh" with "rshsp"
+# 	[1994/10/04  17:35:44  fadden]
+# 
+# Revision 1.1.2.6  1994/07/27  19:26:25  fadden
+# 	Add dcdrel002 functions
+# 	[1994/07/26  23:54:11  fadden]
+# 
+# Revision 1.1.2.5  1994/07/26  21:41:46  fadden
+# 	Add functions for dcdrel003
+# 	Modify results reporting to generalize it
+# 	[1994/07/26  19:37:17  fadden]
+# 
+# Revision 1.1.2.4  1994/07/21  21:26:55  fadden
+# 	Modify approach to declaring test result
+# 	Add testing of certified login
+# 	Add use of second test server on each node
+# 	[1994/07/21  21:00:59  fadden]
+# 
+# Revision 1.1.2.3  1994/06/24  19:54:02  fadden
+# 	Merged with changes from 1.1.2.2
+# 	[1994/06/24  19:53:21  fadden]
+# 
+# 	Complete the error checking function
+# 	Export env var TEST_DBG_LEVEL to remote systems in rshsp commands
+# 	Add setup routine
+# 	[1994/06/24  18:24:22  fadden]
+# 
+# Revision 1.1.2.2  1994/06/17  18:46:07  devsrc
+# 	cr10872 - fix copyright
+# 	[1994/06/17  18:36:50  devsrc]
+# 
+# Revision 1.1.2.1  1994/05/26  22:44:23  fadden
+# 	Prepare for initial submission
+# 	[1994/05/26  20:10:36  fadden]
+# 
+# $EndLog$
+
+# Setup for dcdrel001
+#   This could be combined into one shell script without the numerous
+#   dce logins, and could test for each condition before cleaning it up.
+#
+setup()
+{
+   # remove server group object 
+   su.dce cell_admin -p '-dce-' \
+	-c "cdscp delete obj /.:/test/systest/srv_grp/dcdrel001"
+   # setup namespace server group entry if group obj didn't exist
+   if [[ $? -ne 0 ]]
+   then
+   	su.dce cell_admin -p '-dce-' -c "cdscp create dir /.:/test"
+   	su.dce cell_admin -p '-dce-' -c "cdscp create dir /.:/test/systest"
+   	su.dce cell_admin -p '-dce-' -c "cdscp create dir /.:/test/systest/srv_grp"
+   fi
+   # this next step is only needed when a server fails to shutdown properly
+   for RHOST in ${HOSTLIST} ; do
+     su.dce cell_admin -p '-dce-' -c "cdscp del obj /.:/hosts/${RHOST}/dcdrel001a"
+     su.dce cell_admin -p '-dce-' -c "cdscp del obj /.:/hosts/${RHOST}/dcdrel001b"
+   done
+}
+
+# Start dcdrel001 servers on each host in $HOSTLIST.
+start_servers()
+{
+  for RHOST in ${HOSTLIST} ; do
+    RES_FILE1=${STTMPDIR}/dcdrelsrva.${RHOST}.log
+    RES_FILE2=${STTMPDIR}/dcdrelsrvb.${RHOST}.log
+    if [[ ${RHOST} = ${LOCAL_HOST} ]] ; then
+      tet_infoline "Executing dcdrel001a_server | tee ${RES_FILE1} &"
+      dcdrel001a_server | tee ${RES_FILE1} &
+      SPIDS="${SPIDS} $!"
+      tet_infoline "Executing dcdrel001b_server | tee ${RES_FILE2} &"
+      dcdrel001b_server | tee ${RES_FILE2} &
+      SPIDS="${SPIDS} $!"
+    else
+      tet_infoline "Executing rshsp ${RHOST} ${TCDIR}/dcdrel001a_server | tee ${RES_FILE1}"
+      rshsp ${RHOST} "export TEST_DBG_LEVEL=\"$TEST_DBG_LEVEL\"; ${TCDIR}/dcdrel001a_server | tee ${RES_FILE1}" &
+      SPIDS="${SPIDS} $!"
+      tet_infoline "Executing rshsp ${RHOST} ${TCDIR}/dcdrel001b_server | tee ${RES_FILE2}"
+      rshsp ${RHOST} "export TEST_DBG_LEVEL=\"$TEST_DBG_LEVEL\"; ${TCDIR}/dcdrel001b_server | tee ${RES_FILE2}" &
+      SPIDS="${SPIDS} $!"
+    fi
+  done
+}
+
+# Start a client on each host in $HOSTLIST.
+start_clients()
+{
+  for RHOST in ${HOSTLIST} ; do
+    RES_FILE=${STTMPDIR}/dcdrelcli.${RHOST}.log
+      if [[ ${RHOST} = ${LOCAL_HOST} ]] ; then
+	  tet_infoline "Executing dcdrel001_client | tee ${RES_FILE} &"
+	  dcdrel001_client | tee ${RES_FILE} &
+
+      else
+	 tet_infoline "Executing rshsp ${RHOST} ${TCDIR}/dcdrel001_client | tee ${RES_FILE}"
+	 rshsp ${RHOST} "export TEST_DBG_LEVEL=\"$TEST_DBG_LEVEL\"; ${TCDIR}/dcdrel001_client | tee ${RES_FILE}" &
+      fi
+    PIDS="${PIDS}$! "
+  done
+}
+
+# Start a shell script to test certified logins on each host in $HOSTLIST.
+start_secval_test()
+{
+  for RHOST in ${HOSTLIST} ; do
+    RES_FILE=${STTMPDIR}/dcdrelsecval.${RHOST}.log
+      if [[ ${RHOST} = ${LOCAL_HOST} ]] ; then
+	  tet_infoline "Executing dcdrel001_secval | tee ${RES_FILE} &"
+	  dcdrel001_secval | tee ${RES_FILE} &
+      else
+	 tet_infoline "Executing rshsp ${RHOST} ${TCDIR}/dcdrel001_secval | tee ${RES_FILE}"
+	 rshsp ${RHOST} "export TEST_DBG_LEVEL=\"$TEST_DBG_LEVEL\"; ${TCDIR}/dcdrel001_secval | tee ${RES_FILE}" &
+      fi
+    PIDS="${PIDS}$! "
+  done
+}
+
+# Start a dcecp script to test hostdata operation on each host in $HOSTLIST.
+start_hd_test()
+{
+  for RHOST in ${HOSTLIST} ; do
+    RES_FILE=${STTMPDIR}/dcdrelhd.${RHOST}.log
+      if [[ ${RHOST} = ${LOCAL_HOST} ]] ; then
+	  tet_infoline "Executing dcdrel003_hd.tcl /.:/hosts/${RHOST} ${RES_FILE} &"
+	  dcdrel003_hd.tcl /.:/hosts/${RHOST} ${RES_FILE} &
+      else
+	 tet_infoline "Executing rshsp ${RHOST} ${TCDIR}/dcdrel003_hd.tcl /.:/hosts/${RHOST} ${RES_FILE}"
+	 rshsp ${RHOST} "export TCDIR=${TCDIR}; dcecp ${TCDIR}/dcdrel003_hd.tcl /.:/hosts/${RHOST} ${RES_FILE}" &
+      fi
+    PIDS="${PIDS}$! "
+  done
+}
+
+# Start a dcecp script to test keytab operations on each host in $HOSTLIST.
+start_ktb_test()
+{
+  for RHOST in ${HOSTLIST} ; do
+    RES_FILE=${STTMPDIR}/dcdrelktb.${RHOST}.log
+      if [[ ${RHOST} = ${LOCAL_HOST} ]] ; then
+	  tet_infoline "Executing dcdrel003_ktb.tcl /.:/hosts/${RHOST} ${RES_FILE} &"
+	  dcdrel003_ktb.tcl /.:/hosts/${RHOST} ${RES_FILE} &
+      else
+	 tet_infoline "Executing rshsp ${RHOST} ${TCDIR}/dcdrel003_ktb.tcl /.:/hosts/${RHOST} ${RES_FILE}"
+	 rshsp ${RHOST} "export TCDIR=${TCDIR}; dcecp ${TCDIR}/dcdrel003_ktb.tcl /.:/hosts/${RHOST} ${RES_FILE}" &
+      fi
+    PIDS="${PIDS}$! "
+  done
+}
+
+# Start a dcecp script to test acl operations on each host in $HOSTLIST.
+start_acl_test()
+{
+  for RHOST in ${HOSTLIST} ; do
+    RES_FILE=${STTMPDIR}/dcdrelacl.${RHOST}.log
+      if [[ ${RHOST} = ${LOCAL_HOST} ]] ; then
+	  tet_infoline "Executing dcdrel003_acl.tcl /.:/hosts/${RHOST} ${RES_FILE} &"
+	  dcdrel003_acl.tcl /.:/hosts/${RHOST} ${RES_FILE} &
+      else
+	 tet_infoline "Executing rshsp ${RHOST} ${TCDIR}/dcdrel003_acl.tcl /.:/hosts/${RHOST} ${RES_FILE}"
+	 rshsp ${RHOST} "export TCDIR=${TCDIR}; dcecp ${TCDIR}/dcdrel003_acl.tcl /.:/hosts/${RHOST} ${RES_FILE}" &
+      fi
+    PIDS="${PIDS}$! "
+  done
+}
+
+# Start the dcecp script to test server start and stop operations on 
+# each host in $HOSTLIST.
+start_rel002()
+{
+  for RHOST in ${HOSTLIST} ; do
+    RES_FILE=${STTMPDIR}/dcdrel002.${RHOST}.log
+      if [[ ${RHOST} = ${LOCAL_HOST} ]] ; then
+	  tet_infoline "Executing dcdrel002.tcl /.:/hosts/${RHOST} ${RES_FILE} &"
+	  dcdrel002.tcl /.:/hosts/${RHOST} ${RES_FILE} &
+      else
+	 tet_infoline "Executing rshsp ${RHOST} ${TCDIR}/dcdrel002.tcl /.:/hosts/${RHOST} ${RES_FILE}"
+         rshsp ${RHOST} "export TCDIR=${TCDIR}; dcecp ${TCDIR}/dcdrel002.tcl /.:/hosts/${RHOST} ${RES_FILE}" &
+      fi
+    PIDS="${PIDS}$! "
+  done
+}
+
+# Stop a DCDREL001 server on each host in $HOSTLIST.
+stop_servers()
+{
+  for RHOST in ${HOSTLIST} ; do
+    RES_FILE=${STTMPDIR}/dcdrelstop.${RHOST}.log
+      if [[ ${RHOST} = ${LOCAL_HOST} ]] ; then
+	  tet_infoline "Executing dcdrel001_srv_shut | tee ${RES_FILE}"
+	  dcdrel001_srv_shut | tee ${RES_FILE} 
+      else
+	 tet_infoline "Executing rshsp ${RHOST} ${TCDIR}/dcdrel001_srv_shut | tee ${RES_FILE}"
+	 rshsp ${RHOST} "export TEST_DBG_LEVEL=\"$TEST_DBG_LEVEL\"; ${TCDIR}/dcdrel001_srv_shut | tee ${RES_FILE}" 
+      fi
+  done
+}
+
+# check_file()
+#
+# $1 - file to be checked 
+# $2 - fullname of summary results file
+# 
+# if $1 doesn't exist add an error message to the results file 
+# if $1 contains "FATAL" messages add them to the results file 
+# 
+check_file()
+{
+  if [[ ! -f $1 ]]
+  then 
+    echo "Missing results file $1" >> $2 
+  else
+    grep -q FATAL $1  
+    if [[ $? -eq 0 ]] 
+    then
+      echo "FATAL messages in $1:" >> $2 
+      grep FATAL $1 >> $2
+    fi
+  fi
+}
+
+# check_srv_file
+#
+# check server results file $1 using check_file()
+# additionally, verify that the expected number of passes from clients
+#   were performed by counting the calls to register_uuid_vec_all_protseqs
+#
+# $1 - the file to be checked
+# $2 - the results summary file
+#
+check_srv_file()
+{
+  check_file $1 $2
+  REG_COUNT=`grep -c register_uuid_vec_all_protseqs $1`
+  if (( REG_COUNT != TARGET_BINDING_COUNT ))
+  then 
+    echo "Incorrect number of register_uuid_vec calls ($REG_COUNT) to server in $1" >>  $2
+  fi
+}
+
+# check_results_001
+#
+# $1 - summary results file to use
+#
+# Copies remote log files to local system, then scans each
+# log file 
+#
+check_results_001()
+{
+  rm -f $1
+  for RHOST in ${HOSTLIST} 
+  do
+    for TARGET in dcdrelsrva dcdrelsrvb dcdrelcli dcdrelsecval dcdrelstop
+    do 
+        if [ ! "${RHOST}" = "${LOCAL_HOST}" ] 
+        then
+            rm -f ${STTMPDIR}/${TARGET}.${RHOST}.log
+    	    echo "rcp ${RHOST}:${STTMPDIR}/${TARGET}.${RHOST}.log ${STTMPDIR}"
+    	    rcp ${RHOST}:${STTMPDIR}/${TARGET}.${RHOST}.log ${STTMPDIR}
+      	    if [ $? -ne 0 ] 
+	    then
+      	    	tet_infoline "ERROR: Unable to rcp ${RHOST}:${STTMPDIR}/${TARGET}.${RHOST}.log "
+	    fi
+         fi
+         if [[ ("${TARGET}" = "dcdrelsrva") || ("${TARGET}" = "dcdrelsrvb") ]]
+         then
+           check_srv_file ${STTMPDIR}/${TARGET}.${RHOST}.log $1 
+         else
+           check_file ${STTMPDIR}/${TARGET}.${RHOST}.log $1
+         fi
+    done;
+  done
+
+}
+
+# check_results_002
+#
+# $1 - summary results file to use
+#
+# Copies remote log files to local system, then scans each
+# log file 
+#
+check_results_002()
+{
+  rm -f $1
+  for RHOST in ${HOSTLIST} 
+  do
+    for TARGET in dcdrel002
+    do 
+        if [ ! "${RHOST}" = "${LOCAL_HOST}" ] 
+        then
+            rm -f ${STTMPDIR}/${TARGET}.${RHOST}.log
+    	    echo "rcp ${RHOST}:${STTMPDIR}/${TARGET}.${RHOST}.log ${STTMPDIR}"
+    	    rcp ${RHOST}:${STTMPDIR}/${TARGET}.${RHOST}.log ${STTMPDIR}
+      	    if [ $? -ne 0 ] 
+	    then
+      	    	tet_infoline "ERROR: Unable to rcp ${RHOST}:${STTMPDIR}/${TARGET}.${RHOST}.log "
+	    fi
+        fi
+        check_file ${STTMPDIR}/${TARGET}.${RHOST}.log $1
+    done;
+  done
+
+}
+
+
+# check_results_003
+#
+# $1 - summary results file to use
+#
+# Copies remote log files to local system, then scans each
+# log file 
+#
+check_results_003()
+{
+  rm -f $1
+  for RHOST in ${HOSTLIST} 
+  do
+    for TARGET in dcdrelhd dcdrelktb dcdrelacl 
+    do 
+        if [ ! "${RHOST}" = "${LOCAL_HOST}" ] 
+        then
+            rm -f ${STTMPDIR}/${TARGET}.${RHOST}.log
+    	    echo "rcp ${RHOST}:${STTMPDIR}/${TARGET}.${RHOST}.log ${STTMPDIR}"
+    	    rcp ${RHOST}:${STTMPDIR}/${TARGET}.${RHOST}.log ${STTMPDIR}
+      	    if [ $? -ne 0 ] 
+	    then
+      	    	tet_infoline "ERROR: Unable to rcp ${RHOST}:${STTMPDIR}/${TARGET}.${RHOST}.log "
+	    fi
+        fi
+        check_file ${STTMPDIR}/${TARGET}.${RHOST}.log $1
+    done;
+  done
+
+}
+
+
+
+
+

@@ -1,0 +1,635 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: sec_pvtkey.idl,v $
+ * Revision 1.1.2.3  1996/11/13  18:03:03  arvind
+ * 	Add/modify copyright info
+ * 	[1996/08/05  17:41 UTC  cuti  /main/DCE_1.2.2/4]
+ *
+ * 	Merge in CHFts19722 fix.
+ * 	[1996/08/05  13:33 UTC  cuti  /main/DCE122_PK/cuti_pk_migration/1]
+ *
+ * 	CHFts19722
+ * 	[1996/07/03  12:47 UTC  cuti  /main/DCE122_PK/3]
+ *
+ * Revision 1.1.2.2  1996/08/09  21:22:42  arvind
+ * 	Merge in CHFts19722 fix.
+ * 	[1996/08/05  13:33 UTC  cuti  /main/DCE122_PK/cuti_pk_migration/1]
+ * 
+ * 	CHFts19722
+ * 	[1996/07/03  12:47 UTC  cuti  /main/DCE122_PK/3]
+ * 
+ * 	Merge from cuti_pk_export to DCE_1.2.2
+ * 	[1996/06/30  21:59 UTC  cuti  /main/DCE_1.2.2/3]
+ * 
+ * 	Merge PSM, sec_pvtkey, sec_pubkey, dced, base defs for Public Key Login
+ * 	[1996/06/11  17:59 UTC  aha  /main/DCE_1.2.2/1]
+ * 
+ * Revision 1.1.2.1  1996/07/08  20:20:39  arvind
+ * 	OSF DCE1.2.2 Drop3
+ * 	sec_pvtkey.idl,v
+ * 	Revision /main/DCE_1.2.2/3  1996/06/30  21:59 UTC  cuti
+ * 	Merge from cuti_pk_export to DCE_1.2.2
+ * 	[1996/07/08  19:58:22  arvind]
+ * 
+ * Revision /main/DCE122_PK/cuti_pk_export/2  1996/06/27  19:42 UTC  cuti
+ * 	Merge out from DCE122
+ * 
+ * 	Modify DES capability's API
+ * 	[1996/06/27  14:02 UTC  cuti  /main/DCE122_PK/cuti_pk_export/1]
+ * 	Revision /main/DCE_1.2.2/2  1996/06/13  21:29 UTC  sommerfeld
+ * 	remove double indirection.
+ * 	[1996/06/11  18:58 UTC  sommerfeld  /main/DCE122_PK/sommerfeld_pk_indir/1]
+ * 
+ * Revision /main/DCE_1.2.2/1  1996/06/11  17:59 UTC  aha
+ * 	Merge PSM, sec_pvtkey, sec_pubkey, dced, base defs for Public Key Login
+ * 
+ * Revision /main/DCE122_PK/1  1996/06/04  18:53 UTC  psn
+ * 	Merge PK work from DCE12_PK off of DCE_1.2 to DCE122_PK off of DCE_1.2.2.
+ * 
+ * Revision /main/DCE12_PK/4  1996/05/28  17:59 UTC  cuti
+ * 	Merge psm, pvtkey work
+ * 
+ * 	Update the error status name
+ * 	[1996/05/23  18:47 UTC  cuti  /main/DCE12_PK/cuti_pk_new/1]
+ * 	Revision /main/DCE12_PK/3  1996/05/08  15:06 UTC  cuti
+ * 	Add psm components
+ * 
+ * Revision /main/cuti_pk_work/3  1996/05/08  14:26 UTC  cuti
+ * 	Prepare for review of pvtkey.
+ * 
+ * $EndLog$
+ */
+/*
+ * Copyright (c) Hewlett-Packard Company 1996
+ * Unpublished work.  All Rights Reserved.
+ *
+ *       Private Key Storage Interface
+ *
+ */
+
+
+[
+    local
+]
+
+interface sec_pvtkey 
+
+{
+
+    import "dce/rgybase.idl";
+    import "dce/sec_pk_base.idl";
+
+
+    typedef void *sec_pk_mechanism_handle_t;
+
+    /* Capability should be uuid */
+
+    typedef uuid_t sec_pk_pvtkey_capability;
+
+/* sec_pvtkey_open
+ * 
+ * Open (connect to) the private key storage service.  For file-based 
+ * keystore implementation, it creates the file for the follow up key
+ * store.  It opens the file for the follow up key retrieval or key
+ * update.  It can involve a password check (please note, password check is 
+ * not applicable to sys admin's operation).  For a server-based 
+ * implementation, it binds to the server.
+ *
+ * Return status
+ *   error_status_ok:   Success.
+ *   other (non-zero): 
+ *             for PKSS:
+ *                      Can't initialize keystore container.
+ *                      Can't locate keystore.
+ *                      Can't communicate with keystore.
+ *                      Access-control failure. 
+ *             for file base:
+ *                      sec_pvtkey_privileged
+ *                      sec_pvtkey_no_more_memory
+ *
+ * Input
+ *
+ *    Name: Pointer to the user's canonical name within the 
+ *          specified domain.
+ *    domain_id: The application domain this key belongs to.
+ *
+ * Output
+ *    handle: A pointer to an opaque handle to the private key context
+ *            data.  The context data should contain the domain_id of
+ *            the operation.
+ *  
+ */ 
+
+
+error_status_t sec_pvtkey_open(
+        [in]  char                      *name,
+        [in]  sec_pk_domain_t           *domain_id,
+        [out] sec_pk_mechanism_handle_t *handle
+);
+
+/* sec_pvtkey_close
+ * 
+ * Close the connection to the private key storage service.  It also
+ * frees the handle.  If there are sensitive data, the data should
+ * be zeroed first.
+ *
+ * Return status
+ *   error_status_ok:   Success.
+ *   other (non-zero):  Can't close keystore container.
+ *                      Can't locate keystore.
+ *                      Can't communicate with keystore.
+ *                      Access-control failure.
+ *              for file base:
+ *                      sec_pvtkey_invalid_handle
+ *                      sec_pvtkey_mechanism_not_init
+ *
+ * Input
+ *
+ *    handle: A pointer to an opaque handle to the private key context
+ *            data.  The handle should be obtained through 
+ *            sec_pvtkey_open()
+ *  
+ */ 
+
+
+
+error_status_t sec_pvtkey_close(
+        [in]  sec_pk_mechanism_handle_t handle
+);
+
+/* sec_pvtkey_capabilities
+ *
+ * Inquire about the capabilities of a key storage service.  Multiple 
+ * storage services may be supported by a client system, selected 
+ * according to username and/or domain_id.  If no keystore service 
+ * is defined for a given username and domain_id, all sec_pvtkey 
+ * operations for that name/domain will return the error 
+ * "Can't locate keystore".  Some services may not 
+ * support all storage service operations, and the 
+ * sec_pvtkey_capabilities function allows the PSM module to 
+ * interrogate a particular storage service to determine whether a 
+ * given feature or operation is supported.
+ *
+ * Return status
+ *   error_status_ok:    Success.
+ *   other (non-zero):   Can't locate keystore.
+ *                       Can't communicate with keystore.
+ *                  for file base:
+ *                       sec_pvtkey_capability_not_supported
+ *
+ * Input
+ *    Name: Pointer to the user's canonical name within the 
+ *          specified domain.
+ *    capability_parameter: Pointer to the paramter specific to the
+ *              capability specified.  In KEYGEN capability, it is
+ *              public-key algorithm.  If specified as
+ *              NULL, the default public-key algorithm (RSA)
+ *              is implied.  Many capability queries will
+ *              ignore this parameter.
+ *    Feature:  Pointer to a uuid code identifying a service feature.
+ *
+ *              The following features are currently defined:
+ *              Feature code            Feature
+ *              ------------            -------
+ *              SEC_PVTKEY_CAP_KEYGEN   Service can generate keys for the
+ *                                      specified algorithm.
+ *              SEC_PVTKEY_CAP_ANYALG   Service can store keys for any
+ *                                      algorithm.
+ *              SEC_PVTKEY_CAP_KEYALG   Service can store keys for the
+ *                                      specified algorithm.
+ *              SEC_PVTKEY_CAP_KEYDEL   Service can delete user's key.
+ *
+ *
+ *   
+ * Output
+ *    Supported: true if the feature is available, false if not.
+ *
+ */
+
+error_status_t sec_pvtkey_capabilities(
+        [in]  sec_pk_mechanism_handle_t handle,
+        [in]  void *                    capability_parameter,
+        [in]  sec_pk_pvtkey_capability  *feature,
+        [out] boolean32                 *supported
+   );
+
+
+ 
+/* sec_pvtkey_store
+ * 
+ * Store the user's keypair encrypted using the user's password in
+ * the storage service.  The encryption mechanism is determined
+ * by the service provider.  The public-key algorithm ID (such as 
+ * RSA, DSA) should be included in both the private_key and 
+ * public_key structures which are the final [in] parameters.  
+ * The keys will be indexed by name, domain_id, key_usage and 
+ * key_version in the private key storage service in order to 
+ * allow retrieval via the sec_pvtkey_get API.
+ *
+ * If the specified key already exists in the keystore, the routine
+ * will leave it unchanged and return a failure status.  To replace
+ * a key in a keystore, either use sec_pvtkey_update or
+ * sec_pvtkey_update_generate, or call sec_pvtkey_delete followed by 
+ * sec_pvtkey_store.
+ * 
+ * A keystore may enforce its own access-control requirements, and
+ * an access-control failure will be indicated by an appropriate status
+ * code, with the contents of the keystore unchanged.  For example,
+ * a file-based keystore implementation may require that the caller
+ * has write-access to the keystore file; a server-based implementation
+ * may require that the caller has appropriate ACL-based permission
+ * to create a new entry; a memory-card implementation may require that
+ * the card be write-enabled.
+ *
+ * Return status
+ *   error_status_ok:   Success.
+ *   other (non-zero):  Can't initialize keystore container.
+ *                      Can't locate keystore.
+ *                      Can't communicate with keystore.
+ *                      Access-control failure.
+ *                      Same domain and usage's key already exists.
+ *                for file base:
+ *                      sec_pvtkey_invalid_handle
+ *                      sec_pvtkey_mechanism_not_init
+ *                      sec_pvtkey_no_more_memory
+ *                      sec_pvtkey_internal_error
+ *                      sec_pvtkey_same_domain_and_usage_key_already_exists.
+ *
+ * Input
+ *
+ *    handle: A pointer to an opaque handle to the private key context
+ *            data.  The handle should be obtained through 
+ *            sec_pvtkey_open()
+ *    pwd:  Pointer to the user's password.
+ *    key_usage: The usage permitted of this keypair.  One key_usage 
+ *               at a time.
+ *    key_vno: The key version number. (0 may be specified to 
+ *             indicate that the routine should select the next 
+ *             appropriate or newest key version number).  
+ *             (In the reference implementation, key_vno starts with
+ *              1, then monotonically increase 1 for each update.)
+ *    private_key: Pointer to the encoded private key 
+ *                 structure. 
+ *    public_key: Pointer to the encoded public key structure.
+ *  
+ */ 
+
+ error_status_t sec_pvtkey_store(
+        [in]  sec_pk_mechanism_handle_t handle,
+        [in]  char                   	*pwd,
+        [in]  sec_pk_usage_flags_t  	key_usage,
+        [in]  unsigned32             	key_vno,
+        [in]  sec_pk_data_t       	*private_key,
+        [in]  sec_pk_data_t       	*public_key
+   );
+
+/* sec_pvtkey_delete
+ * 
+ * Delete the user's keypair from the storage device. 
+ *
+ * Return status
+ *   error_status_ok:   Success.
+ *   other (non-zero):  Can't initialize keystore container.
+ *                      Can't locate keystore.
+ *                      Can't communicate with keystore.
+ *                      Access-control failure.
+ *                 for file base:
+ *                      sec_pvtkey_key_deletion_not_supported
+ *
+ * Input
+ *
+ *    handle: A pointer to an opaque handle to the private key context
+ *            data.  The handle should be obtained through 
+ *            sec_pvtkey_open()
+ *    pwd:  Pointer to the user's password.
+ *    key_usage: The usage of the key pair of the desired key. One
+ *               key_usage at a time or NULL key usage.
+ *               NULL value means "delete all the key_usages
+ *               related to the user.
+ *    key_vno: The version number of the desired key.  If 0 (zero) is
+ *             specified, the function will select the most recent key
+ *             key version number.  (or should it be "all the key version?)
+ *  
+ */ 
+
+error_status_t sec_pvtkey_delete(
+        [in]  sec_pk_mechanism_handle_t handle,
+        [in]  char                   	*pwd,
+        [in]  sec_pk_usage_flags_t  	key_usage,
+        [in]  unsigned32             	key_vno
+   );
+
+/* sec_pvtkey_generate
+ * 
+ * Generate a new keypair and store it in the keystore encrypted using 
+ * the user's password in the storage service.  The encryption 
+ * mechanism is determined by the service provider. 
+ * The keys will be indexed by name, domain_id, key_usage and 
+ * key_version in the private key storage service in order to allow 
+ * retrieval via the sec_pvtkey_get API.
+ *
+ * If the specified key already exists in the keystore, the routine
+ * will leave it unchanged and return a failure status.  To replace
+ * a key in a keystore, either use sec_pvtkey_update or
+ * sec_pvykey_update_generate, or call sec_pvtkey_delet followed by 
+ * sec_pvtkey_store.
+ * 
+ * A keystore may enforce its own access-control requirements, and
+ * an access-control failure will be indicated by an appropriate status
+ * code, with the contents of the keystore unchanged.  For example,
+ * a file-based keystore implementation may require that the caller
+ * has write-access to the keystore file; a server-based implementation
+ * may require that the caller has approriate ACL-based permission
+ * to create a new entry; a memory-card implementation may require that
+ * the card be write-enabled.
+ *
+ * Return status
+ *   error_status_ok:   Success.
+ *   other (non-zero):  Can't initialize keystore container.
+ *                      Can't locate keystore.
+ *                      Can't communicate with keystore.
+ *                      Access-control failure.
+ *                      Same domain and usage's key already exits.
+ *                      Key generation not supported.
+ *		for file base:
+ *                    	sec_pvtkey_key_generation_not_supported
+ *
+ * Input
+ *
+ *     handle: A pointer to an opaque handle to the private key context
+ *             data.  The handle should be obtained through 
+ *             sec_pvtkey_open()
+ *     pwd:    Pointer to the user's password.
+ *     alg_id: Desired public-key algorithm.  If specified as
+ *             NULL, the default public-key algorithm (RSA)
+ *             shall be used.
+ *     key_length: Desired key-length.  The length of the desired key.
+ *                 Interpretation of this parameter is algorithm-dependent;
+ *                 For RSA, it shall be interpreted as the bit-length of
+ *                 the key.  For any algorithm, a value of 0xffffffff
+ *                 shall mean the algorithm-specific default.
+ *     key_usage: The usage of the public key this key pair 
+ *                 shall belongs to.
+ *     key_vno: The key version number. (0 may be specified to 
+ *             indicate that the routine should select the next 
+ *             appropriate or newest key version number).  
+ *             (In the reference implementation, key_vno starts with
+ *              1, then monotonically increase 1 for each update.)
+ *
+ * Output
+ *
+ *     public_key: Pointer to the encoded public key structure of the
+ *     newly-generated key.
+ *
+ */ 
+
+error_status_t sec_pvtkey_generate(
+        [in]  sec_pk_mechanism_handle_t handle,
+        [in]  char                   	*pwd,
+        [in]  sec_pk_algorithm_id_t     *alg_id,
+        [in]  unsigned32                key_length,
+        [in]  sec_pk_usage_flags_t  	key_usage,
+        [in]  unsigned32             	key_vno,
+        [out] sec_pk_data_t       	*public_key
+   );
+
+ 
+/* sec_pvtkey_get
+ * 
+ * Retrieve the user's keypair from the storage device. 
+ * The routine allocates memory for the data returned in the 
+ * private key and public key parameters.  Users should call 
+ * sec_pvtkey_free() to deallocate that memory.  
+ * 
+ * The keypair returned will be the first one found with a 
+ * stored key_usage value containing the input "key_usage" value.
+ * i.e. the input value (which will typically have a single bit 
+ * set) will be "AND"d with the stored value (which may have many 
+ * bits set), and the will be returned if the result is not 0.  
+ *
+ * Return status
+ *   error_status_ok:   Success.
+ *   other (non-zero):  Access control failure.
+ *                      Can't locate keystore.
+ *                      Can't communicate with keystore.
+ *                      Can't find specified key.
+ *                      Invalid password.
+ *                for file base:
+ *                      sec_pvtkey_invalid_handle
+ *                      sec_pvtkey_mechanism_not_init
+ *                      sec_pvtkey_internal_error
+ *                      sec_pvtkey_invalid_password
+ *                      sec_pvtkey_multiple_key_usages
+ *
+ * Input
+ *
+ *    handle: A pointer to an opaque handle to the private key context
+ *            data.  The handle should be obtained through 
+ *            sec_pvtkey_open()
+ *    pwd:  Pointer to the user's password.
+ *    domain_id: The application domain of the desired key.
+ *    key_usage: The usage of the public key of the desired key. One
+ *               key_usage at a time.
+ *
+ * Input/Output
+ *
+ *    key_vno: The key version number. (0 may be specified to 
+ *             indicate that the routine should select the 
+ *             newest key version number).  The return value is
+ *             the key version of the key returned.
+ *
+ * Output
+ *
+ *    private_key: Pointer to the encoded private key 
+ *                 structure. 
+ *    public_key   Pointer to the encoded public key 
+ *                 structure.
+ *
+ */ 
+
+error_status_t sec_pvtkey_get(
+       [in]  sec_pk_mechanism_handle_t handle, 
+       [in]  char                      *pwd,
+       [in]  sec_pk_usage_flags_t      key_usage, 
+       [in, out]  unsigned32           *key_vno,
+       [out] sec_pk_data_t             *private_key, 
+       [out] sec_pk_data_t             *public_key 
+   );
+
+
+
+/* sec_pvtkey_update
+ * 
+ * Update the user's keypair record in a keystore.  This API may be 
+ * used to change either the password, or the keypair, or both.  
+ * It may be invoked either by the user to change her own 
+ * keypair record (in which case the current_pwd parameter must 
+ * be supplied), or by a system administrator to change another 
+ * user's keypair record (in which case the current_pwd parameter 
+ * should be specified as NULL.  
+ *
+ * Keystore implementations may impose their own access-control
+ * requirements.  In particular, some keystore implementations 
+ * may not support administrative updates, or may require that
+ * the caller have valid administrative DCE credentials.
+ *
+ * Return status
+ *   error_status_ok:   Success.
+ *   other (non-zero):  Access control failure.
+ *                      Can't locate keystore.
+ *                      Can't communicate with keystore.
+ *                      Can't find specified record.
+ *                      Invalid password.
+ *                 for file base:
+ *			sec_pvtkey_invalid_handle
+ *			sec_pvtkey_mechanism_not_init
+ *			sec_pvtkey_private_key_is_not_supplied
+ *			sec_pvtkey_new_password_required
+ *			sec_pvtkey_no_more_memory
+ *			sec_pvtkey_internal_error
+ *			sec_pvtkey_no_matched_private_key
+ *                      sec_pvtkey_Invalid_password.
+ *
+ * Input
+ *
+ *    handle: A pointer to an opaque handle to the private key context
+ *            data.  The handle should be obtained through 
+ *            sec_pvtkey_open()
+ *    current_pwd: Pointer to the user's current password.
+ *                 Used to authenticate the user when changing her own
+ *                 password or keypair.  If this parameter is NULL, 
+ *                 the keystore will assume that the update is an 
+ *                 administrative action, and will enforce 
+ *                 administrative access-control
+ *    new_pwd: Pointer to the user's new password.  If the user
+ *             is changing her own key, and does not wish to change
+ *             the associated password, this argument may be NULL
+ *             (subject to any restrictions imposed by the keystore).
+ *             If this is an administrative action, a valid new_pwd
+ *             must be supplied.
+ *    key_usage: The allowed usage for this keypair.  One
+ *               key_usage at a time. 
+ *    private_key: Pointer to the encoded private key structure. 
+ *    public_key:  Pointer to the encoded public key structure.
+ *                 If the user is changing her own password, and does
+ *                 not wish to change the corresponding keypair, this
+ *                 parameter may be NULL (subject to any restrictions
+ *                 imposed by the keystore).  If this is an administrative
+ *                 action, valid private and public keys must be supplied.
+ *
+ * Output
+ *    key_vno: The key version number. (0 may be specified to 
+ *             indicate that the routine should select the next 
+ *             appropriate or newest key version number).  
+ *             (In the reference implementation, key_vno starts with
+ *              1, then monotonically increase 1 for each update.)
+ *
+ */ 
+
+error_status_t sec_pvtkey_update(
+        [in] sec_pk_mechanism_handle_t handle,  
+        [in] char                   *current_pwd,
+        [in] char                   *new_pwd,
+        [in] sec_pk_usage_flags_t   key_usage,
+        [out] unsigned32            *key_vno,
+        [in] sec_pk_data_t          *private_key,     
+        [in] sec_pk_data_t          *public_key
+  );
+
+
+
+
+
+
+/* sec_pvtkey_update_generate
+ * 
+ * Update the user's keypair record for a keystore that supports
+ * key generation.  This API may be used to change
+ * either the keypair alone, or both the keypair and the password.
+ * It may be invoked either by the user to change her own keypair 
+ * record (in which case the current_pwd parameter must be supplied), 
+ * or by a system administrator to change another user's keypair 
+ * record (in which case the current_pwd parameter should be specified 
+ * as NULL.  
+ *
+ * Keystore implementations may impose their own access-control
+ * requirements.  In particular, some keystore implementations 
+ * may not support administrative updates, or may require that
+ * the caller have valid administrative DCE credentials.
+ *
+ *
+ * Return status
+ *   error_status_ok:    Success.
+ *   other (non-zero):  Access control failure.
+ *                      Can't locate keystore.
+ *                      Can't communicate with keystore.
+ *                      Can't find specified record.
+ *                      Key generation not supported.
+ *                      Invalid password.
+ *		for file base:
+ *			sec_pvtkey_key_generation_not_supported
+ *
+ * Input
+ *
+ *    handle: A pointer to an opaque handle to the private key context
+ *            data.  The handle should be obtained through 
+ *            sec_pvtkey_open()
+ *    current_pwd: Pointer to the user's current password.
+ *                 Used to authenticate the user when changing her own
+ *                 password or keypair.  If this parameter is NULL, 
+ *                 the keystore will assume that the update is an 
+ *                 administrative action, and will enforce 
+ *                 administrative access-control
+ *    new_pwd: Pointer to the user's new password.  If the user
+ *             is changing her own key, and does not wish to change
+ *             the associated password, this argument may be NULL
+ *             (subject to any restrictions imposed by the keystore).
+ *             If this is an administrative action, a valid new_pwd
+ *             must be supplied.
+ *     alg_id: Desired public-key algorithm.  If specified as
+ *             NULL, the default public-key algorithm (RSA)
+ *             shall be used.
+ *     key_length: Desired key-length.  The length of the desired key.
+ *                 Interpretation of this parameter is algorithm-dependent;
+ *                 For RSA, it shall be interpreted as the bit-length of
+ *                 the key.  For any algorithm, a value of 0xffffffff
+ *                 shall mean the algorithm-specific default.
+ *     key_usage: The allowed usage for this keypair.  One at a time.
+ *
+ *
+ * Output
+ *
+ *    key_vno: The key version number. (0 may be specified to 
+ *             indicate that the routine should select the next 
+ *             appropriate or newest key version number).  
+ *             (In the reference implementation, key_vno starts with
+ *              1, then monotonically increase 1 for each update.)
+ *    public_key:  The newly-generated public-key.
+ *
+ */ 
+
+error_status_t sec_pvtkey_update_generate(
+        [in] sec_pk_mechanism_handle_t handle,
+        [in] char                   *current_pwd,
+        [in] char                   *new_pwd,
+        [in] sec_pk_algorithm_id_t  *alg_id,
+        [in] unsigned32             key_length,
+        [in] sec_pk_usage_flags_t   key_usages,
+        [out] unsigned32            *key_vno,
+        [out] sec_pk_data_t         *public_key
+  );
+
+
+}
+
+
+
+
+

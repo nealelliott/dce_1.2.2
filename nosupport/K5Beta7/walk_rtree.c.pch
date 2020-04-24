@@ -1,0 +1,515 @@
+From b17783@achilles.ctd.anl.gov  Tue Nov 12 15:06:39 1996
+Return-Path: b17783@achilles.ctd.anl.gov
+Received: from achilles.ctd.anl.gov (achilles.ctd.anl.gov [146.137.72.1]) by postman.osf.org (8.7.6/8.7.3) with SMTP id PAA16190 for <rsalz@osf.org>; Tue, 12 Nov 1996 15:06:37 -0500 (EST)
+Received: from pembroke.ctd.anl.gov (pembroke.ctd.anl.gov [146.137.64.73]) by achilles.ctd.anl.gov (8.6.11/8.6.11) with ESMTP id OAA02190 for <rsalz@osf.org>; Tue, 12 Nov 1996 14:06:36 -0600
+Received: (b17783@localhost) by pembroke.ctd.anl.gov (8.6.11/8.6.11) id OAA32210; Tue, 12 Nov 1996 14:06:35 -0600
+Date: Tue, 12 Nov 1996 14:06:35 -0600
+Message-Id: <199611122006.OAA32210@pembroke.ctd.anl.gov>
+From: Doug Engert <DEEngert@anl.gov>
+To: rsalz@osf.org
+Subject: DCE-SIG Demo Now Works
+X-UIDL: e68df3dd8fa79affd5f2912b7fe53315
+Status: RO
+
+
+At the DCE-SIG last week, I gave a presentation showing how I could
+use a routing table of cells to accomplish transitive cross-cell
+trust. At that time, the mod was working for Kerberos only, but would
+hang which doing some type of DCE RPC.
+
+Well we fixed today! All it needed was to define a principal for
+krbtgt/other.cell with the correct UUID for the other cell. 
+
+Now DCE processes like dcecp and DFS work.
+
+For those of you who were not at the meeting, I showed transitive
+trust using three cells: dce.anl.gov to dce.es.net to
+dce.pnl.gov. These cells are located at ANL, LBNL, and PNNL.  There is
+no direct connection between ANL and PNNL, and there are no cell
+aliases defined.
+
+(You may have to fiddle with the includes, as I only complied the
+single routine, so I moved a few header files around to simplfiy the
+process and added a #if 0) 
+
+Thanks.
+
+-- 
+ 
+ Douglas E. Engert  <DEEngert@anl.gov>
+ Argonne National Laboratory
+ 9700 South Cass Avenue
+ Argonne, Illinois  60439 
+ (630) 252-5444          <New Area Code 8/3/96>
+ PGP Key fingerprint =  20 2B 0C 78 43 8A 9C A6  29 F7 A3 6D 5E 30 A6 7F
+
+
+
+
+*** ./,walk_rtree.c	Thu Apr 13 11:17:43 1995
+--- ./walk_rtree.c	Tue Nov 12 13:49:51 1996
+***************
+*** 1,4 ****
+--- 1,5 ----
+  /*
++ 
+   * @OSF_COPYRIGHT@
+   * COPYRIGHT NOTICE
+   * Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+***************
+*** 72,85 ****
+--- 73,184 ----
+   * krb5_walk_realm_tree()
+   */
+  
++ /* ANL - Modified to allow Configurable Authentication Paths.
++  *
++  * (This DCE version is designed to interoperate with similiar
++  * code in the MIT Kerberos 5 beta 6 and above. )
++  *
++  * This modification removes the restriction on the choice of realm
++  * names, i.e. they nolonger have to be hierarchical. This
++  * is allowed by RFC 1510: "If a hierarchical orginization is not used
++  * it may be necessary to consult some database in order to construct
++  * an authentication path between realms."  The database is contained
++  * in the [capaths] section of the MIT Kerberos krb5.conf file.
++  * 
++  * (In the DCE version , which does not have the profile routines,
++  * the data base is contained in /krb5/capaths.conf file. In future 
++  * versions this should be a database maintained by the security server
++  * and cached by the local dced.)
++  *
++  * Client to server paths are defined. There are n**2 possible
++  * entries, but only those entries which are needed by the client
++  * or server need be present in its krb5.conf file. (n entries or 2*n
++  * entries if the same krb5.conf is used for clients and servers)
++  *
++  * (The followinig is in Kerberos terms; translate realm to cell,
++  * KDC to security server and use lower case names for cells.)
++  *
++  * for example: ESnet will be running a KDC which will share
++  * inter-realm keys with its many orginizations which include among
++  * other ANL, NERSC and PNL. Each of these orginizations wants to
++  * use its DNS name in the realm, ANL.GOV. In addition ANL wants
++  * to authenticatite to HAL.COM via a K5.MOON and K5.JUPITER
++  * A [capaths] section of the krb5.conf file for the ANL.GOV clients
++  * and servers would look like:
++  *
++  * [capaths]
++  * ANL.GOV = {
++  *      NERSC.GOV = ES.NET
++  *      PNL.GOV = ES.NET
++  *      ES.NET = .
++  *      HAL.COM = K5.MOON
++  *      HAL.COM = K5.JUPITER
++  * }
++  * NERSC.GOV = {
++  *      ANL.GOV = ES.NET
++  * }
++  * PNL.GOV = {
++  *      ANL.GOV = ES.NET
++  * }
++  * ES.NET = {
++  *      ANL.GOV = .
++  * }
++  * HAL.COM = {
++  *      ANL.GOV = K5.JUPITER
++  *      ANL.GOV = K5.MOON
++  * }
++  * In the above a "." is used to mean directly connected since the
++  * the profile routines cannot handle a null entry.
++  *
++  * (For DCE the capaths file will be of the form:
++  * client  server intermediate ...
++  * So it would look like:
++  *
++  * ANL.GOV NERSC.GOV ES.NET
++  * ANL.GOV PNL.GOV   ES.NET
++  * ANL.GOV ES.NET .
++  * ANL.GOV HAL.COM K5.MOON
++  * ANL.GOV HAL.COM K5.JUPTER
++  * NERSC.GOV ANL.GOV ES.NET
++  * PNL.GOV ANL.GOV ES.NET
++  * ES.NET ANL.GOV .
++  * HAL.COM ANL.GOV K5.JUPITER
++  * HAL.COM ANL.GOV K5.MOON
++  *
++  * If no client-to-server path is found, the default hierarchical path
++  * is still generated.
++  *
++  * This version of the Configurable Authentication Path modification
++  * differs from the previous versions prior to K5 beta 5 in that
++  * the profile routines are used, and the explicite path from
++  * client's realm to server's realm must be given. The modifications
++  * will work together.
++  * DEE - 5/23/95
++  * Modifed for DCE 1.1, Sept 96, DEEngert@anl.gov
++  */
++ #define CONFIGURABLE_AUTHENTICATION_PATH
++ 
++ #if defined(sun)
++ #include "transarc.h"
++ #endif 
++ 
+  #if !defined(lint) && !defined(SABER)
+  static char rcsid_walk_rtree_c[] =
+  "$Id: walk_rtree.c,v /main/DCE1_1_WP/1 1995/04/13 16:17 UTC jrr Exp $";
+  #endif	/* !lint & !SABER */
+  
++ #if 0
+  #include <krb5/krb5.h>
+  #include <krb5/ext-proto.h>
+  #include <int-proto.h>
++ #else
++ #include "krb5.h"
++ #include "ext-proto.h"
++ #include <fcntl.h>
++ #include <stdio.h>
++ #include <string.h> 
++ #include <stdio.h>
++ #endif
+  
+  /* internal function, used by krb5_get_cred_from_kdc() */
+  
+***************
+*** 93,98 ****
+--- 192,276 ----
+    * hierarchy orderings that are "parent/child" rather than "child.parent"
+    */
+  
++ #ifdef CONFIGURABLE_AUTHENTICATION_PATH
++ krb5_error_code
++ #ifdef NARROW_PROTOTYPES
++ dee_profile_get_values( const  char **names, char ***ret_values)
++ #else
++ dee_profile_get_values(names, ret_values)
++ const  char **names;
++ char ***ret_values;
++ #endif
++ {
++ 
++ 	char **retval;
++ 	char *cp;
++ 	int fdd; 
++ 	int ai, bi, ci, i;
++ 	FILE *capaths_file;
++ 	char cap1[256+1], cap2[256+1];
++ 	char mbuf[BUFSIZ];
++ 	char abuf[BUFSIZ]; 
++ 
++ 
++ 	if (((fdd = open("/krb5/capaths.log",O_WRONLY|O_APPEND)) >= 0)) {
++ 		sprintf(mbuf,"Walk called by %d : %s : %s \n",
++ 			getpid(), names[1], names[2]);
++ 		write(fdd,mbuf,strlen(mbuf));
++ 		close(fdd);
++ 	}
++ 
++     if (!(capaths_file = fopen("/krb5/capaths.conf","r")))
++ 		return(1);
++ 	
++ 	while(fgets(abuf, sizeof(abuf), capaths_file) != NULL){
++ 		if (abuf[0] == '#')
++ 			 continue;
++ 		if (sscanf(abuf, "%s %s %n",&cap1, &cap2,&ai) != 2)
++ 			continue;
++ 		if (strcmp(names[1],cap1) || strcmp(names[2],cap2))
++ 			continue;
++ 
++ 		/* found a matching line, lets count the number of entries
++ 		 */
++ 
++ 		bi = ai;  /* save starting location */
++ 		i = 0;
++ 		while(sscanf(&abuf[bi],"%s %n",&cap1,&ci) == 1) { 
++ 			i++;
++ 			bi += ci;
++ 		}
++ 			
++ 		/* get the return array, like profile would do. */
++ 
++ 		if (!(retval = (char **)calloc(i+1, sizeof(char *)))) 
++        		return ENOMEM;
++  
++ 		/* scan again this time allocating storage */
++ 		bi = ai;
++ 		i = 0;
++ 		while(sscanf(&abuf[bi],"%s %n",&cap1,&ci) == 1) {
++ 			if(!(retval[i] = (char *)malloc(strlen(cap1) + 1)))
++ 				return ENOMEM;
++ 			strcpy(retval[i],cap1);
++ 			i++;
++ 			bi += ci;
++ 		}
++ 		if (((fdd = open("/krb5/capaths.log",O_WRONLY|O_APPEND)) >= 0)) {
++ 			sprintf(mbuf,"Walk called by %d : %s : %s :found %d\n",
++ 				getpid(), names[1], names[2],i);
++ 			write(fdd,mbuf,strlen(mbuf));
++ 			close(fdd);
++ 	}
++ 		*ret_values = retval;
++ 		fclose(capaths_file);
++ 		return 0;
++ 	}
++ 	fclose(capaths_file);
++ 	return (1); /* set not found */
++ }
++ #endif 
++ 
+  krb5_error_code
+  #ifdef NARROW_PROTOTYPES
+  krb5_walk_realm_tree(const krb5_data *client, const krb5_data *server,
+***************
+*** 114,119 ****
+--- 292,335 ----
+      krb5_data tmpcrealm, tmpsrealm;
+      int nocommon = 1;
+  
++ #ifdef CONFIGURABLE_AUTHENTICATION_PATH
++     const char *cap_names[4];
++     char *cap_client, *cap_server;
++     char **cap_nodes;
++         krb5_error_code cap_code;
++     if ((cap_client = (char *)malloc(client->length + 1)) == NULL)
++         return ENOMEM;
++     strncpy(cap_client, client->data, client->length);
++     cap_client[client->length] = '\0';
++     if ((cap_server = (char *)malloc(server->length + 1)) == NULL) {
++         krb5_xfree(cap_client);
++         return ENOMEM;
++     }
++     strncpy(cap_server, server->data, server->length);
++     cap_server[server->length] = '\0';
++     cap_names[0] = "capaths";
++     cap_names[1] = cap_client;
++     cap_names[2] = cap_server;
++     cap_names[3] = 0;
++ 	/* DCE does not use the Kerberos 5 profile routines, 
++ 	 * So we will define our own till they do */
++     cap_code = dee_profile_get_values(cap_names, &cap_nodes);
++     krb5_xfree(cap_names[1]);    /* done with client string */
++     if (cap_code == 0) {     /* found a path, so lets use it */
++         links = 0;
++         if (*cap_nodes[0] != '.') { /* a link of . means direct */
++             while(cap_nodes[links]) {
++                 links++;
++             }
++         }
++         cap_nodes[links] = cap_server; /* put server on end of list */
++                         /* this simplifies the code later and make */
++                         /* cleanup eaiser as well */
++         links++;        /* count the null entry at end */
++     } else {            /* no path use hierarchical method */
++     krb5_xfree(cap_names[2]); /* failed, don't need server string */
++ #endif
++ 
+      clen = client->length;
+      slen = server->length;
+  
+***************
+*** 185,190 ****
+--- 401,411 ----
+  	   com_ssep = server->data + server->length ;
+      }
+  
++ #ifdef CONFIGURABLE_AUTHENTICATION_PATH
++     }       /* end of if use hierarchical method */
++ #endif
++ 
++ 
+      if (!(rettree = (krb5_principal *)calloc(links+2,
+  					     sizeof(krb5_principal)))) {
+  	return ENOMEM;
+***************
+*** 195,200 ****
+--- 416,461 ----
+  	krb5_xfree(rettree);
+  	return retval;
+      }
++ #ifdef CONFIGURABLE_AUTHENTICATION_PATH
++     links--;                /* dont count the null entry on end */
++     if (cap_code == 0) {    /* found a path above */
++         tmpcrealm.data = client->data;
++         tmpcrealm.length = client->length;
++         while( i-1 <= links) {
++ 
++             tmpsrealm.data = cap_nodes[i-1];
++             /* don't count trailing whitespace from profile_get */
++             /* tmpsrealm.length = strcspn(cap_nodes[i-1],"\t "); */
++ 			tmpsrealm.length = strlen(cap_nodes[i-1]);
++             if ((retval = krb5_tgtname(
++                            &tmpsrealm,
++                            &tmpcrealm,
++                            &rettree[i]))) {
++                 while (i) {
++                     krb5_free_principal(rettree[i-1]);
++                     i--;
++                 }
++                 krb5_xfree(rettree);
++                 /* cleanup the cap_nodes from profile_get */
++                 for (i = 0; i<=links; i++) {
++                     krb5_xfree(cap_nodes[i]);
++                 }
++                 krb5_xfree((char *)cap_nodes);
++                 return retval;
++             }
++             tmpcrealm.data = tmpsrealm.data;
++             tmpcrealm.length = tmpsrealm.length;
++             i++;
++         }
++         /* cleanup the cap_nodes from profile_get last one has server */
++         for (i = 0; i<=links; i++) {
++             krb5_xfree(cap_nodes[i]);
++         }
++         krb5_xfree((char *)cap_nodes);
++     } else {  /* if not cap then use hierarchical method */
++ #endif
++ 
++ 
+      for (prevccp = ccp = client->data + client->length - 1;
+  	 ccp >= com_csep;
+  	 ccp--) {
+***************
+*** 271,276 ****
+--- 532,541 ----
+  	    return retval;
+  	}
+      }
++ #ifdef CONFIGURABLE_AUTHENTICATION_PATH
++     }
++ #endif
++ 
+      *tree = rettree;
+      return 0;
+  }
+***************
+*** 285,290 ****
+--- 550,556 ----
+  krb5_data      *realm1;
+  krb5_data      *realm2;
+  {
++ #if 0
+      char curr[MAX_REALM_LN+1];
+      char next[MAX_REALM_LN+1];
+      char *nextp;
+***************
+*** 292,297 ****
+--- 558,565 ----
+      int trans_length;
+      krb5_error_code retval = 0;
+      krb5_principal *tgs_list;
++ 	char mbuf[BUFSIZ];
++ 	int fdd;
+  
+  #ifdef KRB5_BETA1
+      if (!trans || !trans->length)
+***************
+*** 303,308 ****
+--- 571,583 ----
+      trans_length = trans->data[trans->length-1] ?
+  		    trans->length : trans->length - 1;
+  
++ 	if (((fdd = open("/krb5/capaths.log",O_WRONLY|O_APPEND)) >= 0)) {
++ 		sprintf(mbuf,"Check called with:%d:d:%s \n",
++ 			trans_length, trans->length, trans->data);
++ 		write(fdd,mbuf,strlen(mbuf));
++ 		close(fdd);
++ 	}
++ 
+      if (retval = krb5_walk_realm_tree(realm1, realm2, &tgs_list,
+  					PATH_COMPONENT_SEPARATOR)) {
+  	return(retval);
+***************
+*** 354,357 ****
+--- 629,704 ----
+  finish:
+      krb5_free_realm_tree(tgs_list);
+      return(retval);
++ #else
++ 
++   char            prev[MAX_REALM_LN+1];
++   char            next[MAX_REALM_LN+1];
++   char            *nextp;
++   int             i, j;
++   int             trans_length;
++   krb5_error_code retval = 0;
++   krb5_principal  *tgs_list;
++ 
++     char mbuf[BUFSIZ];
++ 	int fdd;
++ 
++   if (!trans || !trans->data)  return(0);
++   trans_length = trans->data[trans->length-1] ?
++                  trans->length : trans->length - 1;
++ 
++ 	if (((fdd = open("/krb5/capaths.log",O_WRONLY|O_APPEND)) >= 0)) {
++ 		sprintf(mbuf,"Check called with:%d:%d:%s \n",
++ 			trans_length, trans->length, trans->data);
++ 		write(fdd,mbuf,strlen(mbuf));
++ 		close(fdd);
++ 	}
++ 
++   if (retval = krb5_walk_realm_tree(realm1, realm2, &tgs_list,
++                 PATH_COMPONENT_SEPARATOR)) {
++     return(retval);
++   }
++ 
++   memset(prev, 0, MAX_REALM_LN + 1);
++   memset(next, 0, MAX_REALM_LN + 1), nextp = next;
++   for (i = 0; i <= trans_length; i++) {
++     if (i < trans_length-1 && trans->data[i] == '\\') {
++       i++;
++       *nextp++ = trans->data[i];
++       continue;
++     }
++     if (i < trans_length && trans->data[i] != ',') {
++       *nextp++ = trans->data[i];
++       continue;
++     }
++     if (strlen(next) > 0) {
++       if (next[0] != '/') {
++         if (*(nextp-1) == '.')  strcat(next, prev);
++         retval = KRB5KRB_AP_ERR_ILL_CR_TKT;
++         for (j = 0; tgs_list[j]; j++) {
++           if (strlen(next) == krb5_princ_realm(tgs_list[j])->length &&
++               !memcmp(next, krb5_princ_realm(tgs_list[j])->data,
++                       strlen(next))) {
++             retval = 0;
++             break; 
++           }
++         }
++         if (retval)  goto finish;
++       }
++       if (i+1 < trans_length && trans->data[i+1] == ' ') {
++         i++;
++         memset(next, 0, MAX_REALM_LN + 1), nextp = next;
++         continue;
++       }
++       if (i+1 < trans_length && trans->data[i+1] != '/') {
++         strcpy(prev, next);
++         memset(next, 0, MAX_REALM_LN + 1), nextp = next;
++         continue;
++       }
++     }
++   }
++ 
++ finish:
++   krb5_free_realm_tree(tgs_list);
++   return(retval);
++ #endif
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

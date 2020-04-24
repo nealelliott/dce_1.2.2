@@ -1,0 +1,138 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: README,v $
+# Revision 1.1.11.1  1996/10/02  17:28:01  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:34:19  damon]
+#
+# Revision 1.1.6.1  1994/06/09  14:03:21  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:38:24  annie]
+# 
+# Revision 1.1.2.3  1993/01/21  18:23:35  zeliff
+# 	Embedding copyright notices
+# 	[1993/01/19  14:13:27  zeliff]
+# 
+# Revision 1.1.2.2  1992/10/27  20:53:22  jaffe
+# 	New File
+# 	[1992/10/27  13:07:12  jaffe]
+# 
+# $EndLog$
+
+OVERVIEW
+
+This directory contains the "scavenger" test tools for the Episode
+salvager.  The basic approach used by these tools is to damage a
+precise portion of Episode meta-data before running the salvager.  The
+salvager's exit status is then checked to see if the salvager
+succeeded in repairing the problem or not.  The tools also notice if
+the salvager dumps core.
+
+The scavenger is much different from the "ravager", which is described
+in "../ravage/README".  While the ravager provides for doing gross
+damage to relatively large areas of the aggregate, the scavenger
+allows the tester to find an Episode object with specific attributes
+and change a single field within that object.  To accomplish this, the
+scavenger includes a Perl library, efs.pl, that "knows" the Episode
+disk format and allows direct access to Episode objects aggregates
+through the operating system's device interface.  Another Perl
+library, efs_query.pl, builds a goal-directed search mechanism on top
+of efs.pl to provide a powerful mechanism (yet somewhat idiosyncratic)
+for both examining and modifying Episode aggregates.
+
+Although it is beyond the scope of this description to describe the
+programming and test writing facilities provided by the scavenge
+tools, a few examples are given below to give a general idea of
+their use and capabilities.  Each of the examples comes from a script
+in this directory.  The name of the script is given for each example.
+
+Example 1. (basic_test.pl)
+
+The following script finds a copy-on-write anode, one with a non-zero
+`bOffset' field, and sets that field to an arbitrary value.
+
+if (&FindObject(*GetAggr, 1, *GetAVLAnode, 1, *GetFileSet, 1,
+		*GetFSAnode,  q/$anode{'bOffset'} != 0/)) {
+    &StartTest();
+    &SetAnode('bOffset', 515);
+    &EndTest();
+}
+
+The FindObject call does a depth-first search an aggregate looking
+for:
+	1. The aggregate header
+	2. Any AVL anode
+	3. Any fileset
+	4. An anode whose bOffset field is not zero
+
+If it finds one, the aggregate is copied to a temporary location
+(StartTest), the anode's bOffset field is set to 515 (SetAnode), and
+runs the salvage on the resulting aggregate (EndTest).
+
+Example 2. (epidump.pl)
+
+The following script dumps the contents of an aggregate in a
+human-readable format.
+
+&Flush(*GetAggr, 1,	*PrintAggr, 1,
+       *GetAVLAnode, 1,	*PrintAnode, 1,
+       *GetFileSet, 1,	*PrintFileSet, 1,
+       *GetFSAnode, 1,	*PrintAnode, 1,
+       *GetDirPage, 1,	*PrintDirPage, 1,
+       *GetDirEntry, 1,	*PrintDirEntry, 0);
+
+A similar script, aggrinfo.pl, just dumps aggregate and fileset
+headers.  It is useful when you forget what the names and IDs of the
+filesets on a given aggregate.
+
+Example 3. (upquota.pl)
+
+The following script sets the quota of a specified fileset.  Warning:
+this change is made by writing directly to the disk.  Don't try this
+on a running aggregate!
+
+if (&FindObject(*GetAggr, 1, *GetAVLAnode, 1, 
+		*GetFileSet, q/$fs{'ident.name'} eq $main'ARGV[1]/)) {
+    open(TMP_AGGR, "+<$AGGR") || &Die("${AGGR}: open(2) failed");
+    &SetFileSet('quota.limit', $main'ARGV[2]);
+}
+
+RUNNING THE TESTS
+
+The existing test script tries to locate one of every type of Episode
+object and then bashes one of each of the objects fields, running the
+salvager after each modification.
+
+1. cd to the scavenge object directory
+   (.../obj/<machine>/file/episode/scavenge) 
+2. Ensure that both "." and the directory containing the target
+   salvager are in your path.
+   You must also ensure that various tools like metamucil and scp are
+   in your path.  Including "../ravage" should do the trick.
+3. Copy an Episode aggregate to a sparse file:
+	% metamucil <aggregate's device> | scp - <sparse file>
+   See "../ravage/README" for a brief description of metamucil.
+4. Run the test
+	% perl simple_test <sparse file>
+
+CUSTOMIZATION
+
+The scavenger tools use a number of environment variables to control
+their operation.  They are:
+
+Variable		Default	Purpose
+--------		-------	-------
+RVG_AGGR_TMP_DIR	/tmp	The directory to which the ravage scripts
+				will copy the aggregate before each
+				bash-salvage iteration.
+RVG_BLOCK_SIZE		8192	The block size of the aggregate.
+RVG_FRAG_SIZE		1024	The fragment size of the aggregate.
+
+Note that metamucil needs to know the correct block and fragment size
+to work properly, so any change to RVG_BLOCK_SIZE and RVG_FRAG_SIZE
+should be made before step 3 above.

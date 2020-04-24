@@ -1,0 +1,193 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: bigdir,v $
+# Revision 1.1.11.1  1996/10/17  18:22:20  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:51:40  damon]
+#
+# Revision 1.1.6.1  1994/02/04  20:42:12  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:23:09  devsrc]
+# 
+# Revision 1.1.4.1  1994/01/28  20:44:09  annie
+# 	expand OSF copyright
+# 	[1994/01/28  20:42:36  annie]
+# 
+# Revision 1.1.2.2  1993/01/13  20:49:21  shl
+# 	Transarc delta: jdp-ot4575-directory-dump 1.7
+# 	  Selected comments:
+# 	    This delta contains the DFS changes necessary to accomplish a filesystem
+# 	    independent directory dump format.  This includes the generic dump additions
+# 	    in the ftserver and xvolume modules.  I've also stubbed in the new
+# 	    UFS volops for someone else to fill in later.
+# 	    This revision is merely a checkpoint to allow for the impending cml
+# 	    cataclysm.
+# 	    This revision is just another checkpoint.  It contains most of the Episode
+# 	    changes.
+# 	    This is another checkpoint to allow other deltas to be opened/imported.
+# 	    Another checkpoint.  Everything seems to be working for Episode->Episode
+# 	    dumps on the RIOS.
+# 	    Fix compiler warning on the pmax.
+# 	    This delta contains a new test for the directory dump changes and also
+# 	    contains some of the intertwined volume sync changes.
+# 	    This file is used by the fts tests to create directory entries.
+# 	    Edited this delta to bring it into the internationalization fold, where
+# 	    filenames carry codeset tags.
+# 	[1993/01/13  13:26:44  shl]
+# 
+# $EndLog$
+#
+
+###############################################################################
+#    Copyright (C) 1991, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+
+# This script will create, and then optionally delete, lots of zero-length
+# files in the current directory.
+#
+# Simple usage is:   bigdir [number-of-files-to-create]
+# In this case, all files will be deleted after they have all been created.
+# For example,   bigdir 3000   will create 3000 files, and then delete all
+# of them. Just typing   bigdir   alone will create and delete 1000 files.
+#
+# Alternate usage:   bigdir [-nfiles number-of-files-to-create] \
+#                           [-start first-file-to-delete] \
+#                           [-end last-file-to-delete]
+#
+# -start is taken to be 1 if not specified, and -end is taken to be the same
+# as -nfiles if not specified; the default -nfiles is 1000. The -nfiles,
+# -start, and -end arguments can be given in any order. A -end of 0 is
+# taken to mean that none of the files are to be deleted.
+#
+# For example,   bigdir -nfiles 2000 -end 1990   will create 2000 files, then
+# delete the first 1990 of them.   bigdir -nfiles 2000 -start 11   will create
+# 2000 files, then delete all but the first 10 of them.   bigdir -nfiles 2000
+# -start 6 -end 1995 will create 2000 files, and then delete all but the first
+# 5 and the last 5 files. Finally,   bigdir -nfiles 2000 -end 0   will create
+# 2000 files and won't delete any of them.
+#
+# The zero-length files will be named foo.1, foo.2, and so on. The name "foo"
+# is stored in $BASENAME in case you need to change it. The script deletes
+# foo.[1-9]* before starting.
+#
+# The script will exit if 10 errors ($ERRLIMIT) occur; the most common cause
+# of errors will probably be that you're trying to create more files than the
+# number of free inodes. The exit status is always the number of errors
+# encountered (so an exit status of 0 indicates that everything went well).
+#
+# The script prints a few status messages along the way, including status
+# messages after creating and deleting every 100 ($NOTIFY) files; this way
+# you know it's not hung.
+
+
+NFILES=1000
+START=1
+END=$NFILES
+
+BASENAME=foo
+NOTIFY=100
+ERRLIMIT=10
+RC=0
+
+nfiles_flag=FALSE
+start_flag=FALSE
+end_flag=FALSE
+
+if test $# -eq 1 -a "$1" -gt 0
+   then NFILES=$1; END=$1
+   else
+   for a in $*
+       do
+       if test $a = "-nfiles"; then nfiles_flag=TRUE
+       elif test $a = "-start"; then start_flag=TRUE
+       elif test $a = "-end"; then end_flag=TRUE
+       elif test $nfiles_flag = TRUE; then NFILES=$a; nfiles_flag=FALSE
+       elif test $start_flag = TRUE; then START=$a; start_flag=FALSE
+       elif test $end_flag = TRUE; then END=$a; end_flag=FALSE
+       fi
+       done
+   fi
+
+if test $END -lt 0 -o $END -gt $NFILES
+   then END=$NFILES
+        echo ""; echo "WARNING: Setting -end to $NFILES."
+        sleep 3
+   fi
+
+if test $START -le 0 -o $START -gt $END
+   then START=1
+        echo ""; echo "WARNING: Setting -start to 1."
+        sleep 3
+   fi
+
+echo ""
+echo "Will make $NFILES files in `pwd`."
+echo "Then files $START thru $END will be removed."
+
+echo ""; echo "Removing any old $BASENAME.* files..."
+rm -rf $BASENAME.[1-9]*
+echo "Done."
+
+nf_1=`ls | wc -l`; nf_1=`expr $nf_1 + 0`
+echo "There are currently $nf_1 files in this directory."
+ls -ld .
+
+echo ""; echo "Making files..."
+i=1
+while test $i -le $NFILES
+   do
+   touch $BASENAME.$i
+   if test $? -ne 0
+      then echo "WARNING: file number $i create failed"
+      RC=`expr $RC + 1`; if test $RC -gt $ERRLIMIT; then exit $RC; fi
+      fi
+   z=`expr $i / $NOTIFY`; z=`expr $z \* $NOTIFY`
+   if test $z -eq $i; then echo "   created $i files at `date`"; fi
+   i=`expr $i + 1`
+   done
+
+echo "Done making files."; ls -ld .
+nf_2=`ls | wc -l`; nf_2=`expr $nf_2 + 0`
+echo "There are now $nf_2 files in this directory."
+z=`expr $nf_1 + $NFILES`
+if test $z -ne $nf_2
+   then echo "WARNING: number of files seems wrong (should be $z)."
+        RC=`expr $RC + 1`
+   fi
+
+echo ""; echo "Removing files $START thru $END..."
+i=$START
+while test $i -le $END
+   do
+   rm $BASENAME.$i
+   if test $? -ne 0
+        then echo "WARNING: file number $i remove failed"
+        RC=`expr $RC + 1`; if test $RC -gt $ERRLIMIT; then exit $RC; fi
+        fi
+   z=`expr $i / $NOTIFY`; z=`expr $z \* $NOTIFY`
+   if test $z -eq $i; then echo "   removed $i files at `date`"; fi
+   i=`expr $i + 1`
+   done
+
+echo "Done removing files."; ls -ld .
+
+nf_3=`ls | wc -l`; nf_3=`expr $nf_3 + 0`
+z1=`expr $START - 1`
+z2=`expr $NFILES - $END`
+z3=`expr $z1 + $z2`
+z=`expr $nf_1 + $z3`
+echo ""; echo "There are now $nf_3 files in this directory."
+if test $nf_3 -ne $z
+   then echo "WARNING: number of files seems wrong (should be $z)."
+        RC=`expr $RC + 1`
+   fi
+
+exit $RC

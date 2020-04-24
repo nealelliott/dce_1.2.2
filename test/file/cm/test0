@@ -1,0 +1,453 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: test0,v $
+# Revision 1.1.10.1  1996/10/17  18:18:20  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:50:03  damon]
+#
+# Revision 1.1.4.4  1993/01/13  20:25:46  shl
+# 	Transarc delta: mcinerny-ot6561-remove-testing-of-cm-debug 1.1
+# 	  Selected comments:
+# 	    The cm debug command is defunct.  Don't test it any more.
+# 	[1993/01/13  13:16:25  shl]
+# 
+# Revision 1.1.4.3  1993/01/11  18:25:46  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  16:58:09  htf]
+# 
+# Revision 1.1.4.2  1992/10/28  16:11:47  jaffe
+# 	Transarc delta: comer-fix-cm-test-suite 1.1
+# 	  Selected comments:
+# 	    Fixed the cm test suite so that it would no longer use the
+# 	    exportdfs command and so that it didn't expect resetstore to
+# 	    fail if the user is not root.
+# 	    Fixed /bin/sh bug.
+# 	[1992/10/27  18:05:36  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/21  12:36:15  jaffe
+# 	Transarc delta: fred-merge-tests 1.1
+# 	  Selected comments:
+# 	    Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	    the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	    should be looking at the same test code.
+# 	    Changes to facilitate merge of local DFS test code with the OSF's.
+# 	Transarc delta: fred-remove-sys 1.1
+# 	  Selected comments:
+# 	    To remove dependency on the AFS sys command in the test scripts.
+# 	    To remove dependency on AFS sys command.
+# 
+# 	$TALog: test0,v $
+# 	Revision 12.4  1996/03/08  13:36:42  gait
+# 	Makes minor repairs to the following tests: fts, rep, acl, fset, cm.
+# 	Adds a script to run these tests all at once. The script bullet proofs
+# 	the test environment as much as possible and gathers the logs together
+# 	in one place.
+# 
+# 	Fix whoami calculation.
+# 	[from r4.9 by delta gait-db7321-repair-rep-tests, r1.1]
+# 
+# Revision 4.9  1994/11/01  22:22:08  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r4.8 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	[1992/05/20  18:02:15  jaffe]
+# 
+# $EndLog$
+#
+
+###############################################################################
+#    Copyright (C) 1991, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This script tests the cm command very quickly. This is the basic DFS
+# cm correctness test.
+
+###############################################################################
+
+# Usage:                test0
+
+# Typically run via:    test0 >& test0.out
+
+###############################################################################
+
+# Test environment:
+# This test requires that DFS be up and running.
+
+# Privilege required:
+# Nothing special.
+
+# Highest error number is: 45.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+rc=0
+ty=cm
+
+: ${TESTTOP:="`pwd`"}
+
+if [ "$TESTTOP" = "`pwd`" ]
+then
+    . ../util/fs_SetSysVar
+else
+    . $TESTTOP/util/fs_SetSysVar
+fi
+
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+
+: ${bin_dir=/opt/dcelocal/bin}
+
+PATH=":"$bin_dir":"$PATH
+
+cacheinfo=/opt/dcelocal/etc/CacheInfo
+dfslog=/opt/dcelocal/var/adm/dfs/cache/DFSLog
+WHOAMI=`/usr/ucb/whoami`
+if test ${WHOAMI} = root; then rootflag=TRUE; else rootflag=FALSE; fi
+tdir=$ty.$p.$$
+
+trap 'cd $d; rm -rf $tdir; exit 3' 2 3 15
+
+###############################################################################
+
+pwd | grep -s '^/\.\.\./'
+if test $? -eq 0; then tdir=$d/$tdir; else tdir=/:/$tdir; fi
+mkdir $tdir; cd /tmp; old_pwd=`pwd`; cd $tdir
+if test $? -ne 0 -o `pwd` = $old_pwd
+   then echo "- cd $tdir failed ($p: E0)"; exit 2
+   fi
+
+echo ""
+echo "$ty/$p (quickie) starting in $tdir"
+echo "   on $hn at `date`."
+echo ""
+echo "System type is $fs_sysName, root flag is $rootflag."
+echo ""
+cm whereis . ; fts lsquota -path .; cm getca
+
+###############################################################################
+
+echo ""; echo "Testing cm apropos cell"
+cm apropos cell; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E1)"; rc=`expr $rc + 1`
+   fi
+
+########################################
+
+echo ""; echo "Testing cm checkfilesets"
+cm checkfilesets; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E2)"; rc=`expr $rc + 1`
+   fi
+
+########################################
+
+
+echo ""; echo "Testing cm flush ."
+cm flush .; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E7)"; rc=`expr $rc + 1`
+   fi
+
+########################################
+
+echo ""; echo "Testing cm flushfileset ."
+cm flushfileset .; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E8)"; rc=`expr $rc + 1`
+   fi
+
+########################################
+
+echo ""; echo "Testing cm getcachesize"
+cm getcachesize; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E9)"; rc=`expr $rc + 1`
+   fi
+
+if test $rootflag = TRUE
+   then
+
+   echo ""; echo "Testing cm setcachesize 1234"
+   cm setcachesize 1234; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E10)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Testing cm getc"
+   cm getc; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E11)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Testing cm setc -reset"
+   cm setc -reset; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E12)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Testing cm getca"
+   cm getca; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E13)"; rc=`expr $rc + 1`
+      else
+         cm_size=`cm getca | awk '{print $9}'`
+         ci_size=`awk '-F:' '{print $3}' $cacheinfo`
+         if test $cm_size != $ci_size
+            then echo "- returned wrong size ($cm_size, not $ci_size) ($p: E14)"
+                 rc=`expr $rc + 1`
+            fi
+      fi
+
+   else # $rootflag != TRUE
+
+   echo ""; echo "Testing cm setcachesize 1122"
+   old_size=`cm getca | awk '{print $9}'`
+   cm setcachesize 1122; rf=$?
+   if test $rf -eq 0; then echo "- worked ($p: E15)"; rc=`expr $rc + 1`; fi
+   new_size=`cm getca | awk '{print $9}'`
+   if test $old_size -ne $new_size
+      then echo "- size CHANGED (is $new_size, was $old_size)"
+           rc=`expr $rc + 1`
+      fi
+
+   fi
+
+########################################
+
+echo ""; echo "Testing cm getdevok ."
+cm getdevok .; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E16)"; rc=`expr $rc + 1`
+   fi
+
+if test $rootflag = TRUE
+   then
+
+   echo ""; echo "Testing cm setdevok . -state on"
+   cm setdevok . -state on; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E17)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Testing cm getd ."
+   cm getd .; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E18)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Testing cm setdev . -state off"
+   cm setdev . -state off; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E19)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Testing cm getdev ."
+   cm getdev .; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E20)"; rc=`expr $rc + 1`
+      fi
+
+   else # $rootflag != TRUE
+
+   echo ""; echo "Testing cm setdevok . -state on"
+   cm setdevok . -state on; rf=$?
+   if test $rf -eq 0; then echo "- worked ($p: E21)"; rc=`expr $rc + 1`; fi
+
+   fi
+
+########################################
+
+echo ""; echo "Testing cm getsetuid ."
+cm getsetuid .; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E22)"; rc=`expr $rc + 1`
+   fi
+
+if test $rootflag = TRUE
+   then
+
+   echo ""; echo "Testing cm setsetuid . -state on"
+   cm setsetuid . -state on; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E23)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Testing cm gets ."
+   cm gets .; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E24)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Testing cm sets . -state off"
+   cm sets . -state off; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E25)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Testing cm getset ."
+   cm getset .; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E26)"; rc=`expr $rc + 1`
+      fi
+
+   else # $rootflag != TRUE
+
+   echo ""; echo "Testing cm setsetuid . -state on"
+   cm setsetuid . -state on; rf=$?
+   if test $rf -eq 0; then echo "- worked ($p: E27)"; rc=`expr $rc + 1`; fi
+
+   fi
+
+########################################
+
+echo ""; echo "Testing cm lscellinfo"
+cm lscellinfo; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E28)"; rc=`expr $rc + 1`
+   fi
+
+########################################
+
+echo ""; echo "Testing cm help"
+cm help; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E29)"; rc=`expr $rc + 1`
+   fi
+
+########################################
+
+echo ""; echo "Testing cm lsstores"
+cm lsstores; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E30)"; rc=`expr $rc + 1`
+   fi
+
+########################################
+
+echo ""; echo "Testing cm resetstores"
+cm resetstores; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E31)"; rc=`expr $rc + 1`
+   fi
+
+########################################
+
+echo ""; echo "Testing cm statservers"
+cm statservers; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E32)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Testing cm st -all"
+cm st -all; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E33)"; rc=`expr $rc + 1`
+   fi
+
+########################################
+
+echo ""; echo "Testing cm sysname"
+cm sysname; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E34)"; rc=`expr $rc + 1`
+   fi
+sys=`cm sysname | sed -n 's/.*is .\(.*\).\..*/\1/p`
+if test $sys != $fs_sysName
+   then echo "- returned wrong type ($sys, not $fs_sysName) ($p: E35)"
+        rc=`expr $rc + 1`
+   fi
+
+bogus=foo_bar
+
+if test $rootflag = TRUE
+   then
+
+   echo ""; echo "Testing cm sy $bogus"
+   cm sy $bogus; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E36)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Testing cm sys"
+   cm sys; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E37)"; rc=`expr $rc + 1`
+      else
+         sys=`cm sysname | sed -n 's/.*is .\(.*\).\..*/\1/p`
+         if test $sys != $bogus
+            then echo "- returned wrong type ($sys, not $bogus) ($p: E38)"
+                 rc=`expr $rc + 1`
+            fi
+      fi
+
+   echo ""; echo "Testing cm sysn $fs_sysName"
+   cm sysn $fs_sysName; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E39)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Testing cm sysna"
+   cm sysna; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E40)"; rc=`expr $rc + 1`
+      else
+         sys=`cm sysname | sed -n 's/.*is .\(.*\).\..*/\1/p`
+         if test $sys != $fs_sysName
+            then echo "- returned wrong type ($sys, not $fs_sysName) ($p: E41)"
+                 rc=`expr $rc + 1`
+            fi
+      fi
+
+   else # $rootflag != TRUE
+
+   echo ""; echo "Testing cm sy $bogus"
+   cm sy $bogus; rf=$?
+   if test $rf -eq 0; then echo "- worked ($p: E42)"; rc=`expr $rc + 1`; fi
+
+   echo ""; echo "Testing cm sys"
+   cm sys; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E43)"; rc=`expr $rc + 1`
+      else
+         sys=`cm sysname | sed -n 's/.*is .\(.*\).\..*/\1/p`
+         if test $sys != $fs_sysName
+            then echo "- returned wrong type ($sys, not $fs_sysName) ($p: E44)"
+                 rc=`expr $rc + 1`
+            fi
+      fi
+
+
+   fi
+
+########################################
+
+echo ""; echo "Testing cm whereis ."
+cm whereis .; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E45)"; rc=`expr $rc + 1`
+   fi
+
+###############################################################################
+
+cd /tmp; cd $d; rm -rf $tdir
+
+echo ""; echo "Test complete at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$ty/$p PASSED"
+   else echo "$ty/$p FAILED ($rc errors)"
+   fi
+
+exit $rc
+
+###############################################################################

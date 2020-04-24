@@ -1,0 +1,310 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+# Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS exporting Episode and UFS.
+# The script tests the fts dump and fts restore, particularly to ensure that
+# directories are handled properly.
+
+###############################################################################
+
+# Usage:                test17
+
+# Typically run via:    test17 >& test17.out
+# or via the fts/runtests script.
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode and UFS.
+
+# Privilege required:
+#    Need to be on admin.ft and admin.fl lists
+
+# Highest error number is: 8.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname|cut -f1 -d"." 2>/dev/null`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${VERB_ARG=""}
+: ${SERVER_1=$hn}
+: ${EPI_AGGRNAME_1=epi1}
+: ${EPI_AGGRNAME_2=epi2}
+: ${UFS_AGGRNAME_1=/ufs1}
+: ${UFS_AGGRNAME_2=/ufs2}
+: ${UFS_FSNAME_1=ufs1}
+: ${UFS_FSNAME_2=ufs2}
+: ${DFS_WORKS_ON_BOTH=BOTH}
+: ${DFS_PASS_EQ_ZERO=1}
+: ${DFS_PASS_EQ_NONZERO=2}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name=/.../$CELL_NAME}
+: ${dns_server_prefix=/.:/hosts/}
+: ${export_root=/.../$CELL_NAME/fs}
+: ${mount_prefix=$export_root/test}
+: ${base_name=Zappa.$$}
+: ${server=$dns_server_prefix$SERVER_1}
+: ${epi_ft1=$base_name.1}
+
+: ${epi_mp1=$mount_prefix/$epi_ft1}
+: ${epi_ft2=$base_name.2}
+: ${epi_mp2=$mount_prefix/$epi_ft2}
+: ${epi_dump=/tmp/$epi_ft1.dump}
+: ${ufs_mp1=$mount_prefix/$UFS_FSNAME_1}
+: ${ufs_mp2=$mount_prefix/$UFS_FSNAME_2}
+: ${ufs_dump=/tmp/$UFS_FSNAME_1.dump}
+: ${nfiles=600}
+
+cleanup()
+{
+# Nothing yet.
+ return 0
+}
+
+av_arg="$AUTH_ARG $VERB_ARG"
+ca_arg="$CELL_ARG $AUTH_ARG"
+cav_arg="$CELL_ARG $AUTH_ARG $VERB_ARG"
+
+PATH="`pwd`:$PATH"
+
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+###############################################################################
+# Create filesets and/or mount points
+
+fts create $epi_ft1 $server $EPI_AGGRNAME_1 $cav_arg
+if [ $? -ne 0 ]
+then
+    echo "creation of fileset $epi_ft1 failed, terminating..."
+    exit 1
+fi
+fts crmount $epi_mp1 $epi_ft1
+if [ $? -ne 0 ]
+then
+    echo "creation of mount point $epi_mp1 failed, terminating..."
+    fts delete $epi_ft1 $server $EPI_AGGRNAME_1 $cav_arg
+    exit 1
+fi
+
+setFsetRootProt $epi_mp1 $testuid "E100"
+
+fts create $epi_ft2 $server $EPI_AGGRNAME_1 $cav_arg
+if [ $? -ne 0 ]
+then
+    echo "creation of fileset $epi_ft2 failed, terminating..."
+    fts delete $epi_ft1 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp1
+    exit 1
+fi
+fts crmount $epi_mp2 $epi_ft2
+if [ $? -ne 0 ]
+then
+    echo "creation of mount point $epi_mp2 failed, terminating..."
+    fts delete $epi_ft1 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp1
+    fts delete $epi_ft2 $server $EPI_AGGRNAME_1 $cav_arg
+    exit 1
+fi
+
+fts crmount $ufs_mp1 $UFS_FSNAME_1
+if [ $? -ne 0 ]
+then
+    echo "creation of mount point $ufs_mp1 failed, terminating..."
+    fts delete $epi_ft1 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp1
+    fts delete $epi_ft2 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp2
+    exit 1
+fi
+
+fts crmount $ufs_mp2 $UFS_FSNAME_2
+if [ $? -ne 0 ]
+then
+    echo "creation of mount point $ufs_mp2 failed, terminating..."
+    fts delete $epi_ft1 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp1
+    fts delete $epi_ft2 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp2
+    fts delmount $ufs_mp1
+    exit 1
+fi
+
+###############################################################################
+# Populate filesets
+
+cd $epi_mp1
+bigdir -nfiles $nfiles -end 0
+if [ $? -ne 0 ]
+then
+    echo "creation of files in $epi_mp1 failed, terminating..."
+    fts delete $epi_ft1 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp1
+    fts delete $epi_ft2 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp2
+    fts delmount $ufs_mp1
+    fts delmount $ufs_mp2
+    exit 1
+fi
+
+cd $ufs_mp1
+chmod 777 .
+bigdir -nfiles $nfiles -end 0
+if [ $? -ne 0 ]
+then
+    echo "creation of files in $ufs_mp1 failed, terminating..."
+    fts delete $epi_ft1 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp1
+    fts delete $epi_ft2 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp2
+    fts delmount $ufs_mp1
+    fts delmount $ufs_mp2
+    exit 1
+fi
+
+###############################################################################
+# Dump filesets
+
+fts dump $epi_ft1 0 -file $epi_dump $av_arg $cav_arg
+if [ $? -ne 0 ]
+then
+    echo "dump of fileset $epi_ft1 failed, terminating..."
+    fts delete $epi_ft1 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp1
+    fts delete $epi_ft2 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp2
+    fts delmount $ufs_mp1
+    fts delmount $ufs_mp2
+    rm -f $epi_dump $ufs_dump
+    exit 1
+fi
+
+fts dump $UFS_FSNAME_1 0 -file $ufs_dump $cav_arg
+if [ $? -ne 0 ]
+then
+    echo "dump of fileset $UFS_FSNAME_1 failed, terminating..."
+    fts delete $epi_ft1 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp1
+    fts delete $epi_ft2 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp2
+    fts delmount $ufs_mp1
+    fts delmount $ufs_mp2
+    rm -f $epi_dump $ufs_dump
+    exit 1
+fi
+
+###############################################################################
+# Restore filesets
+
+fts restore $epi_ft2 $SERVER_1 $EPI_AGGRNAME_1 -overwrite -file $epi_dump \
+    $cav_arg
+dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E1 rc
+
+diff -r $epi_mp1 $epi_mp2
+dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E2 rc
+
+fts restore $UFS_FSNAME_2 $SERVER_1 $UFS_AGGRNAME_2 -overwrite \
+    -file $ufs_dump $cav_arg
+dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E3 rc
+
+diff -r $ufs_mp1 $ufs_mp2
+dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E4 rc
+
+###############################################################################
+# Modify directories (remove every other file) and dump again
+
+rm $epi_mp1/foo.*[13579]
+rm $ufs_mp1/foo.*[13579]
+
+fts dump $epi_ft1 0 -file $epi_dump $av_arg $cav_arg
+if [ $? -ne 0 ]
+then
+    echo "dump of fileset $epi_ft1 failed, terminating..."
+    fts delete $epi_ft1 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp1
+    fts delete $epi_ft2 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp2
+    fts delmount $ufs_mp1
+    fts delmount $ufs_mp2
+    rm -f $epi_dump $ufs_dump
+    rc=`expr $rc + 1`
+    exit $rc
+fi
+
+fts dump $UFS_FSNAME_1 0 -file $ufs_dump $cav_arg
+if [ $? -ne 0 ]
+then
+    echo "dump of fileset $UFS_FSNAME_1 failed, terminating..."
+    fts delete $epi_ft1 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp1
+    fts delete $epi_ft2 $server $EPI_AGGRNAME_1 $cav_arg
+    fts delmount $epi_mp2
+    fts delmount $ufs_mp1
+    fts delmount $ufs_mp2
+    rm -f $epi_dump $ufs_dump
+    rc=`expr $rc + 1`
+    exit $rc
+fi
+
+###############################################################################
+# Restore filesets
+
+fts restore $epi_ft2 $SERVER_1 $EPI_AGGRNAME_1 -overwrite -file $epi_dump \
+    $cav_arg
+dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E5 rc
+
+diff -r $epi_mp1 $epi_mp2
+dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E6 rc
+
+fts restore $UFS_FSNAME_2 $SERVER_1 $UFS_AGGRNAME_2 -overwrite \
+    -file $ufs_dump $cav_arg
+dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E7 rc
+
+diff -r $ufs_mp1 $ufs_mp2
+dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E8 rc
+
+###############################################################################
+# Clean up
+
+fts delete $epi_ft1 $server $EPI_AGGRNAME_1 $cav_arg
+fts delmount $epi_mp1
+fts delete $epi_ft2 $server $EPI_AGGRNAME_1 $cav_arg
+fts delmount $epi_mp2
+fts delmount $ufs_mp1
+fts delmount $ufs_mp2
+rm -f $epi_dump $ufs_dump
+
+###############################################################################
+
+sync; sync; sleep 2
+
+echo ""; echo "Done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################

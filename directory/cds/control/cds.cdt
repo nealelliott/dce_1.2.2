@@ -1,0 +1,928 @@
+!
+! @OSF_COPYRIGHT@
+! COPYRIGHT NOTICE
+! Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+! ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+! the full copyright text.
+!
+!
+! HISTORY
+! $Log: cds.cdt,v $
+! Revision 1.1.11.2  1996/03/09  23:11:42  marty
+! 	Update OSF copyright year
+! 	[1996/03/09  22:29:01  marty]
+!
+! Revision 1.1.11.1  1995/12/08  15:06:38  root
+! 	Submit OSF/DCE 1.2.1
+! 	[1995/12/08  14:39:19  root]
+! 
+! Revision 1.1.9.7  1994/08/22  16:21:21  mccann
+! 	fix invalid binding problem: OT 10837
+! 	[1994/08/22  16:20:45  mccann]
+! 
+! Revision 1.1.9.6  1994/08/03  19:00:10  mccann
+! 	include file cleanup
+! 	[1994/07/19  17:36:11  mccann]
+! 
+! Revision 1.1.9.5  1994/06/23  18:29:28  mccann
+! 	sams cleanup drop1
+! 	[1994/06/22  19:33:10  mccann]
+! 
+! Revision 1.1.9.4  1994/06/09  16:08:22  devsrc
+! 	cr10892 - fix copyright
+! 	[1994/06/09  15:53:09  devsrc]
+! 
+! Revision 1.1.9.3  1994/05/06  15:58:57  zee
+! 	OT 10275 fix for add/remove cellname.
+! 	[1994/05/05  21:02:22  zee]
+! 
+! Revision 1.1.9.2  1994/03/22  19:59:53  griffin
+! 	HCell Bl3 support: add/remove cellname commands
+! 	[1994/03/22  17:44:29  griffin]
+! 
+! Revision 1.1.9.1  1994/03/12  21:57:31  peckham
+! 	DEC serviceability and i18n drop
+! 	[1994/03/12  13:56:06  peckham]
+! 
+! Revision 1.1.7.1  1993/09/24  20:16:33  pwang
+! 	Made Create Object/Link treats the attribute names case sensitive
+! 	[OT#7558, #8668]
+! 
+! Revision 1.1.5.3  1992/12/30  13:01:16  zeliff
+! 	Embedding copyright notices
+! 	[1992/12/29  22:30:47  zeliff]
+! 
+! Revision 1.1.5.2  1992/09/29  19:09:29  devsrc
+! 	SNI/SVR4 merge.  OT 5373
+! 	[1992/09/11  15:10:33  weisman]
+! 
+! Revision 1.1.2.4  1992/06/29  19:37:15  m_sawyer
+! 	Fix parsing abbreviations for "preferred clearinghouse"
+! 	[1992/06/29  19:36:14  m_sawyer]
+! 
+! Revision 1.1.2.3  1992/04/30  20:36:34  m_sawyer
+! 	fix 'with' processing
+! 	[1992/04/30  20:28:20  m_sawyer]
+! 
+! Revision 1.1.2.2  1992/03/22  21:38:46  weisman
+! 	              Big merge with post-1.0 development at Digital.
+! 	      [1992/03/22  20:19:01  weisman]
+! 
+! Revision 1.1  1992/01/19  15:19:56  devrcs
+! 	      Initial revision
+! 
+! $EndLog$
+!
+
+!
+! COPYRIGHT (c) DIGITAL EQUIPMENT CORPORATION 1991-1994. ALL RIGHTS RESERVED.
+!
+! THIS SOFTWARE IS FURNISHED UNDER A LICENSE AND MAY BE USED AND  COPIED
+! ONLY  IN  ACCORDANCE  WITH  THE  TERMS  OF  SUCH  LICENSE AND WITH THE
+! INCLUSION OF THE ABOVE COPYRIGHT NOTICE.  THIS SOFTWARE OR  ANY  OTHER
+! COPIES  THEREOF MAY NOT BE PROVIDED OR OTHERWISE MADE AVAILABLE TO ANY
+! OTHER PERSON.  NO TITLE TO AND OWNERSHIP OF  THE  SOFTWARE  IS  HEREBY
+! TRANSFERRED.
+!
+! THE INFORMATION IN THIS SOFTWARE IS SUBJECT TO CHANGE  WITHOUT  NOTICE
+! AND  SHOULD  NOT  BE  CONSTRUED  AS  A COMMITMENT BY DIGITAL EQUIPMENT
+! CORPORATION.
+!
+! DIGITAL ASSUMES NO RESPONSIBILITY FOR THE USE OR  RELIABILITY  OF  ITS
+! SOFTWARE ON EQUIPMENT THAT IS NOT SUPPLIED BY DIGITAL.
+!
+! command definition file for dns management
+
+! this file must be first if it is used in another file.
+! the first element is the high level goal of the parse.
+
+! /* some comments include the c comment delimiters */ /* and */
+! /* this is to prevent the c preprocessor from making substitutions */
+
+#include <dce/dnsmanpar.h>
+!#include <entities_cds.cdt>
+#undef FAILURE
+#undef ERROR
+#undef SUCCESS
+
+! /* ----------------- */
+! /* top level parsing */	/* i18n */
+! /* ----------------- */
+
+ELEMENT *
+    CHAR e CALL set_func:NULLCMD SUCCESS
+    GOSUB cdscmd SUCCESS
+
+ELEMENT cdscmd
+    FORCE CALL clear_ent_list NEXT
+ELEMENT *
+    WORD show      MIN 2 CALL set_func:SHOENTCMD GOTO show
+    WORD set       MIN 2 GOTO set
+    WORD list      MIN 1 GOTO list
+    WORD create    MIN 2 GOTO create
+    WORD delete    MIN 3 GOTO delete
+    WORD add       MIN 1 CALL set_func:ADDSETCMD GOTO modify
+    WORD remove    MIN 1 CALL set_func:REMSETCMD GOTO remove
+    WORD clear     MIN 2 GOTO clear
+    WORD dump      MIN 2 CALL set_func:DMPCCHCMD GOTO dump
+    WORD define    MIN 3 GOTO define
+    WORD disable   MIN 3 GOTO disable
+    WORD exit      MIN 1 CALL set_func:EXITCMD   GOTO shouldbeend
+    WORD quit      MIN 1 CALL set_func:EXITCMD   GOTO shouldbeend
+    WORD help      MIN 1 CALL set_func:HELPCMD   GOTO shouldbeend
+
+! /* ------------------- */
+! /* subparsing for SHOW */
+! /* ------------------- */
+
+! /* function code preset to SHOENTCMD since that is the most likely. */
+
+ELEMENT show
+    WORD cell      MIN 2 CALL cellent            GOTO showcell
+    WORD replica   MIN 1 CALL pretend_not_seen   GOTO shorep
+    WORD cdscp     MIN 2                         GOTO shodns
+    WORD server    MIN 2 CALL set_func:SHOWSRV   GOTO shouldbeend
+    WORD clerk     MIN 4 CALL set_func:SHOWCLK   GOTO shouldbeend
+    WORD cached    MIN 2                         GOTO showcached
+    GOSUB shoent   SUCCESS
+
+! /* ---------------------------------- */
+! /* subparse for SHOW <entity> command */
+! /* ---------------------------------- */
+
+ELEMENT shoent
+    GOSUB wildent NEXT
+ELEMENT *
+    GOSUB showattrlist NEXT
+ELEMENT *
+    GOSUB withtail GOTO shouldbeend
+
+! /* --------------------------------- */
+! /* subparse for SHOW REPLICA command */
+! /* --------------------------------- */
+
+! /* have seen SHOW REPLICA (and backed up over replica ) */
+! /* subparse for SHOW REPLICA dirname CLEARINGHOUSE clhname */
+
+ELEMENT shorep
+    GOSUB tameent NEXT
+ELEMENT *
+    GOSUB tamecle NEXT
+ELEMENT *
+    FORCE CALL set_func:SHOREPCMD NEXT
+ELEMENT *
+    GOSUB showattrlist NEXT
+ELEMENT *
+    GOSUB withtail GOTO shouldbeend
+
+! /* ------------------------------ */
+! /* subparse for SHOW CELL command */
+! /* ------------------------------ */
+
+! /* have seen SHOW CELL */
+
+ELEMENT showcell
+    WORD as MIN 1 GOTO defcell
+    GOSUB nowildfullname CALL entity:0 NEXT
+    GOSUB rootfullname   CALL entity:0 NEXT
+ELEMENT *
+    WORD as MIN 1 NEXT
+    FORCE CALL set_func:SHOW500 GOTO shouldbeend
+ELEMENT whichspace
+    WORD dns MIN 1 CALL set_func:SHOWDNS GOTO shouldbeend
+    WORD gds MIN 1 CALL set_func:SHOW500 GOTO shouldbeend
+ELEMENT defcell
+    GOSUB rootfullname CALL entity:0 GOTO whichspace
+
+! /* ---------------------------------------- */
+! /* subparse for ADD/REMOVE CELLNAME command */
+! /* ---------------------------------------- */
+
+! /* have seen ADD CELLNAME */
+
+ELEMENT addcell
+    GOSUB nowildfullname CALL entity:0 NEXT
+    GOSUB rootfullname   CALL entity:0 NEXT
+ELEMENT *
+    WORD as MIN 1 NEXT
+    GOSUB addcellas SUCCESS
+ELEMENT addcellas
+    WORD preferred MIN 1 CALL set_func:ADDCELLPREFERCMD GOTO shouldbeend
+    WORD alias MIN 1 CALL set_func:ADDCELLALIASCMD GOTO shouldbeend
+    WORD child MIN 1 CALL set_func:ADDCELLCHILDCMD GOTO shouldbeend
+    WORD inherit MIN 1 CALL set_func:ADDCELLINHERITCMD GOTO shouldbeend
+
+! /* have seen REMOVE CELLNAME */
+
+ELEMENT remcell
+    GOSUB nowildfullname CALL entity:0 NEXT
+ELEMENT *
+    FORCE CALL set_func:REMCELLCMD GOTO shouldbeend
+
+! /* ------------------------------- */
+! /* subparse for SHOW CDSCP command */
+! /* ------------------------------- */
+
+! /* have seen SHOW CDSCP */
+
+ELEMENT shodns
+    WORD preferred  MIN 1 GOTO shopfd
+    WORD confidence MIN 1 CALL set_func:SHOCFCMD GOTO shouldbeend
+
+! /* have seen SHOW CDSCP PREFERRED */
+
+ELEMENT shopfd
+    WORD clearinghouse MIN 1 CALL set_func:SHOPFCCMD GOTO shouldbeend
+
+! /* have seen SHOW CACHED */
+
+ELEMENT showcached
+    GOSUB wildcle     CALL set_func:SHOWCLKCLE GOTO shouldbeend
+    WORD server MIN 1 CALL set_func:SHOWCLKSRV NEXT
+ELEMENT *
+    GOSUB wildsimplename GOTO shouldbeend
+
+! /* have seen CLEAR */
+
+ELEMENT clear
+    GOSUB tamecle CALL set_func:CLEARCLE GOTO shouldbeend
+    WORD cached MIN 2 NEXT
+ELEMENT *
+    WORD server MIN 1 CALL set_func:CLEARCLKSRV NEXT
+ELEMENT *
+    GOSUB simplename GOTO shouldbeend
+
+! /* have seen DUMP */
+
+ELEMENT dump
+    WORD clerk MIN 1 NEXT
+ELEMENT *
+    WORD cache MIN 1 GOTO shouldbeend
+
+ELEMENT optionalspace
+    STRING s SUCCESS
+    FORCE    SUCCESS
+
+ELEMENT comma
+    WORD , SUCCESS
+
+! /* looking for FILE [=] <filespec> */
+ELEMENT filedest
+    WORD file MIN 2 TERM/KEEP sep NEXT
+ELEMENT *
+    WORD = TERM/KEEP x NEXT
+    FORCE  NEXT
+ELEMENT *
+    GOSUB filespec TERM/KEEP sep SUCCESS
+
+ELEMENT onlywilddir
+    WORD directory MIN 1 CALL pretend_not_seen NEXT
+ELEMENT * 
+    GOSUB wildent SUCCESS
+
+ELEMENT onlytamedir
+    WORD directory MIN 1 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB tameent SUCCESS
+
+ELEMENT onlytameobj
+    WORD object MIN 1 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB tameent SUCCESS
+
+ELEMENT onlywildobj
+    WORD object MIN 1 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB wildent SUCCESS
+
+ELEMENT onlywildlnk
+    WORD link MIN 1 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB wildent SUCCESS
+
+ELEMENT onlytamelnk
+    WORD link MIN 1 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB tameent SUCCESS
+
+
+
+
+! /* save the filename in 'fsblk' structure before we advance
+   * the pointer along 
+  */
+ELEMENT filespec
+   FORCE CALL stash_filespec SUCCESS
+
+
+! /* ------------------------ */
+! /* subparse for SET command */
+! /* ------------------------ */
+
+! /* function code preset to SETENTCMD since that is the most likely. */
+! /* might be corrected below. */
+
+ELEMENT set
+    GOSUB setepoch        CALL set_func:NEWEPOCHCMD GOTO shouldbeend
+    GOSUB setskulk        CALL set_func:SKULKCMD    GOTO shouldbeend
+    WORD  cdscp     MIN 2                           GOTO setcdscp
+    FORCE                 CALL set_func:SETENTCMD   GOTO modify
+
+! /* ------------------------------ */
+! /* subparse for SET CDSCP command */
+! /* ------------------------------ */
+
+ELEMENT setcdscp
+    WORD preferred  MIN 1 CALL set_func:SETPFCCMD   GOTO setpfd
+    WORD confidence MIN 1 CALL set_func:SETCFCMD    GOTO setconfopt
+
+! /* have seen SET CDSCP PREFERRED */
+
+ELEMENT setpfd
+    GOSUB tamepfdcle         CALL save_pfd_clh:1 GOTO shouldbeend
+    WORD clearinghouse MIN 1 CALL save_pfd_clh:0 GOTO shouldbeend
+
+! /* process preferred clearinghouse */
+
+ELEMENT tamepfdcle
+    WORD clearinghouse MIN 1 CALL clhent NEXT
+ELEMENT *
+    GOSUB nowildfullname     CALL entity:0 SUCCESS
+
+! /* have seen SET CDSCP CONFIDENCE */
+
+ELEMENT setconfopt
+    GOSUB optionalequal NEXT
+ELEMENT *
+    WORD low     MIN 1 CALL saveconf:1 GOTO shouldbeend
+    WORD medium  MIN 1 CALL saveconf:2 GOTO shouldbeend
+    WORD high    MIN 1 CALL saveconf:3 GOTO shouldbeend
+    WORD default MIN 1 CALL saveconf:1 GOTO shouldbeend
+
+! /* --------------------------------- */
+! /* subparse for SET <entity> command */
+! /* --------------------------------- */
+
+! /* subparse for SET/remove/add entity command after the  */
+
+ELEMENT modify
+    WORD cellname      MIN 2 CALL cellent GOTO addcell
+    GOSUB tameent  NEXT
+ELEMENT *
+    WORD attribute NEXT
+    FORCE          NEXT
+ELEMENT *
+    GOSUB setattr GOTO shouldbeend
+
+! /* subparse for SET DIR TO SKULK */
+
+ELEMENT setskulk
+    WORD directory MIN 1 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB tameent NEXT
+ELEMENT *
+    WORD to MIN 1 NEXT
+ELEMENT *
+    WORD skulk MIN 1 SUCCESS
+
+! /* subparse for SET DIR TO NEW EPOCH MASTER */
+
+ELEMENT setepoch
+    WORD directory MIN 1 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB tameent NEXT
+ELEMENT *
+    WORD to MIN 1 NEXT
+ELEMENT *
+    WORD new MIN 1 NEXT
+ELEMENT *
+    WORD epoch MIN 1  NEXT
+ELEMENT *
+    WORD master    MIN 1 CALL save_reptype:1 NEXT
+ELEMENT *
+    GOSUB repname NEXT
+ELEMENT *
+    WORD readonly  MIN 1 CALL save_reptype:3 GOTO readonly
+    WORD exclude   MIN 1 CALL save_reptype:4 GOTO exclude
+    FORCE SUCCESS
+
+! /* subparse for SET DIR TO NEW EPOCH MASTER ... READONLY ... */
+
+ELEMENT readonly
+    GOSUB repname NEXT
+ELEMENT morereadonly
+    WORD exclude MIN 1 CALL save_reptype:4 GOTO exclude
+    GOSUB repname GOTO morereadonly
+    FORCE SUCCESS
+
+! /* subparse for SET DIR TO NEW EPOCH MASTER ... EXCLUDE ... */
+
+ELEMENT exclude
+    GOSUB repname NEXT
+ELEMENT moreexclude
+    GOSUB repname GOTO moreexclude
+    FORCE SUCCESS
+
+! /* subparse for SET DIR TO NEW EPOCH MASTER ... replica ... */
+
+ELEMENT repname
+    GOSUB nowildfullname CALL save_rep SUCCESS
+
+! /* ---------------------------------- */
+! /* subparse for LIST <entity> command */
+! /* ---------------------------------- */
+
+! /* subparse for LIST entity command after the LIST verb */
+
+ELEMENT list
+    WORD object        MIN 1 CALL pretend_not_seen:DIROBJCMD NEXT
+    WORD directory     MIN 1 CALL pretend_not_seen:DIRDIRCMD NEXT
+    WORD     link      MIN 1 CALL pretend_not_seen:DIRLNKCMD NEXT
+    WORD softlink      MIN 1 CALL pretend_not_seen:DIRLNKCMD NEXT
+    WORD clearinghouse MIN 2 CALL pretend_not_seen:DIRCLHCMD NEXT
+    WORD children      MIN 2 CALL pretend_not_seen:DIRDIRCMD NEXT
+ELEMENT *
+    GOSUB wildent NEXT
+    FORCE NEXT
+ELEMENT *
+    GOSUB withtail GOTO shouldbeend
+
+! /* subparse for CREATE <entity> */
+
+ELEMENT create
+    GOSUB createdir  CALL set_func:V1CREDIRCMD GOTO shouldbeend
+    GOSUB createobj  CALL set_func:V1CREOBJCMD GOTO shouldbeend
+    GOSUB createsl   CALL set_func:V1CRELNKCMD GOTO shouldbeend
+    GOSUB createrep  CALL set_func:  CREREPCMD GOTO shouldbeend
+    GOSUB createkid  CALL set_func:  CREKIDCMD GOTO shouldbeend
+    GOSUB createcle  CALL set_func:  CRECLECMD GOTO shouldbeend
+
+! /* subparse for DELETE <entity> */
+
+ELEMENT delete
+    GOSUB deletedir  CALL set_func:V1DELDIRCMD GOTO shouldbeend
+    GOSUB deleteobj  CALL set_func:V1DELOBJCMD GOTO shouldbeend
+    GOSUB deletesl   CALL set_func:V1DELLNKCMD GOTO shouldbeend
+    GOSUB deleterep  CALL set_func:  DELREPCMD GOTO shouldbeend
+    GOSUB deletekid  CALL set_func:  DELKIDCMD GOTO shouldbeend
+    GOSUB deletecle  CALL set_func:  DELCLECMD GOTO shouldbeend
+
+! /* subparse for CREATE DIRECTORY dirname [CLEARINGHOUSE clhname] */
+
+ELEMENT createdir
+    WORD directory MIN 1 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB tameent NEXT
+ELEMENT *
+    GOSUB tamecle SUCCESS
+    FORCE         SUCCESS
+
+! /* subparse for DELETE DIRECTORY dirname */
+
+ELEMENT deletedir
+    WORD directory MIN 1 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB tameent SUCCESS
+
+
+! /* subparse for CREATE CHILD childpointername CLEARINGHOUSE clhname */
+
+ELEMENT createkid
+    WORD child MIN 2 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB tameent NEXT
+ELEMENT *
+    GOSUB tamecle SUCCESS
+
+! /* subparse for DELETE CHILD childpointername */
+
+ELEMENT deletekid
+    WORD child MIN 2 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB tameent SUCCESS
+
+! /* subparse for CREATE OBJECT objname classname attr classversion attr */
+
+ELEMENT createobj
+    WORD object MIN 1 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB tameent NEXT
+ELEMENT *
+    GOSUB classnameandver SUCCESS
+    FORCE                 SUCCESS
+
+! /* subparse for DELETE OBJECT objname */
+
+ELEMENT deleteobj
+    WORD object MIN 1 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB tameent SUCCESS
+
+! /* subparse for CREATE SOFTLINK slname */
+
+ELEMENT createsl
+    WORD     link MIN 1 CALL pretend_not_seen NEXT
+    WORD softlink MIN 2 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB tameent NEXT
+ELEMENT *
+    GOSUB targetandto SUCCESS
+
+! /* subparse for DELETE SOFTLINK slname */
+
+ELEMENT deletesl
+    WORD     link MIN 1 CALL pretend_not_seen NEXT
+    WORD softlink MIN 1 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB tameent SUCCESS
+
+! /* subparse for CREATE REPLICA dirname CLEARINGHOUSE chname */
+
+ELEMENT createrep
+    WORD replica MIN 1 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB tameent NEXT
+ELEMENT *
+    GOSUB tamecle CALL save_reptype:3 SUCCESS
+
+! /* subparse for DELETE REPLICA dirname AT CLEARINGHOUSE chname */
+
+ELEMENT deleterep
+    WORD replica MIN 1 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB tameent NEXT
+ELEMENT *
+    GOSUB tamecle SUCCESS
+
+! /* subparse for CREATE CLE */
+
+ELEMENT createcle
+    GOSUB tamecle NEXT
+ELEMENT *
+    WORD initial MIN 1 NEXT
+    FORCE        SUCCESS
+ELEMENT *
+    WORD replica    MIN 1 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB tameent SUCCESS
+
+! /* subparse for DELETE CLE */
+
+ELEMENT deletecle
+    GOSUB tamecle SUCCESS
+
+! /* have seen DEFINE */
+
+ELEMENT define
+    WORD cached MIN 1 CALL set_func: DEFCLKSRV NEXT
+ELEMENT *
+    WORD server MIN 1 NEXT
+ELEMENT *
+    GOSUB simplename NEXT
+ELEMENT *
+    WORD tower MIN 1 NEXT
+ELEMENT * 
+    FORCE CALL savecharattr goto shouldbeend
+
+! /* have seen DISABLE */
+
+ELEMENT disable
+    WORD clerk MIN 1 CALL set_func:DISCLK goto shouldbeend
+    WORD server MIN 1 CALL set_func:DISSRV goto shouldbeend
+
+! /* subparse for REMOVE */
+
+ELEMENT remove
+    WORD cellname      MIN 2 CALL cellent GOTO remcell
+    GOSUB modify  SUCCESS
+    GOSUB tameent NEXT
+ELEMENT *
+    WORD attribute NEXT
+    FORCE          NEXT
+ELEMENT *
+    GOSUB attributename CALL save_named_attr GOTO shouldbeend
+
+! /* subparse for <tameent>, an entity without wildcards */
+
+ELEMENT tameent
+    WORD object        MIN 1 CALL objent NEXT
+    WORD clearinghouse MIN 4 CALL clhent NEXT
+    WORD link          MIN 1 CALL slent  NEXT
+    WORD softlink      MIN 2 CALL slent  NEXT
+    WORD child         MIN 2 CALL kident NEXT
+    WORD replica       MIN 1 CALL repent NEXT
+    WORD directory     MIN 1 CALL dirent NEXT
+ELEMENT *
+    GOSUB nowildfullname CALL entity:0 SUCCESS
+
+! /* subparse for <wildent>, an entity with wildcards */
+
+ELEMENT wildent
+    WORD object        MIN 1 CALL objent NEXT
+    WORD clearinghouse MIN 4 CALL clhent NEXT
+    WORD link          MIN 1 CALL slent  NEXT
+    WORD softlink      MIN 2 CALL slent  NEXT
+    WORD child         MIN 2 CALL kident NEXT
+    WORD replica       MIN 1 CALL repent NEXT
+    WORD directory     MIN 1 CALL dirent NEXT
+ELEMENT *
+    GOSUB wildfullname   CALL entity:1 SUCCESS
+    GOSUB nowildfullname CALL entity:0 SUCCESS
+
+! /* -------------------------------------------------------------- */
+! /* miscellaneous subparsing routines used when showing attributes */
+! /* -------------------------------------------------------------- */
+
+! /* subparse to accumulate attributes to be shown */
+
+ELEMENT showattrlist
+    WORD with MIN 1 CALL pretend_not_seen GOTO setallattr
+    STRING e GOTO setallattr
+    WORD attribute MIN 1 NEXT
+    FORCE NEXT
+ELEMENT showattr
+    GOSUB attributename CALL save_named_attr NEXT
+ELEMENT *
+    WORD with MIN 1 CALL pretend_not_seen SUCCESS
+    STRING e SUCCESS
+    FORCE GOTO showattr
+
+! /* ------------------------------------------------------ */
+! /* miscellaneous subparsing routines used in WITH parsing */
+! /* ------------------------------------------------------ */
+
+! /* have seen WITH but no attributes so set ALL_ATTR */
+
+ELEMENT withtailsetall
+    GOSUB setallattr SUCCESS
+ELEMENT *
+    FORCE CALL after_this_is_with GOTO withtailset
+
+! /* process WITH 'tail' */
+
+ELEMENT withtail
+    FORCE CALL after_this_is_with NEXT
+ELEMENT *
+    WORD with MIN 1 NEXT
+    FORCE SUCCESS
+ELEMENT withtailset
+    GOSUB setattr  NEXT
+ELEMENT setmoreattrs
+    GOSUB setattr GOTO setmoreattrs
+    FORCE SUCCESS
+
+! /* --------------------------------- */
+! /* Subparse for different name types */
+! /* --------------------------------- */
+
+! /* subparse for a SIMPLENAME */
+ELEMENT simplename
+    FORCE CALL simplename SUCCESS
+
+! /* subparse for a SIMPLENAME with wildcards */
+ELEMENT wildsimplename
+    FORCE CALL wildsimplename SUCCESS
+
+! /* subparse for an ATTRIBUTENAME */
+ELEMENT attributename
+    FORCE CALL attributename SUCCESS
+
+! /* subparse for a FULLNAME */
+ELEMENT nowildfullname
+    FORCE CALL nowildfullname SUCCESS
+
+! /* subparse for a 'rooted' FULLNAME */
+ELEMENT rootfullname
+    FORCE CALL rootfullname SUCCESS
+
+! /* subparse for a FULLNAME with wildcards */
+ELEMENT wildfullname
+    FORCE CALL wildfullname SUCCESS
+
+! /* -------------------------------------------------------------- */
+! /* subparse for any attribute, known or user defined, [=] a value */
+! /* -------------------------------------------------------------- */
+
+ELEMENT setattr
+    GOSUB attributename NEXT
+ELEMENT *
+    GOSUB optionalequal NEXT
+ELEMENT *
+    FORCE CALL savecdsattr SUCCESS
+    GOSUB istimeout        SUCCESS
+    GOSUB isconvergence    SUCCESS
+    GOSUB isinch           SUCCESS
+    GOSUB isversion        SUCCESS
+    GOSUB isrptype         SUCCESS
+    GOSUB isrpstate        SUCCESS
+    GOSUB ischstate        SUCCESS
+
+ELEMENT isconvergence
+    FORCE CALL isconvergence NEXT
+ELEMENT *
+    WORD high   MIN 1 CALL save1byteattr:3 SUCCESS
+    WORD medium MIN 1 CALL save1byteattr:2 SUCCESS
+    WORD low    MIN 1 CALL save1byteattr:1 SUCCESS
+
+ELEMENT ischstate
+    FORCE CALL ischstate NEXT
+ELEMENT *
+    WORD new   MIN 1 CALL save1byteattr:1 SUCCESS
+    WORD on    MIN 1 CALL save1byteattr:2 SUCCESS
+    WORD dying MIN 1 CALL save1byteattr:3 SUCCESS
+
+ELEMENT isrpstate
+    FORCE CALL isrpstate NEXT
+ELEMENT *
+    WORD new       MIN 1 GOTO new
+    WORD on        MIN 1 CALL save1byteattr:3 SUCCESS
+    WORD dying     MIN 1 GOTO dying
+
+ELEMENT new
+    WORD directory MIN 1 CALL save1byteattr:1 SUCCESS
+    WORD replica   MIN 1 CALL save1byteattr:2 SUCCESS
+
+ELEMENT dying
+    WORD replica   MIN 1 CALL save1byteattr:5 SUCCESS
+    WORD directory MIN 1 CALL save1byteattr:4 SUCCESS
+
+ELEMENT isrptype
+    FORCE CALL isrptype NEXT
+ELEMENT *
+    WORD master    MIN 1 CALL save1byteattr:1 SUCCESS
+    WORD read-only MIN 1 CALL save1byteattr:3 SUCCESS
+    WORD readonly  MIN 1 CALL save1byteattr:3 SUCCESS
+
+ELEMENT isinch
+    FORCE CALL isinch NEXT
+ELEMENT *
+    WORD true      MIN 1 CALL save1byteattr:1 SUCCESS
+    WORD false     MIN 1 CALL save1byteattr:0 SUCCESS
+
+ELEMENT isversion
+    FORCE CALL isversion NEXT
+ELEMENT *
+    GOSUB majorminor CALL saveverattr SUCCESS
+
+ELEMENT istimeout
+    FORCE CALL istimeout NEXT
+ELEMENT *
+    GOSUB timeoutv CALL savetoattr SUCCESS
+
+! /* ---------------------------------------------------------------- */
+! /* used by CREATE SOFTLINK                                          */
+! /* subparse for target and timeout, either order - timeout optional */
+! /* ---------------------------------------------------------------- */
+
+ELEMENT targetandto
+    GOSUB targetthento SUCCESS
+    GOSUB tothentarget SUCCESS
+    GOSUB lnktarget    SUCCESS
+
+! /* subparse for target then timeout */
+
+ELEMENT targetthento
+    GOSUB lnktarget NEXT
+ELEMENT *
+    GOSUB lnktimeout SUCCESS
+
+! /* subparse for classversion then classname */
+
+ELEMENT tothentarget
+    GOSUB lnktimeout NEXT
+ELEMENT *
+    GOSUB lnktarget SUCCESS
+
+! /* subparse for the value of a timeout */
+
+ELEMENT timeoutv
+    STRING s NEXT
+    FORCE    NEXT
+ELEMENT *
+    CHAR (   NEXT
+ELEMENT *
+    GOSUB expval NEXT
+ELEMENT *
+    GOSUB extval NEXT    
+ELEMENT *
+    CHAR ) SUCCESS
+
+! /* subparse for an expiration date */
+
+ELEMENT expval
+    FORCE CALL parse_abstime SUCCESS
+
+! /* subparse for an extension date */
+
+ELEMENT extval
+    FORCE CALL parse_deltatime SUCCESS
+
+! /* ------------------------------------------------- */
+! /* used by CREATE OBJECT                             */
+! /* subparse for class name and version, either order */
+! /* ------------------------------------------------- */
+
+ELEMENT classnameandver
+    GOSUB namethenver SUCCESS
+    GOSUB verthenname SUCCESS
+
+! /* subparse for classname then classversion */
+
+ELEMENT namethenver
+    GOSUB classname NEXT
+ELEMENT *
+    GOSUB classversion SUCCESS
+
+! /* subparse for classversion then classname */
+
+ELEMENT verthenname
+    GOSUB classversion NEXT
+ELEMENT *
+    GOSUB classname SUCCESS
+
+! /* subparse for dns, etc version, major.minor */
+
+ELEMENT majorminor
+    DECIMAL MIN 0 MAX 255 TERM/SKIP . CALL savemajorminor:0 NEXT
+ELEMENT *
+    DECIMAL MIN 0 MAX 255             CALL savemajorminor:1 SUCCESS
+
+! /* ------------------------------------ */
+! /* miscellaneous subparsing subroutines */
+! /* ------------------------------------ */
+
+! /* set all attributes */
+
+ELEMENT setallattr
+    FORCE CALL set_attr:ALL_ATTR NEXT
+ELEMENT *
+    FORCE CALL save_attr SUCCESS
+
+! /* process clearinghouse with wildcards */
+
+ELEMENT wildcle
+    WORD clearinghouse MIN 4 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB wildent SUCCESS
+
+! /* process clearinghouse */
+
+ELEMENT tamecle
+    WORD clearinghouse MIN 4 CALL pretend_not_seen NEXT
+ELEMENT *
+    GOSUB tameent SUCCESS
+
+! /* subparse for optional equal sign */
+
+ELEMENT optionalequal
+    WORD = CALL save_relop:RELOP_EQ SUCCESS
+    FORCE  CALL save_relop:RELOP_EQ SUCCESS
+
+! /* subparse to ensure we're at the end of the line */
+
+ELEMENT shouldbeend
+    STRING s GOTO shouldbeend
+    CHAR e SUCCESS
+    FORCE ERROR
+
+! /* Switch to case exact because the attribute names need */
+! /* to be case sensitive                                  */
+
+SWITCH TEST CASE EXACT
+
+! /* subparse for linktarget and its value */
+
+ELEMENT lnktarget
+    WORD CDS_LinkTarget MIN 10 NEXT
+ELEMENT *
+    GOSUB optionalequal NEXT
+ELEMENT *
+    GOSUB nowildfullname CALL savelnktarget SUCCESS
+
+! /* subparse for linktimeout and its value */
+
+ELEMENT lnktimeout
+    WORD CDS_LinkTimeout MIN 10 NEXT
+ELEMENT *
+    GOSUB optionalequal NEXT
+ELEMENT *
+    GOSUB timeoutv CALL savelnktimeout SUCCESS
+
+! /* subparse for classname and its value */
+
+ELEMENT classname
+    WORD CDS_Class MIN 9 NEXT
+ELEMENT *
+    GOSUB optionalequal NEXT
+ELEMENT *
+    GOSUB simplename CALL savecnattr SUCCESS
+
+! /* subparse for classversion and its value */
+
+ELEMENT classversion
+    WORD CDS_ClassVersion MIN 10 NEXT
+ELEMENT *
+    GOSUB optionalequal NEXT
+ELEMENT *
+    GOSUB majorminor CALL savecvattr SUCCESS
+

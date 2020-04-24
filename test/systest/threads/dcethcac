@@ -1,0 +1,149 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dcethcac,v $
+# Revision 1.1.6.2  1996/03/09  20:52:33  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:30:06  marty]
+#
+# Revision 1.1.6.1  1995/12/11  22:49:25  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/29  17:25 UTC  bell_d
+# 	Merge in latest version  bug fixed for platform independence
+# 	[1995/12/11  22:36:42  root]
+# 
+# 	updated from DTM tree
+# 	[1993/09/01  19:09:00  giza]
+# 
+# 	Initial King Kong branch
+# 	[1993/07/09  14:55:10  root]
+# 
+# Revision 1.1.3.3  1993/04/23  13:52:47  eheller
+# 	Merged time looping changes
+# 	[1993/04/23  13:26:44  eheller]
+# 
+# Revision 1.1.3.2  1993/03/31  13:01:10  mgm
+# 	Initial GAMERA branch
+# 
+# Revision 1.1.2.3  1992/11/12  13:31:24  mgm
+# 	Fixed comments
+# 	[1992/11/12  13:30:44  mgm]
+# 
+# Revision 1.1.2.2  1992/11/04  18:32:16  mgm
+# 	Ported to TET on HPUX
+# 	[1992/11/04  18:31:08  mgm]
+# 
+# $EndLog$
+#
+#
+#   FILE_NAME: dcethcac
+#
+#
+#   (C) COPYRIGHT International Business Machines Corp. 1991
+#   All Rights Reserved
+#
+#
+#   FOR_TEST: pthread_CACHING
+#
+#   HISTORY: 
+#                 Claussen/Carpenter   Initial code
+#      10/30/90   Ken Walker           Initial changes for DCE
+#       1/02/91   Ken Walker           "Iteration 0" for workstation setup,
+#                                      minor usability changes
+#       4/29/91   Ken Walker           Added TCSUBDIR and STROOT variables
+#                                      to fit into new directory structure
+#
+#      12/20/91	  Gerald Cantor 	Updated prologs.
+#      11/03/92   Mary MacGregor	Ported to TET on HPUX
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1" 
+ic1="run_test"
+
+# Authenticate the cell
+
+startup ()
+{
+	if [ -z "$NUMBER_OF_THREADS" ]
+	then
+		NUMBER_OF_THREADS=40
+	fi
+	if [ -z "$YIELDS" ]
+	then
+		YIELDS=20
+	fi
+	#D# check to see if RUN_TIME is set, if not default is quarter hour
+	if [ -z "$RUN_TIME" ]
+	then
+	  RUN_TIME=.25
+	fi
+	tet_infoline "Run duration: $RUN_TIME"
+        tet_infoline "Log workstation parameters"
+	tet_infoline "Number of threads:	$NUMBER_OF_THREADS"
+	tet_infoline "Number of yields:	$YIELDS"
+
+}	# end startup ()
+
+
+cleanup ()
+{
+	rm /tmp/dcethcac
+}
+
+run_test ()
+{
+        error=0
+	CURRENT_LOOP=1
+	SECONDS=0
+	SECONDS_TO_EXECUTE=`awk "BEGIN { printf (\"%d\", 3600 * $RUN_TIME); exit; }"`
+	while [ $SECONDS -lt $SECONDS_TO_EXECUTE ]
+	do
+		tet_infoline "Starting iteration $CURRENT_LOOP"
+		./pthreads_CACHING $NUMBER_OF_THREADS $YIELDS > /tmp/dcethcac
+		if [ "$?" -ne "0" ]
+		then
+			error=1
+			tet_infoline "Error: dcethcac failed in iteration $CURRENT_LOOP"
+		fi
+	
+		# Send stdout to tet journal file
+#D# THIS WC doesn't work on AIX, so insert a simple read all the lines here
+#D#		WC=`wc -l /tmp/dcethcac |tr -s " " | cut -f 1 -d " "`
+#D#		i=1
+#D#		while [ $i -le $WC ]
+#D#		do
+#D#			pr_line=`eval "awk 'NR == ${i}' /tmp/dcethcac"`
+#D#			tet_infoline $pr_line
+#D#			i=`expr $i + 1`
+#D#		done
+
+  if [ `wc -l /tmp/dcethcac | awk '{print $1}'` -ne 0 ]
+  then
+    while read x
+    do
+      tet_infoline "$x"
+    done < /tmp/dcethcac
+  fi
+
+		CURRENT_LOOP=`expr $CURRENT_LOOP + 1`
+	done
+	if [ $error -ne 0 ]
+	then
+		tet_infoline "DCETHCAC tests failed"
+		tet_result DCE_ERROR
+	else
+		tet_infoline "DCETHCAC tests passed"
+		tet_result PASS
+	fi
+}
+# tcc will fail if these files don't exist and get sourced
+# so there is no need to check that this happens
+
+. $TET_ROOT/profile.dcest
+. $TET_ROOT/lib/ksh/tcm.ksh

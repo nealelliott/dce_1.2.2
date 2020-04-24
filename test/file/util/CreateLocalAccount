@@ -1,0 +1,192 @@
+#!/bin/sh
+#
+#  @OSF_COPYRIGHT@
+#  COPYRIGHT NOTICE
+#  Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+#  ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+#  src directory for the full copyright text.
+#
+# HISTORY
+# $Log: CreateLocalAccount,v $
+# Revision 1.1.8.1  1996/10/17  18:37:32  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:58:21  damon]
+#
+# Revision 1.1.2.3  1993/01/11  18:38:01  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:23:17  htf]
+# 
+# Revision 1.1.2.2  1992/10/28  18:16:03  jaffe
+# 	Transarc delta: rajesh-ot5367-salvage-recovery-authorization-check-tests 1.8
+# 	  Selected comments:
+# 	    To add authorization check tests for salvage/recovery. This is
+# 	    the initial checkpoint.
+# 	    Just a checkpoint.
+# 	    Another checkpoint.
+# 	    Checkpoint.
+# 	    This delta version has been tested.
+# 	    Changed permissions.
+# 	    Update makefiles.
+# 	    Fixed logical errors in the script pertaining to requiring read/write
+# 	    access to aggregate to perform salvage and/or recovery, handling
+# 	    of error counts generated in the AuthCheckTest.noroot script.
+# 	    Fix a build-time error.
+# 	Transarc delta: rajesh-ot5368-create-local-account-utility 1.2
+# 	  Selected comments:
+# 	    Added utility scripts to delete and create local unix accounts.
+# 	    These utility functions currently work on AIX and OSF/1 systems
+# 	    See above.
+# 	    Removed "osType" parameter for the scripts. Now the script uses
+# 	    uname to determine the system type automatically.
+# 	    See above.
+# 	[1992/10/28  15:06:08  jaffe]
+# 
+# $EndLog$
+#
+###############################################################################
+#    Copyright (C) 1992 Transarc Corporation - All rights reserved            #
+###############################################################################
+
+#  CreateLocalAccount
+#   This script creates a local unix account.
+#   It currently works on AIX and OSF1 systems.
+#
+#  Parameters:
+#   $1                  User's name
+#   [ -group <group> ]  User's group (Default value is "staff") 
+#   [ -setpasswd ]      Set password. (This is done interactively)
+#
+##############################################################################
+
+#
+# Print usage message for this script.
+#
+
+PrintUsage()
+{ 
+    echo "Usage: ${cmdName} <user-name> [-group <group>] [-setpasswd]"
+}
+
+#
+# Validate input for required parameters.
+#  
+# Parameters:
+#   $1      Number of parameters.
+#
+
+ValidateInput() 
+{
+    if [ $1 -lt 1 ]
+    then     
+        echo "${cmdName}: insufficient arguments." 
+        PrintUsage
+        exit 1
+   fi
+}
+
+#
+# Setup local password for user.
+#
+
+SetupLocalPasswd()
+{
+    echo "You must now set the Unix password for ${user}:"
+    passwd ${user}
+}
+
+#################################################################################
+
+hostName=`hostname`
+cmdName=`basename $0`
+
+# Input validation
+ValidateInput $#
+
+# Fetch login-id 
+user=$1
+shift
+
+# Determine operating system type
+osType=`uname`
+
+# Determine if local account for user already exists
+grep "^${user}:" /etc/passwd >/dev/null
+if [ $? -eq 0 ]
+then
+    echo "${cmdName}: local account for ${user} already exists."
+    exit 1
+fi
+
+# Initialise default option variable values.
+group=staff
+setPasswd=0
+
+# Parse the command line for optional arguments.
+while [ "$1" != "" ]
+do 
+    case $1 in 
+        -group) 
+                shift
+                if [ "$1" = "" ]
+                then    
+                    echo "${cmdName}: option -group requires an argument"
+                    PrintUsage
+                    exit 1
+                fi
+                group=$1
+                shift
+                ;;
+
+        -setpasswd)
+                setPasswd=1
+                shift
+                ;;
+
+        *)      echo "${cmdName}: invalid argument \"$1\"" 
+                PrintUsage
+                exit 1
+                ;;
+    esac
+done
+
+# Create user's local account. Accept default home directory and shell. 
+
+echo "${cmdName}: creating local account for user ${user} ..."
+
+if [ "${osType}" = "AIX" ]
+then
+    # rios specific
+    mkuser pgrp="${group}" "${user}"
+elif [ "${osType}" = "OSF1" ]
+then  
+    # osf1 specific
+    sed -e '/^#/d' -e 's/#.*$//' << ==ADDUSEROSF1== | adduser
+${user}             # username
+${user}             # default gecos info
+${group}            # primary group
+                    # no secondary groups
+                    # default home directory
+==ADDUSEROSF1==
+else
+    echo "${cmdName}: System ${osType} is unsupported currently."
+    echo "The supported systems are AIX and OSF/1."
+    exit 1
+fi
+
+grep "^${user}:" /etc/passwd >/dev/null
+if [ $? -ne 0 ]
+then 
+   echo "${cmdName}: failed to create local account as per /etc/passwd."
+   exit 1
+fi
+
+id=`grep "^${user}:" /etc/passwd | awk '-F:' '{print $3}'`
+
+# Setup local passwd if option -setpasswd was specified.
+if [ "${setPasswd}" -eq 1 ]
+then
+    SetupLocalPasswd
+fi
+
+echo " Creation of local account for user ${user} is complete. User id is ${id}."
+

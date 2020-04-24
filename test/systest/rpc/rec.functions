@@ -1,0 +1,339 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: rec.functions,v $
+# Revision 1.1.6.2  1996/03/09  20:51:18  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:07  marty]
+#
+# Revision 1.1.6.1  1995/12/11  22:01:04  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  14:08 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/03/29  18:41 UTC  truitt
+# 
+# 	HP revision /main/truitt_junk/1  1994/03/29  18:37 UTC  truitt
+# 	Update test to latest tet version
+# 	[1995/12/11  21:43:08  root]
+# 
+# 	Initial King Kong branch
+# 	[1993/07/09  12:54:24  root]
+# 
+# Revision 1.1.3.3  1993/04/23  14:42:39  giza
+# 	add OS portability changes
+# 	[1993/04/22  23:51:20  giza]
+# 
+# Revision 1.1.3.2  1993/03/31  12:50:18  mgm
+# 	Initial GAMERA branch
+# 
+# Revision 1.1.2.10  1992/12/09  15:10:52  mgm
+# 	Added code to break out of infinite loops to avoid hangs.
+# 	[1992/12/09  15:10:29  mgm]
+# 
+# Revision 1.1.2.9  1992/12/03  20:52:56  mgm
+# 	Put in timer to break out of infinite loops if, for some reason,
+# 	the client didn't start.
+# 	[1992/12/03  20:52:13  mgm]
+# 
+# Revision 1.1.2.8  1992/11/24  22:12:44  mgm
+# 	Fixed check_results to search only filename.* and not filename*
+# 	[1992/11/24  22:09:15  mgm]
+# 
+# Revision 1.1.2.7  1992/11/23  18:44:27  mgm
+# 	Added failed, usage, Usage to grep in check results
+# 	[1992/11/23  18:43:45  mgm]
+# 
+# Revision 1.1.2.6  1992/11/20  21:08:29  mgm
+# 	Removed -w from ropen
+# 	[1992/11/20  21:08:09  mgm]
+# 
+# Revision 1.1.2.5  1992/11/20  12:28:27  mgm
+# 	Fixed cleanup
+# 	[1992/11/20  12:26:20  mgm]
+# 
+# Revision 1.1.2.4  1992/11/20  11:56:52  mgm
+# 	Added rcp to copy client_file to remote host
+# 	[1992/11/20  11:56:20  mgm]
+# 
+# Revision 1.1.2.3  1992/11/09  13:57:01  mgm
+# 	Added dce_login as cell_admin to do initial resgistration of
+# 	server to naming space.
+# 	[1992/11/09  13:56:28  mgm]
+# 
+# Revision 1.1.2.2  1992/11/03  22:28:59  mgm
+# 	functions for TET version of dcerprec
+# 	[1992/11/03  22:26:48  mgm]
+# 
+# $EndLog$
+#
+# Functions for dcerprec
+# 11/03/92	Rick OBrien	Initial design
+debug=0
+(( $debug )) && set -x
+
+###########################################################################
+#
+# delete test purpose if we bail
+#
+###########################################################################
+del_test_purp ()
+{
+    (( $debug )) && set -x
+    for test_purp in $*
+    do
+        tet_infoline "Info: $0: Deleting $test_purp due to fatal error."
+	tet_delete $test_purp "FAILURE: Startup...$test_purp() deleted."
+    done
+}   # end del_test_purp ()
+
+
+###########################################################################
+#
+# ping host to see if it is really alive
+#
+###########################################################################
+ping_hosts()
+{	
+    (( $debug )) && set -x
+    export OSTYPE=`uname`
+    if [ "$OSTYPE" = "OSF1" ]
+    then
+        PINGCOMMAND='eval /etc/ping -p 1 -c 1 $RHOST'
+    else
+        PINGCOMMAND='eval /etc/ping $RHOST 8 1'
+    fi
+	
+    CELL_NAME=` /usr/bin/getcellname | awk -F/ '{ print $3}'`
+    exec 8< $TET_ROOT/systest/client_names_$CELL_NAME
+    while read -u8 RHOST
+    do
+        $PINGCOMMAND > /dev/null
+        if [ "$?" != 0 ]
+        then
+            tet_infoline "Error: $0: Host $RHOST not responding."
+        else
+            HOSTLIST=$HOSTLIST"$RHOST "
+            tet_infoline "Info: $0: $RHOST is responding."
+        fi
+    done
+    exec 8<&-
+
+    if [ -z "$HOSTLIST" ]
+    then
+        tet_infoline "Error: $0: No hosts responded."
+        del_test_purp $testlist
+        return
+    else
+        export HOSTLIST
+    fi
+}
+
+
+###########################################################################
+#
+# Start server process in backround, saving its process id number.  Verify
+# that the process started correctly
+#
+###########################################################################
+start_server()
+{
+    (( $debug )) && set -x
+    integer j=0 timeout=240 SERVER_PID=0 status=0
+    # SERVER_PARMS contains all the parameters passed in by the user
+    # Must be cell_admin to do initial registration of server to naming space
+    export KRB5CCNAME=`dce_login_noexec cell_admin -dce-`
+    FILE=$(print ${KRB5CCNAME} |awk '{split ($1,word,":"); print word[2]}')
+    ./$SERVER_FILE $SERVER_PARMS &
+    SERVER_PID=$!
+
+    until ( ps -e |grep $SERVER_FILE > /dev/null )
+    do
+        sleep 1
+        j=j+1
+        (( $j == $timeout )) && {       # Give it 120 seconds to start.
+            tet_infoline "Error: $0: Could not start $SERVER_FILE."
+            del_test_purp $testlist
+            status=1
+	    break
+        }
+    done
+
+    (( ! $status )) && {
+        tet_infoline "Info: $0: Waiting for $ENTRY_NAME to be exported."
+        sleep 10
+        j=0
+        until [ -f /tmp/server.$SERVER_PID ]
+        do
+            sleep 1
+            j=j+1
+            (( $j == $timeout )) && {        # Give it 120 seconds to export.
+                tet_infoline "Error: $0: Could not export $ENTRY_NAME."
+                del_test_purp $testlist
+                status=1
+		break
+            }
+        done
+    }
+    rm $FILE
+    (( ! $status )) &&
+        tet_infoline "Info: $0: Server process started, pid=$SERVER_PID."
+    return $status
+}
+
+###########################################################################
+#
+# Start a client process on each host passed by workstation driver.
+#
+###########################################################################
+start_clients()
+{
+    (( $debug )) && set -x
+    integer i=0 status=0
+    exec 8<$TET_ROOT/systest/client_names_$CELL_NAME
+    while read -u8 RHOST
+    do
+	rcp ./$CLIENT_FILE $RHOST:/tmp
+        status=$status+$?
+	rcp ./$CLIENT_WRAPPER $RHOST:/tmp
+        status=$status+$?
+        rcp $STTMPDIR/$BIG_FILE $RHOST:$STTMPDIR
+        status=$status+$?
+        if (( ! $status ))
+        then
+	    i=0
+	    tet_infoline "Info: $0: Starting $PROCESSES client(s) on $RHOST."
+	    while (( $i < $PROCESSES ))
+	    do
+                $RSHELL $RHOST -n "/bin/ksh -c ' \
+                export BIG_FILE=$BIG_FILE; \
+                export CLT_PRINC_NAME=$CLT_PRINC_NAME; \
+                export CLT_PRINC_PASS=$CLT_PRINC_PASS; \
+                export CLIENT_FILE=$CLIENT_FILE; \
+                export PNUM=$i; \
+                export SERVER=$(hostname); \
+                export STTMPDIR=$STTMPDIR; \
+                export TCDIR=$TCDIR; \
+                $TCDIR/$CLIENT_WRAPPER $CLIENT_PARMS;'" &
+                if (( ! $? ))
+                then
+                    tet_infoline "Info: $0: Started client process number $i on $RHOST."
+                else
+                    tet_infoline "Error: $0: Client process number $i did not start on $RHOST."
+                    tet_infoline "Warning: $0: Continuing with test, expect errors on $RHOST."
+                fi
+                i=i+1
+            done
+        else
+            tet_infoline "Error: $0: Unable to rcp client files to $RHOST."
+            del_test_purp $testlist
+        fi
+    done
+    exec 8<&-
+    return $status
+}
+
+###########################################################################
+#
+# Wait for the client processes to complete.
+#
+###########################################################################
+wait_for_clients()
+{
+    (( $debug )) && set -x
+    integer i=0 j=0 status=0 timeout=0
+    tet_infoline "Info: $0: Waiting for client processes to finish"
+    # Make sure all the temp result files have been created.
+    exec 8<$TET_ROOT/systest/client_names_$CELL_NAME
+    while read -u8 RHOST
+    do
+	i=0
+	while (( $i < $PROCESSES ))
+	do
+	    j=0
+	    timeout=600		# Give it 10 minutes to be on the safe side
+	    while (( $j < $timeout ))
+	    do
+		if [ -f $STTMPDIR/$RHOST/$CLIENT_FILE.$i ]
+		then
+		    break
+		else
+		    j=j+1 
+		    sleep 1
+		fi
+	    done
+	    i=i+1
+	done
+	if (( $j == $timeout ))
+	then
+	    tet_infoline "Error: $0: Timed out waiting for client $RHOST log file."
+	    status=1
+	    break
+	else
+	    tet_infoline "Info: $0: Checking for match in client $RHOST log file."
+	    for LOG_FILE in $STTMPDIR/$RHOST/$CLIENT_FILE.*
+	    do
+		grep "MATCH" $LOG_FILE >/dev/null
+                (( $? )) && {
+		    tet_infoline "Error: $0: No match was found in $LOG_FILE."
+		    status=1
+		    break
+                }
+	    done
+	fi
+    done
+
+    exec 8<&-
+    tet_infoline "Info: $0: Finished checking for match in client log file."
+
+    return $status
+}
+
+###########################################################################
+#
+# Check the testcase logs for any errors or severe errors.
+#
+###########################################################################
+check_results()
+{
+    (( $debug )) && set -x
+    integer status=0
+
+    status=0
+    exec 8<$TET_ROOT/systest/client_names_$CELL_NAME
+    while read -u8 RHOST
+    do
+        tet_infoline "Checking results in $STTMPDIR/$RHOST/$CLIENT_FILE.*"
+	if [ -f $STTMPDIR/$RHOST/$CLIENT_FILE.* ]
+       	then
+	    grep -e error -e severe -e gethostbyname -e usage -e Usage -e ksh: $STTMPDIR/$RHOST/$CLIENT_FILE.* 
+	    (( ! $? )) && {
+		date >> $STTMPDIR/dcerprec.$RHOST.ERRORS
+		print "Client Error" >> $STTMPDIR/dcerprec.$RHOST.ERRORS
+		cat $STTMPDIR/$RHOST/$CLIENT_FILE.* >> $STTMPDIR/dcerprec.$RHOST.ERRORS
+		status=1
+	    }
+	else
+	    tet_infoline "Error: $0: No client file to grep"
+	    status=1
+	fi
+    done
+    exec 8<&-
+
+    [[ -f $STTMPDIR/server.* ]] && {
+	grep -e error -e severe -e gethostbyname -e usage -e Usage -e ksh: $STTMPDIR/server.* 
+        (( ! $? )) && {
+            date >> $STTMPDIR/dcerprec.$RHOST.ERRORS
+	    print "Server Error" >> $STTMPDIR/dcerprec.$RHOST.ERRORS
+            cat $STTMPDIR/server.* >> $STTMPDIR/dcerprec.$RHOST.ERRORS
+            status=1
+        }
+    }
+    return $status
+}

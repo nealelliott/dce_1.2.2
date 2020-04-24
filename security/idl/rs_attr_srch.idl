@@ -1,0 +1,254 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rs_attr_srch.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:28:25  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:53  marty]
+ *
+ * Revision 1.1.4.1  1995/12/08  17:34:10  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:55:25  root]
+ * 
+ * Revision 1.1.2.2  1994/06/17  18:42:28  devsrc
+ * 	cr10872 - fix copyright
+ * 	[1994/06/17  18:09:06  devsrc]
+ * 
+ * Revision 1.1.2.1  1994/03/02  17:55:21  hanfei
+ * 	Initial ERA drop
+ * 	[1994/02/18  19:19:50  hanfei]
+ * 
+ * $EndLog$
+ */
+/*
+** Copyright (c) Hewlett-Packard Company 1994
+** Unpublished work. All Rights Reserved.
+**
+**      Registry Server Attributes Search Interface
+**            security/idl/rs_attr_srch.idl
+**
+*/
+[
+    uuid(b34115d0-d3ac-11cb-a2ae-08001e039d7d)
+]
+interface  rs_attr_srch {
+
+    import "dce/rs_attr_base.idl";
+    import "dce/rsbase.idl";
+
+    /* 
+     * PRIVATE DATATYPES for the Attribute Search Interface
+     */
+
+    /* r s _ a t t r _ s r c h _ c u r s o r _ t;
+     *
+     * Attribute search cursor. The cursor must minimally represent
+     * the list of all objects managed by this server that
+     * possess the search attributes specified in the
+     * rs_attr_srch_cursor_init operation.  It may additionally
+     * represent a given object within this list as well as
+     * attribute instance(s) possessed by that object.
+     */
+    typedef [context_handle] void * rs_attr_srch_cursor_t;
+
+    /*
+     * ATTRIBUTE SEARCH OPERATIONS 
+     */
+
+    /* r s _ a t t r _ s r c h _ c u r s o r _ i n i t
+     *
+     * Initialize a search cursor with an attribute search set.
+     * The output cursor indicates the beginning of the
+     * list of components possessing at least those attributes
+     * specified in the search_attrs[] set.
+     * If num_search_attrs is zero, the cursor indicates
+     * the beginning of the list of all components managed
+     * by this server.  
+     * If a search attribute contains an attribute_id with
+     * no attribute_value, the component must carry an 
+     * attribute with that id, regardless of value.  
+     * If a search attribute contains both an id and value,
+     * the component must carry that attribute with an
+     * identical value.
+     *
+     * Attribute Sets:
+     * If an attribute set is included in search_attrs, the 
+     * search criteria will require existence of an instance of
+     * that attribute set, NOT existence of the members of that set.
+     *
+     * Triggers:
+     * Query triggers are not supported during evaluation 
+     * of the search_attrs attributes.
+     * An attribute type that has a query trigger 
+     * associated with it may be used in the search_attrs array,
+     * but if this search attribute also carries a value, a match
+     * will not be found. The match will fail because the query
+     * trigger will not be executed with the result that a value will not
+     * be retrieved for comparison against the value in the search
+     * attribute.
+     * 
+     *    In Parameters:
+     *        num_search_attrs - specifies the number of attribute
+     *            types or type-value pairs provided in search_attrs.
+     *        search_attrs - contains the attribute types or type-value
+     *            pairs against which a match must be made in order
+     *            to return a component in a subsequent rs_attr_srch
+     *            operation.
+     *
+     *    Out Parameters:
+     *        cursor - cursor initialized to the first in the 
+     *            list of components managed by this server that
+     *            match on all search attributes.
+     */
+    void rs_attr_srch_cursor_init (
+        [in]        handle_t                    h,
+        [in]        unsigned32                  num_search_attrs,
+        [in, size_is(num_search_attrs)]
+                    sec_attr_t                  search_attrs[],
+        [out]       rs_attr_srch_cursor_t       *cursor,
+        [out]       rs_cache_data_t             *cache_info,
+        [out]       error_status_t              *st_p
+    );
+
+
+    /* r s _ a t t r _ s r c h _ c u r s o r _ r e l e a s e 
+     *
+     * Release any state associated with an initialized search cursor.
+     *
+     *    In/Out Parameters:
+     *        cursor -        in: initialized cursor;
+     *                out: uninitialized cursor with resources released
+     */
+    void rs_attr_srch_cursor_release (
+        [in]        handle_t                    h,
+        [in, out]   rs_attr_srch_cursor_t       *cursor,
+        [out]       rs_cache_data_t             *cache_info,
+        [out]       error_status_t              *st_p
+    );
+
+
+    /* r s _ a t t r _ s r c h _ n a m e s
+     *
+     * Return the names of components possessing at least
+     * those attributes specified in the search_attr[] set
+     * provided to the rs_attr_srch_cursor_init routine.
+     * Return the total number of attributes carried
+     * by each component in total_component_attr[].
+     *
+     *    In Parameters:
+     *        num_names_avail - specifies the size of both the
+     *            component_names and total_component_attrs arrays.
+     *
+     *    In/Out Parameters:
+     *        cursor - in: initialized cursor; out: cursor advanced
+     *            past components returned in this call.
+     *
+     *    Out Parameters:
+     *        num_names_returned - specifies the number of component
+     *            names returned in the component_names array which
+     *            is the same as the number of attribute totals
+     *            returned in total_component_attrs.
+     *        component_names - contains the names of the components
+     *            possessing attributes that match the search
+     *            attributes provided in rs_attr_srch_cursor_init.
+     *        total_component_attrs - contains, for each component
+     *            named in component_names, the total number of
+     *            attributes attached to that component.
+     */
+    void rs_attr_srch_names (
+        [in]        handle_t                    h,
+        [in, out]   rs_attr_srch_cursor_t       *cursor,
+        [in]        unsigned32                  num_names_avail,
+        [out]       unsigned32                  *num_names_returned,
+        [out, size_is(num_names_avail), length_is(*num_names_returned)]
+                    sec_attr_component_name_t   component_names[],
+        [out, size_is(num_names_avail), length_is(*num_names_returned)]
+                    unsigned32                  total_component_attrs[],
+        [out]       rs_cache_data_t             *cache_info,
+        [out]       error_status_t              *st_p
+    );
+
+
+    /* r s _ a t t r _ s r c h _ n a m e s _ a t t r s
+     *
+     * Return the names of components possessing at least
+     * those attributes specified in the search_attr[] set
+     * provided to the rs_attr_srch_cursor_init routine
+     * for the input cursor.
+     * For each component, return in attr[] those attributes
+     * identified by uuid in desired_attr[].
+     * The component_attr_num[] array contains, for each 
+     * component, the number of attributes returned in attr[].
+     *
+     * If num_desired_attr is zero, return all the 
+     * attributes carried by each component.
+     *
+     * Attribute Sets:
+     * If the type UUID of an attribute set is provided in 
+     * desired_attrs, the members of that set (as opposed to the
+     * attribute set instance) will be returned.
+     *
+     * Triggers:
+     * Warning: If a requested attribute type in desired_attrs
+     * is associated with a query trigger, the trigger will
+     * be called with no input attribute information
+     *
+     *    In Parameters:
+     *        num_desired_attrs - specifies the size of desired_attrs.
+     *        desired_attrs - contains the type UUIDs of the attributes
+     *            to be returned for each component.
+     *        num_names_avail - specifies the size of both the
+     *            component_names and component_attr_num arrays.
+     *        num_attrs_avail - specifies the size of the attrs array.
+     *
+     *    In/Out Parameters:
+     *        cursor - in: initialized cursor; out: cursor advanced
+     *            past components/attributes returned in this call.
+     *
+     *    Out Parameters:
+     *        num_names_returned - specifies the number of component
+     *            names returned in the component_names array which
+     *            is the same as the size of the component_attr_num
+     *            array.
+     *        component_names - contains the names of the components
+     *            possessing attributes that match the search
+     *            attributes provided in rs_attr_srch_cursor_init.
+     *        component_attr_num - contains, for each component
+     *            named in component_names, the number of
+     *            attributes attached to that component that match
+     *            the desired_attrs types and that appear in the
+     *            attrs array.
+     *        num_attrs_returned - specifies the number of attributes
+     *            returned in the attrs array.
+     *        attrs - contains, for each component named in
+     *            component_names, some attributes (the number of
+     *            which is specified in the corresponding element
+     *            of component_attr_num) that are of the type(s)
+     *            requested in desired_attrs.
+     */
+    void rs_attr_srch_names_attrs (
+        [in]        handle_t                    h,
+        [in, out]   rs_attr_srch_cursor_t       *cursor,
+        [in]        unsigned32                  num_desired_attrs,
+        [in, size_is(num_desired_attrs)]
+                    uuid_t                      desired_attrs[],
+        [in]        unsigned32                  num_names_avail,
+        [in]        unsigned32                  num_attrs_avail,
+        [out]       unsigned32                  *num_names_returned,
+        [out, size_is(num_names_avail), length_is(*num_names_returned)]
+                    sec_attr_component_name_t   component_names[],
+        [out, size_is(num_names_avail), length_is(*num_names_returned)]
+                    unsigned32                  component_attr_num[],
+        [out]       unsigned32                  *num_attrs_returned,
+        [out, size_is(num_attrs_avail), length_is(*num_attrs_returned)]
+                    sec_attr_t                  attrs[],
+        [out]       rs_cache_data_t             *cache_info,
+        [out]       error_status_t              *st_p
+    );
+}

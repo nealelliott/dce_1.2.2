@@ -1,0 +1,76 @@
+#!/bin/sh
+
+# CHANGEME
+DEFAULT_AGGREGATE=epi0
+
+echo fset test running
+date
+echo expect about 26 kbytes of log info
+echo the fset test takes about 12 minutes
+
+echo remove old logs
+\rm -f *log
+
+# what's this?
+system=`uname`
+echo system $system
+
+echo "Using default aggregate $DEFAULT_AGGREGATE. May overwrite!"
+echo "If you don't like that...STOPMEQUICK!"
+sleep 60
+if test ${system} = "SunOS"
+then
+	FSET_DEVICE=/dev/dsk/$DEFAULT_AGGREGATE
+else
+	# AIX
+	FSET_DEVICE=/dev/$DEFAULT_AGGREGATE
+fi
+export FSET_DEVICE
+echo device $FSET_DEVICE
+
+FSET_AGGR_ID=`grep $FSET_DEVICE /opt/dcelocal/var/dfs/dfstab \
+	|awk '{print $4}'`
+AGGR_NAME=`grep $FSET_DEVICE /opt/dcelocal/var/dfs/dfstab \
+	|awk '{print $2}'`
+echo aggregate id $FSET_AGGR_ID
+export FSET_AGGR_ID
+echo aggregate name $AGGR_NAME
+export AGGR_NAME
+
+echo verify existence of aggregate $DEFAULT_AGGREGATE
+dfsexport -all > /dev/null 2>&1
+hostname=`hostname`
+string=`fts aggrinfo $hostname | grep $DEFAULT_AGGREGATE`
+if test -n $string
+then
+	echo aggregate $DEFAULT_AGGREGATE exists
+else
+	echo ERROR no aggregate called $DEFAULT_AGGREGATE
+	echo please create aggregate $DEFAULT_AGGREGATE and
+	echo try again
+	return 1
+fi
+echo detach $DEFAULT_AGGREGATE for the test
+dfsexport $DEFAULT_AGGREGATE -detach > /dev/null 2>&1
+
+echo make sure mnt and mnt2 dirs exist
+mkdir /mnt > /dev/null 2>&1
+mkdir /mnt2 > /dev/null 2>&1
+echo run tests - takes about 12 minutes
+./fset_test -I scripts/all_tests.itl > fset.log 2>&1
+err=$?
+if test $err -eq 0
+then
+	echo "fset SUCCEEDED"
+else
+	echo "fset FAILED"
+fi
+
+echo put $DEFAULT_AGGREGATE back in service
+dfsexport -all > /dev/null 2>&1
+
+echo move the logs
+cp *log ../logs
+echo fset test done
+date
+exit $err

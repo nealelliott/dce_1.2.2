@@ -1,0 +1,396 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rs_attr_schema.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:28:24  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:51  marty]
+ *
+ * Revision 1.1.4.1  1995/12/08  17:34:03  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:55:24  root]
+ * 
+ * Revision 1.1.2.4  1994/08/04  16:12:57  mdf
+ * 	Hewlett Packard Security Code Drop
+ * 	[1994/07/26  19:09:50  mdf]
+ * 
+ * Revision 1.1.2.3  1994/06/17  18:42:27  devsrc
+ * 	cr10872 - fix copyright
+ * 	[1994/06/17  18:09:05  devsrc]
+ * 
+ * Revision 1.1.2.2  1994/05/11  19:12:16  ahop
+ * 	hp_sec_to_osf_2 drop
+ * 	[1994/04/29  21:07:27  ahop]
+ * 
+ * $EndLog$
+ */
+/*
+** Copyright (c) Hewlett-Packard Company 1993, 1994
+** Unpublished work. All Rights Reserved.
+**
+**     Registry Server Attributes Schema Manipulation Interface
+**            security/idl/rs_attr_schema.idl
+**
+*/
+[
+    uuid(b47c9460-567f-11cb-8c09-08001e04de8c)
+]
+interface rs_attr_schema {
+
+    import "dce/rsbase.idl";
+    import "dce/rs_attr_base.idl";
+
+    /*
+     * Private Datatypes for the schema interface
+     */
+
+    /*
+     * SCHEMA OPERATIONS
+     */
+
+    /* r s _ a t t r _ s c h e m a _ c r e a t e _ e n t r y
+     *
+     * Create a new schema entry.  Presumably you must be 
+     * authorized to add entries to the schema - 
+     * that is handled by the targetserver.
+     *    In Parameters:
+     *        schema_name - identifies the schema object on which
+     *            to perform this operation.
+     *        schema_entry - a schema entry with a value in every
+     *            field except perhaps the optional fields:
+     *            trig_types, trig_bind, and comment.
+     *
+     * Errors:
+     *  Redundant name/uuid
+     *  Unauthorized
+     *  Server read only
+     *  Server unavailable
+     *  Invalid/Unsupported attribute type
+     *  Invalid acl manager type
+     *  Invalid permission set
+     *  Invalid binding info
+     */
+    void rs_attr_schema_create_entry (
+        [in]    handle_t                        h,
+        [in]    sec_attr_component_name_t       schema_name,
+        [in]    sec_attr_schema_entry_t	        *schema_entry,
+        [out]   rs_cache_data_t                 *cache_info,
+        [out]   error_status_t                  *st_p
+    );
+
+    /* r s _ a t t r _ s c h e m a _ d e l e t e _ e n t r y
+     *
+     * Delete a schema entry.  This is a radical operation
+     * that will delete or invalidate any existing 
+     * attributes of this type on nodes dominated by  
+     * the schema.  Access to this operation should be
+     * severely limited.
+     *    In Parameters:
+     *        schema_name - identifies the schema object on which
+     *            to perform this operation.
+     *        attr_id - attribute type uuid of entry to be deleted.
+     *
+     * Errors:
+     *  Unauthorized
+     *  No such entry
+     *  Server read only
+     *  Server unavailable
+     */
+    void rs_attr_schema_delete_entry (
+        [in]    handle_t                        h,
+        [in]    sec_attr_component_name_t       schema_name,
+        [in]    uuid_t                          *attr_id,
+        [out]   rs_cache_data_t                 *cache_info,
+        [out]   error_status_t                  *st_p
+    );
+
+    /* r s _ a t t r _ s c h e m a _ u p d a t e _ e n t r y
+     *
+     *
+     * Update the modifiable fields of a schema entry
+     * identified by the attr_id in the input schema_entry.
+     * See sec_attr_base.idl for the modifiable fields.
+     *
+     * If a field is indicated by its flag in modify_parts, that
+     * field from the input schema entry will completely replace
+     * the current field of the existing schema entry.  All other
+     * fields will remain untouched.  Note that fields which are
+     * arrays of structures (like acl_mgr_set and trig_binding)
+     * will be *completely* replaced by the new input array.
+     * This operation will not simply add one more element to
+     * the existing array.
+     *
+     *    In Parameters:
+     *        schema_name - identifies the schema object on which
+     *            to perform this operation.
+     *        modify_parts - this flag set identifies the fields
+     *            in the input schema_entry that should be updated.
+     *            Fields not indicated by modify_parts will retain
+     *            their current values.
+     *        schema_entry - a schema entry whow fields are null
+     *            except for the fields indicated by modify_parts.
+     *
+     * Errors:
+     *  Redundant name/uuid
+     *  Unauthorized
+     *  No such entry
+     *  Invalid field for update
+     *  Server read only
+     *  Server unavailable
+     *  Invalid binding info
+     */
+    void rs_attr_schema_update_entry (
+        [in]    handle_t                        h,
+        [in]    sec_attr_component_name_t       schema_name,
+        [in]    sec_attr_schema_entry_parts_t   modify_parts,
+        [in]    sec_attr_schema_entry_t         *schema_entry,
+        [out]   rs_cache_data_t                 *cache_info,
+        [out]   error_status_t                  *st_p
+    );
+
+    /* r s _ a t t r _ s c h e m a _ c u r s o r _ i n i t
+     *
+     * Initialize a scan cursor
+     *    In Parameters:
+     *        schema_name - identifies the schema object on which
+     *            to perform this operation.
+     *        
+     *    Out Parameters:
+     *        cur_num_entries - the current total number of entries in 
+     *            the schema at the time of this call.
+     *        cursor - cursor initialized to the first in the
+     *            list of entries in the named schema.
+     *
+     */
+    void rs_attr_schema_cursor_init (
+        [in]    handle_t                        h,
+        [in]    sec_attr_component_name_t       schema_name,
+        [out]   unsigned32                      *cur_num_entries,
+        [out]   rs_attr_cursor_t                *cursor,
+	[out]   rs_cache_data_t                 *cache_info,
+        [out]   error_status_t                  *st_p
+    );
+
+    /* r s _ a t t r _ s c h e m a _ s c a n
+     *
+     * Read num_to_read entries from the named schema - 
+     * useful for a browser.
+     *    In Parameters:
+     *        schema_name - identifies the schema object on which
+     *            to perform this operation.
+     *        num_to_read - specifies the size of the 
+     *            schema_entries array and the max number of
+     *            entries to be returned in this call.
+     *
+     *    In/Out Parameters:
+     *        cursor - in: initialized or uninitialized cursor; 
+     *            out: cursor advanced past entries returned 
+     *                 in this call.
+     *
+     *    Out Parameters:
+     *        num_read - specifies the number of entries 
+     *            returned in schema_entries.
+     *        schema_entries - array containing num_read entries.
+     */
+    void rs_attr_schema_scan (
+        [in]        handle_t                                 h,
+        [in]        sec_attr_component_name_t                schema_name,
+        [in, out]   rs_attr_cursor_t                         *cursor,
+        [in]        unsigned32                               num_to_read,
+        [out]       unsigned32                               *num_read,
+        [out, size_is(num_to_read), length_is(*num_read)]
+                    sec_attr_schema_entry_t                  schema_entries[],
+        [out]       rs_cache_data_t                          *cache_info,
+        [out]       error_status_t                           *st_p
+    );
+
+    /* r s _ a t t r _ s c h e m a _ l o o k u p _ b y _ n a m e
+     *
+     * Read a schema entry by name - useful for an interactive
+     * editor.
+     *    In Parameters:
+     *        schema_name - identifies the schema object on which
+     *            to perform this operation.
+     *        attr_name - attribute name identifying the entry
+     *
+     *    Out Parameters:
+     *        schema_entry - entry identified by attr_name. 
+     *
+     */
+    void rs_attr_schema_lookup_by_name (
+        [in]         handle_t                         h,
+        [in]         sec_attr_component_name_t        schema_name,
+        [in, string] char                             *attr_name,
+        [out]        sec_attr_schema_entry_t          *schema_entry,
+        [out]        rs_cache_data_t                  *cache_info,
+        [out]        error_status_t                   *st_p
+    );
+
+    /* r s _ a t t r _ s c h e m a _ l o o k u p _ b y _ i d
+     *
+     * Read a schema entry by ID.  Useful for 
+     * programmatic access.
+     *    In Parameters:
+     *        schema_name - identifies the schema object on which
+     *            to perform this operation.
+     *        attr_id - attribute type uuid identifying the entry.
+     *
+     *    Out Parameters:
+     *        schema_entry - entry identified by attr_id. 
+     *
+     */
+    void rs_attr_schema_lookup_by_id (
+        [in]        handle_t                            h,
+        [in]        sec_attr_component_name_t           schema_name,
+        [in]        uuid_t                              *attr_id,
+        [out]       sec_attr_schema_entry_t             *schema_entry,
+        [out]       rs_cache_data_t                     *cache_info,
+        [out]       error_status_t                      *st_p
+    );
+
+    /* r s _ a t t r _ s c h e m a _ g e t _ r e f e r r a l
+     *
+     * Obtain a referral to an schema update site.  This
+     * function is used when the current schema site yields a
+     * sec_schema_site_readonly error.  Some replication
+     * managers will require all updates for a given object
+     * to be directed to a given replica.
+     * Clients of the generic schema interface may not know
+     * they are dealing with an object that is replicated in
+     * this way.  This function allows them to recover from
+     * this problem and rebind to the proper update site.
+     *    In Parameters:
+     *        schema_name - identifies the schema object on which
+     *            to perform this operation.
+     *        attr_id - attribute type uuid identifying the entry.
+     *
+     *    Out Parameters:
+     *        towers - tower set of a schema update server.
+     */
+    void rs_attr_schema_get_referral (
+        [in]        handle_t                    h,
+        [in]        sec_attr_component_name_t   schema_name,
+        [in]        uuid_t                      *attr_id,
+        [out]       sec_attr_twr_set_p_t        *towers,
+        [out]       error_status_t              *st_p
+    );
+
+
+    /* r s _ a t t r _ s c h _ g e t _ a c l _ m g r s 
+     *
+     * Retrieve the acl_mgr_types that protect the objects
+     * dominated by the named schema.  The returned acl_mgr_types
+     * are valid for use in the acl_mgr_set field of a schema_entry
+     * for the named schema.
+     *
+     * If num_acl_mgr_types is greater than size_used, this operation
+     * should be called again with a bigger acl_mgr_types buffer.
+     *
+     *	In Parameters:
+     *		schema_name - identifies the schema object on which
+     *			to perform this operation.
+     *		size_avail - size of the acl_mgr_types array
+     *
+     *	Out Parameters:
+     *		size_used - number of acl_mgr_types returned
+     *		num_acl_mgr_types - total number of acl_mgr_types
+     *			supported for this schema.  
+     *		acl_mgr_types - array containing 'size_used' 
+     *			acl_mgr_type UUIDs.
+     *
+     * Errors:
+     *	sec_attr_unauthorized
+     *	sec_attr_svr_unavailable
+     *	sec_attr_no_memory
+     */
+     
+    void rs_attr_schema_get_acl_mgrs (
+	[in]	handle_t			h,
+	[in]	sec_attr_component_name_t	schema_name,
+        [in]	unsigned32			size_avail,
+        [out]	unsigned32			*size_used,
+        [out]	unsigned32			*num_acl_mgr_types,
+        [out, size_is(size_avail), length_is(*size_used)]
+		uuid_t				acl_mgr_types[],
+        [out]   rs_cache_data_t                 *cache_info,
+	[out]	error_status_t			*st_p
+	);
+
+
+    /* r s _ a t t r _ s c h _ a c l m g r _ s t r i n g s
+     *
+     * Retrieve printable representations for each permission bit that the 
+     * input acl_mgr_type will support.  There may be aliases for common
+     * permission combinations - by convention simple entries should
+     * appear at the beginning of the array, and combinations should at the
+     * appear at the end.  When false the tokenize flag indicates that
+     * permission printstrings are unambiguous and therefore printstrings
+     * for various permissions can be concatenated.  When true, however,
+     * this property does not hold and the strings should be tokenized
+     * before input or output. 
+     *
+     * The acl_mgr_info string provides a name and
+     * help info for the manager type as well as the complete set of
+     * supported permission bits. total_num_printstrings is the total
+     * number of acl printstrings supported by this acl manager type - if
+     * it is greater than the size avail, this function should be invoked
+     * again with a buffer of the appropriate size.
+     *
+     * If acl_mgr_type supports more than 32 permission
+     * bits, multiple manager types can be used - one for each 32 bit wide
+     * slice of permissions.  When this is the case the acl_mgr_type_chain
+     * parameter is set to the uuid of the next manager type in the set.  The
+     * final result for the chain returns uuid_nil in the manager_type_chain
+     * parameter.
+     *
+     *	In Parameters:
+     *		schema_name - identifies the schema object on which
+     *			to perform this operation.
+     *		acl_mgr_type - the UUID of the acl_mgr_type for which
+     *			the printstrings are to be returned.
+     *		size_avail - size of the printstrings array
+     *
+     *	Out Parameters:
+     *		acl_mgr_type_chain - if not uuid_nil, identifies the
+     *			next acl_mgr_type UUID in a chain supporting
+     *			acl managers with more than 32 permission bits.
+     *		acl_mgr_info - printstrings containing the name, help info,
+     *			and complete set of supported permission bits
+     *			for this acl_mgr.
+     *		tokenize - if true, permission bit strings should be
+     *			tokenized.
+     *		total_num_permstrings -  the total number of permission 
+     *			printstrings supported by this acl_mgr_type.
+     *		size_used - number of perm printstrings returned
+     *		permstrings - array containing the printstrings for
+     *			each permission supported by this acl_mgr_type.
+     *
+     * Errors:
+     *	sec_attr_unauthorized
+     *	sec_attr_svr_unavailable
+     *	sec_attr_no_memory
+     *
+     */
+     void rs_attr_schema_aclmgr_strings (
+	[in]		handle_t		h,
+	[in]		sec_attr_component_name_t schema_name,
+        [in, ref]	uuid_t			*acl_mgr_type,   
+        [in]		unsigned32		size_avail,
+        [out]		uuid_t			*acl_mgr_type_chain,
+        [out]		sec_acl_printstring_t	*acl_mgr_info,
+        [out, ref]	boolean32		*tokenize,
+        [out]		unsigned32		*total_num_printstrings,
+        [out, ref]	unsigned32		*size_used,
+        [out, size_is(size_avail), length_is(*size_used)]
+			sec_acl_printstring_t	permstrings[],
+        [out]		rs_cache_data_t		*cache_info,
+	[out]		error_status_t		*st_p
+    );
+
+}

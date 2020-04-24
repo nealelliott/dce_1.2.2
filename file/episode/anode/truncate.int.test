@@ -1,0 +1,649 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: truncate.int.test,v $
+# Revision 1.1.12.1  1996/10/02  17:19:36  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:29:06  damon]
+#
+# Revision 1.1.6.2  1994/06/09  13:59:14  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:34:31  annie]
+# 
+# Revision 1.1.6.1  1994/02/04  20:12:16  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:09:45  devsrc]
+# 
+# Revision 1.1.4.1  1994/01/28  20:43:37  annie
+# 	expand OSF copyright
+# 	[1994/01/28  20:42:12  annie]
+# 
+# 	expand OSF copyright
+# 
+# Revision 1.1.2.2  1993/01/28  16:41:36  shl
+# 	Transarc delta: ota-ot5926-AFS-quota 1.7
+# 	  Selected comments:
+# 	    Motivation:
+# 	    This delta augments Episode to maintain two types of size
+# 	    information about filesets and their constituent anodes.  Further,
+# 	    independent limits are omposed for each size measures.  The two
+# 	    measures are called allocated and visible.  The first matches the
+# 	    old semantics and counts fragments actually allocated to the anode
+# 	    or fileset.  The second (new) measure counts fragments visible in an
+# 	    anode or fileset.  The principle difference appears when COW is
+# 	    being used.  A freshly cloned anode will have zero allocated size
+# 	    but visible size which is the same as that for its backing anode.
+# 	    Similarly deleting a large file which was just clones will not
+# 	    reduce the allocated usage of the containing fileset but will return
+# 	    the expected amount of space to the visible usage, even if not
+# 	    blocks were actually freed in the underlying aggregate.
+# 	    Details of the implementation strategy are in:
+# 	    ~ota/doc/episode/FilesetQuota.text.
+# 	    Status:
+# 	    This delta is restricted to Episode only changes.  The corresponding
+# 	    changes in the fileset layers (including ftutil, ftserver, and the
+# 	    fts command, not to mention the doc changes) are in other OTs and
+# 	    deltas.
+# 	    This script tries a long sequence of writes and truncates with randomly
+# 	    selected offsets.  Mixed in are creates of COW files which are also
+# 	    randomly written and truncated.
+# 	    Introduced a bug in recloning an already recloned fragmented fileset.
+# 	    This was exposed by the fts tests.
+# 	    Fix several problems that turned up when running the fts tests.
+# 	    All_tests was failing on multi-block-frag.int.test.  The cause was a
+# 	    confusion of the calling conventions of MoveUnblockedAnodes; it can be
+# 	    called with the backing container BLOCKED, with the visible field not
+# 	    yet updated.
+# 	    A typo augmented by liberal cut-and-paste caused several volume quota
+# 	    updates to be done with a transaction id of zero (and therefore not
+# 	    logged).  This lead to errors after recovery.
+# 	    Found several salvage problems while tracking down another problem.  But
+# 	    since the afflicted code had been modified in this delta, I thought it
+# 	    would be reduce the risk of merge conflicts to make the change as part
+# 	    of this delta.
+# 	    Changing the IsAnodeAllEmpty predicate to use the visible field is a
+# 	    great efficiency win but the salvager gets really unhappy when it tries
+# 	    to read in directories with a zero visible field (i.e. running on
+# 	    -verify on an old aggregate).
+# 	    For now, for upward compatibility, go back to the old scheme.
+# 	[1993/01/27  17:07:30  shl]
+# 
+# $EndLog$
+# /* Copyright (C) 1992 Transarc Corporation - All rights reserved */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/truncate.int.test,v 1.1.12.1 1996/10/02 17:19:36 damon Exp $
+
+# truncate.int -- creates a file and fills it with randomly located bytes.
+#     The leads to very sparse files.  Periodically a COW copy of this
+#     file is created and truncated to another random offset, then
+#     deleted.  This process continues.  There are two sequences, one
+#     with 100 uniformly distributed offsets on the range [0..2^32) and
+#     the second 100 exponentially distributed over the same range (i.e.
+#     the offset is 2^x, with 'x' uniformly distributed on the range
+#     [0..32).)  The third sequence does more truncates and modifies the COW
+#     file as well.
+
+truncate.int 1
+
+# First, try uniformly distributed random numbers.
+#
+open_file deep_and_wide
+write_file  419529749 1
+write_file 2413508915 1
+write_file 2377856298 1
+write_file 3367935298 1
+write_file   32994814 1
+write_file 4151479155 1
+write_file 1362481733 1
+write_file 4244830336 1
+write_file  769186095 1
+write_file 1217973866 1
+create_file cow_daw "" "" deep_and_wide
+truncate_file   29902412
+delete_file
+open_file deep_and_wide
+write_file  150438539 1
+write_file 3054921677 1
+write_file 1897311589 1
+write_file 3748907612 1
+write_file 1965327665 1
+write_file 2286456598 1
+write_file 2718408754 1
+write_file  298647654 1
+write_file 2332130591 1
+write_file 4232073672 1
+create_file cow_daw "" "" deep_and_wide
+truncate_file 2852493277
+delete_file
+open_file deep_and_wide
+write_file 3202255435 1
+write_file  612407632 1
+write_file 1500941938 1
+write_file 1051597084 1
+write_file 1360560600 1
+write_file  159033654 1
+write_file 1602872903 1
+write_file 1477509755 1
+write_file 1951766784 1
+write_file 1500486859 1
+create_file cow_daw "" "" deep_and_wide
+truncate_file 1631184151
+delete_file
+open_file deep_and_wide
+write_file 1829762682 1
+write_file  632471011 1
+write_file 3094488851 1
+write_file  837994870 1
+write_file 2980984049 1
+write_file 3153266158 1
+write_file 1350264890 1
+write_file 3744699184 1
+write_file 1695445273 1
+write_file 1126399968 1
+create_file cow_daw "" "" deep_and_wide
+truncate_file 2425920798
+delete_file
+open_file deep_and_wide
+write_file  714598742 1
+write_file 2540271032 1
+write_file 1339941761 1
+write_file  322843980 1
+write_file 2994880473 1
+write_file 2188951713 1
+write_file 2756631311 1
+write_file 3835026851 1
+write_file 3752820375 1
+write_file   68410787 1
+create_file cow_daw "" "" deep_and_wide
+truncate_file 2844351836
+delete_file
+open_file deep_and_wide
+write_file 3763521406 1
+write_file 3715900058 1
+write_file 1153100295 1
+write_file 3720034577 1
+write_file 1726338772 1
+write_file 3019059685 1
+write_file  944356229 1
+write_file 3760810351 1
+write_file 1526490603 1
+write_file 3917770172 1
+create_file cow_daw "" "" deep_and_wide
+truncate_file 1862535598
+delete_file
+open_file deep_and_wide
+write_file 1960660349 1
+write_file   21504662 1
+write_file 3746445620 1
+write_file  259607956 1
+write_file 2854827913 1
+write_file 1549069224 1
+write_file 1934936659 1
+write_file 3774684883 1
+write_file 1287330980 1
+write_file 4133665252 1
+create_file cow_daw "" "" deep_and_wide
+truncate_file 1140238353
+delete_file
+open_file deep_and_wide
+write_file 3393398062 1
+write_file 2371314650 1
+write_file  628834146 1
+write_file 3565568756 1
+write_file 2147119540 1
+write_file 2347367528 1
+write_file  869932560 1
+write_file 2551707593 1
+write_file 2960486478 1
+write_file  796341595 1
+create_file cow_daw "" "" deep_and_wide
+truncate_file 1003403577
+delete_file
+open_file deep_and_wide
+write_file 2812993769 1
+write_file 2924917721 1
+write_file 2868057544 1
+write_file 2606265167 1
+write_file 3520468716 1
+write_file 2583437721 1
+write_file  746578615 1
+write_file 2985212867 1
+write_file 1754473793 1
+write_file 1635533564 1
+create_file cow_daw "" "" deep_and_wide
+check_device
+truncate_file 3937642535
+delete_file
+open_file deep_and_wide
+write_file  848943382 1
+
+# This sequence is similar to the previous one except that the numbers are
+# formed by 2^random[0..32.0), i.e. they are exponentially distributed.
+#
+open_file log_deep_and_wide
+write_file    64209337 1
+write_file   842300845 1
+write_file     4902045 1
+write_file         772 1
+write_file     2221085 1
+write_file        2554 1
+write_file   986473850 1
+write_file   434252614 1
+write_file     5189975 1
+write_file           2 1
+create_file cow_ldaw "" "" log_deep_and_wide
+truncate_file 2061564181
+delete_file
+open_file log_deep_and_wide
+write_file         845 1
+write_file        6926 1
+write_file      396573 1
+write_file           9 1
+write_file       37359 1
+write_file     2279458 1
+write_file       19158 1
+write_file      283356 1
+write_file           2 1
+write_file          96 1
+create_file cow_ldaw "" "" log_deep_and_wide
+truncate_file 8
+delete_file
+open_file log_deep_and_wide
+write_file    58671393 1
+write_file      262651 1
+write_file       31572 1
+write_file    11241923 1
+write_file   937461708 1
+write_file           2 1
+write_file           2 1
+write_file   995990634 1
+write_file          67 1
+write_file     3360806 1
+create_file cow_ldaw "" "" log_deep_and_wide
+truncate_file 4650
+delete_file
+open_file log_deep_and_wide
+write_file    73032330 1
+write_file        2007 1
+write_file   172371266 1
+write_file        1227 1
+write_file   450144960 1
+write_file   793630870 1
+write_file         121 1
+write_file          55 1
+write_file      149500 1
+write_file      152461 1
+create_file cow_ldaw "" "" log_deep_and_wide
+truncate_file 5
+delete_file
+open_file log_deep_and_wide
+write_file   880124145 1
+write_file          42 1
+write_file      185421 1
+write_file        6321 1
+write_file   307719277 1
+write_file    23292443 1
+write_file           1 1
+write_file   415853007 1
+write_file           2 1
+write_file        3566 1
+create_file cow_ldaw "" "" log_deep_and_wide
+truncate_file 18209306
+delete_file
+open_file log_deep_and_wide
+write_file           2 1
+write_file  1486034791 1
+write_file          71 1
+write_file         105 1
+write_file    12291793 1
+write_file          77 1
+write_file  1259991817 1
+write_file           5 1
+write_file         137 1
+write_file    57265625 1
+create_file cow_ldaw "" "" log_deep_and_wide
+truncate_file 8707522
+delete_file
+open_file log_deep_and_wide
+write_file       19895 1
+write_file          18 1
+write_file   323149212 1
+write_file        2775 1
+write_file  1320272019 1
+write_file           5 1
+write_file     1159684 1
+write_file         500 1
+write_file         173 1
+write_file   811720671 1
+create_file cow_ldaw "" "" log_deep_and_wide
+truncate_file 539683764
+delete_file
+open_file log_deep_and_wide
+write_file          41 1
+write_file   918472274 1
+write_file           2 1
+write_file    13056793 1
+write_file   899357594 1
+write_file   214427181 1
+write_file      391479 1
+write_file           2 1
+write_file      141819 1
+write_file           9 1
+create_file cow_ldaw "" "" log_deep_and_wide
+truncate_file 76801
+delete_file
+open_file log_deep_and_wide
+write_file     1759013 1
+write_file       83064 1
+write_file       56304 1
+write_file        3740 1
+write_file       11814 1
+write_file      911900 1
+write_file          35 1
+write_file        4139 1
+write_file       35097 1
+write_file       15318 1
+create_file cow_ldaw "" "" log_deep_and_wide
+truncate_file 19429
+delete_file
+open_file log_deep_and_wide
+write_file       39261 1
+
+# Continue on the same file with exponentially distributed random numbers, but
+# now try truncates more often and modify COW file as well.
+#
+write_file          90 1
+write_file    16680567 1
+write_file  2895720615 1
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file           5 1
+write_file    27695549 1
+write_file          52 1
+truncate_file     4268182
+write_file    28193188 1
+delete_file
+open_file log_deep_and_wide
+truncate_file   103676552
+write_file    51133581 1
+write_file   876678216 1
+write_file     3729756 1
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file       23328 1
+write_file      393594 1
+write_file      197284 1
+truncate_file  3716387672
+write_file          17 1
+delete_file
+open_file log_deep_and_wide
+truncate_file       59890
+write_file           1 1
+write_file        4180 1
+write_file        1021 1
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file         114 1
+write_file      376081 1
+write_file    40234604 1
+truncate_file   171442740
+write_file     9575409 1
+delete_file
+open_file log_deep_and_wide
+truncate_file  2124070556
+write_file       19232 1
+write_file   262905266 1
+write_file     2452304 1
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file    52059568 1
+write_file     2076008 1
+write_file    11239753 1
+truncate_file          11
+write_file     3450135 1
+delete_file
+open_file log_deep_and_wide
+truncate_file       38574
+write_file         279 1
+write_file       30267 1
+write_file         771 1
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file          12 1
+write_file     3396347 1
+write_file     1149639 1
+truncate_file      326895
+write_file        4481 1
+delete_file
+open_file log_deep_and_wide
+truncate_file           4
+write_file       99626 1
+write_file         365 1
+write_file       99734 1
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file        2926 1
+write_file       34073 1
+write_file         148 1
+truncate_file         366
+write_file      199079 1
+delete_file
+open_file log_deep_and_wide
+truncate_file        9074
+write_file  1419662668 1
+write_file       28425 1
+write_file           1 1
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file     2304307 1
+write_file      423348 1
+write_file           4 1
+truncate_file          74
+write_file      715270 1
+delete_file
+open_file log_deep_and_wide
+truncate_file      117517
+write_file        2246 1
+write_file          27 1
+write_file        9585 1
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file  2677224172 1
+write_file          21 1
+write_file           7 1
+truncate_file          14
+write_file     1452356 1
+delete_file
+open_file log_deep_and_wide
+truncate_file      100451
+write_file        1089 1
+write_file       13948 1
+write_file  2450032241 1
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file   356283337 1
+write_file   644850594 1
+write_file         334 1
+truncate_file     3284535
+write_file           2 1
+delete_file
+open_file log_deep_and_wide
+truncate_file       64515
+write_file  3011422262 1
+write_file        6113 1
+write_file         128 1
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file      414328 1
+write_file    50427441 1
+write_file       16881 1
+truncate_file  2763412700
+write_file     1426995 1
+delete_file
+open_file log_deep_and_wide
+truncate_file        7552
+write_file      106039 1
+write_file        1039 1
+write_file  2059195643 1
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file       27894 1
+write_file   180314324 1
+write_file      119290 1
+truncate_file       41366
+write_file     4764577 1
+delete_file
+open_file log_deep_and_wide
+truncate_file   652144793
+write_file         426 1
+
+open_file log_deep_and_wide
+truncate_file          3
+write_file  374343296    33
+write_file       4523   151
+write_file 3172506439    52
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file     892777   393
+write_file         44  1471
+write_file    1408542    65
+truncate_file     286348
+write_file        719   411
+write_file  501025959  2585
+write_file    1176992  2198
+delete_file
+open_file log_deep_and_wide
+truncate_file      22863
+write_file       4199  1082
+write_file    4664520  5744
+write_file         93  1167
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file         25   164
+write_file  522733007  2368
+write_file      37020    29
+truncate_file     482739
+write_file     545827   146
+write_file        212  1326
+write_file         10    88
+delete_file
+open_file log_deep_and_wide
+truncate_file        350
+write_file 3373152983  2031
+write_file        365    47
+write_file   22116373  1479
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file     487870 17901
+write_file         10   886
+write_file   34639078   314
+truncate_file    9319971
+write_file         60   158
+write_file 1856743386   433
+write_file    1733350    40
+delete_file
+open_file log_deep_and_wide
+truncate_file   35988699
+write_file  221071830   831
+write_file   94137765  6580
+write_file         54   182
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file    5499171    46
+write_file         18   398
+write_file    1586165   173
+truncate_file   55039278
+write_file      54266   859
+write_file      35102    30
+write_file       5833   138
+delete_file
+open_file log_deep_and_wide
+truncate_file     376815
+write_file          2    42
+write_file  167568605    30
+write_file        435   168
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file  556015490  9728
+write_file         94  2839
+write_file          7  3549
+truncate_file       2938
+write_file  774263763    55
+write_file       4367  6379
+write_file        282 20379
+delete_file
+open_file log_deep_and_wide
+truncate_file  162858452
+write_file          2  1181
+write_file      27517  2419
+write_file 1197474532  1221
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file       1435   296
+write_file     144890   158
+write_file        497   476
+truncate_file 2354607970
+write_file         85  9098
+write_file          5   369
+write_file  162782800   194
+delete_file
+open_file log_deep_and_wide
+truncate_file       2617
+write_file  409409757  8638
+write_file     985460    36
+write_file   13422835 20165
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file          2  2199
+write_file        653   232
+write_file  256791639  2710
+truncate_file          1
+write_file        149    99
+write_file   29430346  1592
+write_file          3    69
+delete_file
+open_file log_deep_and_wide
+truncate_file     496309
+write_file       2006  7470
+write_file 1773880120    40
+write_file      42350   335
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file   35519064  4872
+write_file      92322    74
+write_file        968    45
+truncate_file    2015962
+write_file 2528693199   606
+write_file   67661583    29
+write_file   15150465   101
+delete_file
+open_file log_deep_and_wide
+truncate_file          4
+write_file        460   302
+write_file     101725   159
+write_file        411  2516
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file     575088  1917
+write_file        224  4053
+write_file  831964308    36
+truncate_file    4546087
+write_file         52  3978
+write_file         10   633
+write_file  545035913 11484
+delete_file
+open_file log_deep_and_wide
+truncate_file   12994504
+write_file 1312903266    81
+write_file        429   752
+write_file      17121  1388
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file       5637    60
+write_file   95203715  2602
+write_file         12  1158
+truncate_file  105223736
+write_file         22  1582
+write_file        564  4839
+write_file  234144008   277
+delete_file
+open_file log_deep_and_wide
+
+open_file log_deep_and_wide
+truncate_file     179588
+write_file     247905    44
+write_file       1488  7343
+write_file    1640165 18467
+create_file cow_ldaw "" "" log_deep_and_wide
+write_file  524408210   187
+write_file        128   375
+write_file        481  5390
+truncate_file  143602294
+write_file 2325663748  5290
+write_file    8220211  2340
+delete_file
+open_file log_deep_and_wide
+
+end

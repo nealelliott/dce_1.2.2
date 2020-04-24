@@ -1,0 +1,226 @@
+echo This test checks addition of text to the database
+
+
+echo connect to the bakserver
+
+bakServerConnect init hand
+
+set hightime int 360
+set id int  200
+set lock int 0
+set tlock int 0
+set BUDB_TEXT_COMPLETE int 1
+set numvertest 100
+
+set maxsize 1022
+
+
+
+bakFreeAllLocks $hand $id
+
+
+
+Loop texttype 0 1 2
+
+set ilock local int 0
+
+set str local "Kandor"
+set len local #$str
+set charlist local fs_bakCharList $len $str
+
+set offset local int 0 
+
+set num local 0
+set numlen local 0
+
+echo Testing for text type $texttype
+
+echo Test adding of text
+
+bakGetLock $hand  $id  $texttype  $hightime  ilock
+
+Loop i 1 1 $numvertest
+
+* First send the string
+
+bakSaveText $hand $ilock $texttype  $offset 0 $charlist
+
+set offset ($offset + $len)
+
+* Then send a number 
+
+set numstr local string $num
+set numlen int #$numstr
+set chrlist local fs_bakCharList $numlen $numstr
+
+bakSaveText $hand $ilock $texttype  $offset 0 $chrlist
+
+set num ($num + 1)
+
+set offset ($offset + $numlen)
+endLoop
+
+* Now Finish it off 
+
+bakSaveText $hand $ilock $texttype  $offset $BUDB_TEXT_COMPLETE $charlist
+
+set offset 0 
+set nextoffset local 0 
+set saveoffset local 0
+
+* Free Lock
+
+bakFreeLock $hand $ilock
+
+echo Finished Writing text
+
+echo Retrieve text and compare against saved text
+
+* Now Grab Lock Again
+
+bakGetLock $hand  $id  $texttype  $hightime  ilock
+
+set str local "Kandor"
+set len local #$str
+set curoffset local 0
+set num  0
+
+Loop i 1 1 $numvertest
+
+* First get the string
+
+bakGetText $hand $ilock $texttype $len $curoffset nextoffset charlist
+
+if ($charlist.length != $len) {
+	echo "Test Failed : cannot get back written text : length wrong"
+	}
+
+if ($charlist.val != $str) {
+	echo "Test Failed : cannot get back written text : value wrong"
+	} 
+
+* increment current 
+set curoffset $nextoffset
+
+* Store away for final random test
+
+if ($num == ($numvertest / 2)) {
+	set saveoffset $nextoffset
+	}
+
+* Then get a number 
+
+set numstr local string $num
+set numlen int #$numstr
+
+bakGetText $hand $ilock $texttype $numlen $curoffset nextoffset charlist
+
+if ($charlist.length != $numlen) {
+	echo "Test Failed : cannot get back written text"
+	}
+
+if ($charlist.val != $numstr) {
+	echo Test Failed : cannot get back written text
+	} 
+
+* increment current offset
+set curoffset $nextoffset
+
+set num ($num + 1)
+endLoop
+
+
+echo  Now get the last block of text, also try a large size
+bakGetText $hand $ilock $texttype $maxsize $curoffset nextoffset charlist
+
+if ($charlist.length != $len) {
+	echo "Test Failed : cannot get back written text"
+	}
+
+if ($charlist.val != $str) {
+	echo "Test Failed : cannot get back written text"
+	}
+
+
+
+* Free Lock
+
+
+bakFreeLock $hand $ilock
+
+echo Retrieval Succeeded
+
+* Now Grab Lock Again
+* This is required because time limits on the lock in the bakserver may expire
+*
+
+bakGetLock $hand  $id  $texttype  $hightime  ilock
+
+echo Verify that large access of text data succeeds
+
+
+bakGetText $hand $ilock $texttype $maxsize 0 nextoffset charlist
+
+
+echo Try accessing zero length data 
+
+set charlist.len 0 
+
+bakGetText $hand $ilock $texttype 0  0 nextoffset charlist
+
+	if ($charlist.len != 0){
+	echo Test failed when accesing zero length data
+	} else {
+	echo Passed
+	}
+
+echo Try accessing huge offset
+
+set charlist.len 0 
+set nextoffset 0 
+
+verifyStatus false
+bakGetText $hand $ilock $texttype 10  100000  nextoffset charlist
+verifyStatus true
+
+if ($nextoffset != 0){
+	echo Test failed when accessing huge offset
+	}else {
+	echo Passed
+	}
+
+
+echo Try random access of data
+
+set num ($numvertest / 2)
+set numstr local string $num
+set numlen int #$numstr
+
+bakGetText $hand $ilock $texttype $numlen $saveoffset nextoffset charlist
+
+if ($charlist.length != $numlen) {
+	echo "Test Failed : cannot get back written text"
+	}
+
+if ($charlist.val != $numstr) {
+	echo "Test Failed : cannot get back written text"
+	} else {
+	echo Random Text Acces Passed
+	}
+
+endLoop
+
+bakFreeAllLocks $hand $id
+
+set status int 0
+set orphans int 0 
+set host int 0 
+
+bakDbVerify $hand status orphans host
+
+if ($status == 1) {
+	echo Text addition Tests Failed : Database cannot be verified
+	} else {
+	echo Text addition Tests Succeeded : Database verified
+	}
+

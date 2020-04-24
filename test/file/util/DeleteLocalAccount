@@ -1,0 +1,190 @@
+#!/bin/sh
+#
+#  @OSF_COPYRIGHT@
+#  COPYRIGHT NOTICE
+#  Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+#  ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+#  src directory for the full copyright text.
+#
+# HISTORY
+# $Log: DeleteLocalAccount,v $
+# Revision 1.1.8.1  1996/10/17  18:37:35  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:58:22  damon]
+#
+# Revision 1.1.2.3  1993/01/11  18:38:04  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:23:21  htf]
+# 
+# Revision 1.1.2.2  1992/10/28  18:16:09  jaffe
+# 	Transarc delta: rajesh-ot5367-salvage-recovery-authorization-check-tests 1.8
+# 	  Selected comments:
+# 	    To add authorization check tests for salvage/recovery. This is
+# 	    the initial checkpoint.
+# 	    Just a checkpoint.
+# 	    Another checkpoint.
+# 	    Checkpoint.
+# 	    This delta version has been tested.
+# 	    Changed permissions.
+# 	    Update makefiles.
+# 	    Fixed logical errors in the script pertaining to requiring read/write
+# 	    access to aggregate to perform salvage and/or recovery, handling
+# 	    of error counts generated in the AuthCheckTest.noroot script.
+# 	    Fix a build-time error.
+# 	Transarc delta: rajesh-ot5368-create-local-account-utility 1.2
+# 	  Selected comments:
+# 	    Added utility scripts to delete and create local unix accounts.
+# 	    These utility functions currently work on AIX and OSF/1 systems
+# 	    See above.
+# 	    Removed "osType" parameter for the scripts. Now the script uses
+# 	    uname to determine the system type automatically.
+# 	    See above.
+# 	[1992/10/28  15:07:29  jaffe]
+# 
+# $EndLog$
+#
+###############################################################################
+#    Copyright (C) 1992 Transarc Corporation - All rights reserved            #
+###############################################################################
+
+#  DeleteLocalAccount
+#   This script deletes a local unix account.
+#   It currently designed to handle AIX and OSF1 systems.
+#
+#  Parameters:
+#   $1                  User's name
+#
+##############################################################################
+
+#
+# Print usage message for this script.
+#
+
+PrintUsage()
+{ 
+       echo "Usage: ${cmdName} <login-name>"
+}
+
+#
+# Validate input.
+#
+# Parameters:
+#   $1      Number of parameters.
+#
+
+ValidateInput() 
+{
+   if [ $1 -lt 1 ]
+   then 
+    echo "${cmdName}: insufficient arguments."
+    PrintUsage
+        exit 1
+   fi
+}
+
+#
+# OSF1_DeleteLocalAccount
+#   Remove a user from an OSF/1 system. The user is removed from the 
+#   the /etc/passwd and /etc/group files. Then the password database
+#   is reconstructed.
+#
+# Parameters
+#   $1      User Name
+#
+# Assumptions:
+#       The user specified has a valid local account. Appropriate checks
+#       should be done in the caller of this function.
+#
+
+OSF1_DeleteLocalAccount()
+{
+    
+    PASSWD_DIR_FILE=/etc/passwd.dir
+    PASSWD_PAG_FILE=/etc/passwd.pag
+    PASSWD_ORIG_FILE=/etc/passwd
+    PASSWD_COPY_FILE=/tmp/passwd
+    GROUP_ORIG_FILE=/etc/group
+    GROUP_COPY_FILE=/tmp/group
+
+    if [ $# -ne 1 ]
+    then
+        echo "$cmdName - OSF1_DeleteLocalAccount: requires name of user to be removed"
+        return 1
+    fi
+
+    victimUser=$1
+
+#   echo "Removing $victimUser from password file"
+    grep -v $victimUser $PASSWD_ORIG_FILE > $PASSWD_COPY_FILE
+
+#   echo "Removing $victimUser from group file"
+    sed "s/$victimUser,//" $GROUP_ORIG_FILE | sed "s/,$victimUser//" | sed "s/$victimUser//" > $GROUP_COPY_FILE
+    /bin/rm $PASSWD_ORIG_FILE $GROUP_ORIG_FILE
+    /bin/cp $PASSWD_COPY_FILE $PASSWD_ORIG_FILE
+    /bin/cp $GROUP_COPY_FILE $GROUP_ORIG_FILE
+
+    /bin/rm $PASSWD_DIR_FILE $PASSWD_PAG_FILE
+
+    if [ -f $PASSWD_DIR_FILE ] 
+    then
+        echo "ERROR: Unable to delete $PASSWD_DIR_FILE "
+        return 1
+    fi
+
+    if [ -f $PASSWD_PAG_FILE ] 
+    then
+        echo "ERROR: Unable to delete $PASSWD_PAG_FILE "
+        return 1        
+    fi
+
+#   echo "Reinitialising password databases"
+
+    mkpasswd $PASSWD_ORIG_FILE
+}
+
+
+hostName=`hostname`
+cmdName=`basename $0`
+
+# Input validation
+ValidateInput $#
+
+# Fetch login-id 
+user=$1
+
+# Determine operating system type.
+osType=`uname`
+
+# Determine if user local account exists
+grep "^${user}:" /etc/passwd >/dev/null
+if [ $? -ne 0 ]
+then
+    echo "${cmdName}: local account removal for ${user} does not exist as per /etc/passwd."
+    exit 1
+fi
+
+# Remove local user account
+echo "Removing local account for user ${user} ..."
+if [ "${osType}" = "AIX" ]
+then    
+    #rios specific
+    rmuser -p "${user}"     
+elif [ "${osType}" = "OSF1" ]
+then
+    # osf1
+    OSF1_DeleteLocalAccount ${user}            
+else
+    echo "${cmdName}: System ${osType} is unsupported currently."
+    echo "The supported systems are AIX and OSF/1."
+    exit 1
+fi
+
+
+grep "^${user}:" /etc/passwd >/dev/null
+if [ $? -eq 0 ]
+then
+    echo "${cmdName}: local account removal for ${user} failed as per /etc/passwd."
+    exit 1
+fi
+
+echo "... removal of local account for user ${user} completed."

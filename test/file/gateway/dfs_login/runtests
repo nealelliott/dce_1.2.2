@@ -1,0 +1,95 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for 
+# the full copyright text.
+#
+# HISTORY
+# $Log: runtests,v $
+# Revision 1.1.6.1  1996/10/17  18:23:37  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:52:01  damon]
+#
+# Revision /main/HPDCE02/2  1995/06/22  20:14 UTC  maunsell_c
+# 	mothra C&S fixes
+# 
+# Revision /main/HPDCE02/1  1994/11/07  20:45 UTC  maunsell_c
+# 	test fixes-enhances from last pull up from OSF
+# 
+# Revision 1.1.2.2  1994/08/22  16:16:26  maunsell_c
+# 	run different set of tests according to user id
+# 	[1994/08/22  16:05:06  maunsell_c]
+# 
+# 	add running new test3 and test4
+# 	[1994/08/10  16:45:43  maunsell_c]
+# 
+# Revision 1.1.2.1  1994/07/28  17:38:09  mckeen
+# 	Initial Revision
+# 	[1994/07/28  14:10:25  mckeen]
+# 
+# $EndLog$
+
+###############################################################################
+# This is a driver script, which runs dfs_login/test*. The tests are applicable
+# to DFS/NFS exporter. dfs_login/dfs_logout funtionality is exercised by this test suite.
+###############################################################################
+
+ty=dfs_login
+p=`basename $0`
+rc=0
+hn=`hostname`
+
+: ${SERVER= `mount | grep "/\.\.\. on" | cut -d' ' -f3 | sed 's/:\/\.\.\.//'`}
+: ${lf=$ty.$p.log}
+
+export SERVER
+
+rm -rf $lf
+
+(
+echo ""
+echo "$ty/$p running on $hn at `date`"
+) | tee -a $lf
+
+if test `whoami` = tester; then testerflag=TRUE; else testerflag=FALSE; fi 
+if test $testerflag = TRUE
+then
+: ${dfs_login_tests="test1 test4"}
+else
+: ${dfs_login_tests="test1 test2 test3"}
+fi
+
+for test in $dfs_login_tests
+   do
+(
+   echo ""
+   echo "Running $test."
+) | tee -a $lf
+   $test >>$lf 2>&1
+   rf=$?
+   rc=`expr $rc + $rf`
+(
+   echo ""
+   echo "$test returned $rf."
+) | tee -a $lf
+   done
+
+
+###############################################################################
+
+(
+echo ""
+echo "Tests complete at `date`."
+echo ""
+) | tee -a $lf
+
+if [ $rc -eq 0 ]
+then
+   echo "$ty/$p PASSED" | tee -a $lf
+else
+   echo "$ty/$p FAILED ($rc total errors)" | tee -a $lf
+fi
+
+  
+exit $rc 

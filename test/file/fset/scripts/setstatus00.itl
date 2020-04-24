@@ -1,0 +1,89 @@
+*
+* @OSF_COPYRIGHT@
+* COPYRIGHT NOTICE
+* Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+* ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+* src directory for the full copyright text.
+*
+* HISTORY
+* $Log: setstatus00.itl,v $
+* Revision 1.1.435.1  1996/10/17  18:21:45  damon
+* 	Submitting on behalf of Transarc
+* 	[1996/10/17  16:51:28  damon]
+*
+* Revision 1.1.430.1  1994/02/04  20:42:08  devsrc
+* 	Merged from 1.0.3a to 1.1
+* 	[1994/02/04  15:23:07  devsrc]
+* 
+* Revision 1.1.428.1  1993/12/07  17:42:45  jaffe
+* 	1.0.3a update from Transarc
+* 	[1993/12/03  19:01:45  jaffe]
+* 
+* Revision 1.1.2.3  1993/01/11  18:28:01  htf
+* 	Embedded copyright notice
+* 	[1993/01/11  17:03:39  htf]
+* 
+* Revision 1.1.2.2  1992/10/28  17:20:20  jaffe
+* 	Transarc delta: fred-itl-make-open-like-c 1.3
+* 	  Selected comments:
+* 	    Fix ITL system calls to have more C like syntax.  Previously only a
+* 	    single open or opendir could be issued against a file resource, since the
+* 	    filename/directory name being opened was hashed.  Now the names are no longer
+* 	    hashed and the resulting file descriptor (or DIR *) is placed in a
+* 	    user supplied variable.  This changes the syntax of the open, creat,
+* 	    opendir and mmap commands.  They now all require a variable name as the
+* 	    last argument to the command.
+* 	    Also a number of commands that previously took a filename or directory
+* 	    name, now take the actual file descriptor or DIR *, as was placed in a
+* 	    variable by the open and opendir comands.
+* 	    Make the necessary changes to the fset ("ftutil") tests to match the
+* 	    described above.
+* 	    Convert system calls to use the more traditional usage.
+* 	    Cleanup debugging code.
+* 	Transarc delta: jdp-itl-add-fset-driver 1.2
+* 	  Selected comments:
+* 	    Add the code for fset_test, the fileset (ftutil) test driver.
+* 	    This delta adds "fset" to the list of build directories in the test tree
+* 	    and adds all of the test scripts.
+* 	    Setstatus test.
+* 	[1992/10/27  19:17:36  jaffe]
+* 
+* $EndLog$
+*
+
+!**********************************************************
+!*** Set quota lower than usage
+!**********************************************************
+
+include "setup.itl"
+
+!*** Write a one megabyte file
+open $path_name[0] (O_CREAT|O_WRONLY) 0666 fd1
+set data ("1" * 1048576)
+write $fd1 $data
+
+!*** Set quota lower than usage
+getFsetSize $aggr_id $fset_id fset_size
+setFsetQuota $aggr_id $fset_id ($fset_size / 2)
+
+!*** Try to extend the file
+verifyStatus false
+write $fd1 $data
+assert ($ITL_Status == $EDQUOT)
+verifyStatus true
+close $fd1
+
+!*** Try to re-write the file
+open $path_name[0] (O_TRUNC|O_WRONLY) 0 fd1
+write $fd1 $data
+close $fd1
+
+!*** Try to clone the fileset
+set clone_name ($fset_name + ".clone")
+set clone_id ($fset_id + 1)
+cloneFset $aggr_id $fset_id $clone_id $clone_name
+
+!*** Unmount the fileset
+unmountFset $mount_point[0]
+
+include "shutdown.itl"

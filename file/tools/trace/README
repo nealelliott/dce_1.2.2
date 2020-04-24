@@ -1,0 +1,168 @@
+OVERVIEW
+========
+
+This directory builds performance instrumentation tracing tools. These
+include:
+	Trace preprocessor to track function entry and exit.
+	Trace data generator to generate and extrace raw trace data.
+	Trace postprocessor to process raw trace logs into a meaningful format.
+
+TRACE PREPROCESSOR
+==================
+
+The trace preprocessor determines function entry and exit (include those
+via explicit returns) and inserts trace events at the points. The
+generated trace events include timestamps, which enable us to determine
+time spent in a particular function. It relies on a lexical analyser 
+built using GNU's flex. 
+
+The trace package used can be customized. Currently it supports
+ICL and RIOS native tracing package. Details of customization are beyond
+the scope of this document.
+
+Using the trace preprocessor
+----------------------------
+The trace preprocessor has been integrated with the ODE build environment.
+Hence to do entry/exit tracing,  
+- Ensure that the tracepp has been built as detailed below.
+- For the  modules that need to be traced run "build" as usual with the 
+  following addition:
+	 specify on the build command line
+	"DFS_TRACE_PP=<sandbox-obj-path>/tracepp" 
+  Specify the absolute pathname for tracepp as the value of the
+  DFS_TRACE_PP variable. This will generate trace events using the native 
+  tracing package on the platform you are using. 
+
+  To use ICL for the trace facility, specify 
+	"CARGS=-DTRACE_TYPE_ICL"
+  in addition on the build command line.
+The variable can also be defined in your environment.
+
+Tracepp relies on existence of a directory
+<sb>/src/TRACE/${TARGET_MACHINE} which contains some files used
+internally by tracepp and also file specifying mappings between
+function names and function id that can be used by a postprocessor.
+
+Disabling tracing of functions
+------------------------------
+
+To disable tracing of particular functions add the  comment directive
+
+	/* NOTRACE */
+
+just before the function definition.
+
+Special Notes
+-------------
+
+Tracing of interrrupt level functions: 
+These functions cannot be traced using ICL as the tracing package.
+Functions outside the osi layer called at interrupt level, or with
+interrupts disabled, have entry/exit tracing disabled.  Currently
+these functions are
+	asevent_Iodone
+	bufHash_Enter
+	bufHash_Remove
+	bufHash_LookupAndRemove
+and additionally on RIOS
+	efs_vmstrategy
+
+Tracing of osi layer: 
+The osi layer should not be traced because of circular dependencies.
+If you need to do that, modifications to these tools might be
+necessary or reorganization of the osi layer to recognize osi layer
+internal dependencies.
+
+If using ICL tracing, you must build the osi.klib and dfscore with 
+"CARGS=-DTRACE_TYPE_ICL" in order to provide the definition of traceIclSetP.
+
+Building the trace preprocessor
+-------------------------------
+Run 
+	"build LEX=flex"
+It will build the preprocessor called tracepp.
+
+CAUTION:You must use flex. Just lex will not do.
+
+Integration into ODE build environment
+--------------------------------------
+If you care for the details, checkout <sb>/src/lbe/mk/osf.obj.mk file
+that specifies the default suffix rule to be used when attempting to
+generate a .o file from a .c file.
+
+There is also a DFS_TRACE_PP_DEBUG variable that you can use if you
+need to.
+
+TRACE DATA GENERATOR
+====================
+
+This is the dotrace perl program. It can be used to execute commands
+with tracing activated and to extract the raw trace data that can 
+be interpreted by the trace postprocessor.
+
+The command syntax is
+
+	dotrace { <command> | -extractonly } [-prefix <report-name-prefix>]  
+		[-type {native | icl}]
+where
+	<command> 	Command or commands to be traced. The specified 
+	 		command will be executed with tracing activated
+			and the raw trace data will be extracted.
+
+	-extractonly	Only extract the raw trace data
+
+	-prefix 	Prefix of name of file to put raw trace data in.
+			Default: If this option is not specified
+			the prefix will be 
+			/tmp/trout.<machine_name>.<date>.<time>
+		
+	-type		Type of tracing package being used -
+			ICL or platform native package.
+			Default: The ICL tracing package.
+
+The actual file name will be <prefix>.<trace-package-type>.rpt.
+
+
+TRACE POSTPROCESSOR
+===================
+
+This is the tracepostp perl program. The trace postprocessor massages
+the raw trace data from the trace logs into a human interpretable
+format.
+
+The command syntax is
+
+    	tracepostp <raw-data-file> [ -sb <sandbox-path> ]
+
+where
+	<raw-data-file>	File with raw trace data.
+			The name of the file should be of format
+			<prefix>.<tracing-package-type>.rpt
+
+	-sb <sandbox>	Sandbox path name
+			Default: If this is not specified then 
+			the current directory must contain a directory
+			called SYMBOLS that specify mapping
+			between function names and ids.
+
+The trace postprocessor creates 3 files 
+
+	<prefix>.rpx
+	<prefix>.rps
+	<prefix>.rpc
+
+where	
+	<prefix>.rpx 	The function execution time report.
+			Contains function call graphs with timings.
+			The format should be self-explanatory. If 
+			not contact someone familiar with the format
+			for into. Its really not that hard.
+
+	<prefix>.rps    The trace summary report.
+			Contains cumulative and absolute times for each
+			function, including averages.
+
+	<prefix>.rpc	The common function sequences report.
+			Lists common function sequences encountered.
+
+

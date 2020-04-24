@@ -1,0 +1,620 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: utst_driver,v $
+# Revision 1.1.114.1  1996/10/17  18:37:13  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:58:15  damon]
+#
+# $EndLog$
+###############################################################################
+#    Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+ProgramName=`basename $0`
+NSGroup=/.:/subsys/dce/dfs/utst
+AdminFile=/opt/dcelocal/var/dfs/admin.utst
+AdminList=admin.utst
+ErrorFile=/tmp/utst.err.$$
+LocalHost=`uname -n | cut -f1 -d.`
+
+# check user is cell_admin
+checkCellAdmin() {
+	klist 2> /dev/null | grep Principal | grep cell_admin > /dev/null 2>&1
+	if [ $? -ne 0 ]
+	  then
+		echo "${ProgramName}: you must be cell_admin to run to proceed" >&2
+		exit 1
+	fi
+}
+
+# check binaries are in /opt/dcelocal/bin
+# takes a list of hosts, checks for utst_server in dcelocal/bin on each
+checkBinaries() {
+	_ret=0
+	echo "${ProgramName}: checking for utst_server binaries in /opt/dcelocal/bin on each host"
+	for _host in $*
+	  do
+		bos getdates /.:/hosts/$_host utst_server > $ErrorFile 2>&1
+		if [ $? -ne 0 ]
+		  then
+			echo "${ProgramName}: checkBinaries: checking utst_server on $_host failed" >&2
+			cat $ErrorFile | sed 's/^/> /' >&2
+			_ret=1
+		fi
+	done
+
+	rm $ErrorFile
+	return $_ret
+}
+
+# list all hosts in cell
+findHosts() {
+	cdscp show dir /.:/hosts/\* | grep MyName | awk '{print $3}' | \
+	sed -e 's/.*hosts.//'
+}
+
+# takes list of host names and returns those with dfs-server principals
+pruneHosts() {
+	_ret=1
+	for _host in $*
+	  do
+		# check for existence of dfs server principal
+		rgy_edit -p -v hosts/$_host/dfs-server > /dev/null 2>&1
+		if [ $? -eq 0 ]
+		  then
+			echo $_host
+			_ret=0
+		fi
+	done
+	return $_ret
+}
+
+# Print the IP address for each host in list of host name provided
+PrintHosts () {
+	for _host in $*
+	  do
+		_ipaddr=`getip $_host`
+		if [ ! "$_ipaddr" ]
+		  then
+			_ipaddr="?.?.?.?"
+		fi
+		echo "$_host $_ipaddr"
+	done
+
+	return 0
+}
+
+# returns principals in server entry
+listEntry() {
+	rpccp show entry ${NSGroup} 2> /dev/null | sed -e '1,/^group/d' -e '/^$/d' 
+}
+
+# returns hosts in server entry
+listShortEntry() {
+	rpccp show entry ${NSGroup} 2> /dev/null | sed -e '1,/^group/d' -e '/^$/d' -e 's/.*hosts.//' -e 's/.self$//' 
+}
+
+# takes list of hosts, puts all in admin.utst, distributes it to all
+distAdmin() {
+	# generate admin.utst
+	/bin/rm -f $AdminFile
+	for _host in $*
+	  do
+		bos addadmin /.:/hosts/$LocalHost $AdminList -princ hosts/$_host/dfs-server -createlist > $ErrorFile 2>&1
+		if [ $? -ne 0 ]
+		  then
+			echo "${ProgramName}: distAdmin: adding $_host to admin.utst failed" >&2
+			cat $ErrorFile | sed 's/^/> /' >&2
+			rm $ErrorFile
+			return 1
+		fi
+	done
+	# dfs-server principals for all hosts are in admin.utst; distribute it
+
+	for _host in $*
+	  do
+		bos install /.:/hosts/$_host $AdminFile -dir var/dfs > $ErrorFile 2>&1
+		if [ $? -ne 0 ]
+		  then
+			echo "${ProgramName}: distAdmin: sending admin.utst to $_host failed" >&2
+			cat $ErrorFile | sed 's/^/> /' >&2
+			rm $ErrorFile
+			return 1
+		fi
+	done
+
+	rm $ErrorFile
+	return 0
+}
+
+# takes list of hosts and removes admin.utst from all
+removeAdmin() {
+	for _host in $*
+	  do
+		bos uninstall /.:/hosts/$_host $AdminList -dir var/dfs -all > $ErrorFile 2>&1
+		if [ $? -ne 0 ]
+		  then
+			echo "${ProgramName}: removeAdmin: removing admin.utst from $_host failed" >&2
+			cat $ErrorFile | sed 's/^/> /' >&2
+			rm $ErrorFile
+			return 1
+		fi
+	done
+
+	rm $ErrorFile
+	return 0
+}
+
+# create utst server group
+createGroup() {
+	# takes no arguments
+	deleteGroup -quiet
+	rpccp add entry $NSGroup > $ErrorFile 2>&1
+	if [ $? -ne 0 ]
+	  then
+		echo "${ProgramName}: createGroup: 'rpccp add entry ${NSGroup}' failed" >&2
+		cat $ErrorFile | sed 's/^/> /' >&2
+		rm $ErrorFile
+		return 1
+	fi
+
+	Uuid=`uuidgen`
+	rpccp export -o $Uuid /.:/subsys/dce/dfs/utst  > $ErrorFile 2>&1
+	if [ $? -ne 0 ]
+	  then
+		echo "${ProgramName}: createGroup: 'rpccp export -o ${Uuid} ${NSGroup}' failed" >&2
+		cat $ErrorFile | sed 's/^/> /' >&2
+		rm $ErrorFile
+		return 1
+	fi
+
+	rgy_edit <<! > $ErrorFile 2>&1
+do g
+add subsys/dce/dfs-utst-servers
+quit
+!
+	rgy_edit -g -v subsys/dce/dfs-utst-servers > $ErrorFile 2>&1
+	if [ $? -ne 0 ]
+	  then
+		echo "${ProgramName}: createGroup: 'rgy_edit' failed" >&2
+		cat $ErrorFile | sed 's/^/> /' >&2
+		rm $ErrorFile
+		return 1
+	fi
+
+	rm $ErrorFile
+	return 0
+}
+
+#destroy utst server group
+deleteGroup() {
+	# takes -quiet option
+	_quiet=$1
+	rpccp remove entry $NSGroup > $ErrorFile 2>&1
+	if [ $? -ne 0 -a ! "$_quiet" ]
+	  then
+		echo "${ProgramName}: deleteGroup: 'rpccp remove entry ${NSGroup}' failed" >&2
+		cat $ErrorFile | sed 's/^/> /' >&2
+		rm $ErrorFile
+		return 1
+	fi
+
+	rgy_edit <<! > $ErrorFile 2>&1
+do g
+delete subsys/dce/dfs-utst-servers
+y
+quit
+!
+	rgy_edit -g -v subsys/dce/dfs-utst-servers > $ErrorFile 2>&1
+	if [ $? -eq 0 -a ! "$_quiet" ]
+	  then
+		echo "${ProgramName}: deleteGroup: 'rgy_edit' failed" >&2
+		cat $ErrorFile | sed 's/^/> /' >&2
+		rm $ErrorFile
+		return 1
+	fi
+
+	rm $ErrorFile
+	return 0
+}
+
+# add the specified host to the server group and to the security group
+# takes host name
+addMember() {
+	_host=$1
+
+	_principal=/.:/hosts/$_host/self
+	_dfsPrincipal=hosts/$_host/dfs-server
+	rpccp add member -m $_principal $NSGroup > $ErrorFile 2>&1
+	if [ $? -ne 0 ]
+	  then
+		echo "${ProgramName}: addMember: 'rpccp add member -m ${_principal} ${NSGroup}' failed" >&2
+		cat $ErrorFile | sed 's/^/> /' >&2
+		rm $ErrorFile
+		return 1
+	fi
+
+	rgy_edit <<! > $ErrorFile 2>&1
+do g
+member subsys/dce/dfs-utst-servers -a $_dfsPrincipal
+quit
+!
+	rm $ErrorFile
+	return 0
+}
+
+# takes a list of hosts and verifies they are in both group
+verifyAdmin() {
+	
+	rgy_edit -g -v subsys/dce/dfs-utst-servers > /dev/null 2>&1
+	if [ $? -ne 0 ]
+	  then
+		echo "${ProgramName}: verifyGroup: security group subsys/dce/dfs-utst-servers does not exist" >&2
+		return 1
+	fi
+
+	_ret=0
+	for _host in $*
+	  do
+		_dfsPrincipal=hosts/$_host/dfs-server
+		(
+			rgy_edit -g <<! 2> /dev/null
+			v subsys/dce/dfs-utst-servers -m
+!
+		) | grep $_dfsPrincipal > /dev/null
+		if [ $? -ne 0 ]
+		  then
+			echo "${ProgramName}: verifyGroup: host $_host not in security group subsys/dce/dfs-utst-servers" >&2
+			_ret=1
+		fi
+	done
+
+	return $_ret
+}
+
+# takes a list of host names, starts a utst_server on each
+startServers() {
+	# start you engines
+	for _host in $*
+	  do
+		bos stop /.:/hosts/$_host utst_server -wait > /dev/null 2>&1
+		bos delete /.:/hosts/$_host utst_server > /dev/null 2>&1
+		bos create /.:/hosts/$_host utst_server simple "/opt/dcelocal/bin/utst_server -nsgroup ${NSGroup}" > $ErrorFile 2>&1
+		if [ $? -ne 0 ]
+		  then
+			echo "${ProgramName}: startServers: starting utst_server to $_host failed" >&2
+			cat $ErrorFile | sed 's/^/> /' >&2
+			rm $ErrorFile
+			return 1
+		fi
+	done
+
+	rm $ErrorFile
+	return 0
+}
+
+# takes a list of host names, stops utst_server on each
+stopServers() {
+	# shut them all down
+	for _host in $*
+	  do
+		bos stop /.:/hosts/$_host utst_server -wait > $ErrorFile 2>&1
+		if [ $? -ne 0 ]
+		  then
+			echo "${ProgramName}: stopServers: stopping utst_server to $_host failed" >&2
+			cat $ErrorFile | sed 's/^/> /' >&2
+			rm $ErrorFile
+			return 1
+		fi
+
+		bos delete /.:/hosts/$_host utst_server > $ErrorFile 2>&1
+		if [ $? -ne 0 ]
+		  then
+			echo "${ProgramName}: stopServers: stopping utst_server to $_host failed" >&2
+			cat $ErrorFile | sed 's/^/> /' >&2
+			rm $ErrorFile
+			return 1
+		fi
+	done
+
+	rm $ErrorFile
+	return 0
+}
+
+# takes a list of host names, verifies utst_server running on each
+verifyServers() {
+	_ret=0
+	for _host in $*
+	  do
+		bos stat $_host utst_server -noauth 2> /dev/null | grep normally > /dev/null
+		if [ $? -ne 0 ]
+		  then
+			echo "${ProgramName}: verifyServers: utst_server not running under bos on $_host" >&2
+			_ret=1
+		fi
+
+	done
+
+	if [ $_ret -eq 0 ]
+	  then
+		echo "${ProgramName}: verifyServers: all utst_servers running"
+	fi
+
+	return $_ret
+}
+
+# takes optional list of hosts
+showStatus() {
+	if [ $# -eq 0 ]
+	  then
+		# show them all
+		_hostList="`listEntry`"
+		if [ ! "$_hostList" ]
+		  then
+			echo "no entries in server group" >&2
+			exit 1
+		fi
+	  else
+		_hostList="$*"
+	fi
+
+	for _host in $_hostList
+	  do
+		echo "====== $_host ======"
+		udebug ${NSGroup} $_host -long
+	done
+}
+
+printHandProcedure() {
+cat <<!
+Instructions for configuring the ubik utst_ tests:
+==================================================
+
+1) Add the utst group entry in the namespace:
+
+	# rpccp add entry /.:/subsys/dce/dfs/utst
+
+	>>> entry added
+
+	# rpccp export -o `uuidgen` /.:/subsys/dce/dfs/utst
+
+	>>> objects exported
+
+2) Add each server which will run the utst_server into the
+   group:
+
+	# rpccp add member -m /.:/hosts/<hostname>/self /.:/subsys/dce/dfs/utst
+
+	>>> group member added
+
+3) Add the security group for utst into the registry and add each host running
+   the utst_server into the group:
+
+	# rgy_edit 
+	Current site is: registry server at /.../ds/subsys/dce/sec/master 
+	rgy_edit=> do g
+	Domain changed to: group
+	rgy_edit=> add subsys/dce/dfs-utst-servers
+	rgy_edit=> member subsys/dce/dfs-utst-servers -a hosts/<hostname>/dfs-server
+	rgy_edit=> quit
+	bye.
+
+4) Set up admin.utst identical to admin.fl on all machines running utst_server.
+
+5) Start the utst_server on each machine:
+
+	# utst_server -nsgroup /.:/subsys/dce/dfs/utst &
+
+6) To run the utst_client, issue:
+
+	# utst_client -nsgroup /.:/subsys/dce/dfs/utst -mget
+
+        Other options to utst_client are:
+
+          -trunc  to set the number to zero
+          -inc    to increment the stored number
+          -qget   to get the number from any server
+          -get    to get the number from the sync site
+	  -mget	  to do get, inc, get, get, sleep 1 (repeatedly until ^C)
+	  -minc	  to do get, inc, get, inc, sleep 1 (repeatedly until ^C)
+	  -incf	  to do inc, sleep 1 (repeatedly until ^C)
+
+	These last 3 are stress tests.
+
+7) To see current ubik status, issue the following command on each
+   utst_server machine:
+
+	# udebug /.:/subsys/dce/dfs/utst -long
+!
+}
+
+# main
+case $1 in 
+	-init)
+		checkCellAdmin
+		shift
+		hostList="$*"
+		if [ ! "$hostList" ]
+		  then
+			hostList=`findHosts`
+		fi
+
+		hostList=`pruneHosts $hostList`
+		if [ $? -ne 0 ]
+		  then
+			echo "$ProgramName: empty host list" >&2
+			echo "	(after stripping those without dfs-server principals)" >&2
+			exit 1
+		fi
+
+		echo "${ProgramName}: initializing the following hosts:"
+		PrintHosts $hostList
+
+		# make sure utst_server installed in /opt/dcelocal/bin on all
+		checkBinaries $hostList
+		if [ $? -ne 0 ]
+		  then
+			exit 1
+		fi
+
+		# create server group and security group
+		createGroup
+		if [ $? -ne 0 ]
+		  then
+			exit 1
+		fi
+
+		# add each host to the group
+		for _host in $hostList
+		  do
+			addMember $_host
+			if [ $? -ne 0 ]
+			  then
+				exit 1
+			fi
+		done
+
+		# create and distribute admin list
+		distAdmin $hostList
+		if [ $? -ne 0 ]
+		  then
+			exit 1
+		fi
+
+		# start servers
+		startServers $hostList
+		if [ $? -ne 0 ]
+		  then
+			exit 1
+		fi
+
+		echo "initialization complete"
+		echo "wait for quorum to be reached before proceeding"
+		exit 0
+		;;
+	-shut*)
+		checkCellAdmin
+		# clean up all hosts in group
+		hostList=`listShortEntry`
+		stopServers $hostList
+		removeAdmin $hostList
+		deleteGroup
+		exit 0
+		;;
+	-ver*)
+		# verify things are set up properly
+		rpccp show entry $NSGroup > /dev/null 2>&1
+		if [ $? -ne 0 ]
+		  then
+			echo "${ProgramName}: RPC group $NSGroup does not exist" >&2
+			exit 1
+		fi
+
+		hostList=`listShortEntry`
+		echo "${ProgramName}: checking hosts:"
+		PrintHosts $hostList
+		verifyAdmin $hostList && echo "${ProgramName}: groups check out"
+		verifyServers $hostList
+		exit 0
+		;;
+	-stat*)
+		shift
+		showStatus $*
+		exit $?
+		;;
+	-trunc)
+		utst_client -nsgroup ${NSGroup} -trunc
+		exit $?
+		;;
+	-inc)
+		utst_client -nsgroup ${NSGroup} -inc
+		exit $?
+		;;
+	-qget)
+		utst_client -nsgroup ${NSGroup} -qget
+		exit $?
+		;;
+	-get)
+		utst_client -nsgroup ${NSGroup} -get
+		exit $?
+		;;
+	-mget)
+		utst_client -nsgroup ${NSGroup} -mget
+		exit $?
+		;;
+
+	-minc)
+		utst_client -nsgroup ${NSGroup} -minc
+		exit $?
+		;;
+
+	-incf)
+		utst_client -nsgroup ${NSGroup} -incf
+		exit $?
+		;;
+	-info*)
+		cat <<!
+	driver options:
+	  -init	  to set up test environment (must be cell_admin)
+	  -shutdown  to shut down test environment (must be cell_admin)
+	  -status to show status of servers
+	  -verify to check current configuration
+	  -info	  to print this message
+
+	utst_client options:
+          -trunc  to set the number to zero
+          -inc    to increment the stored number
+          -qget   to get the number from any server
+          -get    to get the number from the sync site
+	  -mget	  to do get, inc, get, get, sleep 1 (repeatedly until ^C)
+	  -minc	  to do get, inc, get, get, sleep 1 (repeatedly until ^C)
+	  -incf	  to do inc, sleep 1 (repeatedly until ^C)
+
+	operation:
+	  To run these tests, set up the environment as cell_admin with 
+	  '$ProgramName -init'.  A set of hosts can be specified but if
+	  they're not, all the machines in the cell with dfs-server 
+	  principals will be chosen.  Init will install an admin.utst on
+	  each machine and will start a utst_server through the bosserver.
+	  Note that utst_server MUST be in /opt/dcelocal/bin on each machine.
+	  In addition, init will set up the $NSGroup server 
+	  group and the subsys/dce/dfs-utst-servers security group with 
+	  all the specified hosts.
+
+	  Shutdown (as cell_admin) will remove all the state installed by -init.
+	  Status gives udebug status on all or all specified hosts.
+	  Procedure prints out the by-hand procedure for setting up tests.
+
+	  The other commands are utst_client test options.
+!
+		exit 0
+		;;
+	-proc*)
+		printHandProcedure
+		exit 0
+		;;
+	-help|*)
+		cat <<!
+
+	$ProgramName -help
+	$ProgramName -info (show detailed help information)
+
+	$ProgramName -init host ...
+	$ProgramName -shutdown
+	$ProgramName -status [host ...]
+	$ProgramName -verify (verify setup of configuration)
+	$ProgramName -procedure (print by-hand procedure)
+	$ProgramName [-trunc | -inc | -qget | -get | -mget | -minc | -incf ]
+!
+		exit 0
+		;;
+esac
+
+exit 0

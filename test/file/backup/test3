@@ -1,0 +1,282 @@
+#! /bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# test3
+#
+# tests adddump, rmdump, lsdumps 
+#
+# This script exercises bak commands that do not result in
+# any tape drive operations.
+#
+# HISTORY
+# $Log: test3,v $
+# Revision 1.1.12.1  1996/10/17  18:12:21  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:47:51  damon]
+#
+# Revision 1.1.5.2  1993/01/11  17:36:49  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  16:53:19  htf]
+# 
+# Revision 1.1.2.2  1992/05/21  12:32:16  jaffe
+# 	To convert the /bin/csh backup test scripts to /bin/sh.
+# 	To change the scripts to use the recommended style of variable names.
+# 
+# 	$TALog: test3,v $
+# 	Revision 4.4  1994/06/01  17:25:10  andi
+# 	None of the files existed in the configuration!  Checked them all out
+# 	and added them.
+# 	[added by delta andi-db5496-checkout-backup-tests, r1.1]
+# 
+# Revision 4.3  1993/01/14  17:32:07  jaffe
+# 	revdrop of latest OSF copyright changes to these files
+# 	[from r4.2 by delta osf-revdrop-01-12-92, r1.1]
+# 
+# 	[1992/05/20  16:11:25  jaffe]
+# 
+# $EndLog$
+#
+
+
+: ${BAK_BIN_DIR=$1}
+: ${BAK_LEVEL=$2}
+ 
+PATH=$PATH":"$BAK_BIN_DIR
+#export PATH
+
+echo ""
+echo "********************* TEST3 **********************"
+echo ""
+echo bak lsdumps 
+bak lsdumps 
+if [ $? -ne 0 ] 
+then
+  echo "Case 3.0 FAILED unexpectedly"
+fi
+
+# add some dumps in a hiearchy and perform a lsdumps
+echo ""
+echo bak adddump -level /monthly
+bak adddump -level /monthly
+echo ""
+echo bak adddump -level /monthly/weekly
+bak adddump -level /monthly/weekly
+echo ""
+echo bak adddump -level /monthly/weekly/monday 
+bak adddump -level /monthly/weekly/monday 
+echo ""
+echo bak lsdumps 
+bak lsdumps 
+echo ""
+echo bak rmdump -level /monthly
+bak rmdump -level /monthly
+echo ""
+echo bak lsdumps
+bak lsdumps
+
+# now trounce adddump
+# should fail because no slash given
+echo ""
+echo bak adddump -level $BAK_LEVEL
+bak adddump -level $BAK_LEVEL
+if [ $? -ne 1 ] 
+then
+  echo "Case 3.1 WORKED unexpectedly"
+fi
+
+# LOTS of date testing.
+echo ""
+# should fail because "at" is missing
+echo bak adddump -level /$BAK_LEVEL -expires 12/01/91 
+bak adddump -level /$BAK_LEVEL -expires 12/01/91 
+if [ $? -ne 1 ] 
+then
+  echo "Case 3.2 WORKED unexpectedly"
+fi
+
+echo ""
+# fails because xx is not a valid day
+echo bak adddump -level /$BAK_LEVEL -expires at 12/xx/91 
+bak adddump -level /$BAK_LEVEL -expires at 12/xx/91 
+if [ $? -ne 1 ] 
+then
+  echo "Case 3.3 WORKED unexpectedly"
+fi
+
+echo ""
+# fails because 00 is not a valid month
+echo bak adddump -level /$BAK_LEVEL -expires at 00/01/91
+bak adddump -level /$BAK_LEVEL -expires at 00/01/91
+if [ $? -ne 1 ] 
+then
+  echo "Case 3.4 WORKED unexpectedly"
+fi
+
+echo ""
+# fails because 00 is not a valid day
+echo bak adddump -level /$BAK_LEVEL -expires at 12/00/91
+bak adddump -level /$BAK_LEVEL -expires at 12/00/91
+if [ $? -ne 1 ] 
+then
+  echo "Case 3.5 WORKED unexpectedly"
+fi
+
+echo ""
+echo "Observe error message if any"
+echo ""
+# succeeds, but 38 > limit on years
+echo bak adddump -level /$BAK_LEVEL -expires at 12/01/38
+bak adddump -level /$BAK_LEVEL -expires at 12/01/38
+if [ $? -ne 0 ] 
+then
+  echo "Case 3.6 FAILED unexpectedly"
+fi
+
+echo ""
+# successful
+echo bak rmdump -level /$BAK_LEVEL
+bak rmdump -level /$BAK_LEVEL
+if [ $? -ne 0 ] 
+then
+  echo "Case 3.7 FAILED unexpectedly"
+fi
+
+echo ""
+# fails because not quoted
+echo bak adddump -level /$BAK_LEVEL -expires at 12/01/91 20:30
+bak adddump -level /$BAK_LEVEL -expires at 12/01/91 20:30
+if [ $? -ne 1 ] 
+then
+  echo "Case 3.8 WORKED unexpectedly"
+fi
+
+echo ""
+# fails because hour is > 23
+echo bak adddump -level /$BAK_LEVEL -expires at "12/01/91 50:00"
+bak adddump -level /$BAK_LEVEL -expires at "12/01/91 50:00"
+if [ $? -ne 1 ] 
+then
+  echo "Case 3.9 WORKED unexpectedly"
+fi
+
+echo ""
+# fails because minute > 59
+echo bak adddump -level /$BAK_LEVEL -expires at "12/01/91 20:70"
+bak adddump -level /$BAK_LEVEL -expires at "12/01/91 20:70"
+if [ $? -ne 1 ] 
+then
+  echo "Case 3.10 WORKED unexpectedly"
+fi
+
+echo "" 
+# successful
+echo "Note error message if any"
+echo bak adddump -level /$BAK_LEVEL -expires in 9999y 12m 31d
+bak adddump -level /$BAK_LEVEL -expires in 9999y 12m 31d
+if [ $? -ne 0 ] 
+then
+  echo "Case 3.11 FAILED unexpectedly"
+fi
+
+# successful
+echo ""
+echo bak rmdump -level /$BAK_LEVEL 
+bak rmdump -level /$BAK_LEVEL 
+if [ $? -ne 0 ] 
+then
+  echo "Case 3.12 FAILED unexpectedly"
+fi
+
+echo ""
+# successful
+echo bak addump -level /$BAK_LEVEL -expires in 0y 0m 0d
+bak adddump -level /$BAK_LEVEL -expires in 0y 0m 0d
+if [ $? -ne 0 ] 
+then
+  echo "Case 3.13 FAILED unexpectedly"
+fi
+
+# successful
+echo ""
+echo bak rmdump -level /$BAK_LEVEL 
+bak rmdump -level /$BAK_LEVEL 
+if [ $? -ne 0 ] 
+then
+  echo "Case 3.14 FAILED unexpectedly"
+fi
+
+echo ""
+# fails because 13d > max 
+echo bak adddump -level /$BAK_LEVEL -expires in 0y 13m 0d
+bak adddump -level /$BAK_LEVEL -expires in 0y 13m 0d
+if [ $? -ne 1 ] 
+then
+  echo "Case 3.15 WORKED unexpectedly"
+fi
+
+echo ""
+# fails because 32d > max 
+echo bak adddump -level /$BAK_LEVEL -expires in 0y 0m 32d
+bak adddump -level /$BAK_LEVEL -expires in 0y 0m 32d
+if [ $? -ne 1 ] 
+then
+  echo "Case 3.16 WORKED unexpectedly"
+fi
+
+echo ""
+# fails because day argument is incorrect.
+echo bak adddump -level /$BAK_LEVEL -expires in 0y 0m dd
+bak adddump -level /$BAK_LEVEL -expires in 0y 0m dd
+if [ $? -ne 1 ] 
+then
+  echo "Case 3.17 WORKED unexpectedly"
+fi
+  	
+echo ""
+# successful
+echo bak adddump -level /$BAK_LEVEL -expires in 0y 0m 0d
+bak adddump -level /$BAK_LEVEL -expires in 0y 0m 0d
+if [ $? -ne 0 ] 
+then
+  echo "Case 3.18 FAILED unexpectedly"
+fi
+
+echo ""
+# should fail because dump already exists
+echo bak adddump -level /$BAK_LEVEL -expires in 0y 0m 0d
+bak adddump -level /$BAK_LEVEL -expires in 0y 0m 0d
+if [ $? -ne 1 ] 
+then
+  echo "Case 3.19 WORKED unexpectedly"
+fi
+
+echo ""
+# successful
+echo bak rmdump -level /$BAK_LEVEL 
+bak rmdump -level /$BAK_LEVEL 
+if [ $? -ne 0 ] 
+then
+  echo "Case 3.20 FAILED unexpectedly"
+fi
+
+echo ""
+# fails because dump foo is not an existing dump
+echo bak rmdump -level /foo
+bak rmdump -level /foo
+if [ $? -ne 1 ] 
+then
+  echo "Case 3.21 WORKED unexpectedly"
+fi
+
+echo ""
+# there should be no dumps existing
+echo bak lsdumps 
+bak lsdumps 
+
+echo ""
+echo "************** TEST3 DONE ***************"

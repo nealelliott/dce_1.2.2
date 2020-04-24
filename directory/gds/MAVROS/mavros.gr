@@ -1,0 +1,502 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/* 
+ * HISTORY
+ * $Log: mavros.gr,v $
+ * Revision 1.1.10.2  1996/03/09  23:12:28  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:29:39  marty]
+ *
+ * Revision 1.1.10.1  1995/12/08  15:09:10  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  14:49:00  root]
+ * 
+ * Revision 1.1.8.1  1994/02/22  15:38:40  marrek
+ * 	Code drop for dce1.1.
+ * 	[1994/02/08  09:03:09  marrek]
+ * 
+ * Revision 1.1.6.2  1993/08/11  14:00:56  marrek
+ * 	July 1993 code drop.
+ * 	[1993/07/29  11:06:39  marrek]
+ * 
+ * Revision 1.1.4.4  1992/12/31  17:11:23  bbelch
+ * 	Embedding copyright notice
+ * 	[1992/12/31  12:54:29  bbelch]
+ * 
+ * Revision 1.1.4.3  1992/11/30  11:11:43  marrek
+ * 	November 1992 code drop
+ * 	Replace malloc.h by stdlib.h
+ * 	[1992/11/30  11:07:54  marrek]
+ * 
+ * Revision 1.1.4.2  1992/11/27  17:55:56  marrek
+ * 	November 1992 code drop
+ * 	[1992/11/23  13:02:11  marrek]
+ * 
+ * Revision 1.1.2.3  1992/06/01  20:21:34  zeliff
+ * 	New version of file from GDS drop
+ * 	[1992/05/28  18:33:14  zeliff]
+ * 
+ * Revision 1.1.2.2  1992/04/09  20:06:10  jim
+ * 	Changes to compile on AIX 3.2.
+ * 	Do not define structures locally, instead
+ * 	use the system include files.
+ * 	[1992/04/09  19:28:25  jim]
+ * 
+ * $EndLog$
+ */
+
+/* ****************************************************************** */
+/*                                                                    */
+/*   COPYRIGHT  (C)  1990 BY SIEMENS NIXDORF INFORMATIONSSYSTEME AG   */
+/*                           AND INRIA                                */
+/*   All rights reserved                                              */
+/*                                                                    */
+/*   This software is furnished under licence and may be used only    */
+/*   in accordance with the terms of that licence and with the        */
+/*   inclusion of the above copyright notice.                         */
+/*   This software may not be provided or otherwise made available    */
+/*   to, or used by, any other person. No title to or ownership of    */
+/*   the software is hereby  transferred.                             */
+/*                                                                    */
+/* ****************************************************************** */
+
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include "mavrospro.h"
+
+#if !defined(lint) && defined(GDS_RCS_ID)
+static char mavros_gr_rcsid[] = "@(#)$RCSfile: mavros.gr,v $ $Revision: 1.1.10.2 $ $Date: 1996/03/09 23:12:28 $";
+#endif
+
+struct tcd{
+	char * id;
+	int m, i, n, ut;
+};
+
+struct stcd{
+	int t, ut;
+	char * st;
+};
+
+struct fstcd{
+	char * id;
+	int m, i, n, ut;
+	int t;
+	char * st;
+};
+
+int linenum = 1;
+int default_tag = 0;
+char * strcpy(), * strcat();
+%}
+
+%start prog
+
+%union {
+	char * var;
+	int num;
+	struct tcd cd;
+	struct stcd std;
+	struct fstcd fstd;
+	char str[4];
+	}
+
+%token <var> IDENT NUMERIC QUOTED_STRING BINARY_STRING HEXA_STRING
+%token SEQUENCE SET CHOICE TYPE COMPONENTS DEFINED
+%token UNIVERSAL APPLICATION PRIVATE EXTERNAL ALLOCATE
+%token IMPLICIT OPTIONAL DEFAULT VAR VALUE INITVAR FINALVAR
+%token INTEGER IGNORE OF NULLITEM COPY OBJECT ID REAL
+%token INDEXED BY UP TO ANY BOOLEAN OCTETS X_BITS CHARS FLAGS
+%token BIT STRING OCTET ENUMERATED ENCRYPTED
+%token NString PString TString VTString ViString IA5String GrString GeString
+%token NChars PChars TChars VTChars ViChars IA5Chars GrChars GeChars
+%token GeTime UnTime ObDesc
+%token DEFINITIONS EXPLICIT TAGS IMPORTS EXPORTS xBEGIN END FROM
+%type <fstd> structbody
+%type <std> itemtype structbodybody callidentdtl simple_item_type
+%type <cd> codedesc openstruct modeval
+%type <num> variablemode variablelist variable simpletype structtype
+%type <num> implicit optionalflag mode arraytype
+%type <var> identornumeric tdclhead choicetag
+
+%start prog
+
+%%
+
+prog: fullmodule | proglist
+
+fullmodule: moduleid DEFINITIONS Tagdefault ':' ':' '='
+	xBEGIN Exports Imports Programs proglist END
+
+moduleid: IDENT {setpackage($1);}
+
+Tagdefault: EXPLICIT TAGS	{default_tag = 0;}
+	| IMPLICIT TAGS		{default_tag = 1;}
+	| empty			{default_tag = 0;}
+
+Exports: EXPORTS exported ';' | empty
+
+exported: export_list | empty { export_all();}
+
+export_list: export_one | export_one ',' export_list
+
+export_one: IDENT {export($1);}
+
+Imports: IMPORTS SymbolsImported ';' | empty
+
+SymbolsImported: SymbolsFromModuleList | empty
+
+SymbolsFromModuleList:
+	SymbolsFromModule |
+	SymbolsFromModule SymbolsFromModuleList
+
+SymbolsFromModule:
+	{ open_module();} importlist FROM IDENT {close_module($4);}
+
+importlist: import_item | import_item ',' importlist
+
+import_item: tdclhead '(' declist ')'
+	{closecomp((char *)0,0,-1,0,T_IMPORT,-1,1,$1,(char *)0,0);}
+	| tdclhead 
+	{closecomp((char *)0,0,-1,0,T_IMPORT,-1,1,$1,(char *)0,0);}
+
+Programs: DEFINED definedlist ';' | empty
+
+definedlist: define_one | definedlist ',' define_one
+
+define_one: IDENT {defined_procedure($1);}
+
+proglist: empty | progitem proglist
+
+progitem: tdcl
+	| value_decl
+	| error
+	{stxerr("unexpected declaration",(char*)0); /*yyerrok; yyclearin;*/}
+
+tdcl: tdclhead '(' declist ')' ':' ':' '=' structure
+	{closecomp((char*)0,0,0,0,T_TYPE,-1,0,$1,(char *)0,0);}
+	| tdclhead ':' ':' '=' structure
+	{closecomp((char *)0,0,0,0,T_TYPE,-1,0,$1,(char *)0,0);}
+	| tdclhead '(' declist ')' ':' ':' '=' IMPORTS
+	{closecomp((char *)0,0,-1,0,T_IMPORT,-1,1,$1,(char *)0,0);}
+	| tdclhead ':' ':' '=' IMPORTS
+	{closecomp((char *)0,0,-1,0,T_IMPORT,-1,1,$1,(char *)0,0);}
+
+tdclhead: IDENT
+	{opencomp((char*)0,0,0,0,T_TYPE,-1,0,(char*)0,(char*)0,0); $$ = $1;}
+
+declist: declitem | declitem ';' declist
+
+declitem: variablemode variablelist ':' IDENT
+	{	addarg($1,$2,$4);}
+	| error
+	{stxerr("bad argument declaration",(char*)0); /*yyerrok; yyclearin;*/}
+
+variablelist: variable { $$ = $1;} | variable ',' variablelist {$$ = $1;}
+
+variable: IDENT { $$ = addparameter($1);}
+
+variablemode: VAR { $$ = 1;}
+	| VALUE	{ $$ = 2;}
+	| empty { $$ = 0;}
+
+structure: openstruct structbody optionalflag
+	{closecomp($2.id,$2.n,$2.m,$2.i,$2.t,$2.ut,$3,$2.st,(char *)0,0);}
+
+optionalflag: DEFAULT 
+	{opencomp((char *)0,0,0,0,T_DEFAULT,-1,0,(char*)0,(char*)0,0);}
+	'(' defaultlist ')' {cclose(); $$=1;}
+	| DEFAULT error
+	{ stxerr("Incorrect default list",(char*)0); /*yyerrok; yyclearin;*/}
+	| OPTIONAL	{$$ = 1;}
+	| empty		{$$ = 0;}
+
+openstruct: empty { opencomp((char*)0,0,0,0,0,-1,0,(char *)0,(char *)0,0);}
+
+structbody: structbodybody allocation initialization
+	{ $$.id = 0; $$.m = -1; $$.n = 0; $$.i = 0;
+	$$.t = $1.t; $$.ut = $1.ut; $$.st = $1.st;}
+	| COMPONENTS OF IDENT '(' calllist ')'  allocation initialization
+	{ $$.id = 0; $$.m = -1; $$.n = 0; $$.i = 0; $$.ut = -1;
+	$$.t = T_COMP; $$.st = $3;}
+	| IDENT codedesc IDENT '(' calllist ')'  allocation initialization
+	{ $$.id = $1; $$.m = $2.m; $$.n = $2.n; $$.i = $2.i; $$.ut = -1;
+	$$.t = T_EXTERN; $$.st = $3;}
+	| codedesc IDENT '(' calllist ')'  allocation initialization
+	{ $$.id = $1.id; $$.m = $1.m; $$.n = $1.n; $$.i = $1.i; $$.ut = -1;
+	$$.t = T_EXTERN; $$.st = $2;}
+	| IDENT IDENT '(' calllist ')'  allocation initialization
+	{ $$.id = $1; $$.m = -1; $$.n = 0; $$.i = 0; $$.ut = -1;
+	$$.t = T_EXTERN; $$.st = $2;}
+	| IDENT '(' calllist ')'  allocation initialization
+	{ $$.id = 0; $$.m = -1; $$.n = 0; $$.i = 0; $$.ut = -1;
+	$$.t = T_EXTERN; $$.st = $1;}
+	| codedesc structbodybody allocation initialization
+	{ $$.id = $1.id; $$.m = $1.m; $$.n = $1.n; $$.i = $1.i; $$.ut = $2.ut;
+	$$.t = $2.t; $$.st = $2.st;}
+	| IDENT codedesc structbodybody allocation initialization
+	{ $$.id = $1; $$.m = $2.m; $$.n = $2.n; $$.i = $2.i; $$.ut = $3.ut;
+	$$.t = $3.t; $$.st = $3.st;}
+	| IDENT structbodybody allocation initialization
+	{ $$.id = $1; $$.m = -1; $$.n = 0; $$.i = 0; $$.ut = $2.ut;
+	$$.t = $2.t; $$.st = $2.st;}
+
+
+structbodybody: itemtype '(' calllist ')' {$$ = $1;}
+	| structtype '{' arglist '}'
+	{$$.t = $1; $$.ut = ($1 == T_SEQUENCE)?16:17; $$.st=0;}
+	| structtype '{' '}' 
+	{$$.t = $1; $$.ut = ($1 == T_SEQUENCE)?16:17; $$.st=0;}
+	| choicehead '{' '}'
+	{	stxerr("There must be at least one choice",(char *)0);
+		$$.t = 0; $$.ut = -1; $$.st = "???";}
+	| choicehead '{' choicelist '}' 
+	{$$.t = T_CHOICE; $$.st = 0; $$.ut = -1;}
+	| simpletype 
+	{ $$.t = $1; $$.st = 0; $$.ut = ($1 == T_NULL)?5:-1; }
+	| arraytype structure INDEXED BY IDENT UP TO callident
+	{	$$.t = $1; $$.st = $5; $$.ut = ($1 == T_SET_OF)?17:16;}
+	| ANY callident DEFINED BY IDENT '(' calllist ')'
+	{	$$.t = T_ANYDEF; $$.st = $5; $$.ut = -1;}
+
+choicehead: CHOICE callident
+	| CHOICE
+	{	opencomp((char *)0,0,0,0,T_ARGUMENT,-1,0,"???",(char*)0,0); 
+		cclose(); stxerr("Selector missing for CHOICE",(char *)0);}
+
+structtype: SET { $$ = T_SET;}
+	| SEQUENCE { $$ = T_SEQUENCE;}
+
+simpletype: IGNORE { $$ = T_IGNORE;}
+	| NULLITEM { $$ = T_NULL;}
+
+arraytype: SEQUENCE OF { $$ = T_SEQUENCE_OF;}
+	| SET OF	{ $$ = T_SET_OF;}
+
+itemtype: ANY
+	{ $$.t = T_ANY;	$$.st = "ANY"; $$.ut = -1;}
+	| INTEGER integervalue	
+	{ $$.t = T_INTEGER; $$.st = "INTEGER"; $$.ut = 2;}
+	| ENUMERATED integervalue	
+	{ $$.t = T_INTEGER; $$.st = "INTEGER"; $$.ut = 10;}
+	| X_BITS bitvalue	
+	{ $$.t = T_BITS; $$.st = "BITS"; $$.ut = 3;}
+	| BIT STRING bitvalue	
+	{ $$.t = T_BITS; $$.st = "BIT STRING"; $$.ut = 3;}
+	| FLAGS bitvalue 
+	{ $$.t = T_FLAGS; $$.st = "FLAGS"; $$.ut = 3;}
+	| simple_item_type {$$ = $1;}
+
+simple_item_type: BOOLEAN	
+	{ $$.t = T_BOOLEAN; $$.st = "BOOLEAN"; $$.ut = 1;}
+	| REAL
+	{ $$.t = T_REAL; $$.st = "REAL"; $$.ut = 9;}
+	| OCTETS	
+	{ $$.t = T_OCTETS; $$.st = "OCTETS"; $$.ut = 4;}
+	| OCTET STRING
+	{ $$.t = T_OCTETS; $$.st = "OCTET STRING"; $$.ut = 4;}
+	| OBJECT ID	
+	{ $$.t = T_OID;	$$.st = "OBJECT ID"; $$.ut = 6;}
+	| ObDesc {$$.t = T_OCTETS; $$.st = "ObjectDescriptor"; $$.ut = 7;}
+	| EXTERNAL 
+	{$$.t = T_EXTERNAL; $$.st = "EXTERNAL"; $$.ut = 8;}
+	| COPY
+	{ $$.t = T_COPY; $$.st = "COPY"; $$.ut = -1;}
+	| CHARS
+	{ $$.t = T_CHARS; $$.st = "CHARS"; $$.ut = 4;}
+	| NString {$$.t = T_OCTETS; $$.st = "NumericString"; $$.ut = 18;}
+	| PString {$$.t = T_OCTETS; $$.st = "PrintableString"; $$.ut = 19;}
+	| TString {$$.t = T_OCTETS; $$.st = "T61String"; $$.ut = 20;}
+	| VTString {$$.t = T_OCTETS; $$.st = "VideotexString"; $$.ut = 21;}
+	| ViString {$$.t = T_OCTETS; $$.st = "VisibleString"; $$.ut = 26;}
+	| IA5String {$$.t = T_OCTETS; $$.st = "IA5String"; $$.ut = 22;}
+	| GrString {$$.t = T_OCTETS; $$.st = "GraphicString"; $$.ut = 25;}
+	| GeString {$$.t = T_OCTETS; $$.st = "GeneralString"; $$.ut = 27;}
+	| UnTime {$$.t = T_OCTETS; $$.st = "UTCTime"; $$.ut = 23;}
+	| NChars {$$.t = T_CHARS; $$.st = "NumericChars"; $$.ut = 18;}
+	| PChars {$$.t = T_CHARS; $$.st = "PrintableChars"; $$.ut = 19;}
+	| TChars {$$.t = T_CHARS; $$.st = "T61Chars"; $$.ut = 20;}
+	| VTChars {$$.t = T_CHARS; $$.st = "VideotexChars"; $$.ut = 21;}
+	| ViChars {$$.t = T_CHARS; $$.st = "VisibleChars"; $$.ut = 26;}
+	| IA5Chars {$$.t = T_CHARS; $$.st = "IA5Chars"; $$.ut = 22;}
+	| GrChars {$$.t = T_CHARS; $$.st = "GraphicChars"; $$.ut = 25;}
+	| GeChars {$$.t = T_CHARS; $$.st = "GeneralChars"; $$.ut = 27;}
+	| GeTime {$$.t = T_OCTETS; $$.st = "GeneralizedTime"; $$.ut = 24;}
+
+
+integervalue : '{' valuelist '}' | empty
+bitvalue : '{' valuelist '}' | empty
+
+valuelist : simplevalue | simplevalue ',' valuelist
+
+simplevalue : IDENT '(' identornumeric ')'
+	{	opencomp((char *)0,0,0,0,T_VALUE,-1,0,$1,$3,0);
+		cclose();
+	}
+
+arglist: argdesc
+	| argdesc ',' arglist
+
+argdesc: structure
+	|	error
+	{	stxerr("incorrect structure element",(char*)0); 
+		/*yyerrok; yyclearin;*/}
+
+choicelist:choicearg | choicearg ',' choicelist
+
+choicearg: choicetag ':' 
+	{ opencomp((char*)0,0,0,0,0,-1,0,(char*)0,(char*)0,0);} structbody
+	{	closecomp($4.id,$4.n,$4.m,$4.i,$4.t,$4.ut,0,$4.st,$1,0);}
+	| error
+	{stxerr("bad choice component",(char*)0); /*yyerrok; yyclearin;*/}
+
+choicetag: DEFAULT { $$ = 0;} | identornumeric {$$ = $1;}
+
+identornumeric: IDENT { $$ = $1;}
+	| NUMERIC { $$ = $1;}
+	| error
+	 {stxerr("bad identifier",(char *)0); /*yyerrok; yyclearin;*/ $$ = "???";}
+
+calllist: empty |  callarglist
+
+callarglist: callident
+	| callident ',' callarglist
+
+callident: callidentdtl {cclose();}
+
+callidentdtl: IDENT 
+	{	opencomp((char*)0,0,0,0,T_ARGUMENT,-1,0,$1,(char *)0,0);} 
+	callargitems {$$.t = T_ARGUMENT; $$.st = $1;}
+	| NUMERIC
+	{	opencomp((char *)0,0,0,0,T_ARGUMENT,-1,0,$1,(char *)0,0);
+		$$.t = T_ARGUMENT; $$.st = $1;}
+	| error
+	{       stxerr("Incorrect variable",(char*)0); /*yyerrok; yyclearin;*/
+		opencomp((char *)0,0,0,0,T_ARGUMENT,-1,0,"???",(char*)0,0);
+		$$.t = T_ARGUMENT; $$.st = "???";}
+
+callargitems: empty | callargitem callargitems
+
+callargitem:	'[' callident ']'
+	|	'.' IDENT 
+	{opencomp((char*)0,0,0,0,T_PARAMETER,-1,0,$2,(char*)0,0);}
+	|	pointerto IDENT 
+	{opencomp((char*)0,0,0,0,T_PARAMETER,-1,0,$2,(char*)0,1);}
+
+pointerto: '^' '.' | '@' '.' | '-' '>'
+
+
+
+allocation: ALLOCATE
+	{opencomp((char*)0,0,0,0,T_ALLOC,-1,0,(char*)0,(char*)0,0);}
+	'(' alloclist ')' { cclose();}
+	| ALLOCATE error
+	{stxerr("Incorrect allocation list",(char*)0); /*yyerrok; yyclearin;*/}
+	| empty
+
+alloclist: alloccitem
+	| alloccitem ';' alloclist
+
+alloccitem: callidentdtl ':' IDENT 
+	{closecomp((char *)0,0,0,0,$1.t,0,-1,$1.st,$3,0);}
+	| error
+	{stxerr("Incorrect allocation",(char*)0); /*yyerrok; yyclearin;*/}
+
+initialization: 
+	  initialization_bloc finalization_bloc
+	| initialization_bloc
+	| finalization_bloc
+	| empty
+
+initialization_bloc:
+	INITVAR  
+	{opencomp((char*)0,0,0,0,T_INIT,-1,0,(char*)0,(char*)0,0);}
+	 '(' initiallist ')' { cclose();}
+	| INITVAR error
+	{ stxerr("Incorrect initialization",(char*)0); /*yyerrok; yyclearin;*/}
+
+
+finalization_bloc: FINALVAR
+	{opencomp((char*)0,0,0,0,T_FINAL,-1,0,(char*)0,(char*)0,0);}
+	'(' initiallist ')' { cclose();}
+	| FINALVAR error
+	{ stxerr("Incorrect finalization",(char*)0); /*yyerrok; yyclearin;*/}
+
+
+initiallist: initialitem
+	| initiallist ';' initialitem
+
+initialitem:
+	QUOTED_STRING
+	{	opencomp((char*)0,0,0,0,T_INIT_STR,-1,0,$1,(char *)0,0);
+		cclose();}
+	| defaultitem;
+
+defaultlist: defaultitem
+	| defaultlist ';' defaultitem
+
+defaultitem:
+	{ opencomp((char*)0,0,0,0,T_INIT_IT,-1,0,(char*)0,(char*)0,0);}
+	callident '=' callident { cclose();}
+
+
+codedesc: '[' modeval ']' implicit
+	{	$$.id = 0;
+		$$.m = $2.m;
+		$$.n = $2.n;
+		$$.i = $4;
+	}
+
+modeval: mode NUMERIC
+	{	$$.m = $1;
+		$$.n = atoi($2);
+		free($2);
+	}
+	|	error
+	{
+	$$.m = -1; $$.n = 0;
+	stxerr("Bad ASN.1 identification",(char*)0); /*yyerrok; yyclearin;*/
+	}
+
+mode: 		UNIVERSAL	{$$ = 0;}
+	|	APPLICATION	{$$ = 1;}
+	|	PRIVATE		{$$ = 3;}
+	|	empty		{$$ = 2;}
+
+implicit:
+	IMPLICIT	{$$ = 1;}
+	| EXPLICIT	{$$ = 0;}
+	| empty		{$$ = default_tag;}
+
+value_decl: IDENT type_name ':' ':' '=' value_item
+
+value_item: string_of_values
+	| '{' list_of_values '}'
+
+list_of_values: value_item
+	| list_of_values ',' value_item
+
+string_of_values: simple_value_item
+	| string_of_values simple_value_item
+
+simple_value_item: '(' NUMERIC ')'
+	| NUMERIC
+	| IDENT
+	| BINARY_STRING
+	| HEXA_STRING
+	| QUOTED_STRING
+
+type_name: IDENT
+	| simple_item_type
+	| INTEGER
+	| BIT STRING
+
+empty:;
+%%
+#include "lex.yy.c"

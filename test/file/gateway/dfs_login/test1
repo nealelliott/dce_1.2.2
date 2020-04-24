@@ -1,0 +1,167 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for 
+# the full copyright text.
+#
+# HISTORY
+# $Log: test1,v $
+# Revision 1.1.6.1  1996/10/17  18:23:39  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:52:02  damon]
+#
+# Revision /main/HPDCE02/2  1995/06/22  20:14 UTC  maunsell_c
+# 	mothra C&S fixes
+# 
+# Revision /main/HPDCE02/1  1994/11/07  20:45 UTC  maunsell_c
+# 	test fixes-enhances from last pull up from OSF
+# 
+# Revision 1.1.2.2  1994/08/22  16:16:27  maunsell_c
+# 	boost functional coverage of test
+# 	[1994/08/10  16:46:35  maunsell_c]
+# 
+# Revision 1.1.2.1  1994/07/28  17:38:11  mckeen
+# 	Initial Revision
+# 	[1994/07/28  14:10:26  mckeen]
+# 
+# $EndLog$
+
+###############################################################################
+# This test is applicable to DFS/NFS exporter.
+# The script tests the dfs_login help funtion
+###############################################################################
+#
+# if not run via the runtests script use          
+#         test1 >test1.log 2>&1
+# to log test data
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+rc=0
+ty=dfs_login
+
+: ${SERVER= `mount | grep "/\.\.\. on" | cut -d' ' -f3 | sed 's/:\/\.\.\.//'`}
+
+echo ""
+echo "RUNNING dfs_login help COMMANDS on $hn using SERVER $SERVER."
+echo "========================================================================="
+date
+echo ""
+
+###############################################################################
+
+   echo ""
+   echo "dfs_login -help"
+   dfs_login -help 
+   rf=$?
+   if test $rf -ne 0 
+      then
+      echo "failed ($p: E1)"
+      rc=`expr $rc + 1`
+   fi 
+
+   echo ""
+   echo "dfs_login -bogus_switch"
+   dfs_login -bogus_switch
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($p: E2)"
+      rc=`expr $rc + 1`
+   fi
+
+##############################################################################
+
+echo ""
+echo "RUNNING dfs_login COMMANDS on $hn using SERVER $SERVER."
+echo "========================================================================="
+date
+echo ""
+
+###############################################################################
+
+   echo ""
+   echo "dfs_login -h "
+   dfs_login -h
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E3)"
+      rc=`expr $rc + 1`
+   fi
+  echo ""
+   echo "dfs_login -h bogusserver"
+   dfs_login -h bogusserver
+   rf=$?
+   if test $rf -eq 0
+      then
+      echo "worked ($rf) ($p: E4)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "dfs_login -h $SERVER bogususer -dce-"
+   dfs_login -h $SERVER bogususer -dce- 
+   rf=$?
+   if test $rf -eq 0
+      then
+      echo "worked ($rf) ($p: E5)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "dfs_login -h $SERVER root -boguspasswd-"
+   dfs_login -h $SERVER root -boguspasswd- 
+   rf=$?
+   if test $rf -eq 0
+      then
+      echo "worked ($rf) ($p: E6)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "dfs_login -h $SERVER -l aa" 
+   dfs_login -h $SERVER -l aa
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E7)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "dfs_login -h $SERVER -l 00:99" 
+   dfs_login -h $SERVER -l 00:99
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E8)"
+      rc=`expr $rc + 1`
+   fi
+
+
+   echo ""
+   echo "dfs_login -h $SERVER -l 00:00"
+   dfs_login -h $SERVER -l 00:00
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "worked ($rf) ($p: E9)"
+      rc=`expr $rc + 1`
+   fi
+
+########################################
+
+echo ""
+echo "Done at `date`."
+echo ""
+if [ $rc -eq 0 ]
+   then
+   echo "$ty/$p PASSED"
+else 
+   echo "$ty/$p FAILED $rc errors"
+fi
+exit $rc

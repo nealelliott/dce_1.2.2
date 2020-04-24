@@ -1,0 +1,167 @@
+*
+* ID: $Id:
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+*  opendir.scr --
+*	This script implements a series of tests by using opendir, readdir, 
+*       closedir and also functions like open, read, write, close. 
+*
+
+*  Terminology:
+*  PASSED -- no problem for the testings.
+*  FAILED -- failed when doing basic checks.
+*  XXXXXX -- needs enhanced later.
+
+*  Errors: 7
+
+
+*
+* Common settings.
+*
+include common1.env
+echo
+echo Running opendir.scr
+echo
+
+
+************************************************************************
+!*                  BASIC CHECKING
+************************************************************************
+*
+* Make the dir $testDir to test
+*
+*
+
+umask 0
+
+*
+!* Use open, read, write, and close commands to test directories.
+*  The open command will not allow open dir for writing.
+
+*
+!* Open dir for reading. 
+*
+open $testDir $O_RDONLY 0 testDirPtr
+
+* SUNOS will not allow to read a directory by read call
+if ( $ITL_SystemType != solaris ) {
+
+*
+!* read dir.
+*
+read $testDirPtr 16 buffer
+if ( $CommandResult != 16 ) {
+   set errorMessage ("FAILED: open dir for reading " + $testDir+" -- E1")
+   exec err_Process
+}
+
+}
+
+close $testDirPtr
+
+*
+!* Open dir for reading+truncate (error check). 
+*
+
+verifyStatus false
+
+open $testDir ($O_RDONLY|$O_TRUNC) 0 testDirPtr
+if ($ITL_Status == 0) {
+   set errorMessage ("FAILED: Should not open the dir for read+truncate, " + $testDir+" -- E2")
+   exec err_Process
+}
+
+*
+!* Open dir for write+truncate (error check). 
+*
+open $testDir ($O_WRONLY|$O_TRUNC) 0 testDirPtr
+if ($ITL_Status == 0) {
+   set errorMessage ("FAILED: Should not open the dir for write+truncate, " + $testDir+" -- E3")
+   exec err_Process
+}
+
+*
+!* Open dir for write (error check). 
+*
+open $testDir $O_WRONLY 0 testDirPtr
+if ($ITL_Status == 0) {
+   set errorMessage ("FAILED: Should not open the dir for write, " + $testDir+" -- E4")
+   exec err_Process
+}
+
+* Set modbit so that the owner does not have read right.
+chmod $testDir 0222
+
+*
+!* Check that missing read rights prevents dir open (error check).
+*
+open $testDir $O_RDONLY 0 testDirPtr
+if ($ITL_Status == 0) {
+   set errorMessage ("FAILED: Should not open the directory, " + $testDir+" -- E5")
+   exec err_Process
+}
+
+
+*
+!* Use opendir, readdir, mkdir and closedir commands to test directories.
+*
+
+*
+!* Open dir for reading (error check).
+*
+opendir $testDir testDirPtr
+if ($ITL_Status == 0) {
+   set errorMessage ("FAILED: Should not open the dir should fail, " + $testDir+" -- E6")
+   exec err_Process
+}
+* set modbits back to normal.
+chmod $testDir 0777
+
+verifyStatus true
+
+*
+!* Open dir for reading. 
+*
+opendir $testDir testDirPtr
+
+* readdir
+readdir $testDirPtr dirInfo
+if ( $CommandResult != 0 ) {
+   set errorMessage ("FAILED to readdir " + $testDir+" -- E7")
+   exec err_Process
+}
+
+*
+* close dir.
+*
+closedir $testDirPtr
+
+************************************************************************
+!* Cleaning up and report.
+************************************************************************
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+*rmdir $testDir
+exec report_Proc "opendir.scr" $errorCounter
+echo
+quit

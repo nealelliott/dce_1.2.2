@@ -1,0 +1,806 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dfs.sec.cross_bind_checklist,v $
+# Revision 1.1.68.2  1996/03/11  02:44:16  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:07:28  marty]
+#
+# Revision 1.1.68.1  1995/12/11  21:59:42  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:58:56  root]
+# 
+# Revision 1.1.66.1  1994/02/04  20:48:45  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:26:12  devsrc]
+# 
+# Revision 1.1.64.3  1994/01/26  21:12:53  cmckeen
+# 	Merged with changes from 1.1.64.2
+# 	[1994/01/26  21:12:44  cmckeen]
+# 
+# 	For OT 9724:
+# 	Changed the cell names to be generic.
+# 	Changed wording in the beginning of Section D and Section D step 5.
+# 	Filled in Section G.
+# 	[1994/01/26  21:11:28  cmckeen]
+# 
+# Revision 1.1.64.2  1994/01/20  18:44:26  annie
+# 	added copyright header
+# 	[1994/01/20  18:40:50  annie]
+# 
+# Revision 1.1.64.1  1993/12/28  20:15:40  sally
+# 	Changed comment leader from #<tab> to #<space>
+# 	[1993/12/28  20:11:24  sally]
+# 
+# Revision 1.1.5.3  1993/06/25  18:27:44  gmd
+# 	Expanded with example commands and output.
+# 	[1993/06/25  18:27:09  gmd]
+# 
+# Revision 1.1.5.2  1993/05/21  21:14:35  gmd
+# 	Not the final version but for reference.
+# 	[1993/05/21  21:03:19  gmd]
+# 
+# Revision 1.1.2.2  1993/04/09  21:50:26  gmd
+# 	Initial version - placeholder to indicate scope/type of test.
+# 	[1993/04/09  21:47:34  gmd]
+# 
+# $EndLog$
+############################################################################
+# TITLE: dfs.sec.cross_bind_checklist
+# SYNTAX:
+# Not Applicable - Read-only file.
+# OBJECTIVE:
+# Document procedures used to setup and test cross-cell acls.
+# Note that to avoid confusion, these steps test access in
+# one direction. The exact same steps should be followed in
+# the reverse direction if the cells are NOT equivalent ie.
+# if the cells are on different hardware platforms. In this
+# example, CELL1 = cell1.qadce.osf.org and 
+# CELL2 = cell2.qadce.osf.org
+# DESCRIPTION:
+# Examples of commands to be typed in are preceeded by ">% or >". 
+# Example output is preceeded by "< ".
+# Order of procedures is:
+# 	A. Setup Intercell Connection and Verify
+# 	B. Create groups, principals and accounts
+# 	C. Create UNIX users and groups
+# 	D. Create directories, files and acls
+# 	E. Attempt all accesses
+# 	F. Concurrently attempt accesses to the same file, some
+# 	   of which are allowed, some of which should NOT be allowed.
+# 	G. Check ACL inheritance
+############################################################################
+
+	A. Setup Intercell Connection and Verify
+	See the dfs.wan_checklist Remote Intercell Connection section for
+	setting up and verifying a DNS Intercell Connection.
+
+	B. Create groups, principals and accounts in CELL1
+	Login as cell_admin and use the following script to update the 
+	registry. 
+
+>% rgy_edit<<EOF
+domain group
+add trustg 1101
+add notrustg 1102
+domain principal
+add trustp 2001
+add trustgm 2002
+add notrustp 2003
+domain account
+add trustp -g notrustg -o none -pw blah -mp -dce- -mcl 96 -mcr 168
+add trustgm -g trustg -o none -pw blah -mp -dce- -mcl 96 -mcr 168
+add notrustp -g notrustg -o none -pw blah -mp -dce- -mcl 96 -mcr 168
+EOF
+
+	C. Update the /etc/passwd and /etc/group files in BOTH
+	CELL1 and CELL2 to include the same users and groups. You
+	may also want to add "cell_adm" for cell_admin. Note that 
+	on the RIOS platform, updating /etc/passwd and /etc/group
+	involves using SMIT. Verify by checking for similar output
+	to the following commands in both CELL1 and CELL2.
+
+>% grep cell_adm /etc/passwd
+<cell_adm:*:100:1::/u/cell_adm:/bin/ksh
+
+>% grep trust /etc/passwd
+<trustp::2001:1102: DFS ACL TEST PRINCIPAL :/:/bin/csh
+<trustgm::2002:1101: DFS ACL TEST PRINCIPAL :/:/bin/csh
+<notrustp::2003:1102: DFS ACL TEST PRINCIPAL :/:/bin/csh
+
+>% grep trust /etc/group
+<trustg:*:1101:trustgm
+<notrustg:*:1102:trustp,notrustp
+
+	D. Create directories, files and acls in CELL2
+	As the principal who created an episode fileset and mount point 
+        in CELL2, cd into that fileset and create a directory to test 
+        foreign cell access. 
+
+	The following commands are run in CELL2 to create a
+	directory in the episode fileset whose mount point is /:/epi_1 
+        and sets the foreign acls for CELL1 on that directory.
+
+	Note that you must first set a foreign acl for CELL1 on CELL2's
+	/: and /:/epi_1 directories in order for CELL2 principals to find 
+	/:/epi_1. The any_other acls are for unauthenticated users from ANY 
+	cell.
+
+>% su root
+>% dce_login root -dce-
+>% acl_edit /: 
+sec_acl_edit>m foreign_other:/.../cell1.qadce.osf.org:rx
+sec_acl_edit>m any_other:rx
+sec_acl_edit> commit
+sec_acl_edit> exit
+
+>% cd /:/epi_1
+>% acl_edit /:/epi_1
+sec_acl_edit> m group_obj:rwxid
+sec_acl_edit> m other_obj:rx
+sec_acl_edit>m foreign_other:/.../cell1.qadce.osf.org:rx
+sec_acl_edit>m any_other:rx
+sec_acl_edit> commit
+
+>% acl_edit /:/epi_1 -ic
+	(SAME AS FOR /:/epi_1)
+
+>% acl_edit /:/epi_1 -io
+	(SAME AS FOR /:/epi_1 -ic)
+
+>% mkdir foreign_dir
+>% acl_edit foreign_dir
+sec_acl_edit> m foreign_user:/.../cell1.qadce.osf.org/trustp:rwxcid
+sec_acl_edit> m foreign_group:/.../cell1.qadce.osf.org/trustg:rwxid
+sec_acl_edit> m foreign_other:/.../cell1.qadce.osf.org:rwx
+sec_acl_edit> m any_other:rx
+sec_acl_edit> commit
+sec_acl_edit> exit
+
+>% acl_edit foreign_dir -ic
+	(SAME AS FOR foreign_dir ABOVE)
+
+>% acl_edit foreign_dir -io
+	(SAME AS FOR foreign_dir ABOVE)
+
+	E. Attempt all accesses. For each principal, start with what's
+	allowed and then try what isn't.
+
+	1. In CELL1 as trustp
+
+>% su trustp
+>% dce_login trustp blah
+(TEST RX of CELL2's /:, /:/epi_1)
+>% cd /.../cell2.qadce.osf.org/fs/epi_1/foreign_dir
+(TEST WI of CELL2's /:/epi_1/foreign_dir)
+>% /dcetest/dcelocal/test/systest/file/filewnr -n 100 -f trustp -p trustp
+>% mkdir trustp_dir
+(TEST D of CELL2's /:/epi_1/foreign_dir and WI of it's ic acl)
+>% mv trustp trustp_dir
+>% echo `date` > trustp_dir/timestamp
+>% ls -l trustp_dir
+<total 1504
+<-rw-rw-r--   1 trustp   notrustg      29 Jun 23 15:22 timestamp
+<-rwx------   1 trustp   notrustg  819300 Jun 23 15:19 trustp
+
+NOTE: Files created by the filewnr program are always rwx by owner only.
+
+>% acl_edit trustp_dir -l
+<# SEC_ACL for trustp_dir:
+<# Default cell = /.../cell1.qadce.osf.org
+<mask_obj:rwxcid
+<user_obj:rwxcid
+<user:trustp:rwxcid
+<group_obj:rwx-id
+<group:trustg:rwx-id
+<other_obj:r-x---
+<foreign_other:/.../cell1.qadce.osf.org:rwx---
+<any_other:r-x---
+
+NOTE: The default cell is that of the creating principal.
+
+(TEST C of CELL2's /:/epi_1/foreign_dir's ic acl)
+>% acl_edit trustp_dir -m group_obj:rx 
+
+(TEST that trustp does NOT have WCID access to CELL2's /: and /:/epi_1)
+>% cd /.../cell2.qadce.osf.org/fs
+>% touch this
+<touch: 0652-046 Cannot create this.
+>% fts delmount epi_1
+<fts delmount: error removing mount point for epi_1: Permission denied
+>% acl_edit epi_1 -m foreign_user:/.../cell1.qadce.osf.org/trustp:rwxcid
+<ERROR: operation on acl not authorized (dce / sec)
+>% cd epi_1
+>% mkdir cell1_dir
+<mkdir: 0653-357 Cannot access Directory ..
+<.: The file access permissions do not allow the specified action.
+>% rmdir foreign_dir
+<rmdir: 0653-609 Cannot remove foreign_dir.
+<The file access permissions do not allow the specified action.
+
+
+	2. In CELL1, login as trustgm
+	
+>% su trustgm
+>% dce_login trustgm blah
+(TEST RX of CELL2's /:, /:/epi_1)
+>% cd /.../cell2.qadce.osf.org/fs/epi_1/foreign_dir
+(TEST WI of CELL2's /:/epi_1/foreign_dir)
+>% /dcetest/dcelocal/test/systest/file/filewnr -n 100 -f trustgm -p trustgm
+>% mkdir trustgm_dir
+(TEST D of CELL2's /:/epi_1/foreign_dir and WI of it's ic acl)
+>% mv trustgm trustgm_dir
+>% echo `date` > trustgm_dir/timestamp
+>% ls -l trustgm_dir
+<total 1504
+<-rw-rw-r--   1 trustgm  trustg        29 Jun 24 10:48 timestamp
+<-rwx------   1 trustgm  trustg    819300 Jun 24 10:38 trustgm
+
+NOTE: Files created by the filewnr program are always rwx by owner only.
+
+(TEST C of CELL2's /:/epi_1/foreign_dir's ic acl)
+>% acl_edit trustgm_dir -m group_obj:rx -d foreign_other:/.../cell1.qadce.osf.org
+
+NOTE: trustgm was NOT given C as part of the ic acl explicitly but since
+trustgm=user_obj for the trustgm_dir, trustgm has C rights.
+
+(TEST that trustgm has RWXID to CELL2's trustp_dir)
+>% cat trustp_dir/timestamp
+<Wed Jun 23 15:22:18 EDT 1993
+>% echo `date` > trustp_dir/timestamp
+>% cat trustp_dir/timestamp
+<Thu Jun 24 13:46:30 EDT 1993
+>% rm trustp_dir/timestamp
+>% echo `date` > trustp_dir/timestamp
+
+(TEST that trustgm does NOT have C access to CELL2's /:/epi_1/foreign_dir and trustp_dir)
+>% acl_edit trustp_dir -m user:trustgm:c
+<ERROR: operation on acl not authorized (dce / sec)
+>% cd ..
+>% acl_edit foreign_dir -m foreign_user:/.../cell1.qadce.osf.org/trustgm:c
+<ERROR: operation on acl not authorized (dce / sec)
+
+(TEST that trustgm does NOT have WCID to CELL2's /: and /:/epi_1)
+>% cd ..
+>% mkdir cell1_dir
+<mkdir: 0653-357 Cannot access Directory ..
+<.: The file access permissions do not allow the specified action.
+>% cd epi_1
+>% rmdir foreign_dir
+<rmdir: 0653-609 Cannot remove foreign_dir.
+<The file access permissions do not allow the specified action.
+>% cd ..
+>% touch this
+<touch: 0652-046 Cannot create this.
+>% fts delmount epi_1
+<fts delmount: error removing mount point for epi_1: Permission denied
+>% acl_edit epi_1 -m foreign_user:/.../cell1.qadce.osf.org/trustp:rwxcid
+<ERROR: operation on acl not authorized (dce / sec)
+
+	3. In CELL1, login as notrustp
+>% su notrustp
+>% dce_login notrustp blah
+(TEST that notrustp has RX access to CELL2's /: and /:/epi_1)
+>% cd /.../cell2.qadce.osf.org/fs;ls
+< epi_1
+>% cd epi_1/foreign_dir;ls
+<trustgm_dir  trustp_dir
+
+(TEST that notrustp has RX access to CELL2's trustp_dir)
+>% ls trustp_dir
+<trustp timestamp
+>% cat trustp_dir/timestamp
+<Thu Jun 24 13:47:30 EDT 1993
+
+(TEST that notrustp does NOT have CID access to anything in CELL2)
+>% acl_edit trustgm_dir -d group:trustg
+ERROR: operation on acl not authorized (dce / sec)
+>% touch trustgm_dir/this
+<touch: 0652-046 Cannot create trustgm_dir/this.
+>% rm trustgm_dir/timestamp
+<rm: Do you wish to override protection setting 664 for trustgm_dir/timestamp? y
+<rm: 0653-609 Cannot remove trustgm_dir/timestamp.
+<The file access permissions do not allow the specified action.
+
+	4. In CELL1, as an authenticated user with expired credentials
+>% su trustp
+>% dce_login trustp blah
+>% kinit -l 10m
+Password:
+	(WAIT 10 MINUTES)
+>% klist
+DCE Identity Information:
+        Warning: Identity information is not certified
+        Global Principal: /.../cell1.qadce.osf.org/trustp
+        Cell:      0072f60a-5a55-1c1e-a33a-08002b15bdb0 /.../cell1.qadce.osf.org
+        Principal: 000007d1-73d8-2c28-8500-08002b15bdb0 trustp
+        Group:     000003ea-73cb-2c28-8501-08002b15bdb0 <group name unknown>
+        Local Groups:
+                000003ea-73cb-2c28-8501-08002b15bdb0 <group name unknown>
+	(NOTE: group name unknown implies expired)
+
+(TEST that user with expired credentials has RX access to CELL2's directories and files)
+>% cd /.../cell2.qadce.osf.org/fs;ls
+<dfs: ticket has expired! 
+<dfs: Warning: created unauthenticated binding
+<epi_1
+>% cd epi_1;ls
+<foreign_dir
+>% cd foreign_dir;ls
+<trustgm_dir  trustp_dir
+
+(TEST that user with expired credentials does NOT have WCID access to CELL2's directories and files)
+>% mkdir exp_dir
+dfs: ticket has expired! 
+dfs: Warning: created unauthenticated binding
+mkdir: 0653-357 Cannot access Directory ..
+.: The file access permissions do not allow the specified action.
+
+>% acl_edit . -m any_other:c
+<acl_edit . -m any_other:c
+<ERROR: auth ticket expired (dce / rpc)
+<Unable to bind to object .
+
+>% rm trustp_dir/trustp
+<rm: Do you wish to override protection setting 700 for trustp_dir/trustp? y
+<rm: 0653-609 Cannot remove trustp_dir/trustp.
+<The file access permissions do not allow the specified action.
+
+	5. In CELL1, as an unauthenticated user
+
+You should NOT be root for this section.
+
+>% klist
+<No DCE identity available: No currently established network identity for which context exists (dce / sec)
+<Kerberos Ticket Information:
+<klist: No credentials cache file found (dce / krb) while setting cache flags (ticket cache /tmp/krb5cc_2001)
+
+(TEST that an unauthenticated user has RX access to CELL2's directories and files)
+>% cd /.../cell2.qadce.osf.org/fs;ls
+<epi_1
+>% cd epi_1;ls
+<foreign_dir
+>% cd foreign_dir;ls
+
+(TEST that an unauthenticated user does NOT have WCID access to CELL2's directories and files)
+
+>% mkdir unauth
+<mkdir: 0653-357 Cannot access Directory ..
+<.: The file access permissions do not allow the specified action.
+
+>% echo `date` >> trustgm_dir/timestamp
+<echo `date` >> trustgm_dir/timestamp
+<ksh: trustgm_dir/timestamp: 0403-005 Cannot create the specified file.
+
+>% rm trustgm_dir/timestamp
+<rm: Do you wish to override protection setting 664 for trustgm_dir/timestamp? y
+<rm: 0653-609 Cannot remove trustgm_dir/timestamp.
+<The file access permissions do not allow the specified action.
+
+	F. Attempt concurrent accesses to the same file
+	In CELL1, have 3 concurrent sessions, 1 for each principal.
+	Have all 3 attempt to write a file at once. For example:
+
+(as trustp)
+>% cd /.../cell2.qadce.osf.org/fs/epi_1/foreign_dir
+>% /dcetest/dcelocal/test/systest/file/filewnr -n 100 -f trustp.file -p trustp
+
+(as trustgm)
+>% cd /.../cell2.qadce.osf.org/fs/epi_1/foreign_dir
+>% /dcetest/dcelocal/test/systest/file/filewnr -n 100 -f trustgm.file -p trustgm
+
+(as notrustp)
+>% cd /.../cell2.qadce.osf.org/fs/epi_1/foreign_dir
+>% /dcetest/dcelocal/test/systest/file/filewnr -n 100 -f notrustp.file -p notrustp
+
+	The trustp and trustgm principals should succeed with PASSED,
+	notrustp should output FAILED.
+
+	Test concurrent read access by:
+
+(as trustp)
+>% /dcetest/dcelocal/test/systest/file/filewnr -n 100 -f trustgm.file -p trustgm -r
+
+(as trustgm)
+>% /dcetest/dcelocal/test/systest/file/filewnr -n 100 -f trustgm.file -p trustgm -r
+
+(as notrustp)
+>% /dcetest/dcelocal/test/systest/file/filewnr -n 100 -f trustgm.file -p trustgm -r
+
+	G. Check ACL inheritance
+
+Setup for ACL inheritance testing.
+In Cell2:
+>% dce_login root -dce-
+Password must be changed!
+>% cd /:/epi_1
+>% mkdir inherit_dir
+
+Set the ACLs on inherit_dir allowing /.../cell1.qadce.osf.org/trustp
+RWXID access.
+
+>% acl_edit inherit_dir
+sec_acl_edit> m foreign_user:/.../cell1.qadce.osf.org/trustp:rwxid
+sec_acl_edit> commit
+sec_acl_edit> l
+
+# SEC_ACL for inherit_dir:
+# Default cell = /.../cell2.qadce.osf.org
+mask_obj:rwx-id
+user_obj:rwxcid
+foreign_user:/.../cell1.qadce.osf.org/trustp:rwx-id
+group_obj:rwx-id
+other_obj:r-x---
+foreign_other:/.../cell1.qadce.osf.org:r-x---
+any_other:r-x---
+sec_acl_edit> exit
+
+>% acl_edit inherit_dir -ic
+sec_acl_edit> m foreign_user:/.../cell1.qadce.osf.org/trustp:rwxid
+sec_acl_edit> commit
+sec_acl_edit> l
+
+# Initial SEC_ACL for directories created under: inherit_dir:
+# Default cell = /.../cell2.qadce.osf.org
+mask_obj:rwx-id
+user_obj:rwxcid
+foreign_user:/.../cell1.qadce.osf.org/trustp:rwx-id
+group_obj:rwx-id
+other_obj:r-x---
+foreign_other:/.../cell1.qadce.osf.org:r-x---
+any_other:r-x---
+sec_acl_edit> exit
+
+>% acl_edit inherit_dir -io 
+sec_acl_edit>  m foreign_user:/.../cell1.qadce.osf.org/trustp:rwx
+sec_acl_edit> commit
+sec_acl_edit> l
+
+# Initial SEC_ACL for objects created under: inherit_dir:
+# Default cell = /.../cell2.qadce.osf.org
+mask_obj:rwx---
+user_obj:rwxc--
+foreign_user:/.../cell1.qadce.osf.org/trustp:rwx---
+group_obj:rwx---
+other_obj:r-x---
+foreign_other:/.../cell1.qadce.osf.org:r-x---
+any_other:r-x---
+sec_acl_edit> exit
+
+
+In cell1:
+>% su trustp
+>% dce_login trustp blah
+>% umask 000
+>% umask
+00
+>% cd /.../cell2.qadce.osf.org/fs/epi_1/inherit_dir
+
+In inherit_dir, create a directory and check the UNIX mode bits and
+the ACLs.  The ACLs should match the Initial Container ACLs.  The UNIX mode
+bits should match the user_obj, group_obj, and other_obj permissions.
+
+>% ls -ld auth_dir
+drwxrwxr-x   2 trustp   notrustg     256 Jan 19 16:28 auth_dir
+>% acl_edit auth_dir -l
+
+# SEC_ACL for auth_dir:
+# Default cell = /.../cell1.qadce.osf.org
+mask_obj:rwx-id
+user_obj:rwxcid
+user:trustp:rwx-id
+group_obj:rwx-id
+other_obj:r-x---
+foreign_other:/.../cell1.qadce.osf.org:r-x---
+any_other:r-x---
+>% 
+
+Check the Initial Container and Initial Object ACLs of auth_dir.
+The Initial Container ACLs should be the same as the Initial Container
+ACLs for foreign_dir.  The Initial Object ACLs should be the same as
+the Initial Object ACLs for inherit_dir.
+
+>% acl_edit auth_dir -ic -l
+
+# Initial SEC_ACL for directories created under: auth_dir:
+# Default cell = /.../cell1.qadce.osf.org
+mask_obj:rwx-id
+user_obj:rwxcid
+user:trustp:rwx-id
+group_obj:rwx-id
+other_obj:r-x---
+foreign_other:/.../cell1.qadce.osf.org:r-x---
+any_other:r-x---
+
+>% acl_edit auth_dir -io -l
+
+# Initial SEC_ACL for objects created under: auth_dir:
+# Default cell = /.../cell1.qadce.osf.org
+mask_obj:rwx---
+user_obj:rwxc--
+user:trustp:rwx---
+group_obj:rwx---
+other_obj:r-x---
+foreign_other:/.../cell1.qadce.osf.org:r-x---
+any_other:r-x---
+>% 
+
+Create a file and check the UNIX mode bits and the ACLs.  The ACLs
+should match the Initial Object ACLs.  The UNIX mode bits should
+match the user_obj, group_obj, and other_obj permissions.
+
+>% echo `date` > auth.file
+>% ls -ld auth.file
+-rw-rw-r--   1 trustp   notrustg      29 Jan 19 16:30 auth.file
+>% acl_edit auth.file -l
+
+# SEC_ACL for auth.file:
+# Default cell = /.../cell1.qadce.osf.org
+mask_obj:rw----
+user_obj:rw-c--
+user:trustp:rwx---      #effective:rw----
+group_obj:rwx---        #effective:rw----
+other_obj:r-----
+foreign_other:/.../cell1.qadce.osf.org:r-x---   #effective:r-----
+any_other:r-x---        #effective:r-----
+>% 
+
+Set trustp's umask to 077 then create a directory and file.  The
+Initial Container and Initial Object ACLs will be filtered by the
+umask to derive the ACLs of new directories and files.
+
+>% umask 077
+>% umask
+077
+>% mkdir auth.umask.dir
+>% ls -ld auth.umask.dir
+drwx------   2 trustp   notrustg     256 Jan 19 16:32 auth.umask.dir
+>% acl_edit auth.umask.dir -l
+
+# SEC_ACL for auth.umask.dir:
+# Default cell = /.../cell1.qadce.osf.org
+mask_obj:----id
+user_obj:rwxcid
+user:trustp:rwx-id      #effective:----id
+group_obj:rwx-id        #effective:----id
+other_obj:------
+foreign_other:/.../cell1.qadce.osf.org:r-x---   #effective:------
+any_other:r-x---        #effective:------
+>% 
+
+Check the Initial Container and Initial Object ACLs of umask.dir.
+>% acl_edit auth.umask.dir -ic -l
+
+# Initial SEC_ACL for directories created under: auth.umask.dir:
+# Default cell = /.../cell1.qadce.osf.org
+mask_obj:rwx-id
+user_obj:rwxcid
+user:trustp:rwx-id
+group_obj:rwx-id
+other_obj:r-x---
+foreign_other:/.../cell1.qadce.osf.org:r-x---
+any_other:r-x---
+>% acl_edit auth.umask.dir -io -l
+
+# Initial SEC_ACL for objects created under: auth.umask.dir:
+# Default cell = /.../cell1.qadce.osf.org
+mask_obj:rwx---
+user_obj:rwxc--
+user:trustp:rwx---
+group_obj:rwx---
+other_obj:r-x---
+foreign_other:/.../cell1.qadce.osf.org:r-x---
+any_other:r-x---
+>% 
+
+Create a file and check the UNIX mode bits and the ACLs.
+
+>% echo `date` > auth.umask.file
+>% ls -l auth.umask.file
+-rw-------   1 trustp   notrustg      29 Jan 19 16:34 auth.umask.file
+>% acl_edit auth.umask.file -l
+
+# SEC_ACL for auth.umask.file:
+# Default cell = /.../cell1.qadce.osf.org
+mask_obj:------
+user_obj:rw-c--
+user:trustp:rwx---      #effective:------
+group_obj:rwx---        #effective:------
+other_obj:------
+foreign_other:/.../cell1.qadce.osf.org:r-x---   #effective:------
+any_other:r-x---        #effective:------
+>% 
+
+
+Unauthenticated user 
+
+Note: This section is incomplete pending resolution of OT 9786 and
+further investigation of ACLs for unauthenticated users.
+
+Setup the ACLs on /.../cell2.qadce.osf.org/epi_1/inherit_dir to allow
+RWXID for any_other.
+
+In Cell2:
+>% cd /:/epi_1
+root@orange> acl_edit inherit_dir
+sec_acl_edit> m any_other:rwxid
+sec_acl_edit> commit
+sec_acl_edit> exit
+>% acl_edit inherit_dir -ic
+sec_acl_edit> m any_other:rwxid
+sec_acl_edit> commit
+sec_acl_edit> exit
+>%          
+>% acl_edit inherit_dir -io
+sec_acl_edit> m any_other:rwxid
+sec_acl_edit> commit
+sec_acl_edit> exit
+
+In Cell1:
+
+>% klist
+No DCE identity available: No currently established network identity for which context exists (dce / sec)
+
+Kerberos Ticket Information:
+klist: No credentials cache file found (dce / krb) while setting cache flags (ticket cache /opt/dcelocal/var/security/creds/dcecred_41ffffd4)
+
+>% cd /.../cell2.qadce.osf.org/fs/epi_1/inherit_dir
+>% ls
+auth.file        auth.umask.dir   auth.umask.file  auth_dir
+>% umask 000
+>% umask
+00
+
+Create a directory and check the UNIX mode bits and the ACLs.
+
+>% mkdir unauth.dir
+>% ls -ld unauth.dir
+drwxrwxr-x   2 nobody   65534        256 Jan 20 08:41 unauth.dir
+>% acl_edit unauth.dir -l
+Warning - binding to registry is unauthenticated
+Unknown default cell from ACL - ERROR: Cell UUID is not a valid cell name (dce / sec)
+INFO: Local cell will be used for operations requiring default cell info.
+
+# SEC_ACL for unauth.dir:
+# Default cell = fffffffe0000.00.00.00.00.00.00.00.00
+mask_obj:rwx-id
+user_obj:rwxcid
+foreign_user:/.../cell1.qadce.osf.org/trustp:rwx-id
+group_obj:rwx-id
+other_obj:r-x---
+foreign_other:/.../cell1.qadce.osf.org:r-x---
+any_other:rwx-id
+>% acl_edit unauth.dir -ic -l
+Warning - binding to registry is unauthenticated
+Unknown default cell from ACL - ERROR: Cell UUID is not a valid cell name (dce / sec)
+INFO: Local cell will be used for operations requiring default cell info.
+
+
+# Initial SEC_ACL for directories created under: unauth.dir:
+# Default cell = fffffffe0000.00.00.00.00.00.00.00.00
+mask_obj:rwx-id
+user_obj:rwxcid
+foreign_user:/.../cell1.qadce.osf.org/trustp:rwx-id
+group_obj:rwx-id
+other_obj:r-x---
+foreign_other:/.../cell1.qadce.osf.org:r-x---
+any_other:rwx-id
+>% acl_edit unauth.dir -io -l
+Warning - binding to registry is unauthenticated
+Unknown default cell from ACL - ERROR: Cell UUID is not a valid cell name (dce / sec)
+INFO: Local cell will be used for operations requiring default cell info.
+
+# Initial SEC_ACL for objects created under: unauth.dir:
+# Default cell = fffffffe0000.00.00.00.00.00.00.00.00
+mask_obj:rwx-id
+user_obj:rwxc--
+foreign_user:/.../cell1.qadce.osf.org/trustp:rwx---
+group_obj:rwx---
+other_obj:r-x---
+foreign_other:/.../cell1.qadce.osf.org:r-x---
+any_other:rwx-id
+
+>% echo `date` > unauth.file
+dfs: set auth binding failed (code 387064042); running unauthenticated.
+dfs: set auth binding failed (code 387064042); running unauthenticated.
+
+>% ls -l unauth.file
+-rw-rw-r--   1 nobody   65534          0 Jan 20 08:43 unauth.file
+
+>% acl_edit unauth.file -l
+Warning - binding to registry is unauthenticated
+Unknown default cell from ACL - ERROR: Cell UUID is not a valid cell name (dce / sec)
+INFO: Local cell will be used for operations requiring default cell info.
+
+# SEC_ACL for unauth.file:
+# Default cell = fffffffe0000.00.00.00.00.00.00.00.00
+mask_obj:rw--id
+user_obj:rw-c--
+foreign_user:/.../cell1.qadce.osf.org/trustp:rwx---     #effective:rw----
+group_obj:rwx---        #effective:rw----
+other_obj:r-----
+foreign_other:/.../cell1.qadce.osf.org:r-x---   #effective:r-----
+any_other:rwx-id        #effective:rw--id
+
+Set your umask to 077.
+
+>% umask 077 
+>% umask
+077
+
+Create a directory and check the UNIX mode bits and ACLs.
+
+>% mkdir unauth.umask.dir
+dfs: set auth binding failed (code 387064042); running unauthenticated.
+>% ls -ld unauth.umask.dir
+drwx------   2 nobody   65534        256 Jan 20 09:15 unauth.umask.dir
+>% acl_edit unauth.umask.dir -l
+Warning - binding to registry is unauthenticated
+Unknown default cell from ACL - ERROR: Cell UUID is not a valid cell name (dce / sec)
+INFO: Local cell will be used for operations requiring default cell info.
+
+# SEC_ACL for unauth.umask.dir:
+# Default cell = fffffffe0000.00.00.00.00.00.00.00.00
+mask_obj:----id
+user_obj:rwxcid
+foreign_user:/.../cell1.qadce.osf.org/trustp:rwx-id     #effective:----id
+group_obj:rwx-id        #effective:----id
+other_obj:------
+foreign_other:/.../cell1.qadce.osf.org:r-x---   #effective:------
+any_other:rwx-id        #effective:----id
+
+>% acl_edit unauth.umask.dir -ic -l
+Warning - binding to registry is unauthenticated
+Unknown default cell from ACL - ERROR: Cell UUID is not a valid cell name (dce / sec)
+INFO: Local cell will be used for operations requiring default cell info.
+
+# Initial SEC_ACL for directories created under: unauth.umask.dir:
+# Default cell = fffffffe0000.00.00.00.00.00.00.00.00
+mask_obj:rwx-id
+user_obj:rwxcid
+foreign_user:/.../cell1.qadce.osf.org/trustp:rwx-id
+group_obj:rwx-id
+other_obj:r-x---
+foreign_other:/.../cell1.qadce.osf.org:r-x---
+any_other:rwx-id
+
+>% acl_edit unauth.umask.dir -io -l
+Warning - binding to registry is unauthenticated
+Unknown default cell from ACL - ERROR: Cell UUID is not a valid cell name (dce / sec)
+INFO: Local cell will be used for operations requiring default cell info.
+
+# Initial SEC_ACL for objects created under: unauth.umask.dir:
+# Default cell = fffffffe0000.00.00.00.00.00.00.00.00
+mask_obj:rwx-id
+user_obj:rwxc--
+foreign_user:/.../cell1.qadce.osf.org/trustp:rwx---
+group_obj:rwx---
+other_obj:r-x---
+foreign_other:/.../cell1.qadce.osf.org:r-x---
+any_other:rwx-id
+
+Create a file.
+
+>% echo `date` > unauth.umask.file
+dfs: set auth binding failed (code 387064042); running unauthenticated.
+>% ls -l unauth.umask.file
+-rw-------   1 nobody   65534          0 Jan 20 09:16 unauth.umask.file
+
+>% acl_edit unauth.umask.file -l
+Warning - binding to registry is unauthenticated
+Unknown default cell from ACL - ERROR: Cell UUID is not a valid cell name (dce / sec)
+INFO: Local cell will be used for operations requiring default cell info.
+
+# SEC_ACL for unauth.umask.file:
+# Default cell = fffffffe0000.00.00.00.00.00.00.00.00
+mask_obj:----id
+user_obj:rw-c--
+foreign_user:/.../cell1.qadce.osf.org/trustp:rwx---     #effective:------
+group_obj:rwx---        #effective:------
+other_obj:------
+foreign_other:/.../cell1.qadce.osf.org:r-x---   #effective:------
+any_other:rwx-id        #effective:----id

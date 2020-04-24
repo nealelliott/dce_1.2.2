@@ -1,0 +1,186 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rep_data.idl,v $
+ * Revision 1.1.9.1  1996/10/02  17:47:04  damon
+ * 	Newest DFS from Transarc
+ * 	[1996/10/01  18:37:33  damon]
+ *
+ * Revision 1.1.4.1  1994/06/09  14:07:57  annie
+ * 	fixed copyright in src/file
+ * 	[1994/06/09  13:22:53  annie]
+ * 
+ * Revision 1.1.2.6  1993/01/21  19:36:06  zeliff
+ * 	Embedding copyright notices
+ * 	[1993/01/19  19:49:46  zeliff]
+ * 
+ * Revision 1.1.2.5  1993/01/13  17:49:42  shl
+ * 	Transarc delta: cfe-ot6054-genl-and-i18n-spares 1.1
+ * 	  Selected comments:
+ * 	    Add spares to several RPC structures, with two goals:
+ * 	    - general future usage
+ * 	    - allow for at least some internationalization designs
+ * 	    The only tricky part of this work is that the on-the-wire representation for
+ * 	    directory contents is expanded.
+ * 	[1993/01/12  20:58:46  shl]
+ * 
+ * Revision 1.1.2.4  1992/11/24  17:03:50  bolinger
+ * 	Change include file install directory from .../afs to .../dcedfs.
+ * 	[1992/11/22  17:59:25  bolinger]
+ * 
+ * Revision 1.1.2.3  1992/09/25  18:13:57  jaffe
+ * 	Transarc delta: cfe-ot5296-rpc-bounds 1.1
+ * 	  Selected comments:
+ * 	    Many RPC interfaces that used varying arrays were erring in one of two
+ * 	    ways:
+ * 	    (a) using last_is() attributes for the array control variable
+ * 	    in the .idl file, but treating the boundary as if it were
+ * 	    specified with length_is()
+ * 	    (b) not always initializing the array control variable, particularly
+ * 	    when an RPC returned a varying array but took an error exit.
+ * 	    Either of these situations could produce a fault_invalid_bound exception
+ * 	    from the RPC runtime, when the control variable was given a value outside
+ * 	    the allowed range.  In case (a), this could happen when an RPC value was
+ * 	    packed full (e.g. an entire [0..24] range was used in a 25-element-max array,
+ * 	    and 25 was stored in the control value).  This would be a correct length_is()
+ * 	    value, but one too large for a last_is() value.  In case (b), uninitialized
+ * 	    storage could take any value, including values outside the [0..24] range.
+ * 	    Case (b) might have occurred in Rx-era code, since Rx didn't send bulk
+ * 	    return values when any non-zero result was returned from the RPC (unlike
+ * 	    DCE RPC, which ships these varying-array OUT parameters regardless of
+ * 	    procedure result).
+ * 	    Case-(a) errors: fidsInVol_val, repStatuses_val, afsNetAddrs_val.
+ * 	[1992/09/23  19:10:37  jaffe]
+ * 
+ * Revision 1.1.2.2  1992/08/31  19:45:49  jaffe
+ * 	Transarc delta: cfe-ot4029-portable-rpc-data-types 1.2
+ * 	  Selected comments:
+ * 	    If ``long'' could possibly mean ``64 bits'' any time soon, we need to keep
+ * 	    our RPC interfaces from breaking.
+ * 	    see above
+ * 	    More of the same.  Forgot a couple of .idl files, and needed to change
+ * 	    a couple of procedure signatures to match.
+ * 	[1992/08/30  02:26:42  jaffe]
+ * 
+ * Revision 1.1  1992/01/19  02:51:10  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+/* Copyright (C) 1989, 1990, 1991 Transarc Corporation - All rights reserved */
+
+interface rep_data
+  {
+      import "dcedfs/common_data.idl";
+
+      /*
+       * AFS v4.0 Replication Server Interface opcodes
+       */
+
+      const long REP_FIDBULKMAX = 50;
+      const long REP_STATBULKMAX = 10;
+      const long REP_ADDRBULKMAX = 30;
+      const long REPMSG_SIZE = 400;
+
+      /* Output parameter for GetVolChangedFiles */
+      /* all but the cell ID and the volume ID */
+      typedef struct fidInVol {
+	  unsigned32 Vnode;
+	  unsigned32 Unique;
+      } fidInVol;
+      
+      typedef struct fidsInVol {
+	  unsigned32 fidsInVol_len;
+	  [length_is(fidsInVol_len)] fidInVol fidsInVol_val[REP_FIDBULKMAX];
+      } fidsInVol;
+
+      /* Output structures for GetRepStatus */
+      typedef struct repNumTrack {
+	  unsigned32 Count;
+	  unsigned32 OverCount;
+	  unsigned32 SizeOverCount;
+	  afsHyper SizeOverCountSq;
+      } repNumTrack;
+
+      typedef struct repserverStatus {	/* for the repserver as a whole. */
+	  repNumTrack Attns;
+	  repNumTrack KAs;
+	  unsigned32 nextForceKA;
+	  unsigned32 numReplicas;
+	  unsigned32 numHosts;
+	  unsigned32 numAllocVIDs;
+	  unsigned32 numUsedVIDs;
+	  unsigned32 numReusedVIDs;
+	  unsigned32 numWillCalls;
+	  unsigned32 willCallState;
+	  unsigned32 willCallError;
+	  unsigned32 nextWillCallTime;
+	  unsigned32 spare1;
+	  unsigned32 spare2;
+	  unsigned32 spare3;
+	  unsigned32 spare4;
+	  unsigned32 spare5;
+	  unsigned32 spare6;
+	  unsigned32 spare7;
+	  unsigned32 spare8;
+	  unsigned32 spare9;
+      } repserverStatus;
+
+      typedef struct repStatus {
+	  afsHyper volId;	/* the local one */
+	  afsHyper srcVolId;	/* where we get info from */
+	  afsHyper curVV;	/* published VV for local volume */
+	  afsHyper srcVV;	/* what we think source VV is */
+	  afsNetAddr srcAddr;	  afsHyper CellId;
+	  afsHyper WVT_ID;	  afsHyper spareh1;
+	  afsHyper spareh2;
+	  afsHyper spareh3;
+	  afsTimeval tokenLossTime;
+	  /* when we lost a WVT token for the source */
+	  afsTimeval tokenExpireTime;/* when WVT token will expire */
+	  afsTimeval lastReplicaPublish;
+	  /* when we last published an updated copy */
+	  afsTimeval vvCurr;	/* when the curVV was current */
+	  afsTimeval vvPingCurr;	/* when we last looked */
+	  afsTimeval whenTried;  /* when we last tried an update */
+	  afsTimeval whenToTryAgain;
+	  /* when we'll work on this replica again */
+	  afsTimeval lastKASweep; /* when we swept the KA cache */
+	  afsTimeval sparet1;
+	  afsTimeval sparet2;
+	  unsigned32 flags;		/* replica flags */
+	  unsigned32 volStates; /* flags (``states'') on published volume */
+	  unsigned32 curAggr;	/* aggregate ID here */
+	  unsigned32 srcAggr;	/* aggregate ID on source */
+	  unsigned32 numKAs;	/* number of keep-alives on this volume */
+	  unsigned32 numVolChanged;
+	  unsigned32 volChangedOldestTimeUsed;
+	  unsigned32 nextVolChangedTime;
+	  unsigned32 sparel1;
+	  unsigned32 sparel2;
+	  unsigned32 sparel3;
+	  codesetTag msgTag;
+	  unsigned32 msgLength;
+	  byte volName[AFS_NAMEMAXLEN];
+	  byte RepMsg[REPMSG_SIZE];
+      } repStatus;
+
+      typedef struct repStatuses {
+	  unsigned32 repStatuses_len;
+	  [length_is(repStatuses_len)] repStatus repStatuses_val[REP_STATBULKMAX];
+      } repStatuses;
+
+      typedef struct afsNetAddrs {
+	  unsigned32 afsNetAddrs_len;
+	  [length_is(afsNetAddrs_len)] afsNetAddr
+	      afsNetAddrs_val[REP_ADDRBULKMAX];
+      } afsNetAddrs;
+  }

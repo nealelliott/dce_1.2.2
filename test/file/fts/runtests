@@ -1,0 +1,312 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+#
+
+###############################################################################
+#    Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This is a driver script, which runs fts/test*. The tests there are
+# applicable to DFS exporting both Episode and UFS filesets. All fts
+# subcommands are exercised by this test suite.
+
+###############################################################################
+
+# Usage:                runtests [-nt <iter>] [-np <procs>] [-server1 <host>]
+#				 [-server2 <host>] [{-ufs | -lfs}] [-short]
+
+# Typically run via:    
+#	On server: runtests -lfs
+#	On client: runtests -lfs -server1 <hostname> -server2 <hostname>
+#		   server1 and server2 can be the same host
+
+# A test log is produced; the default name is ./fts.runtests.log.
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode and UFS.
+# DFS server $SERVER_1 must export Episode aggregate $EPI_AGGRNAME_1 and 
+# UFS partition $UFS_AGGRNAME_1, and $SERVER_2 must export $EPI_AGGRNAME_2
+# and $UFS_AGGRNAME_2.
+# $SERVER_1 and $SERVER_2 can be the same machine.
+
+#
+# If the values of the following variables are other that the default, set them
+# before running the tests.
+#
+# Variable Name		Default Value
+# -------------         -------------
+# UFS_AGGRNAME_1	/ufs1
+# UFS_AGGRNAME_2	/ufs2
+# UFS_FSNAME_1		ufs1
+# UFS_FSNAME_2		ufs2
+# UFS_MP_NAME_2		tmp.ufs
+# EPI_PART_1		/dev/epi1
+# EPI_PART_2		/dev/epi2
+# EPI_AGGRNAME_1	epi1
+# EPI_AGGRNAME_2	epi2
+# EPI_AGGRNAME_3	epi1
+# EPI_FSNAME_2		fileset.epi
+# EPI_MP_NAME_2		epifs2
+# SERVER_1		host on which test running (/bin/hostname)
+# SERVER_2		host on which test running (/bin/hostname)
+# FTS_LOG_HOME		pwd
+# FTS_VERBOSE		OFF
+# FTS_TESTS		All fts tests
+# AUTH_ARG		null
+# CELL_NAME		the local cell name
+# CELL_ARG		null
+# UFS_AGGID_1		23
+# VERB_ARG		null
+# UFS_ROOT_1		/usr
+# UFS_ROOT_2		/tmp
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1 and $SERVER_2, in
+# order to run the fts commands contained in this suite. You must also be
+# able to create mount points in $export_root.
+
+###############################################################################
+
+# Edit this line to choose which tests you want to run
+# test17 requires extended setup, leave it out for now
+: ${FTS_TESTS="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 18 19 20 21"}
+
+hn=`hostname|cut -d"." -f1 2>/dev/null`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${FTS_VERBOSE="OFF"}
+: ${FTS_LOG_HOME=`pwd`}
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${EPI_PART_1=/dev/epi1}	# for SEPI testing
+: ${EPI_PART_2=/dev/epi2}
+: ${EPI_AGGRNAME_1=epi1}
+: ${EPI_AGGRNAME_2=epi2}
+: ${EPI_AGGRNAME_3=epi1}
+: ${EPI_FSNAME_2=fileset.epi.$$}
+: ${EPI_MP_NAME_2=epifs2.$$}
+: ${UFS_AGGID_1=23}
+: ${UFS_FSNAME_2=tmp.ufs}
+: ${UFS_MP_NAME_2=tmp.ufs}     # this should not pre-exist
+: ${UFS_AGGRNAME_1=/ufs1}
+: ${UFS_AGGRNAME_2=/ufs2}
+: ${UFS_FSNAME_1=ufs1}
+: ${UFS_FSNAME_2=ufs2}
+: ${SERVER_1=$hn}
+: ${SERVER_2=$hn}
+: ${TESTTOP=$dn}	# you may have to copy fts and other tests to TESTTOP
+: ${VERB_ARG=""}
+: ${UFS_ROOT_1=/usr}
+: ${UFS_ROOT_2=/tmp}
+: ${DFS_WORKS_ON_UFS="UFS"}
+: ${DFS_WORKS_ON_LFS="LFS"}
+: ${DFS_WORKS_ON_BOTH="BOTH"}
+: ${DFS_PASS_EQ_ZERO=1}
+: ${DFS_PASS_EQ_NONZERO=2}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name=/.../$CELL_NAME}
+: ${dns_server_prefix=/.:/hosts/}
+: ${export_root=/.../$CELL_NAME/fs}
+: ${dfs_FileSysType=$DFS_WORKS_ON_LFS}
+
+PATH=":"$bin_dir":"$PATH
+: ${lf=$FTS_LOG_HOME/$ty.$p.log}
+
+###############################################################################
+
+usage()
+{
+  echo "Usage: runtests [-nt <iter>] [-np <procs>] [-server1 <host>]"
+  echo "[-server2 <host>] [{-ufs | -lfs}] [-short] [-norep] [-help]"
+}
+
+  
+np=1; npf=FALSE
+nt=1; ntf=FALSE
+s1f=FALSE; s2f=FALSE
+
+for a in $*
+do
+   if test $npf = TRUE; then np=$a; npf=FALSE
+   elif test $ntf = TRUE; then nt=$a; ntf=FALSE
+   elif test $s1f = TRUE; then SERVER_1=$a; s1f=FALSE
+   elif test $s2f = TRUE; then SERVER_2=$a; s2f=FALSE
+   else
+      case $a in
+         -np) npf=TRUE ;;
+         -nt) ntf=TRUE ;;
+	 -server1) s1f=TRUE ;;
+	 -server2) s2f=TRUE ;;
+	 -ufs) dfs_FileSysType=$DFS_WORKS_ON_UFS ;;
+	 -lfs) dfs_FileSysType=$DFS_WORKS_ON_LFS ;;
+	 -short) FTS_TESTS="4 5 6 10 12 14" ;;
+	 -norep) DFS_NO_REPLICATION=1; export DFS_NO_REPLICATION
+		 FTS_TESTS="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 18 20 21" ;;
+	 -help) usage; exit 0 ;;
+	 -h) usage; exit 0 ;;
+         *) echo "$p: invalid argument \"$a\"" | tee -a $lf; exit 2 ;;
+      esac
+   fi
+done
+
+if test $npf = TRUE
+then echo "$p: -np requires an argument" | tee -a $lf; exit 2
+elif test $np -lt 1
+then echo "$p: number of processes must be >= 1" | tee -a $lf; exit 2
+elif test $ntf = TRUE
+then echo "$p: -nt requires an argument" | tee -a $lf; exit 2
+elif test $nt -lt 0
+then echo "$p: number of times must be >= 0" | tee -a $lf; exit 2
+elif test "$SERVER_1" = ""
+then echo "$p: -server1 requires a host name/addr as argument" | tee -a $lf; exit 2
+elif test "$SERVER_2" = ""
+then echo "$p: -server2 requires a host name/addr as argument" | tee -a $lf; exit 2
+fi
+
+###############################################################################
+# We do all our tests under /.:/fs/test. So make sure this directory is present
+# and if not create it. If root.dfs is in UFS, we may not have permissions to
+# create a directory or chmod it. If this is the case, create test by hand. In
+# LFS there should be no problem doing this.
+
+if [ -d $export_root/test ]
+then 
+    echo ""; echo "$export_root/test exists, chmod'ing it to 777"
+    chmod 777 $export_root/test
+else
+    echo ""; echo "$export_root/test does not exist, creating it"
+    echo "*** If the directory creation fails, create the dir and restart test"
+    mkdir $export_root/test
+    chmod 777 $export_root/test
+fi
+
+###############################################################################
+# Make some checks here
+if [ "$SERVER_1" = "$SERVER_2" ]
+then
+  EPI_AGGRNAME_3="invalid"
+fi
+
+(
+echo ""
+echo "$ty/$p running on $hn at `date`"
+echo "   in cell $CELL_NAME."
+echo "Servers are $SERVER_1 and $SERVER_2."
+echo "$np processes; $nt times; parent process number $$."
+) | tee -a $lf
+
+if test "$CELL_NAME" = ""
+   then echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting." |
+           tee -a $lf
+        exit 2
+   fi
+
+export AUTH_ARG CELL_NAME CELL_ARG EPI_PART_1 EPI_PART_2
+export EPI_AGGRNAME_1 EPI_AGGRNAME_2 EPI_AGGRNAME_3 EPI_FSNAME_2 EPI_MP_NAME_2
+export UFS_AGGID_1 UFS_FSNAME_2 UFS_MP_NAME_2 UFS_AGGRNAME_1 UFS_AGGRNAME_2
+export SERVER_1 SERVER_2 VERB_ARG UFS_ROOT_1 UFS_ROOT_2
+export DFS_WORKS_ON_UFS DFS_WORKS_ON_LFS DFS_PASS_EQ_ZERO DFS_PASS_EQ_NONZERO
+export DFS_WORKS_ON_BOTH
+
+export bin_dir dns_cell_name dns_server_prefix export_root dfs_FileSysType
+export PATH
+
+###############################################################################
+
+t=1
+runtestsStat=0
+while test $t -le $nt -o $nt -eq 0
+do
+(echo ""; echo "Starting iteration number $t") | tee -a $lf
+
+pr=1
+while test $pr -le $np
+   do
+   (echo ""; echo "Iteration $t starting process number $pr at `date`.") |
+      tee -a $lf
+   (
+   outfile=${FTS_LOG_HOME}/$ty.$pr.$$; rm -rf $outfile
+   (echo ""; echo "Listing /:/..."; ls -lL /: 2>&1) | tee -a $lf
+
+   for f in $FTS_TESTS
+   do
+       test=test$f
+       (echo ""; echo "Iteration $t process $pr running $test.") | tee -a $lf
+       (echo ""; echo "Temporary log file is $outfile") | tee -a $lf
+       sync; sync
+       if [ "$FTS_VERBOSE" = "ON" ]
+       then
+          sh -x $TESTTOP/$test > $outfile 2>&1; rf=$?
+       else
+          sh $TESTTOP/$test  > $outfile 2>&1; rf=$?
+       fi
+       if [ $rf -ne 0 ]
+       then
+		(echo ""; echo "Iteration $t process $pr test $test FAILED with exit status $rf") | tee -a $lf
+       fi
+	
+       rf=$?; rc=`expr $rc + $rf`
+       sync; sync
+       cat $outfile | tee -a $lf
+       (echo ""; echo "Iteration $t process $pr $test returned $rf.") |
+          tee -a $lf
+       sync; sync
+       rm -f $outfile
+       (echo ""; echo "Listing /:/..."; ls -lL /: 2>&1) | tee -a $lf
+       sync; sync
+   done # for
+
+   (echo ""; echo "   process number $pr done at `date`.") | tee -a $lf
+   exit $rc
+   ) &
+
+   childPids="$childPids $!"
+   pr=`expr $pr + 1`
+   done # while
+
+echo "" | tee -a $lf
+pr=1
+for eachPid in $childPids
+ do
+  wait $eachPid
+  rf=$?
+ (echo ""; echo "Iteration $t process number $pr done with exit status $rf") | tee -a $lf
+  if [ $runtestsStat -eq 0 -a $rf -ne 0 ]
+   then
+    runtestsStat=`expr $runtestsStat + 1`
+   fi
+ done 
+
+if [ $runtestsStat -ne 0 ]
+ then
+  echo "Iteration number $t completed at `date` with $runtestsStat failures" | tee -a $lf
+ else
+  echo "Iteration number $t completed at `date` successfully" | tee -a $lf
+ fi
+t=`expr $t + 1`
+done
+
+###############################################################################
+
+(echo ""; echo "Tests complete at `date`."; echo "") | tee -a $lf
+if test $runtestsStat -eq 0
+   then echo "$ty/$p PASSED" | tee -a $lf
+   else echo "$ty/$p FAILED" | tee -a $lf
+   fi
+
+exit $runtestsStat
+
+###############################################################################

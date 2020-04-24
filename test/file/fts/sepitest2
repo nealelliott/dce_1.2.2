@@ -1,0 +1,234 @@
+#!/bin/sh
+
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: sepitest2,v $
+# Revision 1.1.8.1  1996/10/17  18:22:35  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:51:44  damon]
+#
+# Revision 1.1.2.3  1993/01/11  18:28:18  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:04:20  htf]
+# 
+# Revision 1.1.2.2  1992/10/28  17:31:01  jaffe
+# 	New File
+# 	[1992/10/27  19:40:35  jaffe]
+# 
+# $EndLog$
+
+###############################################################################
+#    Copyright (C) 1991, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This test is only applicable to local Episode (not exported Episode or UFS).
+# It creates aggregates with varying blocksizes and fragsizes, and verifies
+# that they work properly. It uses Transarc fs/test2 to do the verification.
+
+###############################################################################
+
+# Usage:                etest3
+
+# Typically run via:    etest3 >& etest3.out
+
+###############################################################################
+
+# Test environment:
+# The system must be capable of running local Episode (i.e., it must be
+# able to do epimounts). DFS is not required, just local Episode.
+# $EPI_PART_1 must be an Episode aggregates. This script will run newaggr
+# on $EPI_PART_1, and will also destroy any pre-existing local directory
+# named $EPI_MOUNT_1.
+
+# Privilege required:
+# You must be local root (in order to run epimount and epiunmount); you must
+# be able to create and delete $EPI_MOUNT_1.
+
+# Notes:
+# As of DCE 1.0, a newaggr bug caused most of the (valid) combinations of
+# blocksize and fragsize to fail. So, we drastically reduce the number of
+# combinations that are actually tested.
+
+# Highest error number is: 10.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+rc=0
+ty=fts
+
+: ${EPI_MOUNT_1=/efs1}
+: ${EPI_PART_1=/dev/epi1}
+: ${TESTTOP=/afs/tr/de/qatest/tests}
+
+: ${bin_dir=/opt/dcelocal/bin}
+
+PATH=":"$bin_dir":"$PATH
+
+ft_name=test.$$
+ft_id=$$
+
+# blocksizes="2048 16384 4096 8192 65536"
+# fragsizes="1024 2048 16384 4096 8192 65536"
+blocksizes="8192 4096"
+fragsizes="1024"
+bad_blocksizes="256 512 1000 8000 131072 65537"
+bad_fragsizes="256 512 1000 131072 65537"
+
+test_prog=$TESTTOP/fs/test2
+
+###############################################################################
+
+echo ""
+echo "$ty/$p running on $hn at `date`."
+echo "Using Episode partition $EPI_PART_1, mounting at $EPI_MOUNT_1."
+echo "Fileset name is $ft_name, ID is $ft_id."
+
+###############################################################################
+
+echo ""; echo "Creating mount directory..."
+rm -rf $EPI_MOUNT_1
+mkdir $EPI_MOUNT_1
+
+###############################################################################
+
+echo ""; echo "Trying valid blocksize/fragsize combinations..."
+
+for bs in $blocksizes
+    do
+    for fs in $fragsizes
+        do
+        if test $bs -ge $fs
+           then
+           for iter in 1 # could do multiple iterations here, for stress
+               do
+
+               echo "Trying blocksize $bs and fragsize $fs (iteration $iter)"
+
+               sync; sync
+               cd /tmp
+               err=FALSE
+
+               newaggr $EPI_PART_1 $bs $fs -overwrite
+               if test $? -ne 0
+                  then echo "- newaggr failed ($p: E1)"
+                  rc=`expr $rc + 1`; err=TRUE
+                  fi
+
+               newvol $ft_id $ft_name $EPI_PART_1
+               if test $? -ne 0
+                  then echo "- newvol failed ($p: E2)"
+                       rc=`expr $rc + 1`; err=TRUE
+                  fi
+
+               epimount $ft_name $EPI_MOUNT_1
+               if test $? -ne 0
+                  then echo "- epimount failed ($p: E3)"
+                       rc=`expr $rc + 1`; err=TRUE
+                  fi
+
+               if test $err = FALSE
+                  then
+
+                  cd $EPI_MOUNT_1
+                  if test `pwd` != $EPI_MOUNT_1 -o $? -ne 0
+                     then echo "- cd $EPI_MOUNT_1 failed ($p: E4)"
+                          rc=`expr $rc + 1`
+                     fi
+
+                  $test_prog -np 2 -nt 3
+                  if test $? -ne 0
+                     then echo "- test2 failed ($p: E5)"; rc=`expr $rc + 1`
+                     fi
+
+                  cd /tmp
+                  epiunmount $EPI_MOUNT_1
+                  if test $? -ne 0
+                     then echo "- epiunmount failed ($p: E6)"; rc=`expr $rc + 1`
+                     fi
+
+                  fi # $err = FALSE
+
+               sync; sync
+
+               done # $iter
+           fi # $bs -ge $fs
+        done # $fs
+    done # $bs
+
+###############################################################################
+
+echo ""; echo "Trying invalid blocksize/fragsize combinations..."
+
+for bs in $blocksizes
+    do
+    for fs in $fragsizes
+        do
+        if test $bs -lt $fs
+           then
+           echo "Trying (invalid combination of) blocksize $bs and fragsize $fs"
+           newaggr $EPI_PART_1 $bs $fs -overwrite
+           if test $? -eq 0
+              then echo "- newaggr succeeded ($p: E7)"; rc=`expr $rc + 1`
+              fi
+           fi
+        done
+    done
+
+###############################################################################
+
+echo ""; echo "Trying invalid blocksizes/fragsizes..."
+
+for bs in $blocksizes
+    do
+    for fs in $bad_fragsizes
+        do
+        echo "Trying blocksize $bs and (invalid) fragsize $fs"
+        newaggr $EPI_PART_1 $bs $fs -overwrite
+        if test $? -eq 0
+           then echo "- newaggr succeeded ($p: E8)"; rc=`expr $rc + 1`
+           fi
+        done
+    done
+
+for bs in $bad_blocksizes
+    do
+    for fs in $fragsizes
+        do
+        echo "Trying (invalid) blocksize $bs and fragsize $fs"
+        newaggr $EPI_PART_1 $bs $fs -overwrite
+        if test $? -eq 0
+           then echo "- newaggr succeeded ($p: E9)"; rc=`expr $rc + 1`
+           fi
+        done
+    done
+
+for bs in $bad_blocksizes
+    do
+    for fs in $bad_fragsizes
+        do
+        echo "Trying (invalid) blocksize $bs and (invalid) fragsize $fs"
+        newaggr $EPI_PART_1 $bs $fs -overwrite
+        if test $? -eq 0
+           then echo "- newaggr succeeded ($p: E10)"; rc=`expr $rc + 1`
+           fi
+        done
+    done
+
+###############################################################################
+
+echo ""; echo "All done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################

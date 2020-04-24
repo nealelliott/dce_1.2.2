@@ -1,0 +1,94 @@
+
+		    INSTALLATION OF MESSAGING COMPONENTS
+
+________________________________________________________________________
+
+			    Queue Manager (qmgr)
+
+Before you start:
+
+    Create principal for each queue manager you will run.  Every instance
+    of the qmgr should have its own DCE principal.  (This is generally true
+    of all DCE services.)
+    "my-qmgr" (passwd "xyzzy"), putting in group "qmgrs"
+
+    Make a private working directory for the qmgr and go there:
+	mkdir /opt/dcelocal/var/Q		-- or the directory you want
+	cd /opt/dcelocal/var/Q
+
+    Create keytab file with dcecp:
+	dcecp> keytab create K -local -storage my-keyfile \
+		-data {my-qmgr plain 1 xyzzy}
+    or file with rgy_edit:
+	rgy_edit=> kta -f my-keyfile -p my-qmgr -pw xyzzy
+    The full path this keytab thus /opt/dcelocal/var/Q/my-keyfile
+    (You can, of course, pick any directory or filename you want for the
+    keytab file. The local system user which will run the qmgr must have
+    read and write access to it.)
+
+Initialize backing stores and ACL database:
+
+    cd /opt/dcelocal/var/Q
+    /some/path/qmgr -p my-qmgr -k /opt/dcelocal/var/Q/my-keyfile -i
+
+Run it:
+
+    (assume qmgr is in your path)
+    qmgr -p my-qmgr -k FILE:/opt/dcelocal/var/Q/my-keyfile \
+	-e /.:/subsys/Q/my-queue
+
+    ("my-qmgr" needs write access to /.:/subsys/Q)
+    * the "-A" flag turns off ACL checking.
+
+    Environment variables:
+
+    Rather then set those values on the command line, you may use the
+    environment variables:
+	QMGR_KEYFILE
+	QMGR_PRINCIPAL
+	QMGR_NS_ENTRY
+
+    Input parameters are checked in this order:
+	1. command line args
+	2. env variables
+	3. DCED attributes
+    Note: interaction with DCED may not work (yet).
+
+    Command line arguments summary:
+	-p qmgr_prin         set principal to run as
+	-e ns_entry          set NS entry to which to export
+	-k keytab_file       keytab to use - eg, "FILE:/opt/dcelocal/Q/KEYS"
+	-w svc_destination   set svc dest - eg, "*:STDERR:-;FILE:/tmp/mos.log"
+			     (sends all messages to both stderr and the file)
+	-i                   initialize files and exit
+	-o uuid              object UUID to export to namespace
+	-A                   disable ACL checking
+
+    You may also set the destination for serviceability messages with -w.
+    You may also turn off all ACL checking with the -A flag.
+
+Accessing the qmgr
+    Once it us running, you access the qmgr through /.:/subsys/Q/my-qmgr.
+    For example, the queue jjb-deposits is /.:/subsys/Q/my-qmgr/jjb-deposits
+
+Issues
+    Multiple qmgrs on same host
+	If you want to run more than one qmgr on a host, they must export
+	different object UUIDs.  (This is true of any DCE server.)
+	This is because (skimping over all the details)  servers register
+	interface-object pair mappings with the endpoint mapper.  Since
+	the interface UUID is always the same, you must choose an object
+	UUID.  (a default is hard-coded)  "uuidgen" will generate a UUID.
+________________________________________________________________________
+
+			Installation of moscp
+
+After building moscp, either:
+    copy the message catalogs
+	dcemos.cat
+	dcemcp.cat
+    to the appropriate place, something like /usr/lib/nls/msg/C (HPUX).
+or
+    set the environment variable that determines where message catalogs
+    live to include where you put the above two message catalogs.
+

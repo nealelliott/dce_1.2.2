@@ -1,0 +1,596 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: dcesestr,v $
+# Revision 1.1.13.2  1996/03/11  02:47:37  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:08:49  marty]
+#
+# Revision 1.1.13.1  1995/12/11  22:44:48  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/29  20:34 UTC  bell_d
+# 	Many changes done by others (looks like cleanup) - changes to standardize setting control of elapsed time
+# 	on the test run.
+# 
+# 	HP revision /main/HPDCE02/3  1994/10/12  20:28 UTC  bissen
+# 	Merge Hpdce02_04 to HPDCE02 branch
+# 	[1995/12/11  22:21:15  root]
+# 
+# Revision 1.1.10.5  1994/09/24  17:28:48  hester
+# 	fix for erarel001 operation
+# 	[1994/09/23  19:45:56  hester]
+# 
+# Revision 1.1.10.4  1994/08/25  21:09:40  hester
+# 	updates to xattrschema and latest dcecp functionality
+# 	[1994/08/25  20:13:20  hester]
+# 
+# 	HP revision /main/HPDCE02/2  1994/08/23  14:51 UTC  bissen
+# 	Merge from Hpdce02_01
+# 
+# Revision 1.1.10.3  1994/08/03  19:36:02  hester
+# 	added setting of USE_ERA for remote shell regardless of ERA or not
+# 	[1994/08/03  18:01:28  hester]
+# 
+# 	Tet'ified file for reference platform testing
+# 	[1993/05/28  15:53:56  eheller]
+# 
+# Revision 1.1.10.2  1994/07/22  17:30:48  hester
+# 	changed references to era test from str
+# 	[1994/07/21  22:10:16  hester]
+# 
+# 	fixed add_schema call
+# 	[1994/07/20  21:25:31  hester]
+# 
+# 	first rev of updates for ERA tests
+# 	[1994/06/28  18:49:24  hester]
+# 
+# 	HP revision /main/HPDCE02/1  1994/07/01  19:43 UTC  bissen
+# 	Merge hpdce02 (DCE 1.1 beta) and HPDCE01 into HPDCE02
+# 
+# Revision 1.1.10.1  1994/02/03  20:56:43  pellis
+# 	Fixed test to run resestr tests on remote machines at the same time.
+# 	[1994/02/03  20:55:38  pellis]
+# 
+# Revision 1.1.8.3  1993/10/20  14:47:37  ohara
+# 	svr4 port 0t 8596
+# 	[1993/10/19  20:41:13  ohara]
+# 
+# Revision 1.1.8.2  1993/10/14  16:09:41  qbarry
+# 	Modified DCESESTR to bring back the remote log file created by its
+# 	minion, RESESTR, scan that file for success, and use that status as
+# 	well to determine its own success or failure.  (Prior to this DCESESTR
+# 	was unable to detect errors from RESESTR.)  DCESESTR also includes all
+# 	the remote RESESTR journals in its own journal now.
+# 	[1993/10/14  16:02:38  qbarry]
+# 
+# Revision 1.1.8.1  1993/09/08  13:51:21  qbarry
+# 	DCESESTR now executes $TET_ROOT/SYSTEM/PROFILE.DCEST.TET.  That was
+# 	missing in earlier versions.
+# 	[1993/09/08  13:50:49  qbarry]
+# 
+# Revision 1.1.5.6  1993/08/16  13:46:05  cmckeen
+# 	Changed the remote_test tcc command to
+# 	1.  put the journal file in DCELOGDIR
+# 	2.  call the right test suite (system/security)
+# 	[1993/08/16  13:42:28  cmckeen]
+# 
+# Revision 1.1.5.5  1993/08/13  18:48:42  cmckeen
+# 	More changes made to reflect the new install tree structure
+# 	[1993/08/13  18:21:28  cmckeen]
+# 
+# Revision 1.1.5.4  1993/08/11  17:43:38  pellis
+# 	Merged with final version of test from DCE 1.0.2.
+# 	[1993/08/11  17:39:38  pellis]
+# 
+# Revision 1.1.5.3  1993/08/02  17:31:30  cmckeen
+# 	 Changes made to reflect the new install tree
+# 	[1993/08/02  17:17:25  cmckeen]
+# 
+# Revision 1.1.5.2  1993/07/28  19:55:58  cmckeen
+# 	HP's TET'ized version of the system tests
+# 	[1993/07/28  13:53:35  cmckeen]
+# 
+# 	Merged time looping changes
+# 	[1993/04/23  13:23:43  eheller]
+# 
+# Revision 1.1.4.2  1993/03/31  12:54:44  mgm
+# 	Initial GAMERA branch
+# 	[1993/03/31  12:54:44  mgm]
+# 
+# Revision 1.1.3.6  1993/02/02  14:21:25  mgm
+# 	Replaced remove_KRB5CCNAME with kdestroy
+# 	[1993/02/02  14:19:09  mgm]
+# 
+# Revision 1.1.3.5  1992/12/01  19:17:59  mgm
+# 	Changed run_test to show DCE_ERROR if remote shell fails
+# 	[1992/12/01  19:17:12  mgm]
+# 
+# Revision 1.1.3.4  1992/11/12  13:42:26  mgm
+# 	Fixed comments
+# 	[1992/11/12  13:42:03  mgm]
+# 
+# Revision 1.1.3.3  1992/11/06  19:10:04  mgm
+# 	Added changes to allow ropen instead of manual use of resestr
+# 	[1992/11/06  19:09:26  mgm]
+# 
+# Revision 1.1.3.2  1992/11/03  13:53:15  mgm
+# 	Ported to TET. Replaces dcesestr.main.
+# 	[1992/11/03  13:52:16  mgm]
+# 
+# Revision 1.1.3.3  1992/07/24  14:33:41  macgregor_m
+# 	Ported to HPUX (changed /bin/sh to /bin/ksh)
+# 	[1992/07/24  14:33:20  macgregor_m]
+# 
+# Revision 1.1.3.2  1992/06/11  20:02:38  mcfarland
+# 	changed files from test_latest
+# 	[1992/06/09  13:09:15  mcfarland]
+# 
+# 	Sync up with shared sbox
+# 	[1992/05/22  19:57:08  eperkins]
+# 
+# Revision 1.1.1.2  1992/05/28  15:16:42  root
+# 	    Loading drop Dce1_0_1b15
+# 
+# $EndLog$
+#
+# TEST_NAME:  dcesestr
+#
+# COMPONENT_NAME:  dce.systest
+#
+# FILE:  dcesestr.data
+#        sec.functions
+#
+# DESCRIPTION:
+#     To stress the security server and registry by forcing constant login
+#     attempts.
+#     Create a large valid/invalid user registry database. Access the registry
+#     via constant log in attempts from various machines, and change their
+#     home directory, shell and password. Also verify that all valid accounts
+#     can log in and each invalid account is refused.
+#
+# Formerly:FILE: test3.main		DATE: 91/06/10		VERSION: 1.3
+# CHANGE HISTORY
+# 3/12/92                       Initial design
+# 6/30/92	Mary MacGregor	Changed /bin/sh to /bin/ksh
+# 11/2/92	Mary MacGregor	Ported to TET
+#
+# Need to decide where the environment files are to reside on the remote 
+# machines.  
+# ==============================================================================
+
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="run_test"
+
+test_purp_list="run_test"
+
+USE_ERA=${USE_ERA:-no}
+
+startup()
+{
+#set -x
+	if [ "$SEC_MACHINES" = "" ]; then
+		tet_infoline "ERROR: There are no machines to test. Exiting"
+		del_test_purp
+		return
+	fi
+	case $OSTYPE in
+		"SVR4") export HOST=`/usr/ucb/hostname`;;
+		*)      export HOST=`hostname`;;
+	esac
+
+        fail=0
+
+	login_fail=0
+
+	export MY_DIR=$STTMPDIR
+	if [[ -f $MY_DIR/clean_str ]] ; then
+		rm $MY_DIR/clean_str
+	fi
+if [ $USE_ERA = yes ]; then
+	testname=ERAREL001
+else
+	testname=DCESESTR
+fi
+	export testname
+	tet_infoline "Starting $testname on ${HOST}"
+
+	# Use a feature of dce_login that allows authentication from a
+	# shell script
+
+        if [ -f /usr/bin/dce_login -a ! -f /usr/bin/dce_login_noexec ] ; then
+                ln -s /usr/bin/dce_login /usr/bin/dce_login_noexec >/dev/null
+        fi
+
+	# Authenticate the cell
+
+	dce_auth $PARENT_ACCOUNT $PARENT_PASSWD 1>/dev/null 2>&1
+
+        if [ $fail -ne 0 ] ; then
+		del_test_purp
+                return
+        fi
+
+        # Make sure that rgy_edit can be accessed as current user.
+        tet_infoline "Attempting to access rgy_edit as current user."
+
+        ${RGY_EXEC} < /dev/null
+        check_return "$?" "ERROR: ${RGY_EXEC} cannot be accessed by current user." \
+                                "Current user can access registry"
+        if [ $fail -ne 0 ] ; then
+		del_test_purp
+                return
+	else
+		kdestroy
+        fi
+
+	# Verify that all the machines listed are available in the net.
+	# All machines which are not available will be removed from the list.
+	# The new list is placed in file determined by ${MACHINE_LIST_FILE}
+
+	tet_infoline "SEC_MACHINES are: ${SEC_MACHINES}"
+	verify_machines "${SEC_MACHINES}"
+
+	if [ $? -eq 0 ] ; then
+		tet_infoline "Machines are available on the net"
+	else
+		tet_infoline "ERROR: None of the machines requested are available on the net" 
+		del_test_purp
+		return
+	fi
+
+	# Set up file to clean up the registry
+
+	for mach in ${SEC_MACHINES} ; do
+		SEC_PRIN_ID=0
+		echo "do p" >> $MY_DIR/clean_str
+		while [ "$SEC_PRIN_ID" -lt $SEC_NUM_USERS ] ; do
+			PERSON=$LEGAL_PREFIX$mach$SEC_PRIN_ID"p"
+			echo "del $PERSON" >> $MY_DIR/clean_str
+			SEC_PRIN_ID=`expr $SEC_PRIN_ID + 1`
+		done
+
+		SEC_PRIN_ID=0
+		while [ "$SEC_PRIN_ID" -lt $SEC_NUM_ILLEGAL_USERS ] ; do
+			IL_PERSON=$ILLEGAL_PREFIX$mach$SEC_PRIN_ID"p"
+			echo "del $IL_PERSON" >> $MY_DIR/clean_str
+			SEC_PRIN_ID=`expr $SEC_PRIN_ID + 1`
+		done
+		echo "do g"  >> $MY_DIR/clean_str
+		echo "del $SEC_GROUP$mach"  >> $MY_DIR/clean_str
+		echo "do o"  >> $MY_DIR/clean_str
+		echo "del $SEC_ORG$mach"  >> $MY_DIR/clean_str
+	done
+	echo "q"  >> $MY_DIR/clean_str
+        
+	chmod 777 $MY_DIR/clean_str
+}
+
+# Ensure test accounts are not left in the registry
+
+cleanup()
+{
+        tet_infoline "Cleaning up"
+	fail=0
+        dce_auth $PARENT_ACCOUNT $PARENT_PASSWD
+
+        if [ $fail -eq 0 ] ; then
+                ${RGY_EXEC} < $MY_DIR/clean_str > /dev/null
+                # Remove authenticated tickets
+		kdestroy
+        else
+                tet_infoline "ERROR: cleanup: Can't login to run cleanup"
+        fi
+	rm -f $MY_DIR/clean_str
+	rm -f ${RGY_OUTPUT} ${RGY_INPUT} ${MACHINE_LIST_FILE}
+
+}       # end cleanup
+
+run_test()
+{
+        fail=0
+        test_fail=0
+
+	tet_setblock
+       	tet_infoline "starting test $testname"
+	rgy_init 
+
+	tet_setblock
+	if [ $fail -eq 0 ] ; then
+		remote_test
+		remote_check
+	fi
+
+	tet_setblock
+	del_obj
+
+	tet_setblock
+	if [ $test_fail -eq 0 ] ; then
+		tet_infoline "$testname Passed"
+		echo "$testname Passed"
+		tet_result PASS
+	else
+		tet_infoline "$testname Failed"
+		echo "$testname Failed"
+		tet_result DCE_ERROR
+	fi
+}
+
+rgy_init()
+{
+	fail=0
+
+	tet_infoline "Initializing registry...begin rgy_init()"
+
+        dce_auth $PARENT_ACCOUNT $PARENT_PASSWD
+
+	for mach in $SEC_MACHINES ; do
+		tet_setblock
+		# Add group to registry
+		add_group $SEC_GROUP$mach 
+
+		# Add organization to registry
+		add_org $SEC_ORG$mach 
+
+if [ $USE_ERA = yes ]; then
+		# Add attribute schema
+		COMMENT="\"Schema added by erarel001 test\""
+		add_schema ${S_ATTR_NAME}$mach ${ATTR_ENCODING} \
+			${UNIQUE_FLAG} ${MULTI_INSTANCED} ${RESERVED_FLAG} \
+			${APPLY_DEFAULTS} ${INTERCELL_ACTION} ${TRIG_TYPE} \
+			"${COMMENT}" "${ACLMGR_SET}"
+    if [ -f ./core ];then
+          tet_infoline "core file found after add_schema ${S_ATTR_NAME}$mach"
+	  print "core file found after add_schema ${S_ATTR_NAME}$mach"
+	  if [ ! -d /tmp/dcesestr ];then
+		mkdir /tmp/dcesestr
+	  fi
+	  mv ./core /tmp/dcesestr/core${S_ATTR_NAME}$mach
+    fi
+fi
+
+		# Add valid principals and accounts to registry
+		SEC_PRIN_ID=0
+		while [ "$SEC_PRIN_ID" -lt $SEC_NUM_USERS ] ; do
+			PERSON=$LEGAL_PREFIX$mach$SEC_PRIN_ID"p"
+			add_person $PERSON "" "$FULL_NAME$LEGAL_PREFIX$mach$SEC_PRIN_ID"p""
+	
+if [ $USE_ERA = yes ]; then
+			ATTR_VAL="$LEGAL_PREFIX$mach${ATTR_ORIG_VAL}val"
+			add_attr principal ${PERSON} ${S_ATTR_NAME}$mach ${ATTR_VAL}
+fi
+			add_account $PERSON  $SEC_GROUP$mach $SEC_ORG$mach\
+				$SEC_LOGIN_PASSWD $PARENT_PASSWD $VALID\
+				$SEC_HOME_DIR $SEC_SHELL
+
+			SEC_PRIN_ID=`expr $SEC_PRIN_ID + 1`
+		done
+	
+		if [ $fail -ne 0 ] ; then
+			kdestroy
+			test_fail=1
+			tet_infoline "ERROR: rgy_init: Adding valid accounts to registry"
+			return
+		fi
+
+		# Add invalid principals and accounts to registry
+
+		SEC_PRIN_ID=0
+		while [ "$SEC_PRIN_ID" -lt $SEC_NUM_ILLEGAL_USERS ] ; do
+			IL_PERSON=$ILLEGAL_PREFIX$mach$SEC_PRIN_ID"p"
+       			add_person $IL_PERSON "" "$FULL_NAME$ILLEGAL_PREFIX$mach$SEC_PRIN_ID"p""
+        	
+			add_account $IL_PERSON $SEC_GROUP$mach $SEC_ORG$mach\
+       		                 $SEC_LOGIN_ILPASSWD $PARENT_PASSWD $INVALID\
+					$SEC_HOME_DIR $SEC_SHELL
+
+       		 	SEC_PRIN_ID=`expr $SEC_PRIN_ID + 1`
+		done
+	
+
+	done
+
+	if [ $fail -ne 0 ] ; then
+                tet_infoline "ERROR: rgy_init: Adding invalid accounts to registry"
+		kdestroy
+                return
+	else
+		kdestroy
+		tet_infoline "SUCCESSFULLY completed rgy_init()"
+        fi
+
+}	# end rgy_init
+
+#
+# Here is where we actually fire up the remote test, wait for the results,
+# check them, and report any errors.
+#
+
+remote_test()
+{
+	tet_infoline "Beginning remote tests"
+	fail=0
+	export PIDS=""
+        IDIR="-i ${STTMPDIR}"
+        VAR_STRING=""
+# Added by Deon - Take a RUNNING_TIME variable and set it to RUN_TIME 
+# The variable to use to get a timed run is standardized to RUN_TIME 
+# yet, RUNNING_TIME will still work (backward compatible)
+
+        if [ -n "$RUNNING_TIME" ]; then
+	        export RUN_TIME="$RUNNING_TIME"
+	fi
+# Changed by Deon - standardize the algorithm for control of amount of run time 
+# Check for set of loops_to_execute, if that isn't set, then check 
+# for run_time.  if neither is set, default to 4 loops (about 15 minutes worth)
+        if [ -n "$LOOPS_TO_EXECUTE" ]; then
+                VAR_STRING="-v LOOPS_TO_EXECUTE=$LOOPS_TO_EXECUTE"
+        elif [ -n "$RUN_TIME" ]; then
+                VAR_STRING="-v RUN_TIME=$RUN_TIME"
+        else
+                VAR_STRING="-v LOOPS_TO_EXECUTE=4"
+	fi
+
+        for mach in ${SEC_MACHINES} ; do
+
+		tet_setblock
+
+		remjou="${STTMPDIR}/resestr.${mach}.journal"
+		JOURNAL="-j ${remjou}"
+
+		${RSH_COMM} ${mach} rm -f ${remjou}
+
+		# Run RESESTR remotely and bring back its journal file.  Pass
+		# SESTR_CTL_MACH to remote machine so it can build the same
+		# names as we did.
+
+		TCC_STRING="tcc -e ${IDIR} ${JOURNAL} ${VAR_STRING}"
+		echo "${TCC_STRING} systest resestr"
+
+		tet_infoline "Starting RESESTR on ${mach}..."
+if [ $USE_ERA = yes ]; then
+		rshsp ${mach} "export sestr_ctl_mach=${sestr_ctl_mach} ; \
+			export USE_ERA=yes ;export TET_TMP_DIR=${STTMPDIR}  ; \
+			${TCC_STRING} systest resestr" \
+			1>/tmp/${mach}.resestr.screen 2>&1 &
+else
+		rshsp ${mach} "export sestr_ctl_mach=${sestr_ctl_mach} ; \
+			export USE_ERA=no ; export TET_TMP_DIR=${STTMPDIR}  ; \
+			${TCC_STRING} systest resestr" \
+			1>/tmp/${mach}.resestr.screen 2>&1 &
+fi #ERA
+		PIDS="${PIDS}$! "
+		tet_infoline "RESESTR startup on ${mach} done"
+        done
+
+	wait_for_clients
+
+	tet_setblock
+
+}       # end remote_test
+
+remote_check()
+{
+        for mach in ${SEC_MACHINES} ; do
+
+	  tet_infoline "Checking results of RESESTR on ${mach}..."
+	  tet_setblock
+
+          tet_infoline "SCREEN: ************************************************"
+          tet_infoline "SCREEN: /tmp/${mach}.resestr.screen"
+          while read line ; do
+              tet_infoline "SCREEN: ${line}"
+          done < /tmp/${mach}.resestr.screen
+          rm -f /tmp/${mach}.resestr.screen
+
+	  locjou="${STTMPDIR}/resestr.from.${mach}.journal"
+	  remjou="$STTMPDIR/resestr.${mach}.journal"
+
+	  rcp -p ${mach}:${remjou} ${locjou}
+	  if [[ $? -ne 0 ]] ; then
+	    tet_infoline "ERROR: remote_check: rcp -p ${mach}:${remjou} ${locjou} failed"
+	    test_fail=1
+	  else
+	    ${RSH_COMM} ${mach} rm ${remjou}
+	    if [[ $? -ne 0 ]] ; then
+	      tet_infoline "ERROR: remote_check: rm ${remjou} on ${mach} failed"
+	      test_fail=1
+	    fi
+	  fi
+
+	  if [ -f ${locjou} ] ; then
+
+	    # Look for success flag "220|<n> <n> 0 " in remote machines
+	    # local journal, fail if not successful
+
+	    grep  '^220\|[0-9][0-9]* [0-9][0-9]* 0 ' ${locjou} > /dev/null
+	    if [[ $? -eq 0 ]] ; then
+	      tet_infoline "RESESTR passed on ${mach}"
+	    else
+	      tet_infoline "ERROR: RESESTR failed on ${mach}"
+	      test_fail=1
+	    fi
+
+	    # Display remote journal in local journal.
+
+	    tet_infoline "LOG: ************************************************"
+	    tet_infoline "LOG: ${locjou}"
+	    cut -f3- -d "|" < ${locjou} |
+	    while read line ; do
+		tet_infoline "LOG: ${line}"
+	    done
+	    rm -f ${locjou}
+	  else
+	    tet_infoline "ERROR: remote_check: ${locjou} not found"
+	    test_fail=1
+          fi
+        done
+
+	tet_setblock
+
+}       # end remote_check
+
+del_obj()
+{
+	fail=0
+	tet_infoline "Deleting objects in registry...begin del_obj()"
+	for mach in $SEC_MACHINES ; do
+		# Remove all objects created
+
+		SEC_PRIN_ID=0
+		ONE_ILLEGAL_PERSON=$ILLEGAL_PREFIX$mach$SEC_PRIN_ID"p"
+		ONE_LEGAL_PERSON=$LEGAL_PREFIX$mach$SEC_PRIN_ID"p"
+
+    		dce_auth $PARENT_ACCOUNT $PARENT_PASSWD 1>/dev/null 2>&1
+
+if [ $USE_ERA = yes ]; then
+		# Delete extended attributes, then delete schema
+		ATTR_VAL=$LEGAL_PREFIX$mach$ATTR_ORIG_VAL"val"
+		PERSON_PREFIX=$LEGAL_PREFIX$mach
+		integer i=0
+		while [ $i -lt $SEC_NUM_USERS ]; do
+		   delete_attr principal ${PERSON_PREFIX}${i}"p" ${S_ATTR_NAME}$mach ${ATTR_VAL}
+		   i=i+1
+        	done
+		delete_schema ${S_ATTR_NAME}$mach 
+fi
+
+		remove_objects -p $ONE_LEGAL_PERSON -g $SEC_GROUP$mach -o $SEC_ORG$mach \
+		       -l $LEGAL_PREFIX$mach -n $SEC_NUM_USERS
+
+		remove_objects -p $ONE_ILLEGAL_PERSON -g $SEC_GROUP$mach -o $SEC_ORG$mach \
+       		        -l $ILLEGAL_PREFIX$mach -n $SEC_NUM_ILLEGAL_USERS
+
+		if [ $fail -ne 0 ] ; then
+			kdestroy
+			tet_infoline "ERROR: Unable to remove all objects in del_obj() for $mach"
+#			tet_result DCE_ERROR
+			test_fail=1
+		else
+			kdestroy
+			tet_infoline "SUCCESSFULLY completed del_obj()  for $mach"
+#			tet_result PASS
+		fi
+	done
+}	# end del_obj
+
+# TCC will fail if these files don't exist and get sourced so there is
+# no need to check that this happens.  UNSET is to make sure we
+# control SESTR_CTL_MACH from DCESESTR.
+
+. $TET_ROOT/profile.dcest
+unset sestr_ctl_mach
+. ./dcesestr.data
+. $TET_ROOT/security/ts/sec.functions
+if [ $USE_ERA = yes ]; then
+. $TET_ROOT/security/ts/era.data
+. $TET_ROOT/security/ts/era.functions
+fi
+. $TCM

@@ -1,0 +1,193 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+# Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS.
+# The script tests the fts apropos, help, and statftserver subcommands,
+# and the fts <subcommand> -help feature.
+
+###############################################################################
+
+# Usage:                test1
+
+# Typically run via:    test1 >& test1.out
+# or via the fts/runtests script.
+
+###############################################################################
+
+# Test environment:
+# This test requires DFS to be running, and DFS server $SERVER_1 to be
+# up (not necessarily even exporting any aggregates, tho).
+
+# Privilege required:
+# None.
+
+# Highest error number is: 24.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname|cut -f1 -d"." 2>/dev/null`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${SERVER_1=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name=/.../$CELL_NAME}
+: ${dns_server_prefix=/.:/hosts/}
+
+av_arg="$AUTH_ARG $VERB_ARG"
+
+
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+###############################################################################
+
+echo ""
+date
+echo "RUNNING BASIC fts COMMANDS on SERVER $SERVER_1 in CELL $CELL_NAME."
+echo "========================================================================"
+echo ""
+
+###############################################################################
+
+echo ""; echo "Running fts"
+   fts; 
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E1 rc
+
+echo ""; echo "Running fts statftserver"
+   fts statftserver $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E2 rc
+
+   fts statftserver fubar_argument $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E3 rc
+
+   fts statftserver $dns_server_prefix$SERVER_1 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E4 rc
+      
+   fts statftserver $dns_server_prefix$SERVER_1 $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E5 rc
+    
+   fts statftserver $dns_cell_name $dns_server_prefix$SERVER_1 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E6 rc
+     
+   fts statftserver $dns_server_prefix$SERVER_1 -cell $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E7 rc
+       
+   fts statftserver -cell $dns_cell_name $dns_server_prefix$SERVER_1 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E8 rc
+       
+   fts statftserver -cell $dns_cell_name -server $dns_server_prefix$SERVER_1 \
+       $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E9 rc
+       
+   fts statftserver -cell fubar_cell -server $dns_server_prefix$SERVER_1 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E10 rc
+       
+   fts statftserver -cell $dns_cell_name -server fubar_server $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E11 rc
+       
+
+echo ""; echo "Running fts apropos"
+   fts apropos
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E12 rc
+       
+   fts apropos fubar_argument
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E13 rc
+       
+   fts apropos aggregate
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E14 rc
+       
+   fts apropos lock
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E15 rc
+       
+   fts apropos -topic create
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E16 rc
+      
+   fts apropos -topic quota
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E17 rc
+       
+
+echo ""; echo "Running fts help and fts <subcommand> -help"
+   fts help
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E18 rc
+       
+   fts help fubar_argument
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E19 rc
+       
+   fts help -fubar_argument
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E20 rc
+       
+   if [ -n "${DFS_NO_REPLICATION}" ]
+    then
+      commands="aggrinfo apropos clone clonesys create crfldbentry \
+            crmount crserverentry delete delfldbentry delmount dump \
+            edserverentry help lock lsaggr lsfldb \
+            lsft lsheader lsmount lsquota lsserverentry move rename \
+            restore setquota statftserver syncfldb syncserv \
+            unlock unlockfldb zap"
+    else
+      commands="addsite aggrinfo apropos clone clonesys create crfldbentry \
+            crmount crserverentry delete delfldbentry delmount dump \
+            edserverentry help lock lsaggr lsfldb \
+            lsft lsheader lsmount lsquota lsserverentry move release rename \
+            restore rmsite setquota setrepinfo statftserver syncfldb syncserv \
+            unlock unlockfldb update zap"
+    fi
+
+   for subcommand  in $commands
+      do
+      fts help $subcommand
+         dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E21 rc
+      fts $subcommand -help
+         dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E22 rc
+      done
+
+   if [ -z "$DFS_NO_REPLICATION" ]
+    then
+      fts help rmsite addsite dump restore
+        dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E23 rc
+       
+      fts help rmsite addsite fubar_argument restore
+        dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E24 rc
+    fi
+
+   fts help dump restore
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E23 rc
+       
+   fts help fubar_argument restore
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E24 rc
+      
+
+###############################################################################
+
+sync; sync; sleep 2
+
+echo ""; echo "Done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################

@@ -1,0 +1,123 @@
+#
+#      SCCS:  @(#)makefile	1.2 (92/09/30) 
+#
+#	UniSoft Ltd., London, England
+#
+# (C) Copyright 1992 X/Open Company Limited
+#
+# All rights reserved.  No part of this source code may be reproduced,
+# stored in a retrieval system, or transmitted, in any form or by any
+# means, electronic, mechanical, photocopying, recording or otherwise,
+# except as stated in the end-user licence agreement, without the prior
+# permission of the copyright owners.
+#
+# X/Open and the 'X' symbol are trademarks of X/Open Company Limited in
+# the UK and other countries.
+#
+#
+# ************************************************************************
+#
+# SCCS:   	@(#)makefile	1.2 92/09/30
+# NAME:		makefile
+# PRODUCT:	DTET (Distributed Test Environment Toolkit) release 1.0b
+# AUTHOR:		Andrew Dingwall, UniSoft Ltd.
+# DATE CREATED:	June 1992
+#
+# DESCRIPTION:
+#	tccd makefile
+# 
+# MODIFICATIONS:
+# 
+# ************************************************************************
+
+include ../defines.mk
+LCDEFS = $(DTET_CDEFS)
+include ../common.mk
+
+# generic tccd .o files
+OFILES_GN = tccd.o config.o exec.o etab.o log.o stcc.o tsfile.o fake.o
+
+# INET-specific tccd .o files
+OFILES_IN = tccd_in.o tccd_bs.o
+
+OFILES = $(OFILES_GN) $(OFILES_IN)
+
+# $(TCCD) is set in defines.mk and should be either tccd or in.tccd
+ALL = $(TCCD)
+
+TARGETS = $(BIN)/$(TCCD)
+
+all: $(ALL)
+
+install: $(TARGETS)
+
+$(TARGETS): $$(@F)
+	cp $(@F) $@
+
+$(TCCD): $P $(OFILES) $(LIBDAPI)
+	$(CC) $(LDFLAGS) -o $@ $(OFILES) $(LIBDAPI) $(SYSLIBS)
+	$(MCS) -c $@
+
+CFILES = $(OFILES_GN:.o=.c) $(OFILES_IN:.o=.c) \
+	../servlib/*.c ../inetlib/*.c ../dtetlib/*.c
+
+LLIBS = $(LLIB)/llib-lserv.ln $(LLIB)/llib-linet.ln $(LLIB)/llib-ldtet.ln
+
+lint:
+	lint -x $(CDEFS) $(OFILES_GN:.o=.c) $(OFILES_IN:.o=.c) \
+		lint.c lint_in.c $(LLIBS) $(LINTLIBS)
+
+tags: $(CFILES)
+	ctags $(CFILES)
+
+scope: $(CFILES)
+	ls -d $(CFILES) | sort -t/ +1 -o $@
+
+CLEAN clean:
+	rm -f $(ALL) $(OFILES)
+
+CLOBBER clobber: clean
+	rm -f $(TARGETS)
+
+FORCE FRC: clobber all
+
+
+# dependencies
+
+config.o: $(INC)/avmsg.h $(INC)/bstring.h $(INC)/dtetlib.h $(INC)/dtmac.h \
+	$(INC)/dtmsg.h $(INC)/error.h $(INC)/llist.h $(INC)/ltoa.h \
+	$(INC)/ptab.h tccd.h
+
+etab.o: $(INC)/bstring.h $(INC)/dtmac.h $(INC)/dtmsg.h $(INC)/error.h \
+	$(INC)/llist.h $(INC)/ltoa.h $(INC)/ptab.h etab.h tccd.h
+
+exec.o: $(INC)/avmsg.h $(INC)/bstring.h $(INC)/dtetlib.h $(INC)/dtmac.h \
+	$(INC)/dtmsg.h $(INC)/error.h $(INC)/ltoa.h $(INC)/ptab.h \
+	$(INC)/servlib.h $(INC)/synreq.h $(INC)/tslib.h $(INC)/valmsg.h \
+	etab.h sptab.h tccd.h
+
+fake.o: $(INC)/dtmsg.h $(INC)/ptab.h tccd.h
+
+log.o: $(INC)/dtetlib.h $(INC)/error.h tccd.h
+
+stcc.o: $(INC)/avmsg.h $(INC)/dtetlib.h $(INC)/dtmac.h $(INC)/dtmsg.h \
+	$(INC)/error.h $(INC)/ltoa.h $(INC)/ptab.h $(INC)/servlib.h \
+	$(INC)/valmsg.h tccd.h
+
+tccd.o: $(INC)/avmsg.h $(INC)/dtetlib.h $(INC)/dtmac.h $(INC)/dtmsg.h \
+	$(INC)/error.h $(INC)/ltoa.h $(INC)/ptab.h $(INC)/server.h \
+	$(INC)/servlib.h $(INC)/tslib.h $(INC)/valmsg.h sptab.h tccd.h
+
+tccd_bs.o: $(INC)/avmsg.h $(INC)/btmsg.h $(INC)/dtetlib.h $(INC)/dtmac.h \
+	$(INC)/dtmsg.h $(INC)/error.h $(INC)/ptab.h $(INC)/server_bs.h \
+	$(INC)/valmsg.h tccd_bs.h
+
+tccd_in.o: $(INC)/dtetlib.h $(INC)/dtmac.h $(INC)/dtmsg.h $(INC)/error.h \
+	$(INC)/inetlib_in.h $(INC)/ltoa.h $(INC)/ptab.h $(INC)/server.h \
+	$(INC)/servlib.h $(INC)/tptab_in.h $(INC)/tsinfo_in.h tccd.h \
+	tccd_bs.h
+
+tsfile.o: $(INC)/avmsg.h $(INC)/dtetlib.h $(INC)/dtmac.h $(INC)/dtmsg.h \
+	$(INC)/error.h $(INC)/ltoa.h $(INC)/ptab.h $(INC)/servlib.h tccd.h
+
+

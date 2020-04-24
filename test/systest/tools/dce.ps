@@ -1,0 +1,219 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: dce.ps,v $
+# Revision 1.1.7.2  1996/03/11  02:49:22  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:10:00  marty]
+#
+# Revision 1.1.7.1  1995/12/11  22:50:45  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  22:23:34  root]
+# 
+# Revision 1.1.4.1  1994/04/05  21:38:24  pellis
+# 	Added SunOS variables and fixed problem with cell name parsing.
+# 	[1994/04/05  21:37:00  pellis]
+# 
+# Revision made from DCE103 base.  1994/03/21 by Jeff Barry @ OSF
+# 	Added a call to DTSCP to show the current time and punt if that fails.
+# 	Also added code necessary to make this thing work under SunOS.  Not only
+# 	was the ps command output different, but the grep command could handle
+# 	only one -e option, so I had to change to fgrep -f.
+# 
+# Revision 1.1.2.3  1993/11/04  22:05:22  qbarry
+# 	Fixed a bug where the HP PS command was one that truncated, causing
+# 	the server in question not to be seen when, in fact, there.  Also did
+# 	platform-specific CUT on PS output to standardize the output between
+# 	platforms.  Finally, added a CDSCP command to get the cell name from
+# 	clearinghouse name to make sure DCE is sorta responding.
+# 	[1993/11/04  22:04:47  qbarry]
+# 
+# Revision 1.1.2.2  1993/10/19  20:27:07  qbarry
+# 	Found an AIX system bug that was keeping this from working on RIOS.
+# 	Inserted a workaround which can be permanent.  Also made this emit a
+# 	list of DCE components which are or should be up IFF no error is seen.
+# 	Finally, fixed the code to detect more than one component of the same
+# 	type running.
+# 	[1993/10/19  20:26:21  qbarry]
+# 
+# Revision 1.1.2.1  1993/10/17  22:37:10  qbarry
+# 	First version of DCE.PS.  Does a PS for DCE programs only and does
+# 	configuration checking as well.  This version does not work on RIOS.
+# 	This version does not do any checking to see if the programs running
+# 	are actually usable.
+# 	[1993/10/17  22:34:53  qbarry]
+# 
+# $EndLog$
+#
+# Command procedure to quickly tell the user which parts of DCE are
+# running and which are not on the current machine.  Returns SUCCESS
+# only if everything in DCE is running that should be running.
+#
+# Original author: Jeff Barry, qbarry@osf.org, Sunday, 17-Oct-93.
+#
+
+# Make sure we have an RC.DCE to work with.  Punt with error if not.
+echo
+ournode="\"`hostname`\""
+DCELOCAL=/opt/dcelocal
+if [ ! -f /etc/rc.dce -a ! -f $DCELOCAL/dce_cf.db ]
+then
+    echo "DCE is not configured on $ournode."
+    echo
+    exit 1
+fi
+
+# The following code attempts to standardize and shorten the PS
+# output.  It's semi-hard-wired and makes assumptions about what the
+# various PSs will put out.  :-(   We are trying ot keep the PID,
+# Start Time, CPU Time, and Command fields.  Fortunately this output
+# is only for human consumption EXCEPT FOR the command field, which
+# we use in here, so it MUST be complete!!
+
+tmpfil="/tmp/dce.ps.$$"
+
+
+
+case `uname 2> /dev/null` in
+    SunOS)
+	#USER       PID %CPU %MEM   SZ  RSS TT STAT START  TIME COMMAND
+	stimstr="START " cptimlen=6 psctl="-aguwwx" stflen=6
+	;;
+    HP-UX)
+	#     UID   PID  PPID  C    STIME TTY      TIME COMMAND
+	stimstr="STIME" cptimlen=6 psctl="-ef" stflen=9
+	;;
+    SINIX*)
+	#     UID   PID  PPID  C    STIME TTY      TIME COMD
+	stimstr="STIME" cptimlen=6 psctl="-ef" stflen=9
+	;;
+    AIX)
+	#    USER   PID  PPID   C    STIME    TTY  TIME CMD
+	stimstr="STIME" cptimlen=6 psctl="-ef" stflen=9
+	;;
+    OSF1)
+	#USER       PID %CPU %MEM   VSZ  RSS TTY      STAT STARTED         TIME COMMAND
+	stimstr="STARTED " cptimlen=10 psctl="auxww" stflen=9
+	;;
+    *)	echo "Platform not recognized.  PS output questionable."
+	stimstr="STIME" cptimlen=6 psctl="auxww" stflen=9
+	;;
+    esac
+
+ps $psctl > $tmpfil.0
+if (( $? != 0 ))
+then
+    echo "PS command failed.  Aborting."
+    echo
+    rm -f $tmpfil.* 1>/dev/null 2>&1
+    exit 2
+fi
+
+hdr=`head -1 $tmpfil.0`
+
+x=`expr "$hdr" : "\(.* PID \)"`		#PID field begin and end
+pidend=${#x}
+(( pidst=$pidend-6 ))			#	Assume length 6
+
+x=`expr "$hdr" : "\(.* $stimstr \)"`	#Start time field begin and end
+estim=${#x}
+(( sstim=$estim-$stflen ))			
+
+x=`expr "$hdr" : "\(.* TIME \)"`	#CPU time and command field begin
+x=${#x}
+(( bcptim=$x-$cptimlen ))
+
+# Now cut out the PS junk we don't want.  The command field WILL BE intact!
+cut -c $pidst-$pidend,$sstim-$estim,$bcptim- $tmpfil.0 > $tmpfil.1
+if (( $? != 0 ))
+then
+    echo "CUT command failed.  Aborting."
+    echo
+    rm -f $tmpfil.* 1>/dev/null 2>&1
+    exit 2
+fi
+hdr="`head -1 $tmpfil.1`"		# Abbreviated header from cut file.
+
+# Find out what is supposed to be running or not by looking at
+# DAEMONRUNNING lines in RC.DCE.
+yes="" no=""
+cp /dev/null $tmpfil.list
+status=0
+grep 'daemonrunning \$DCELOCAL' /etc/rc.dce | cut -f 1-2 -d " " | \
+    while read line
+    do
+	name=${line##*/}
+	if [[ "${line%%daemonrunning*}" = "#" ]]
+	then
+	    no="$name $no"
+	else
+	    yes="$name $yes"
+	fi
+	echo "$name" >> $tmpfil.list
+    done
+
+# If NO DCE components are running, assume DCE is just shut down.
+fgrep -f $tmpfil.list $tmpfil.1 >$tmpfil.2
+if (( $? != 0 ))
+then
+    echo "WARNING: DCE is configured on $ournode but is not currently running."
+    echo "Configured: $yes"
+    status=1
+
+# Report what is running and how that differs from what should be running.
+else
+    echo "The following DCE components are running on $ournode."
+    echo "$hdr"
+    cat $tmpfil.2
+
+    for comp in $no ; do
+	grep $comp $tmpfil.2 1>/dev/null 2>&1
+	(( $? == 0 )) && echo "ERROR: \"$comp\" IS running on $ournode but it should NOT be." && status=2
+    done
+
+    for comp in $yes ; do
+	grep $comp $tmpfil.2 1>$tmpfil.3 2>/dev/null
+	(( $? != 0 )) && \
+	    echo "ERROR: \"$comp\" is NOT running on $ournode as it should be." && status=2
+	(( `wc -l < $tmpfil.3` > 1 )) && \
+	    echo "ERROR: Too many copies of \"$comp\" running on $ournode." && status=2
+    done
+
+    if (( $status == 0 ))
+    then
+	echo "DCE on $ournode seems to be running as configured."
+	echo "Configured: $yes"
+	celnam=''
+	/opt/dcelocal/bin/cdscp show cell /.: > $tmpfil.4
+	[[ $? -eq 0 ]] && \
+		celnam=`grep "CELL   /.../" $tmpfil.4 | awk -F" " '{print $NF}'`
+
+	if [[ -n $celnam ]]
+	then
+		echo "CDSCP says $ournode is responding in the cell \"$celnam\"."
+		x=`dtscp show current time`
+		if (( $? == 0 ))
+		then
+		    echo "DTSCP says the time is: `echo $x | cut -f 2 -d =`"
+		else
+		    echo "ERROR: DTSCP not responding.  Message: $x"
+		    status=1
+		fi
+	else
+		echo "ERROR: No response from CDSCP.  DCE on $ournode may not be functional."
+		status=1
+	fi
+    else
+	echo "ERROR: DCE on $ournode is NOT running as configured!"
+    fi
+fi
+
+# Clean up and exit with whatever status we have.
+echo
+rm -f $tmpfil.* 1>/dev/null 2>&1
+exit $status

@@ -1,0 +1,131 @@
+# Copyright (C) 1996 Transarc Corporation - All rights reserved.
+
+# Test Suite For DCE DFS Security Enhancements - README file
+#
+#   This file contains information on running the test suite.
+
+# ----------------------------------------------------------------------------
+
+INTRODUCTION
+------------
+
+This directory contains the test suite described in detail in
+"Test Plan for OSF-RFC 90.0: Security Enhancements for DCE DFS".
+Below is a brief outline of the required test cell configuration,
+and information on executing the tests.
+
+
+IMPLEMENTATION
+--------------
+
+The test suite is implemented in Perl.  Therefore it is necessary to
+ensure that Perl is accessible from the machine executing the tests.
+Check that the first line of the following files contains the correct
+path to the Perl executable:
+    sectest.pl,
+    secTestStartup.pl, secTestSetProt.pl,
+    secTestRepAuth.pl, secTestFlAuth.pl,
+    secTestRevokeAuth.pl,
+    secTestBounds.pl, secTestBoundsWorker.pl
+
+
+CELL CONFIGURATION:
+-------------------
+
+The complete test requires two cells, referred to here as the local cell
+and the remote cell.  However, a command line switch allows an abbreviated
+version of the test to be executed in just the local cell.
+
+The local cell must contain at least two DFS server machines, A and B, while
+the remote cell requires only a single DFS server machine, C.
+
+The test script must be executed on either server A or B in the local cell.
+
+
+RSH REQUIREMENTS:
+-----------------
+
+The test must be able to execute local commands on server machines A, B
+and C, such as dfstrace, dfsexport, etc.  Thus entries must be made in
+the appropriate file(s) to allow a root user on the server machine executing
+the tests to perform remote executions on all three server machines.
+See 'man rsh' for details.
+
+
+TEST CONFIGURATION PARAMETERS:
+------------------------------
+
+Before executing the test suite, a number of configuration parameters
+must be set in the file secconfig.pl.  Edit this file as indicated there.
+
+NOTE: the executable named fxsecadvice, which is built as part of this
+test suite, must be installed on each server machine.  The configuration
+file secconfig.pl provides a place to specify a path to this command.
+
+
+AUTHORIZATION REQUIREMENTS:
+---------------------------
+
+In editing the configuration file secconfig.pl, you must supply path names
+in both the local and remote cell.  In the local cell, this path refers to
+a directory in which the test will create a mount-point to a fileset;
+in the remote cell, this path refers to a pre-existing file to be read.
+The ACLs on these paths MUST be set so that they can be traversed by
+an unauthenticated principal.  Similarly, the ACL on the pre-existing file
+in the remote cell MUST allow it to be read by an unathenticated principal.
+
+On server machines A and B in the local cell, the cell-administrator
+principal must reside in the admin.ft and admin.rep lists, either directly
+or via group membership.  Similarly, the cell-administrator principal
+must reside in all admin.fl lists in the local cell.
+
+In the remote cell, the local cell's cell-administrator principal must
+reside in all admin.fl lists.  This requires establishing a trust
+relationship between the two cells via 'dcecp registry connect'.
+
+
+RUNNING TESTS:
+--------------
+
+Run the test suite by executing the sectest.pl script; no arguments are
+required.
+
+Local-cell-only testing can be specified via the '-l' switch.
+
+Individual tests may be executed by supplying the test name(s) as command
+line arguments to sectest.pl.  Valid test names are as follows:
+
+    1) startup   : UI extensions test - startup options
+    2) setprot   : UI extensions test - set protection levels
+    3) repauth   : Server RPC authentication test - repserver
+    4) flauth    : Server RPC authentication test - flserver
+    5) revokeauth: Token-revoke authentication test
+    6) bounds-un : CM-FX authn negotiation test - unauthn non-local-root
+    7) bounds-ur : CM-FX authn negotiation test - unauthn local-root
+    8) bounds-an : CM-FX authn negotiation test - authn non-local-root
+    9) bounds-ar : CM-FX authn negotiation test - authn local-root
+
+NOTE:
+    1) The sectest.pl script must be executed as cell_admin and root.
+    2) The test must be executed from, and log files must be written to,
+       a non-DFS file system.
+
+
+TEST RESULTS:
+-------------
+
+Test results are summarized to stdout at the completion of execution.
+
+During the course of each test, messages printed to stdout indicate
+actions that are taking place and any specific errors that are encountered.
+
+To facilitate automated testing, test scripts must at times examine trace
+logs, via dfstrace, and attempt to verify that expected actions have
+taken place.  This can be a somewhat ad hoc methodology which may not detect
+all incorrect behaviors; similarly, correct behaviors may be misinterpreted.
+In practice though, this methodology works well.
+
+Note: A number of tests must wait for an unbounded-time event to occur.
+The waiting time is controlled by a variable defined in secconfig.pl.
+If a test fails immediately after awakening from a sleep, try increasing
+the wait time.

@@ -1,0 +1,135 @@
+--
+-- @OSF_COPYRIGHT@
+-- COPYRIGHT NOTICE
+-- Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+-- ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+-- src directory for the full copyright text.
+--
+--
+-- HISTORY
+-- $Log: mod_rdn9i,v $
+-- Revision 1.1.4.2  1996/03/11  01:51:11  marty
+-- 	Update copyright years
+-- 	[1996/03/10  19:49:14  marty]
+--
+-- Revision 1.1.4.1  1995/12/11  17:19:34  root
+-- 	Submit OSF/DCE 1.2.1
+-- 	[1995/12/11  17:02:26  root]
+-- 
+-- Revision 1.1.2.1  1994/05/10  14:47:48  marrek
+-- 	Initial version.
+-- 	[1994/05/05  12:07:27  marrek]
+-- 
+-- Revision 1.1.6.1  1994/02/22  16:58:43  marrek
+-- 	Code drop for dce1.1.
+-- 	[1994/02/07  14:24:57  marrek]
+-- 
+-- Revision 1.1.4.2  1993/01/05  20:15:30  htf
+-- 	Embedding copyright notice
+-- 	[1993/01/05  18:30:13  htf]
+-- 
+-- Revision 1.1.2.3  1992/07/01  03:26:31  melman
+-- 	GDS drop of 6/16/92
+-- 	[1992/06/30  23:05:49  melman]
+-- 
+-- Revision 1.1.2.2  1992/06/11  23:30:41  marty
+-- 	GDS test code drop
+-- 	[1992/06/11  22:18:19  marty]
+-- 
+-- $EndLog$
+--
+--
+-- @SNI_COPYRIGHT@
+--
+-- $RCSfile: mod_rdn9i,v $ $Revision: 1.1.4.2 $ $Date: 1996/03/11 01:51:11 $
+--
+--------------------------------------------------------------------------------
+
+-- TESTCASE:
+--   mod_rdn9i
+
+-- CATEGORY:
+--   invalid behaviour test
+
+-- DESCRIPTION:
+--   Test error handling in the XDS function ds_modify_rdn().
+--   Modify an OrganizationalPerson object:
+--     context (dua-cache=off, use-dsa=off),
+--     name (C=ie/O=sni/OU=sci/CN=vinnie),
+--     new-RDN (CN=vin),
+--     delete-old-RDN=on.
+--   Expect: library error (bad context).
+
+-- PROCEDURE:
+--   Build test-tree.
+--   Initialise XDS.
+--   Negotiate the BDC and GDS packages.
+--   Create a private context object (DSX_C_GDS_CONTEXT) using om_create().
+--   Modify the private context from a public context using om_put().
+--   Bind to the default DSA.
+--   Modify entry.
+--   Read entry.
+--   Unbind from the default DSA.
+--   Shutdown.
+--   Remove test-tree.
+
+
+--------------------------------------------------------------------------------
+
+Include  ../tree/build_tree8
+
+Function INITIALIZE
+	workspace1
+
+Function VERSION
+	feature_list1		
+        workspace1
+	DS_SUCCESS
+
+Function CREATE
+	DSX_C_GDS_CONTEXT
+	TRUE
+	workspace1
+	OM_SUCCESS
+	private_object1
+
+Function PUT
+	private_object1
+	OM_REPLACE_ALL
+	context_mod1
+	type_list1
+	0
+	0
+	OM_SUCCESS
+
+Function BIND
+	default_session
+	workspace1
+	DS_SUCCESS
+	bound_session1
+
+Function MODIFY_RDN
+	bound_session1
+	private_object1
+	name8
+	rdn29
+	TRUE
+    library_error5
+
+Function READ
+	bound_session1
+	default_context
+	name8
+	entry_info_selection1
+	DS_SUCCESS
+        read_result_return8
+
+Function UNBIND
+	bound_session1
+	DS_SUCCESS
+
+Function SHUTDOWN
+	workspace1
+        DS_SUCCESS 
+
+Include  ../tree/delete_tree8

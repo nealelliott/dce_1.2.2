@@ -1,0 +1,134 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: tc_slv_destroy,v $
+# Revision 1.1.2.2  1996/03/09  20:52:27  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:30:01  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:48:01  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:32 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  20:26 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:54 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  19:40 UTC  gordon_l
+# 	Fixes for change_master/becom
+# 	e_master
+# 	[1995/12/11  22:22:45  root]
+# 
+# Revision 1.1.2.3  1993/08/04  12:38:18  sekhar
+# 	ic1 should be tc_slv_destroy not stc_slv_dest_init .
+# 	[1993/08/04  12:37:58  sekhar]
+# 
+# Revision 1.1.2.2  1993/08/02  17:41:50  sekhar
+# 	Replication system test. Initial version
+# 	[1993/08/02  17:32:29  sekhar]
+# 
+# $EndLog$
+#
+
+if [ -z "${TC_SLV_DESTROY_DEFINED}" ] ; then
+
+TC_SLV_DESTROY_DEFINED=1
+
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  DESCRIPTION: 
+#      This test case is part of the security replication system test
+#      and tests the following:
+#
+#      This tests if a security slave can be destroyed successfully.
+#      Destroying a slave stops the secd and deletes the registry
+#      on the slave. However the slave should still be on all
+#      replica lists (i.e. the master replica list and the
+#      replica lists of the remaining slaves ).
+#
+#      The test first destroyes the slave using the function 
+#      slv_destroy.  slv_destroy() also verifies that
+#      secd is stopped and the registry is deleted on the 
+#      slave host.
+#
+#      Currently the test case does not verify that the replica
+#      exists on all the replica lists because this requires 
+#      requires changes to the replist object. However the 
+#      cleanup code does (or should) forcibly delete the replica
+#      from all the replica lists and thus does test in an indirect
+#      way that the slave has been destroyed successfully.
+#
+#   12/30/93 sekhar
+#      replist object has been modified. So the test case can verify
+#      the replica exists on all replcia lists. However this is currently
+#      not being done.
+#      
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+tet_startup="tc_slv_destroy_init"
+tet_cleanup="tc_slv_destroy_cleanup"
+tet_testlist="tc_slv_destroy"
+
+iclist="ic1"
+ic1="tc_slv_destroy"
+
+tc_slv_destroy_init()
+{
+    tet_infoline "............... Test: tc_slv_destroy"
+    tc_common_init
+    if [ $SLV_CNT -eq 0 ] ; then
+        tet_delete $ic1 "tc_slv_dest_init(): Test requires at least one slave in the cell"
+        return 
+    fi
+}
+
+tc_slv_destroy_cleanup()
+{
+    tc_common_cleanup
+}
+
+tc_slv_destroy()
+{
+    typeset st slvnm slvhost
+
+    testdesc="Destroy replica"  ; replog_testhdr "$testdesc"
+
+    slvhost=${SLV_HOSTNAMES[0]}  ; slvnm=${SLV_NAMES[0]}
+
+    sa_destroy  $slvnm   ; st=$?   # Destroy the replica
+    if [ $st -eq 0 ] ; then
+        slv_v_replica $slvhost $REP_NOTEXIST ; st=$?
+    fi
+
+    replog_testresult "$testdesc" $st
+
+    #  Cleanup
+
+    sa_delete $slvnm $DELREP_FORCE ; st=$?
+    slv_config $slvhost $slvhost
+}
+
+. $TET_ROOT/profile.dcest
+. ./profile
+. $PHOME/replog
+. $PHOME/tc_common
+. $PHOME/slv
+. $PHOME/sft
+. $TCM
+#. $TET_ROOT/lib/xpg3sh/tcm.sh
+
+fi
+

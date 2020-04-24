@@ -1,0 +1,184 @@
+#!/bin/ksh
+# 
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: local_TET.admin,v $
+# Revision 1.1.4.2  1996/03/11  02:33:41  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  19:39:14  marty]
+#
+# Revision 1.1.4.1  1995/12/11  15:23:35  root
+# 	Submit
+# 	[1995/12/11  14:35:19  root]
+# 
+# Revision 1.1.2.8  1994/08/18  12:22:57  keutel
+# 	OT 11279
+# 	[1994/08/17  15:34:29  keutel]
+# 
+# Revision 1.1.2.7  1994/08/17  11:51:31  marrek
+# 	Use uname -n .
+# 	[1994/08/17  07:36:58  marrek]
+# 
+# Revision 1.1.2.6  1994/08/01  12:27:19  marrek
+# 	Fixes for OT 10742, 11357, 11432.
+# 	[1994/08/01  12:26:02  marrek]
+# 
+# Revision 1.1.2.5  1994/07/20  14:06:25  marrek
+# 	<dce_login> is started before GDS Security are running
+# 	[1994/07/20  13:33:55  marrek]
+# 
+# Revision 1.1.2.4  1994/07/06  15:53:54  marrek
+# 	Add version string in July 1994 code drop.
+# 	[1994/07/06  15:41:57  marrek]
+# 
+# Revision 1.1.2.3  1994/06/21  14:29:10  marrek
+# 	June 1994 code submission.
+# 	[1994/06/20  08:07:25  marrek]
+# 
+# Revision 1.1.2.2  1994/06/17  18:45:39  devsrc
+# 	cr10872 - fix copyright
+# 	[1994/06/17  18:35:08  devsrc]
+# 
+# Revision 1.1.2.1  1994/05/24  15:11:39  zeliff
+# 	First version
+# 	[1994/05/24  15:01:20  zeliff]
+# 
+# $EndLog$
+#
+# $RCSfile: local_TET.admin,v $ $Revision: 1.1.4.2 $ $Date: 1996/03/11 02:33:41 $
+bname=`basename $0`
+unset  TET_GDS_CONFIG
+
+echo ""
+echo "  TET - Test Environment Toolkit for testing GDS/Admin on a local machine"
+echo ""
+
+if [ $# -lt 1 ]
+then
+  echo "\nUsage: $bname   <name of scenario (e.g. dsa)"
+  exit
+fi
+
+# Change directory to  Test suite: gds
+cd $TET_ROOT/functional/directory/gds
+
+# User-modifiable variables
+#  OUTDIR is the path to the directory into which all test logs will be written.
+#  This should not be confused with the directory into which TET writes it's "journals".
+#  These logs are produced by the functional tests, not TET.
+if [ "$OUTDIR" = "" ]
+then
+	export OUTDIR=$TET_ROOT/functional/directory/gds/outdir.`uname -n`
+	if [ ! -d $OUTDIR ]
+	then 
+		mkdir $OUTDIR
+		if [ $? -ne 0 ]
+		then
+			echo "Can't create OUTDIR: $OUTDIR"
+			exit 1
+		fi
+	fi
+fi
+
+rm -f $OUTDIR/gds_start.log
+
+echo "\n  TET - Test Environment Toolkit for testing GDS/Admin on a local machine" >> $OUTDIR/gds_start.log
+echo "  TestSuite = $1\n"
+echo "  TestSuite = $1\n" >> $OUTDIR/gds_start.log
+
+# Non-modifiable variables.  There are dependencies upon these being certain 
+# values.  These should be changed only with great care.
+export TET_NSIG=32
+export TET_EXECUTE=$TET_ROOT/functional/directory/gds/ts
+export TET_GDS_CONFIG=3
+export GCT_LOG_DIR=$OUTDIR
+TET_CFG_DIR=$TET_EXECUTE/config
+
+# Set SERVER_IP, CLIENT_IP   
+
+CLIENT_IP="127.0.0.1"
+SERVER_IP=$CLIENT_IP
+
+#echo ""
+#echo -n "  Enter Server IP address: "
+#read SERVER_IP
+
+# Alter SERVER_IPs, CLIENT_IPs with those just entered
+
+sed -e "s/SERVER_IP/${SERVER_IP}/" -e "s/CLIENT_IP/${CLIENT_IP}/"  $TET_CFG_DIR/t.cacheinit125.sed > $TET_CFG_DIR/t.cacheinit125
+sed -e "s/SERVER_IP/${CLIENT_IP}/" -e "s/CLIENT_IP/${CLIENT_IP}/" $TET_CFG_DIR/t.3cacheinit1.sed > $TET_CFG_DIR/t.3cacheinit1
+sed -e "s/SERVER_IP/${CLIENT_IP}/" -e "s/CLIENT_IP/${CLIENT_IP}/" $TET_CFG_DIR/t.4cacheinit1.sed > $TET_CFG_DIR/t.4cacheinit1
+sed -e "s/SERVER_IP/${SERVER_IP}/" -e "s/CLIENT_IP/${CLIENT_IP}/" $TET_CFG_DIR/two_dsas.sed > $TET_CFG_DIR/two_dsas.sh
+sed -e "s/SERVER_IP/${SERVER_IP}/" -e "s/CLIENT_IP/${CLIENT_IP}/" $TET_CFG_DIR/config_gds-admin_cache.sed > $TET_CFG_DIR/config_gds-admin_cache.sh
+sed -e "s/SERVER_IP/${SERVER_IP}/" $TET_CFG_DIR/dsa.dsa1.sed > $TET_CFG_DIR/dsa.dsa1
+sed -e "s/SERVER_IP/${SERVER_IP}/" $TET_CFG_DIR/dsa.dsa2.sed > $TET_CFG_DIR/dsa.dsa2
+sed -e "s/SERVER_IP/${SERVER_IP}/" $TET_EXECUTE/gdscp/test_config.tcl.sed > $TET_EXECUTE/gdscp/test_config.tcl
+
+echo ""
+
+if [ -n "$HIT_FILE" ]
+then
+   export HIT_FILE=$HIT_FILE.$1
+else
+   export HIT_FILE=./hits
+fi
+
+if [ -f $HIT_FILE ]
+then
+   echo "\n\
+      Overwrite existing hits file: $HIT_FILE - Enter 'n' if not: \n\
+      : \c"
+   read xyz
+   if [ x$xyz = xn ]
+   then
+     exit
+   fi
+fi
+
+if [[ `echo $1 | grep -c gds_sec` -gt 0 ]]
+then
+ 
+  echo "Configure DCE using cell_name:  C=ie/O=digital" >> $OUTDIR/gds_start.log
+
+  CELLNAME="c=ie\/o=digital"
+  sed -e "s/CELLNAME/${CELLNAME}/" $TET_CFG_DIR/config.env.sed > $TET_CFG_DIR/config.env
+
+  /etc/dce_config -e $TET_CFG_DIR/config.env -c $TET_CFG_DIR/config.cmd > /dev/null 2>>$OUTDIR/gds_start.log
+
+  if [[ $? -gt 0 ]]
+  then
+     echo "\nMessage from <local_TET.admin> "
+     echo "        dce_config returned with ERROR - STOP\n"
+     echo "See also logfile $OUTDIR/gds_start.log"
+     exit 1
+  fi
+
+  echo "Login to DCE ..." >> $OUTDIR/gds_start.log
+
+  dce_login cell_admin -dce- << EOX
+
+     ksh
+
+#    Start TCC in execute mode
+
+     $TET_ROOT/bin/tcc -e functional/directory/gds gds_sec 
+
+EOX
+
+else
+
+# Start TCC in execute mode
+
+  $TET_ROOT/bin/tcc -e functional/directory/gds $1
+
+fi
+
+echo "\nInvoked tests have been finished ..."
+echo "Note:   In case of an irregular test run -->"
+echo "        See $OUTDIR/gds_start.log also"
+#

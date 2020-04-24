@@ -1,0 +1,129 @@
+echo  This test checks the acquisition and release of text locks
+
+
+echo connect to the bakserver
+
+bakServerConnect init hand
+
+set hightime int 360
+set midtime int 45
+set lowtime 30
+set id int  200
+set lock int 0
+set tlock int 0
+
+
+bakFreeAllLocks $hand $id
+
+echo Test to check that trying to get a lock twice is not allowed
+
+bakGetLock $hand  $id  $TB_DUMPSCHEDULE  $midtime  lock
+
+verifyStatus false
+
+bakGetLock $hand  $id  $TB_DUMPSCHEDULE  $lowtime  tlock
+
+verifyStatus true
+
+if ($tlock != 0) {
+	echo $TB_DUMPSCHEDULE test failed. 
+	} else {
+	echo $TB_DUMPSCHEDULE test passed
+	}
+
+
+bakFreeLock $hand $lock
+	
+bakGetLock $hand  $id  $TB_VOLUMESET  $midtime  lock
+
+verifyStatus false
+
+bakGetLock $hand  $id  $TB_VOLUMESET  $lowtime  tlock
+
+verifyStatus true
+
+if ($tlock != 0) {
+	echo $TB_VOLUMESET test failed. 
+	}else {
+	echo $TB_VOLUMESET test passed
+	}
+
+
+bakFreeLock $hand $lock
+
+	
+bakGetLock $hand  $id  $TB_TAPEHOSTS  $midtime  lock
+
+verifyStatus false
+
+bakGetLock $hand  $id  $TB_TAPEHOSTS  $lowtime  tlock
+
+verifyStatus true
+
+if ($tlock != 0) {
+	echo $TB_TAPEHOSTS test failed. 
+	}else {
+	echo $TB_TAPEHOSTS test passed
+	}
+
+
+
+bakFreeLock $hand $lock
+
+
+echo Testing that the timeout on the locks work
+
+* This test makes use of the fact that the TB_* text types are 0, 1 and 2
+* respectively. Also tests concurrent access to locks of different types
+
+
+
+coLoop texttype 0 1 2
+set ilock local int 0
+set itlock local int 0 
+bakGetLock $hand  $id  $texttype  $midtime  ilock
+verifyStatus false
+do 
+bakGetLock $hand  $id  $texttype  $lowtime  itlock
+while ($itlock == 0)
+verifyStatus true
+bakFreeLock $hand $itlock
+endloop
+echo  Passed
+
+echo  Test to check that bakFreeAllLocks works
+
+bakGetLock $hand  $id  $TB_DUMPSCHEDULE  $hightime  lock
+
+bakGetLock $hand  $id  $TB_VOLUMESET  $hightime  lock
+
+bakGetLock $hand  $id  $TB_TAPEHOSTS  $hightime  lock
+
+bakFreeAllLocks $hand $id
+
+bakGetLock $hand  $id  $TB_DUMPSCHEDULE  $lowtime  lock
+
+bakGetLock $hand  $id  $TB_VOLUMESET  $lowtime  lock
+
+bakGetLock $hand  $id  $TB_TAPEHOSTS  $lowtime  lock
+
+bakFreeAllLocks $hand $id
+
+echo Passed ...
+
+* Now verify that the database is not corrupted   
+
+set status int 0
+set orphans int 0 
+set host int 0 
+
+
+bakDbVerify $hand status orphans host
+
+if ($status == 1) {
+	echo Test Failed : Database cannot be verified
+	} else {
+	echo All Tests Succeeded : Database verified
+	}
+
+

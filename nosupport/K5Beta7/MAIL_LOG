@@ -1,0 +1,287 @@
+From b17783@achilles.ctd.anl.gov  Fri Jul 12 11:03:23 1996
+Return-Path: b17783@achilles.ctd.anl.gov
+Received: from achilles.ctd.anl.gov (achilles.ctd.anl.gov [146.137.72.1]) by postman.osf.org (8.7.5/8.7.3) with SMTP id LAA03256; Fri, 12 Jul 1996 11:03:05 -0400 (EDT)
+Received: from pembroke.ctd.anl.gov (pembroke.ctd.anl.gov [146.137.64.73]) by achilles.ctd.anl.gov (8.6.11/8.6.11) with ESMTP id KAA00343; Fri, 12 Jul 1996 10:03:04 -0500
+Received: (b17783@localhost) by pembroke.ctd.anl.gov (8.6.11/8.6.11) id KAA47902; Fri, 12 Jul 1996 10:03:02 -0500
+Date: Fri, 12 Jul 1996 10:03:02 -0500
+Message-Id: <199607121503.KAA47902@pembroke.ctd.anl.gov>
+From: Doug Engert <DEEngert@anl.gov>
+To: kerberos@mit.edu, info-afs@transarc.com, info-dce@transarc.com,
+        authtf@es.net, dcewg@es.net, adfstf@es.net, sig-security@osf.org,
+        sig-dce-security@osf.org
+Subject: Using Kerberos 5 beta 6 with AFS and/or DCE/DFS
+X-UIDL: 37fb0d7fab2cad6490f5076bc1f2ca97
+Status: RO
+
+
+Kerberos 5 beta 6 can be combined with OSF/DCE by using the DCE
+security server as the KDC. This allows for single sign on using the
+DCE userid and password. You can thus get the best features of both:
+DCE applications such as DFS; kerberized clients such as rlogin, 
+telnet or FTP. These kerberized clients can be run on machines with or
+without DCE, and can be used to establish encrypted terminal
+sessions. This is very useful when the cell admin needs to login to a
+server to do system maintenance work without exposing his password or the
+root password. DCE 1.2.2 is expected to have some of this capability,
+builtin. But if you need it now, it is available. 
+ 
+Kerberos 5 also has the ability to forward tickets during an rlogin
+connection for example. These forwarded tickets can be used to
+establish a DCE context. Thus you can be on a non DCE client,
+establish a connection to a DCE client and get you DCE context.
+Very useful for DFS access. We have developed modifications which will
+do this automaticly during the remote login.  
+
+AFS is probably the most wide spread Kerberos 4 application in
+production. We have also developed modifications which will allow you
+to get a Kerberos 5 ticket from the DCE security server and/or K5 KDC 
+and convert it to a AFS token. This do can be done automaticly during
+login as well. Note that this AFS modification does not rely on DCE,
+and can be used in a Kerberos only environment. But if you have DCE,
+it can also be used to get an AFS token from your DCE context. Thus
+both of these modifications can be combined, and get both a DCE context
+and/or a AFS token from a forwarded ticket. It also works with the
+Transarc AFS/DFS migration package too.  
+
+
+Kerberos 5 beta 6 was released from MIT on 6/6/96, and is much
+improved over the Kerberos 5 beta 5. MIT have been very responsive to
+our needs and has included in this release many of the features which
+allow it to inter-operate with DCE.  This release can be built directly
+without any modifications to the source and use a DCE security server
+as the KDC. See their documentation and man pages.  This can then be
+combined with DCE to address the problem of clear-text password over
+the network.
+
+But, the changes to get a DCE context and/or a AFS token from a
+forwarded ticket are not included in Kerberos 5 beta 6. Over the past
+few years, many of us in the DOE ESnet community (and others) have been
+active in the Kerberos DCE integration effort. In addition to
+cross-realm authentication, we have been active in the use of the
+forwarded ticket to get a DCE context and/or an AFS token.
+
+
+
+A complete set of changes for these modifications can be found at:
+ftp://achilles.ctd.anl.gov/pub/kerberos.v5.
+
+The README, explains what is at the FTP site.
+
+Two other files: afs524.notes and anldce.notes contain comments about
+the two main set of changes: AFS tokens, and DCE interactions
+including changing your DCE password using the unmodified K5b6 kpasswd.
+
+If you have visited this ftp site before you will note the
+modifications to previous versions of Kerberos have been moved to the
+"old" directory. Every thing you need to get started is in the
+pub/kerberos.v5 directory accept the base MIT Kerberos 5 beta 6 code. You
+must get that from MIT at ftp://athena-dist.mit.edu.
+
+Basically there is diff file with all the changes, k56.cdiff.960709,
+which can be applied with patch to the MIT base.  
+
+The aklog program (now called /krb5/sbin/ak5log) is in
+ak5log.960708.tar along with the k5afslogin program. Previously you
+need to get both the tar file and a diff file. 
+
+The k5dce.960708.tar contains the k5dcelogin program. This was
+redesigned to match the specifications as defined in OSF RFC 92.0, so
+it can be easily replaced in the future. 
+
+A special note is needed for those using the AIX 4.1.4 system. As
+shipped from IBM, the libdce.a does not have all the external symbols
+exported for use as a shared library. IBM negatively responded to our
+suggestion that these additional entry points be exported. To "fix"
+the problem, there is a fix.aix.libdce.mk makefile included with the
+k5dce source.
+
+Transarc on the other hand, responded positively when asked how to
+determine the obfuscated names of these same entry points in their
+products. There were no problems with the HP code either, as these entry
+points were already exported.   
+
+I have built this in AIX 4.1.4, HPUX 10.10, Solaris 2.4, SunOS 4.1.3,
+SGI 5.3 and Windows 3.1. And have used HPUX, Transarc 1.0.3a, and
+Transarc 1.1 DCE security servers as the KDCs. 
+
+ 
+ Douglas E. Engert  <DEEngert@anl.gov>
+ Argonne National Laboratory
+ 9700 South Cass Avenue
+ Argonne, Illinois  60439 
+ (708) 252-5444
+ PGP Key fingerprint =  20 2B 0C 78 43 8A 9C A6  29 F7 A3 6D 5E 30 A6 7F
+
+
+
+
+
+
+
+
+From b17783@achilles.ctd.anl.gov  Tue Sep 24 17:39:42 1996
+Return-Path: b17783@achilles.ctd.anl.gov
+Received: from achilles.ctd.anl.gov (achilles.ctd.anl.gov [146.137.72.1]) by postman.osf.org (8.7.5/8.7.3) with SMTP id RAA23747 for <rsalz@osf.org>; Tue, 24 Sep 1996 17:39:40 -0400 (EDT)
+Received: from pembroke.ctd.anl.gov (pembroke.ctd.anl.gov [146.137.64.73]) by achilles.ctd.anl.gov (8.6.11/8.6.11) with ESMTP id QAA20887; Tue, 24 Sep 1996 16:38:59 -0500
+Received: (b17783@localhost) by pembroke.ctd.anl.gov (8.6.11/8.6.11) id QAA27178; Tue, 24 Sep 1996 16:38:54 -0500
+Date: Tue, 24 Sep 1996 16:38:54 -0500
+Message-Id: <199609242138.QAA27178@pembroke.ctd.anl.gov>
+From: Doug Engert <DEEngert@anl.gov>
+To: authtf@es.net
+CC: "Theodore Y. Ts'o" <tytso@MIT.EDU>, ggrider@c8-ibm.lanl.gov,
+        Gus Massey <amassey@ntg02.gsfc.nasa.gov>,
+        Ken Hornstein <kenh@cmf.nrl.navy.mil>, Rich Salz <rsalz@osf.org>,
+        Sean Mullan <mullan_s@apollo.hp.com>
+Subject: Kerberos 5 beta 7 and DCE 1.1 Cross Cell Authentication
+X-UIDL: b7874609eb16340e049d93c5af05e3b9
+Status: RO
+
+
+This afternoon I got cross-cell authentication to work (both ways)
+between a DCE 1.1 cell and a Kerberos 5 beta 7 cell. I know that LANL
+and NASA are both trying to do this. This note describes that its
+possible to do, rather then this is the best way to do it.
+
+The DCE cell (dce.anl.gov) is running on HPUX 10.10 security servers,
+and the K5 beta 7 cell (k5.test.anl.gov) is running on Solaris 2.5.
+
+To do this requires that the DCE registry have a principal for
+   krbtgt/k5.test.anl.gov
+and the K5 database have principals
+   krbtgt/k5.test.anl.gov@dce.anl.gov and
+   krbtgt/dce.anl.gov@k5.test.anl.gov.
+These must all have the same KEY and kvno, and the enctype in K5 must
+be the des-cbc-crc. 
+
+Before starting this exercise, I setup the K5 krb5.conf and kdc.conf
+files to use the most (DCE) compatible options possible. I want to go
+back and try and improve the K5 only security at a later time. This
+may require sumbitting a change to MIT, since some of the libdefaults
+should apply by realm.  
+
+This included in the krb5.conf file setting:
+  default_tkt_enctypes = des-cbc-crc
+  default_tgs_enctypes = des-cbc-crc
+  kdc_req_checksum_type = 2
+
+ and in the kdc.conf:  
+  supported_enctypes = des-cbc-crc:normal des:v4
+
+On the DCE side, using rgy_edit (or dcecp) add the principal and
+account for krbtgt/k5.test.anl.gov with any password. This will have
+kvno 1.
+
+Then run the cpwkey.c program with these options:
+ ./cpwkey -u krbtgt/k5.test.anl.gov -p -P "" -v 2
+This will prompt for a password, and the cell_admin password.
+Remember this password. The -P "" says set a null pepper, and -v 2 is
+for kvno 2.
+
+After creating the K5 data base, run:
+
+ /krb5/sbin/kadmin.local -e des-cbc-crc:v4
+
+ kadmin.local:  addprinc krbtgt/dce.anl.gov
+ Enter password for principal "krbtgt/dce.anl.gov@k5.test.anl.gov":<any one>
+ Re-enter password for principal "krbtgt/dce.anl.gov@k5.test.anl.gov":
+ Principal "krbtgt/dce.anl.gov@k5.test.anl.gov" created.
+
+ kadmin.local:  cpw krbtgt/dce.anl.gov
+ Enter password for principal "krbtgt/dce.anl.gov": <match the cpwkey one>
+ Re-enter password for principal "krbtgt/dce.anl.gov":
+ Password for "krbtgt/dce.anl.gov@k5.test.anl.gov" changed.
+
+ kadmin.local:  getprinc krbtgt/dce.anl.gov
+   ... number of other lines ... 
+ Number of keys: 1
+ Key: vno 2, DES cbc mode with CRC-32, Version 4
+ Attributes:
+
+ kadmin.local:  addprinc krbtgt/k5.test.anl.gov@dce.anl.gov
+   ... more line similiar to above ...
+ kadmin.local:  cpw krbtgt/k5.test.anl.gov@dce.anl.gov
+   ... more lines similiar to above
+ getprinc krbtgt/k5.test.anl.gov@dce.anl.gov
+   ... more lines ...
+ Number of keys: 1
+ Key: vno 2, DES cbc mode with CRC-32, Version 4
+ Attributes:
+
+
+At this point all the keys are in place. 
+
+A kinit in either cell followed by an rlogin to a machine in the other
+cell get the cross cell tickets.
+
+I did run into a problem with the DCE security server. If the TGT
+created by the K5 kdc is not using the des-cbc-crc encryption, but
+rather the des-cbc-md5, the DCE security will crash. and since the
+client did not get a response, it will try the other DCE security
+server, and it crashed too!  This need to be fixed. 
+
+So cross cell is possible, but not currently straight forward. 
+
+I had posted the cpwkey.c code previously. If anyone would like to try
+this, I can send it again. 
+
+-- 
+ 
+ Douglas E. Engert  <DEEngert@anl.gov>
+ Argonne National Laboratory
+ 9700 South Cass Avenue
+ Argonne, Illinois  60439 
+ (630) 252-5444          <New Area Code 8/3/96>
+ PGP Key fingerprint =  20 2B 0C 78 43 8A 9C A6  29 F7 A3 6D 5E 30 A6 7F
+
+
+
+
+
+From sig-security-request@osf.org  Mon Sep 30 12:30:48 1996
+Return-Path: sig-security-request@osf.org
+Received: (from list@localhost) by postman.osf.org (8.7.5/8.7.3) id MAA12966 for rsalz; Mon, 30 Sep 1996 12:30:47 -0400 (EDT)
+Resent-Date: Mon, 30 Sep 1996 12:30:47 -0400 (EDT)
+Date: Mon, 30 Sep 1996 10:33:52 -0500
+Message-Id: <199609301533.KAA22944@pembroke.ctd.anl.gov>
+From: Doug Engert <DEEngert@anl.gov>
+To: authtf@es.net, kerberos@mit.edu, info-afs@transarc.com,
+        info-dce@transarc.com, dcewg@es.net, adfstf@es.net,
+        sig-security@osf.org, sig-dce-security@osf.org
+Subject: Kerberos 5 beta 7 and DCE and AFS 
+Resent-Message-ID: <"D6pVsjLUayP.A.-jH.Os-Ty"@postman.osf.org>
+Resent-From: sig-security@osf.org
+X-Mailing-List: sig-security:archive/latest/62,
+                sig-dce-security:archive/latest/35
+X-Loop: sig-security@osf.org
+Precedence: list
+Resent-Sender: sig-security-request@osf.org
+X-UIDL: 20125670c0361fcaa6f7dfd36c13d976
+Status: RO
+
+
+The modifications to Kerberos 5 beta 7 to allow for interoperability
+with DCE and AFS including using forwarded tickets to get DCE context
+and or AFS tokens; and using the v5passwd routine to change the DCE
+password is now available. 
+
+Thes modifications have undergone some testing, but they are
+modifications to beta code and may have bugs as well. Use them at
+you own risk.
+
+These can be found at:
+
+ ftp://achilles.ctd.anl.gov/pub/kerberos.v5.
+
+See the README file. The modifications are substantially the same as
+made to the Kerberos 5 beta 6 code. You may also which to look at the 
+old/Announcement.k56 and old/README.k56 files as well. 
+
+-- 
+ 
+ Douglas E. Engert  <DEEngert@anl.gov>
+ Argonne National Laboratory
+ 9700 South Cass Avenue
+ Argonne, Illinois  60439 
+ (630) 252-5444          <New Area Code 8/3/96>
+ PGP Key fingerprint =  20 2B 0C 78 43 8A 9C A6  29 F7 A3 6D 5E 30 A6 7F
+

@@ -1,0 +1,1079 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: test4,v $
+# Revision 1.1.133.1  1996/10/17  18:17:13  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:49:35  damon]
+#
+# Revision 1.1.128.2  1994/09/29  19:48:06  mckeen
+# 	Added sleep to allow sufficient time to restart
+# 	[1994/09/29  19:46:37  mckeen]
+# 
+# Revision 1.1.128.1  1994/02/04  20:39:40  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:22:10  devsrc]
+# 
+# Revision 1.1.126.1  1993/12/07  17:41:07  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  18:37:46  jaffe]
+# 
+# Revision 1.1.4.6  1993/01/11  17:38:46  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  16:55:42  htf]
+# 
+# Revision 1.1.4.5  1992/11/10  18:39:26  jaffe
+# 	Fixed /bin/sh line
+# 	[1992/11/10  16:08:02  jaffe]
+# 
+# Revision 1.1.4.4  1992/10/28  16:00:22  jaffe
+# 	Transarc delta: comer-ot4849-misc-bos-command-test-cleanup 1.3
+# 	  Selected comments:
+# 	    Miscellaneous clean-up of the bos command test suite.
+# 	    More cleanup of the bos test suite
+# 	    Installed a working version.  Adjusted a sleep to 20 from 10.
+# 	    Change Makefiles to install files into the export tree.  This should
+# 	    later be changed to install into the install tree as soon as we decide
+# 	    on the correct tree layout.  In the meantime, put the files under
+# 	    export/<machine>/test/bos.
+# 	Transarc delta: comer-ot5751-increase-sleep-time-in-test4 1.1
+# 	  Selected comments:
+# 	    Increased the amount of time that the test script waits for the
+# 	    bosserver to determine that a process is forking out of control.
+# 	    The old value was 20 (the amount of time the bosserver tries to
+# 	    restart a dying process); the new is 40.
+# 	    See above.
+# 	[1992/10/27  16:50:50  jaffe]
+# 
+# Revision 1.1.4.3  1992/09/25  17:01:24  jaffe
+# 	Transarc delta: rajesh-ot5142-convert-bos-tests-from-csh-to-sh 1.3
+# 	  Selected comments:
+# 	    Convert bos tests 4,5,6,8,9 and 10 from csh to sh.
+# 	    Convert test from csh to sh.
+# 	    Addition of a utility function to determine if a dfs-server principal
+# 	    exists for a machne. And more of csh-to-sh conversions.
+# 	    More of csh-to-sh conversions.
+# 	    More to csh-to-sh conversion. This version has been tested.
+# 	    See above.
+# 	[1992/09/23  20:43:10  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/28  19:04:20  jaffe
+# 	Transarc delta: rajesh-ot4937-increase-sleep 1.1
+# 	  Selected comments:
+# 	    To modify bos/test4 to sleep for an appropriate time after a bos
+# 	    restart of the bosserer
+# 	    According to Beth, bos restart returns after the currrent bosserver
+# 	    has received the rpc. Hence when the bos restart command returns, the
+# 	    new bosserver willnot have started yet. To ensure that the new
+# 	    bosserver is in operation, process ids of bosserver processes can be
+# 	    monitored or sleep can be done. 60 seconds of sleep should be enough
+# 	    even in loaded systems according to Beth. Since the first approach is
+# 	    not clean, modified the test to sleep for 60 seconds. The sleep time
+# 	    can be changed by setting the variable BOS_RESTART_SLEEP_TIME before
+# 	    executing the test.
+# 	[1992/08/28  12:05:02  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/21  12:35:14  jaffe
+# 	Transarc delta: fred-merge-tests 1.1
+# 	  Files modified:
+# 	    Makefile
+# 	    bos: Makefile, READ_ME, init_dce, kills, runc, runtests
+# 	    bos: setup, shows
+# 	    bos/tests: Makefile, test0, test1, test10, test11, test12
+# 	    bos/tests: test2, test3, test4, test5, test6, test7, test8
+# 	    bos/tests: test9; bos/tests/procs: Makefile
+# 	    cm: Makefile, runtests, test0, test1, test2, test3, test4
+# 	    cm: test5, test6; config: chk_errnr, echeck, environment
+# 	    fs: Makefile, READ_ME, err1, err2, longalpha, longfox
+# 	    fs: longmix, prog1.c, rtest1, shortalpha, shortfox, shortmix
+# 	    fs: test1, test10, test2, test2b, test2s, test3, test4
+# 	    fs: test5, test6, test7, test8, test9
+# 	    fts: Makefile, check, etest.sed, etest1, etest2, etest3
+# 	    fts: etest4, etest5, etest6, rtest1, rtest2, runrtests
+# 	    fts: runtests, test1, test10, test11, test12, test13, test2
+# 	    fts: test3, test4, test5, test6, test7, test8, test9
+# 	    low: Makefile, ctrl.asc, prog11.c, prog12.c, prog14.c
+# 	    low: prog3a.c, prog8.c, prog9.c, rtest1, rtest2, styl.asc
+# 	    low: test1, test10, test11, test12, test13, test14, test2
+# 	    low: test3, test4, test5, test6, test7, test8, test9
+# 	    naming: Makefile, bostest, fstest, ftstest
+# 	    scout: Makefile, test1, test2; setup: Makefile, environment
+# 	    ubik: Makefile, READ_ME, init, kills, runc, setup, shows
+# 	    ubik: udbg; util: Makefile, sys.c
+# 	  Selected comments:
+# 	    Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	    the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	    should be looking at the same test code.
+# 	    Changes to facilitate merge of local DFS test code with the OSF's.
+# 
+# 	$TALog: test4,v $
+# 	Revision 4.24  1994/11/08  15:59:01  cfe
+# 	[merge of changes from 4.21 to 4.23 into 4.22]
+# 
+# 	[*** log entries omitted ***]
+# 
+# Revision 4.22  1994/07/13  19:52:52  cfe
+# 	Test failures.
+# 
+# 	Don't restart the bosserver twice in succession without sleeping.
+# 	[from r4.21 by delta cfe-db5733-bos-encryption-and-restart-tests, r1.1]
+# 
+# Revision 4.21  1993/11/23  20:08:56  andi
+# 	[merge of changes from 4.16 to 4.20 into 4.19]
+# 
+# Revision 4.20  1993/11/18  01:11:48  comer
+# 	test4 was using some local commands when it should have been
+# 	executing commands on the remote SERVER_1.  This delta adds
+# 	the rsh remote execution of these commands.
+# 	[from r4.16 by delta comer-test4-fix-up-commands-for-remote-server, r1.1]
+# 
+# Revision 4.19  1993/11/15  22:54:51  andi
+# 	[merge of changes from 4.16 to 4.18 into 4.17]
+# 
+# Revision 4.18  1993/11/11  21:19:07  comer
+# 	A few more places where $(pwd) was being used.  Changed to `pwd`.
+# 	[from r4.16 by delta comer-db4664-fix-minor-bos-test-problems, r1.2]
+# 
+# Revision 4.17  1993/09/20  13:51:07  comer
+# 	[merge of changes from 4.13 to 4.16 into 4.15]
+# 
+# Revision 4.16  1993/09/20  13:47:25  comer
+# 	Make bos test4 wait longer (120 sec instead of 40) before it
+# 	expects a bad process to have automatically shut down.
+# 	[from r4.13 by delta comer-db4345-bos-test-make-test4-wait-longer, r1.1]
+# 
+# Revision 4.15  1993/08/24  20:03:05  andi
+# 	[merge of changes from 4.12 to 4.14 into 4.13]
+# 
+# Revision 4.14  1993/08/24  15:17:48  bwl
+# 	More changes for HP port.  Milestone:  got the low tests built;
+# 	can run cthon on DFS.  (But not on glued UFS.)
+# 
+# 	Changes for HP port.
+# 	[from r4.12 by delta bwl-o-db3961-port-103-to-HP, r1.11]
+# 
+# Revision 4.13  1993/08/19  13:30:55  vijay
+# 	There was no test in the bos test suite that tests the bosserver restart
+# 	capability. A fix was made recently (ref. db#4115) to get restart to work on
+# 	solaris. This test is aimed at testing this fix and act as a regression test.
+# 
+# 	add a bosserver restart test
+# 	[from r4.12 by delta vijay-db4139-bos-test-restart-of-bosserver, r1.1]
+# 
+# Revision 4.12  1993/01/14  17:33:10  jaffe
+# 	revdrop of latest OSF copyright changes to these files
+# 	[from r4.11 by delta osf-revdrop-01-12-92, r1.1]
+# 
+# 	[1992/05/20  17:23:43  jaffe]
+# 
+# $EndLog$
+#
+
+###############################################################################
+#    Copyright (C) 1991, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This test is applicable to DFS running bosserver.
+# The script tests the bos process-management subcommands, using proc4.
+# It also tests the bos getdates and prune subcommands.
+
+###############################################################################
+
+# Usage:                test4
+
+# Typically run via:    test4 >& test4.out
+# or via the bos/runtests script.
+
+###############################################################################
+
+# Test environment:
+# This test requires DFS server $SERVER_1 to be running bosserver.
+
+# Privilege required:
+# You must be authenticated to DCE as someone who's in admin.bos, and
+# you must be logged into Unix as local root.
+
+# Highest error number is: 58.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+p1="$p:"
+rc=0
+ty=bos
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${VERB_ARG=""}
+: ${SERVER_1=$hn}
+: ${TESTTOP=`pwd`}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name=/.../$CELL_NAME}
+: ${dns_server_prefix=/.:/hosts/}
+
+#
+# When bos restart -bosserver returns, it is not guaranteed that the
+# new bosserver has started. Hence need to sleep for some time.
+# 60 seconds should be appropriate according to the developer
+# even in loaded systems.
+#
+
+BOS_RESTART_SLEEP_TIME=${BOS_RESTART_SLEEP_TIME:-60}
+
+PATH=":"$bin_dir":"$PATH
+
+sav_arg="-server $dns_server_prefix$SERVER_1 $AUTH_ARG"
+
+bos_testhome=$TESTTOP/$ty/tests/procs
+bosconfig=/opt/dcelocal/var/dfs/BosConfig
+num_procs=5
+
+if [ "${SERVER_1}" != "$hn" ] 
+then
+	RSH=rsh
+	systype=`uname -s`
+	if [ "$systype" = "HP-UX" ]
+	  then
+		RSH=remsh
+	fi
+
+	if ${RSH} $SERVER_1 pwd
+	  then :
+	  else
+		echo "This test requires ${RSH} functionality to work properly (test12: E0)" >&2
+		echo "test4 FAILED"
+		exit 1
+	fi
+# remote version of functions to run a command on SERVER_1
+runcommand() {
+	echo ${RSH} ${SERVER_1} $*
+	${RSH} ${SERVER_1} $*
+}
+runqcommand() {
+	${RSH} ${SERVER_1} $*
+}
+else
+# local version of functions to run a command
+runcommand() {
+	echo $*
+	$*
+}
+runqcommand() {
+	$*
+}
+fi	
+###############################################################################
+echo ""
+echo "RUNNING bos COMMANDS on SERVER $SERVER_1 in CELL $CELL_NAME."
+echo "========================================================================="
+date
+echo ""
+
+if [ "$CELL_NAME" = "" ]
+then
+   echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting."
+   exit 2
+fi
+
+###############################################################################
+
+echo ""; echo "Status before doing anything:"
+echo bos status -long $sav_arg
+bos status -long $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E1)"
+  rc=`expr $rc + 1`
+fi
+
+echo ""; echo "Contents of BosConfig:"; runqcommand cat $bosconfig
+
+###############################################################################
+
+echo ""; echo "Create processes tp1.1 thru tp1.$num_procs..."
+
+i=0
+while [ $i -lt $num_procs ]
+do
+  	echo bos create -process tp1.$i -type simple -cmd "proc4 tag1.$i 10" $sav_arg
+  	bos create -process tp1.$i -type simple \
+      -cmd "$bos_testhome/proc4 tag1.$i 10" $sav_arg
+  	if [ $? -ne 0 ] 
+	then
+	    echo "- failed ($p1 E2)"
+    	rc=`expr $rc + 1`
+  	fi
+    i=`expr $i + 1`
+done
+
+if [ "$VERB_ARG" != "" ] 
+then
+   	echo ""; echo "Status after creating processes:"
+   	echo bos status -long $sav_arg
+   	bos status -long $sav_arg
+   	if [ $? -ne 0 ] 
+	then
+     	echo "- failed ($p1 E3)"
+     	rc=`expr $rc + 1`
+   	fi
+
+   	echo ""; echo "Contents of BosConfig:"; runqcommand cat $bosconfig
+fi
+
+###############################################################################
+
+i=`expr $i - 1`
+echo ""
+echo "Attempt to create a duplicate process (tp1.$i)..."
+
+echo bos create -process tp1.$i -type simple -cmd "proc4 tag2.$i 10" $sav_arg
+bos create -process tp1.$i -type simple -cmd \
+   "$bos_testhome/proc4 tag2.$i 10" $sav_arg
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E4)"
+  rc=`expr $rc + 1`
+fi
+
+echo ""; echo "Attempt to manipulate a non-existent process:"
+echo bos restart -process tp2 $sav_arg
+bos restart -process tp2 $sav_arg
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E5)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos stop -process tp3 $sav_arg
+bos stop -process tp3 $sav_arg
+if [ $? -eq 0 ] 
+then
+  	echo "- worked ($p1 E6)"
+  	rc=`expr $rc + 1`
+fi
+
+if [ "$VERB_ARG" != "" ] 
+then
+   	echo ""; echo "Current status:"
+   	echo bos status -long $sav_arg
+   	bos status -long $sav_arg
+   	if [ $? -ne 0 ] 
+	then
+     	echo "- failed ($p1 E7)"
+     	rc=`expr $rc + 1`
+   	fi
+ 	echo "Contents of BosConfig:"; runqcommand cat $bosconfig
+fi
+
+###############################################################################
+
+echo ""; echo "Stop processes tp1.1 thru tp1.$num_procs..."
+
+i=0
+while [ $i -lt $num_procs ]
+do
+  	echo bos stop -process tp1.$i -wait $sav_arg
+  	bos stop -process tp1.$i -wait $sav_arg
+  	if [ $? -ne 0 ] 
+	then
+    	echo "- failed ($p1 E8)"
+    	rc=`expr $rc + 1`
+  	fi
+  	i=`expr $i + 1`
+done
+
+if [ "$VERB_ARG" != "" ] 
+then
+   	echo ""; echo "Current status:"
+   	echo bos status -long $sav_arg
+   	bos status -long $sav_arg
+   	if [ $? -ne 0 ] 
+	then
+     	echo "- failed ($p1 E9)"
+     	rc=`expr $rc + 1`
+   	fi
+   	echo "Contents of BosConfig:"; runqcommand cat $bosconfig
+fi
+
+###############################################################################
+
+echo ""; echo "Startup processes tp1.1 thru tp1.$num_procs..."
+
+i=0
+while [ $i -lt $num_procs ]
+do
+  	echo bos startup -process tp1.$i $sav_arg
+  	bos startup -process tp1.$i $sav_arg
+  	if [ $? -ne 0 ] 
+	then
+    	echo "- failed ($p1 E10)"
+    	rc=`expr $rc + 1`
+  	fi
+	i=`expr $i + 1`
+done
+
+if [ "$VERB_ARG" != "" ] 
+then
+   	echo ""; echo "Current status:"
+   	echo bos status -long $sav_arg
+   	bos status -long $sav_arg
+   	if [ $? -ne 0 ] 
+	then
+     	echo "- failed ($p1 E11)"
+    	rc=`expr $rc + 1`
+   	fi
+   	echo "Contents of BosConfig:"; runqcommand cat $bosconfig
+fi
+
+###############################################################################
+
+echo ""
+echo "Stop processes tp1.1 thru tp1.$num_procs..."
+
+i=0
+while [ $i -lt $num_procs ]
+do
+  	echo bos stop -process tp1.$i $sav_arg
+  	bos stop -process tp1.$i $sav_arg
+  	if [ $? -ne 0 ] 
+	then
+    	echo "- failed ($p1 E12)"
+    	rc=`expr $rc + 1`
+  	fi
+  	i=`expr $i + 1`
+done
+
+if [ "$VERB_ARG" != "" ] 
+then
+   	echo ""; echo "Current status:"
+   	echo bos status -long $sav_arg
+   	bos status -long $sav_arg
+   	if [ $? -ne 0 ] 
+	then
+     	echo "- failed ($p1 E13)"
+     	rc=`expr $rc + 1`
+   	fi
+   	echo "Contents of BosConfig:"; runqcommand cat $bosconfig
+fi
+
+###############################################################################
+
+echo ""
+echo "Start processes tp1.1 thru tp1.$num_procs..."
+
+i=0
+while [ $i -lt $num_procs ]
+do
+  	echo bos start -process tp1.$i $sav_arg
+  	bos start -process tp1.$i $sav_arg
+  	if [ $? -ne 0 ] 
+	then
+    	echo "- failed ($p1 E14)"
+    	rc=`expr $rc + 1`
+  	fi
+  	i=`expr $i + 1`
+done
+
+if [ "$VERB_ARG" != "" ] 
+then
+   	echo ""; echo "Current status:"
+   	echo bos status -long $sav_arg
+   	bos status -long $sav_arg
+   	if [ $? -ne 0 ] 
+	then
+     	echo "- failed ($p1 E15)"
+     	rc=`expr $rc + 1`
+   	fi
+   	echo "Contents of BosConfig:"; runqcommand cat $bosconfig
+fi
+
+###############################################################################
+
+echo ""
+echo "Restart all processes..."
+
+echo bos restart $sav_arg
+bos restart $sav_arg
+if [ $? -ne 0 ] 
+then
+  	echo "- failed ($p1 E16)"
+  	rc=`expr $rc + 1`
+fi
+
+if [ "$VERB_ARG" != "" ] 
+then
+   	echo ""; echo "Current status:"
+   	echo bos status -long $sav_arg
+   	bos status -long $sav_arg
+   	if [ $? -ne 0 ] 
+	then
+     echo "- failed ($p1 E17)"
+     rc=`expr $rc + 1`
+   			fi
+
+   echo "Contents of BosConfig:"; runqcommand cat $bosconfig
+
+fi
+
+echo ""; echo "Restart the bosserver..."
+
+lastDate=`bos stat $sav_arg -long | fgrep "Process last started" | tail -1 | cut -d" " -f9,10,11,12,13`
+comLastDate=`echo $lastDate | cut -d" " -f1,2,3,5`
+#
+# restart the bosserver twice, to test descriptor handling
+#
+echo bos restart -bosserver $sav_arg
+bos restart -bosserver $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E18a)"
+  rc=`expr $rc + 1`
+fi
+
+echo "Sleeping..."
+sleep $BOS_RESTART_SLEEP_TIME
+
+echo bos restart -bosserver $sav_arg
+bos restart -bosserver $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E18b)"
+  rc=`expr $rc + 1`
+fi
+
+echo "Sleeping..."
+sleep $BOS_RESTART_SLEEP_TIME
+
+echo ""; echo -n "Make sure bosserver is restarted..."
+i=0
+while [ $i -lt 100 ]
+do
+  newDate=`bos stat $sav_arg -long | fgrep "Process last started" |tail -1|cut -d" " -f9,10,11,12,13`
+  comNewDate=`echo $newDate | cut -d" " -f1,2,3,5`
+  if [ "$newDate" = "$lastDate" ]; then
+     i=`expr $i+1`
+     continue
+  else
+     if [ "$comNewDate" = "$comLastDate" ]; then
+        echo "done"
+        break
+     else
+	i=`expr $i+1`
+	continue
+     fi
+  fi
+done
+if [ $i -eq 100 ]; then
+   echo "- failed ($p1 E19a)"
+   rc=`expr $rc + 1`
+fi
+
+echo bos getlog -file BosLog $sav_arg
+bos getlog -file BosLog $sav_arg
+
+if [ "$VERB_ARG" != "" ] 
+then
+
+   echo ""; echo "Current status:"
+   echo bos status -long $sav_arg
+   bos status -long $sav_arg
+   if [ $? -ne 0 ] 
+then
+     echo "- failed ($p1 E19b)"
+     rc=`expr $rc + 1`
+   fi
+
+   echo "Contents of BosConfig:"; runqcommand cat $bosconfig
+
+fi
+
+###############################################################################
+
+echo ""; echo "Shutdown processes tp1.$1 thru tp1.$num_procs..."
+
+i=0
+while [ $i -lt $num_procs ]
+do
+  echo bos shutdown -process tp1.$i $sav_arg
+  bos shutdown -process tp1.$i $sav_arg
+  if [ $? -ne 0 ] 
+then
+    echo "- failed ($p1 E20)"
+    rc=`expr $rc + 1`
+  fi
+
+  i=`expr $i + 1`
+
+done
+
+if [ "$VERB_ARG" != "" ] 
+then
+
+   echo ""; echo "Current status:"
+   echo bos status -long $sav_arg
+   bos status -long $sav_arg
+   if [ $? -ne 0 ] 
+then
+     echo "- failed ($p1 E21)"
+     rc=`expr $rc + 1`
+   fi
+
+   echo "Contents of BosConfig:"; runqcommand cat $bosconfig
+
+fi
+
+###############################################################################
+
+echo ""; echo "Delete processes tp1.$1 thru tp1.$num_procs..."
+
+i=0
+while [ $i -lt $num_procs ]
+do
+  echo bos delete -process tp1.$i $sav_arg
+  bos delete -process tp1.$i $sav_arg
+  if [ $? -ne 0 ] 
+then
+    echo "- failed ($p1 E22)"
+    rc=`expr $rc + 1`
+  fi
+
+  i=`expr $i + 1`
+
+done
+
+if [ "$VERB_ARG" != "" ] 
+then
+
+   echo ""; echo "Current status:"
+   echo bos status -long $sav_arg
+   bos status -long $sav_arg
+   if [ $? -ne 0 ] 
+then
+     echo "- failed ($p1 E23)"
+     rc=`expr $rc + 1`
+   fi
+
+   echo "Contents of BosConfig:"; runqcommand cat $bosconfig
+
+fi
+
+###############################################################################
+
+echo ""; echo "Create process tp4, a cron-type process..."
+
+echo bos create -process tp4 -type cron -cmd "/bin/ls" "20:05" $sav_arg
+bos create -process tp4 -type cron -cmd "/bin/ls" "20:05" $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E24)"
+  rc=`expr $rc + 1`
+fi
+
+if [ "$VERB_ARG" != "" ] 
+then
+
+   echo ""; echo "Current status:"
+   echo bos status -long $sav_arg
+   bos status -long $sav_arg
+   if [ $? -ne 0 ] 
+then
+     echo "- failed ($p1 E25)"
+     rc=`expr $rc + 1`
+   fi
+
+   echo ""; echo "Contents of BosConfig:"; runqcommand cat $bosconfig
+
+fi
+
+###############################################################################
+
+echo ""; echo "Create process tp5, which will always fail..."
+
+echo bos create -process tp5 -type simple -cmd "proc4 tag3" $sav_arg
+bos create -process tp5 -type simple -cmd "$bos_testhome/proc4 tag3" \
+   $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E26)"
+  rc=`expr $rc + 1`
+fi
+
+echo "Sleeping"; sleep 120; echo ""
+
+if [ "$VERB_ARG" != "" ] 
+then
+
+   echo ""; echo "Current status:"
+   echo bos status -long $sav_arg
+   bos status -long $sav_arg
+   if [ $? -ne 0 ] 
+then
+     echo "- failed ($p1 E27)"
+     rc=`expr $rc + 1`
+   fi
+
+   echo ""; echo "Contents of BosConfig:"; runqcommand cat $bosconfig
+
+fi
+
+echo ""; echo "Delete process tp5..."
+
+echo bos delete -process tp5 $sav_arg
+bos delete -process tp5 $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E28)"
+  rc=`expr $rc + 1`
+fi
+
+if [ "$VERB_ARG" != "" ] 
+then
+
+   echo ""; echo "Current status:"
+   echo bos status -long $sav_arg
+   bos status -long $sav_arg
+   if [ $? -ne 0 ] 
+then
+     echo "- failed ($p1 E29)"
+     rc=`expr $rc + 1`
+   fi
+
+   echo ""; echo "Contents of BosConfig:"; runqcommand cat $bosconfig
+
+fi
+
+###############################################################################
+
+echo ""; echo "Create processes tp6 and tp7..."
+
+echo bos create -process tp6 -type simple -cmd "proc4 tag4 10" $sav_arg
+bos create -process tp6 -type simple -cmd "$bos_testhome/proc4 tag4 10" \
+    $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E30)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos create -process tp7 -type simple -cmd "proc4 tag5 10" $sav_arg
+bos create -process tp7 -type simple -cmd "$bos_testhome/proc4 tag5 10" \
+    $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E31)"
+  rc=`expr $rc + 1`
+fi
+
+echo ""; echo "Shutdown processes tp6 and tp7 using -wait..."
+
+echo bos shutdown -wait -process tp6 $sav_arg
+bos shutdown -wait -process tp6 $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E32)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos stop -wait -process tp7 $sav_arg
+bos stop -wait -process tp7 $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E33)"
+  rc=`expr $rc + 1`
+fi
+
+if [ "$VERB_ARG" != "" ] 
+then
+
+   echo ""; echo "Current status:"
+   echo bos status -long $sav_arg
+   bos status -long $sav_arg
+   if [ $? -ne 0 ] 
+then
+     echo "- failed ($p1 E34)"
+     rc=`expr $rc + 1`
+   fi
+
+   echo ""; echo "Contents of BosConfig:"; runqcommand cat $bosconfig
+
+fi
+
+echo ""; echo "Delete processes tp6 and tp7..."
+
+echo bos delete -process tp6 $sav_arg
+bos delete -process tp6 $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E35)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos delete -process tp7 $sav_arg
+bos delete -process tp7 $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E36)"
+  rc=`expr $rc + 1`
+fi
+
+echo ""; echo "Status after running bos process-management subcommands:"
+echo bos status -long $sav_arg
+bos status -long $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E37)"
+  rc=`expr $rc + 1`
+fi
+
+echo ""; echo "Contents of BosConfig:"; runcommand cat $bosconfig
+
+###############################################################################
+
+echo ""; echo "Test the getdates subcommand..."
+
+runcommand ls -l $bin_dir
+
+echo bos getdates -file bos $sav_arg
+bos getdates -file bos $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E38)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos getdates -file bosserver $sav_arg
+bos getdates -file bosserver $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E39)"
+  rc=`expr $rc + 1`
+fi
+echo ""
+
+###############################################################################
+
+echo ""; echo "Test the prune subcommand..."
+
+echo bos prune -bak -old -core $sav_arg
+bos prune -bak -old -core $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E40)"
+  rc=`expr $rc + 1`
+fi
+
+runcommand ls -l $bin_dir
+
+echo bos getdates -file bos $sav_arg
+bos getdates -file bos $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E41)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos getdates -file bosserver $sav_arg
+bos getdates -file bosserver $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E42)"
+  rc=`expr $rc + 1`
+fi
+echo ""
+
+echo "Create bosserver.OLD and bosserver.BAK..."
+
+runcommand cp $bin_dir/bosserver $bin_dir/bosserver.OLD
+runcommand cp $bin_dir/bos $bin_dir/bos.BAK
+echo ""
+
+runcommand ls -l $bin_dir
+
+echo bos getdates -file bos $sav_arg
+bos getdates -file bos $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E43)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos getdates -file bosserver $sav_arg
+bos getdates -file bosserver $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E44)"
+  rc=`expr $rc + 1`
+fi
+echo ""
+
+echo bos prune -bak $sav_arg
+bos prune -bak $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E45)"
+  rc=`expr $rc + 1`
+fi
+
+runcommand ls -l $bin_dir
+echo bos getdates -file bos $sav_arg
+bos getdates -file bos $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E46)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos getdates -file bosserver $sav_arg
+bos getdates -file bosserver $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E47)"
+  rc=`expr $rc + 1`
+fi
+echo ""
+
+echo bos prune -old $sav_arg
+bos prune -old $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E48)"
+  rc=`expr $rc + 1`
+fi
+
+runcommand ls -l $bin_dir
+
+echo bos getdates -file bos $sav_arg
+bos getdates -file bos $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E49)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos getdates -file bosserver $sav_arg
+bos getdates -file bosserver $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E50)"
+  rc=`expr $rc + 1`
+fi
+echo ""
+
+echo "Re-create bosserver.OLD and bosserver.BAK..."
+
+runcommand cp $bin_dir/bosserver $bin_dir/bosserver.OLD
+runcommand cp $bin_dir/bos $bin_dir/bos.BAK
+
+runcommand ls -l $bin_dir
+
+echo bos getdates -file bos $sav_arg
+bos getdates -file bos $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E51)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos getdates -file bosserver $sav_arg
+bos getdates -file bosserver $sav_arg
+echo ""
+
+echo bos prune -all $sav_arg
+bos prune -all $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E52)"
+  rc=`expr $rc + 1`
+fi
+
+
+runcommand ls -l $bin_dir
+
+echo bos getdates -file bos $sav_arg
+bos getdates -file bos $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E53)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos getdates -file bosserver $sav_arg
+bos getdates -file bosserver $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E54)"
+  rc=`expr $rc + 1`
+fi
+echo ""
+
+###############################################################################
+
+echo ""; echo "Clean up process tp4..."
+
+if [ "$VERB_ARG" != "" ] 
+then
+
+   echo ""; echo "Current status:"
+   echo bos status -long $sav_arg
+   bos status -long $sav_arg
+   if [ $? -ne 0 ] 
+then
+     echo "- failed ($p1 E55)"
+     rc=`expr $rc + 1`
+   fi
+
+   echo ""; echo "Contents of BosConfig:"; runqcommand cat $bosconfig
+
+fi
+
+echo ""; echo "Stop and delete process tp4:"
+
+echo bos stop -process tp4 $sav_arg
+bos stop -process tp4 $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E56)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos delete -process tp4 $sav_arg
+bos delete -process tp4 $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E57)"
+  rc=`expr $rc + 1`
+fi
+
+echo ""; echo "Status before exiting:"
+echo bos status -long $sav_arg
+bos status -long $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E58)"
+  rc=`expr $rc + 1`
+fi
+
+###############################################################################
+
+sync; sync; sleep 2
+
+echo ""; echo "Done at `date`."; echo ""
+if [  $rc -eq 0 ] 
+then
+   echo "$ty/$p PASSED"
+   else
+   echo "$ty/$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################

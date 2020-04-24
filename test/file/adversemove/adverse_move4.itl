@@ -1,0 +1,471 @@
+*
+* @OSF_COPYRIGHT@
+* COPYRIGHT NOTICE
+* Copyright (c) 1993 Open Software Foundation, Inc.
+* ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+* src directory for the full copyright text.
+*
+*
+* (C) Copyright 1993 Transarc Corporation.
+* All Rights Reserved.
+*
+*
+* HISTORY
+* $Log: adverse_move4.itl,v $
+* $EndLog$
+*
+*
+* adverse_move4.itl
+*
+* This is one of 10 test programs testing the CM under Adverse Fileset Moves
+* For more detailed information about the test, please refer to the document
+* [Test the CM Under Adverse Fileset Moves]
+*
+* During a fileset move, there could be a case where the 'move state' recorded 
+* in the fileset (managed by the ftserver) is inconsistent with information
+* managed in FLDB. 
+* 
+* For example, during a move, the fileset's 'move state' in the source machine
+* is marked VOL_MOVE_SOURCE indicating that the fileset has moved to a new 
+* location. However, the FLDB may still point to the source server location. 
+* In any event, the CM while experiencing an adverse condition like this should
+* be able to break out quickly without staying in an RPC loop.
+*
+* The purpose of the following three tests is to make sure that the CM is still
+* robust and is able to recover from these situations.
+
+*
+* The purpose of this test is to make sure that CM will bail out quickly 
+* upon detecting that FLDB provide a conflicting information about where
+* the moving fileset is.
+
+* This test is essentially to test the notion of 'ZLC' supported by the fx 
+* server.
+*
+*  Requirements -
+*	2 machines used as CM1/FX1 and CM2/FX2.
+*
+*  Setup - (2 machine)
+*	The master(ie., Hub) and client #1 running MoveClient#1 are started on 
+*       Machine #1 and client #2 running MoveClient#2 started on Machine #2.
+*       The filset, fset1, is exported by FX1 and later moved to FX2.
+* 
+* HISTORY
+* $Log:$
+*
+* $EndLog$
+******************************************************************************
+
+
+
+
+
+******************************************************************************
+*                                                                            *
+*                        HUB CODE                                            *
+*                                                                            *
+******************************************************************************
+*
+*
+* Echo the following msg !
+!* Include adverse-move configuration.
+*
+include adverse_move.config
+*
+set WRITE_OFFSET0 int (0 * $chunkSize)
+set WRITE_OFFSET1 int ((1 * $chunkSize) - 10 )
+set WRITE_OFFSET2 int ((2 * $chunkSize) - 10 )
+set WRITE_OFFSET3 int ((3 * $chunkSize) - 10 )
+set WRITE_OFFSET4 int ((4 * $chunkSize) - 10 )
+set WRITE_OFFSET5 int ((5 * $chunkSize) - 10 )
+set newline vector "0x0a0d"
+set numFiles int 4
+*
+*
+* Hub Code. 
+*
+* The Hub code does the following initialization:
+* 
+* 1) Create a fileset, $fset1
+* 2) Mount $fset1 to dir /:/$fset1
+* 3) Create two dirs,  /:/$fset1/tdir1 and /:/$fset1/tdir1
+*
+*
+!* Delete the existing fileset, $fset1 and mount point, $mt, if any
+*
+*
+!* Clean up ....it may take a while ....
+*
+set ITL_IgnoreShellError 1
+set command string ("fts lsfldb " + $fset1 + " " +$dumpDev )
+shellExec command
+!* .... more cleanup ....
+if ($CommandResult == 0) {
+    set command string ("fts delete " + $fset1 + " " +$HostName1+ " " + $aggrDev1 +$dumpDev )
+    shellExec command
+    !* .... almost there ...
+    if ($CommandResult != 0) {
+	* 
+	* Delete the fileset from another server.
+	*
+	set command string ("fts delete " + $fset1 + " "+$HostName2+" " + $aggrDev2 +$dumpDev )
+	shellExec command    
+	if ($CommandResult != 0) {
+	    echo
+	    echo ERROR: cannot delete the fileset $fset1 !
+	    echo
+	    quit
+	}
+    }	
+    set command string ("cm checkfileset " + $dumpDev )
+}
+*
+!* Make sure the 'bomb' program exists
+* 
+set ITL_IgnoreShellError 0
+verifyStatus false
+set bomb string " /opt/dcelocal/bin/bomb "
+access $bomb $F_EXIST
+if ($ITL_Status != $ENOENT) {
+   echo
+   echo ERROR: $bomb program does not exist !
+   echo
+   quit
+}
+verifyStatus true
+set command string ("cm checkfileset " + $dumpDev )
+shellExec command
+set command string ("cd /:")
+shellExec command
+set ITL_IgnoreShellError 1
+set command string ("fts delm " + " " + $mt + $dumpDev )
+shellExec command
+set ITL_IgnoreShellError 0
+set command string ("cm checkfileset " + $dumpDev )
+shellExec command
+*
+*
+!* Creating fileset, $fset1, on $aggrDev1 of $HostName1 ...
+*
+set command string ("fts create " + " " + $fset1 + " " + $HostName1 + " " + $aggrDev1 +  $dumpDev )
+shellExec command
+*
+!* Set quota size to $fsetQuota
+*
+set command string ("fts setquota -fileset " + $fset1 + " -size " +$fsetQuota )
+shellExec command
+*
+!* Mount the fileset, $fset1, on $mt
+*
+set command string ("fts crm " + " " + $mt + " " + $fset1 + $dumpDev )
+shellExec command
+*
+!* Create two dirs $testDir1 and $testDir2
+*
+set command string (" mkdir " + $testDir1)
+shellExec command
+set command string (" mkdir " + $testDir2)
+shellExec command
+*
+*
+set fileDataA string "It is really a boring task, but someone got to do it"
+set fileDataB string "I beg your pardon. I never promise you a rose gardon even though I may have left my heart in San Francisco ...."
+*
+*
+******************************************************************************
+*                                                                            *
+*                          Process 1 On Machine1                             *
+*                                                                            *
+******************************************************************************
+*
+*
+*
+* Define procedure for process No#1 running on M1
+* 
+set MoveClient1 proc
+END_PROC
+  *
+  *
+  !* Start process MoveClient1 
+  *
+  *  Set up local variables
+  *  NOTE that until the notion of GLOBAL VARIABLE is implemented in ITL,
+  *       we have to duplicate these "Shared varaibles" in every procedure.
+  *       All these "Shared variables" are defined in ADVERSE_MOVE.CONFIG.
+  *
+  *
+  !* Get READ tokens for files in $mt and $testDir1
+  *
+  set dumpDev string " > /dev/null"
+  set fileDataA string "It is really a boring task, but someone got to do it"
+  set fileDataB string "I beg your pardon. I never promise you a rose gardon even though I may have left my heart in San Francisco ...."
+  *
+  *
+  set command string ("cm checkfileset" + @dumpDev )
+  shellExec command
+  set command string ("ls -l " + $mt + " " + @dumpDev )
+  shellExec command
+  *
+  set command string ("ls -l " + $testDir1  + @dumpDev )
+  shellExec command
+  set command string ("ls -l " + $testDir2  + @dumpDev )
+  shellExec command
+  *
+  *
+  !* Now open/write $numFiles files in dir $testDir1
+  * 
+  loop x 1 1 $numFiles
+     set testFile string ($testDir1 + "/file" + @x)
+     open @testFile (@O_RDWR | @O_CREAT) 0644 fileId[@x]
+     lseek @fileId[@x] @SEEK_SET $WRITE_OFFSET1
+     write @fileId[@x] @fileDataA
+     lseek @fileId[@x] @SEEK_SET $WRITE_OFFSET5
+     write @fileId[@x] @fileDataA
+  endloop
+  * 
+  !* Sleep for 1 minute to sync I/Os
+  *
+  sleep 60000
+  *
+  !* Wait for the event of a BAD_FILESET_STATE
+  *
+  sync_join "BAD_FILESET_STATE" $syncPointTimeout
+  *
+  !*
+  !* Verify results after a adverse move that resulted in a bad state
+  !*
+  *
+  verifyStatus false
+  set errnoNum int 0
+  set errorOut int 0
+  loop x 1  1 $numFiles
+	set testFile string ($testDir1 + "/file" + @x )
+        echo read @testFile ..
+	lseek @fileId[@x] @SEEK_SET $WRITE_OFFSET3
+	read @fileId[@x] #@fileDataA readBuffer
+  endloop
+  echo
+  echo Result OK: read is not hung there
+  echo
+  *
+  * close all $numFiles files and these files should be gone
+  *
+  loop x 1 1 $numFiles
+     close @fileId[@x]
+  endloop
+  verifyStatus true
+  *
+  !* Wait for the event of a RETRY_FTS_MOVE
+  *
+  sync_join "RETRY_FTS_MOVE" $syncPointTimeout
+  *
+  echo Proc 1 completes !
+  echo
+  quit
+END_PROC
+*
+*
+******************************************************************************
+*                                                                            *
+*                          Process 2 On Machine2                             *
+*                                                                            *
+******************************************************************************
+*
+*
+*
+*  Implmentation for MoveClient
+*
+*
+set MoveClient2 proc
+END_PROC
+  *
+  *
+  !* Start process MoveClient2
+  *
+  *  Set up local variables
+  *  NOTE that until the notion of GLOBAL VARIABLE is implemented in ITL,
+  *       we have to duplicate these "Shared varaibles" in every procedure.
+  *
+  *
+  *
+  !* Get READ tokens for files under $mt and $testDir1
+  *
+  set dumpDev string " > /dev/null"
+  set fileDataA string "It is really a boring task, but someone got to do it"
+  set fileDataB string "I beg your pardon. I never promise you a rose gardon even though I may have left my heart in San Francisco ...."
+  *
+  *
+  *
+  set command string ("cm checkfileset" + @dumpDev )
+  shellExec command
+  set command string ("ls -l " + $mt + " " + @dumpDev )
+  shellExec command
+  *
+  set command string ("ls -l " + $testDir1  + @dumpDev )
+  shellExec command
+  set command string ("ls -l " + $testDir2  + @dumpDev )
+  shellExec command
+  *
+  !* Now open/write $numFiles files in dir $testDir1
+  *
+  loop x 1 1 $numFiles
+        set testFile string ($testDir1 + "/file" + @x)
+        open @testFile (@O_RDWR | @O_CREAT) 0644 fileId[@x]
+        lseek @fileId[@x] @SEEK_SET $WRITE_OFFSET2
+        write @fileId[@x] @fileDataB
+        lseek @fileId[@x] @SEEK_SET $WRITE_OFFSET5
+        write @fileId[@x] @fileDataB
+  endloop
+  *
+  !* Wait for the event of a BAD_FILESET_STATE
+  *
+  sync_join "BAD_FILESET_STATE" $syncPointTimeout
+  *
+  !*
+  !* Verify results after a adverse move that resulted in a bad state
+  !*
+  *
+  verifyStatus false
+  set errnoNum int 0
+  set errorOut int 0
+  loop x 1  1 $numFiles
+	set testFile string ($testDir1 + "/file" + @x )
+        echo read @testFile
+	lseek @fileId[@x] @SEEK_SET $WRITE_OFFSET3
+	read @fileId[@x] #@fileDataA readBuffer
+  endloop
+  echo
+  echo Result OK: read is not hung there
+  echo
+  *
+  * close all $numFiles files and these files should be gone
+  *
+  loop x 1 1 $numFiles
+     close @fileId[@x]
+  endloop
+  verifyStatus true
+  *
+  !* Wait for the event of a RETRY_FTS_MOVE
+  *
+  sync_join "RETRY_FTS_MOVE" $syncPointTimeout
+  *
+  *
+  echo 
+  echo Proc 2 completes !
+  quit
+
+END_PROC
+*
+*
+******************************************************************************
+*                                                                            *
+*                         Now Back to the Hub code                           *
+*                                                                            *
+******************************************************************************
+set clientErrors int 0
+*
+*
+!* Send test procedures to clients.
+*
+loop x  0 1 1 
+   set y int ($x + 1)
+   set procName string ("MoveClient" + $y)
+   rexec_async $ITL_spoke[$x] $procName clientResults[$x] asyncId[$x]
+endLoop
+*
+*
+!* Create "BAD_FILESET_STATE" sync point.
+*
+sync_create "BAD_FILESET_STATE" 2 $syncPointTimeout
+*
+*
+set ITL_IgnoreShellError 1
+*
+!* Start an adverse fileset move ..
+!* (from $HostName1 $aggrDev1), 
+!* (to $HostName2 $aggrDev2)
+!* by setting a bomb point ..
+*
+* Recovery after SOURCE exposed -- abnormal state 18b
+* I.e., the source fileset is in a "delete" mode, however, the FLDB still 
+* points to the source.
+* 
+set ftsmove string ("fts move " + $fset1 + " " + $HostName1 + " " + $aggrDev1 + " " + $HostName2 + " " + $aggrDev2 + " -verbose " )
+echo $ftsmove
+*
+* bomb 'movevolume#30:error=27:count=1+0' -command $ftsmove
+*
+set bomb_command string ( " /opt/dcelocal/bin/bomb set " + " 'movevolume#30:exit=27:count=1+0' " + " " + "-command ' " +  $ftsmove + " ' " )
+echo $bomb_command
+shellExec bomb_command
+if ($CommandResult != 27) {
+   echo
+   echo WARNING: bombed fts move failed--not 27 but $CommandResult!
+}
+set ITL_IgnoreShellError 0
+*
+* 
+!* Release "BAD_FILESET_STATE" sync point 
+*
+*
+set WaitTime int 11
+set left int $WaitTime
+*
+!* Sleep for $WaitTime minutes for VOL_BUSY to time out
+loop y  0 2 $WaitTime
+	* sleep for 2 minutes
+	sleep 120000
+	set left int ($left - 2)
+	echo $left minutes to go 
+	echo sleep ...
+endloop
+*
+sync_release "BAD_FILESET_STATE"
+*
+*
+!* Retry a fts move 
+*
+sync_create "RETRY_FTS_MOVE" 2 $syncPointTimeout
+*
+!* Re-try the fileset move again
+!* from $HostName1 $aggrDev1, 
+!* to $HostName2 $aggrDev2
+*
+set command string ("fts unlock " + $fset1)
+shellExec command
+set command string ("fts move " + $fset1 + " " + $HostName1 + " " + $aggrDev1 + " " + $HostName2 + " " + $aggrDev2 + " -verbose")
+shellExec command
+set command string ("cm checkf > /dev/null " )
+shellExec command
+*
+*
+sync_release "RETRY_FTS_MOVE"
+*
+set syncClients int 2
+loop x  0 1 1
+   async_join $asyncId[$x] $syncPointTimeout
+*
+!* Validating results after async join number $x
+*
+    if ($clientResults[$x] != 0) {
+      echo Client $x had a failure, status was $clientResults[$x]
+      set clientErrors ($clientErrors + 1)
+    }
+endLoop
+*
+*
+if ($clientErrors == 0) {
+  echo 
+  echo Adverse Move Test No.4 Completed Successfully!
+  echo 
+  echo Delete the fileset from FLDB !
+  set command string ("fts delete " + $fset1 + " " +$HostName2+ " " + $aggrDev2 +$dumpDev )
+  echo $command
+  shellExec command
+}
+else {
+  error Adverse Move Test No.4 FAILED - with $clientErrors client failures.
+}
+quit
+
+

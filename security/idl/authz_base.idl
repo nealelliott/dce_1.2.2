@@ -1,0 +1,246 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: authz_base.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:27:44  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:11  marty]
+ *
+ * Revision 1.1.4.1  1995/12/08  17:30:55  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:54:47  root]
+ * 
+ * Revision 1.1.2.4  1994/08/18  20:25:27  greg
+ * 	Add authorization data type hooks for "confidential bytes."
+ * 	They aren't implemented in 1.1, but at least implementing
+ * 	them later on won't require a protocol change.
+ * 
+ * 	"
+ * 	[1994/08/16  19:07:05  greg]
+ * 
+ * Revision 1.1.2.3  1994/08/04  16:12:54  mdf
+ * 	Hewlett Packard Security Code Drop
+ * 	[1994/07/28  17:14:16  mdf]
+ * 
+ * Revision 1.1.2.2  1994/06/17  18:42:15  devsrc
+ * 	cr10872 - fix copyright
+ * 	[1994/06/17  18:08:53  devsrc]
+ * 
+ * Revision 1.1.2.1  1994/05/11  19:09:09  ahop
+ * 	hp_sec_to_osf_2 drop
+ * 	[1994/04/29  21:02:48  ahop]
+ * 
+ * $EndLog$
+ */
+/*  authz_base.idl
+**
+** Copyright (c) Hewlett-Packard Company 1994
+** Unpublished work. All Rights Reserved.
+**
+*/
+
+interface authz_base
+
+{
+    import "dce/id_epac.idl";
+    import "dce/prvnbase.idl";
+
+
+    /*  Notes on DCE authorization data
+     *
+     * Prior to 1.1, the authorization data field of a DCE  service ticket 
+     * contained an NDR encoding ("pickle") of an instance of a sec_id_pac_t. 
+     * The NDR pickle was generated using a custom NDR pickling facility 
+     * (version 0) written especially for security.  As of DCE 1.1, the DCE 
+     * idl compiler provides a generic NDR encoding facility (version 1).  
+     * 1.1 DCE authorization  data pickles are generated using the generic
+     * NDR encoding service.
+     * 
+     * The authorization data stream in a DCE 1.1 service ticket may contain 
+     * both a version 0 pickle and version 1 pickle, or it may contain *only* 
+     * a version 1 pickle.  When a service ticket containing only a version
+     * 1 pickle is presented to a 1.0.x server, that 1.0.x server *MUST NOT* 
+     * erroneously interpret the version 1 pickle as a version 0 pickle; 
+     * otherwise the 1.0.x server might grant access to an unauthorized user.
+     *
+     * A version 0 pickle consists of a 40 byte pickle header and a
+     * variable length pickle body.  Following is the specification
+     * of a version 0 pickle header (lifted from pklbase.idl) 
+     * All integers are encoded in big-endian form.
+     *
+     *      name                                type        offset(s)
+     *      ----                                ----        ---------
+     *      version                             unsigned8   0
+     *      length_hi                           unsigned8   1
+     *      length_low                          unsigned16  2,3
+     *      syntax.id.time_low                  unsigned32  4,5,6,7
+     *      syntax.id.time_mid                  unsigned16  8,9
+     *      syntax.id.time_hi_and_version       unsigned16  10,11
+     *      syntax.id.clock_seq_hi_and_reserved unsigned8   12
+     *      syntax.id.clock_seq_low             unsigned8   13
+     *      syntax.id.node[0]                   byte        14
+     *      syntax.id.node[1]                   byte        15
+     *      syntax.id.node[2]                   byte        16
+     *      syntax.id.node[3]                   byte        17
+     *      syntax.id.node[4]                   byte        18
+     *      syntax.id.node[5]                   byte        19
+     *      syntax.version                      unsigned32  20,21,22,23
+     *      type.id.time_low                    unsigned32  24,25,26,27
+     *      type.id.time_mid                    unsigned16  28,29
+     *      type.id.time_hi_and_version         unsigned16  30,31
+     *      type.id.clock_seq_hi_and_reserved   unsigned8   32
+     *      type.id.clock_seq_low               unsigned8   33
+     *      type.id.node[0]                     byte        34  
+     *      type.id.node[1]                     byte        35  
+     *      type.id.node[2]                     byte        36  
+     *      type.id.node[3]                     byte        37  
+     *      type.id.node[4]                     byte        38  
+     *      type.id.node[5]                     byte        39  
+     *
+     * A version 1 (generic) pickle header also contains an 8 bit version 
+     * number at offset 0.  Unfortunately there is a bug in the
+     * version 0 custom pickling code--it does not check the version
+     * number during unpickling.  The version field cannot be used to
+     * differentiate between version 0 and version 1 pickles.
+     *
+     * A version 1 pickle header contains a type uuid in bytes
+     * 24-39, as does a version 0 pickle header.  That type uuid
+     * could be used to differentiate between version 0 and 
+     * version 1 pickles.  But if the layout of the generic pickle
+     * header were to change in subsequent versions of the
+     * generic IDL encoding service such that bytes 24-39 no longer
+     * contained a type uuid, bytes 24-39 would suddenly cease
+     * to be reliable as a means of distinguishing version 0
+     * pickles from version 1+ pickles.
+     *
+     * To preserve compatibility and to avoid any potential
+     * future incompatibilities due to changes in the format of a
+     * generic pickle header, we reserve byte 0 of the authorization
+     * data field as an authorization data version number and
+     * define version 0 authorization data as follows.
+     *
+     * bytes 24-39:  An AD type uuid marshalled in big-endian NDR.
+     *
+     * bytes 1-23:  Varies based on the type uuid in bytes 24-39.
+     * 
+     *    If the AD type uuid equals "d9f3bd98-567d-11ca-9ec6-08001e022936"
+     *    (the "compatibility" type uuid and also the type uuid of a version 
+     *    0 sec_id_pac_t pickle), then the authorization data byte stream 
+     *    contains a version 0 pickle beginning at byte 0.  Additional 
+     *    bytes beyond the version 0 pickle, if any, contain a version 1 
+     *    IDL pickle, beginning at the first 8-byte aligned address beyond 
+     *    the version 0 pickle. Bytes 1-23  have the same format as bytes 
+     *    1-23 of a version 0 pickle header.  
+     *
+     *    0      1  24           40          m       n = (m + (8 - (m MOD 8)))
+     *    |------|--|------------|-----------|---------------------
+     *    | 0x00 |  |   compat   | v0 pickle | fill  |  v1 pickle |
+     *    |      |  |  type uuid |   body    | bytes |            |
+     *    |----------------------|---------------------------------
+     *    |   v0 pickle header   |
+     *    |______________________|
+     *
+     *    (Note on the diagram above: n = m iff (m MOD 8) = 0)
+     *
+     *    If the AD type uuid equals "9b143cec-9a90-11cd-8b27-0800097086bf"
+     *    (the "no-compatibility" type uuid) then bytes 1-23 are reserved
+     *    for future use, and the AD data stream contains a version 1 pickle
+     *    beginning at byte 40.
+     *
+     *    0      1          24           40          
+     *    |------|----------|------------|------------
+     *    | 0x00 | reserved |  no-compat | v1 pickle |
+     *    |      |          |  type uuid |           |
+     *    --------------------------------------------
+     * 
+     * Authorization data must be rejected if
+     *
+     *  1) the version specified in byte 0 is
+     *     not supported
+     *  
+     *  2) version = 0, and the type specified
+     *     in bytes 24-39 is not supported.
+     * 
+     * Version 0 is the only authorization data version
+     * defined as of DCE 1.1. 
+     */
+
+    /* Confidential bytes 
+     *
+     * If one or more of the individual EPACs in a delegation chain
+     * contains confidential bytes, those bytes are encrypted in
+     * a random session key chosen by the privilege server.   All
+     * confidential bytes in all EPACs in a delegation chain are
+     * encrypted under the same session key.  This key is stored 
+     * in the DCE authorization data in privilege/service tickets
+     * so that the security runtime at an application server can 
+     * extract it from the DCE authorization data in the kerberos V5
+     * service ticket and use it to decrypt confidential bytes
+     * before presenting them to the application server via the
+     * sec_cred interface. (A copy of the key is also placed in
+     * the delegation token--see prvnbase.idl for details).
+     *
+     * As of this writing, the only supported encryption mechanism
+     * for confidential bytes is DES CBC.  As the integrity of 
+     * confidential bytes is ensured via EPAC seals, there is no need 
+     * for additional integrity protection in the encryption/decryption 
+     * of confidential bytes. 
+     * 
+     * Because the key information for confidential bytes 
+     * is always protected on the wire (in the key of an end
+     * service in the case of authorization data, or the key
+     * of the privilege server in the case of delegation tokens) 
+     * we can protect against precomputed dictionary attacks 
+     * by including a single 8 byte random initialization vector
+     * with the DES key.  This is less expensive space-wise 
+     * than inserting a confounder at the head of each individual
+     * confidential byte string and provides equivalent protoection.
+     *
+     * (We would have used something more descriptive than
+     * "cb" in the confidential bytes type name but things
+     * like "conf_bytes" and "cbytes" threw us over the
+     * 31 character limit, which generates IDL compiler
+     * warnings and violates DCE 1.1 coding style to boot).
+     */
+
+    const  unsigned16  v0_authz_header_size = 40;
+
+    /*  
+     * IDL pickles in authorization data are 8-byte-aligned
+     */
+    const  unsigned8   v0_authz_alignment   = 8;
+
+    typedef  unsigned16  sec_authz_cb_etype_t;
+
+    const  unsigned16  sec_c_authz_cb_etype_none    =  0;
+    const  unsigned16  sec_c_authz_cb_etype_des_cbc =  1;
+
+    typedef struct {
+	sec_authz_cb_etype_t      etype;
+	unsigned16                eblock_len;
+        [size_is(eblock_len), ptr]
+	    byte                  *eblock;
+     } sec_authz_cb_eblock_t;
+
+
+    /*  sec_v1_1_authz_data_t
+     * 
+     * The extended_info arm is provided for 
+     * future extensibility.
+     */
+    typedef struct {
+            uuid_t                       session_id;
+	    [ptr] sec_id_seal_set_t      *seals;
+	    [ptr] sec_dlg_token_set_t    *deleg_tokens;     /* NULL if delegation not enabled */
+	    [ptr] sec_authz_cb_eblock_t  *conf_bytes_eblock; /* NULL if no confidential bytes in EPAC */
+	    [ptr] sec_bytes_t            *extended_info;
+    } sec_v1_1_authz_data_t;
+
+}
+

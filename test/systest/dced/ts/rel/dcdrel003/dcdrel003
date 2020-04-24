@@ -1,0 +1,132 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: dcdrel003,v $
+# Revision 1.1.4.2  1996/03/11  02:38:34  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:05:25  marty]
+#
+# Revision 1.1.4.1  1995/12/11  21:55:47  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/jrr_1.2_mothra/1  1995/11/30  20:25 UTC  bell_d
+# 	Debugged version
+# 	[1995/12/11  20:55:43  root]
+# 
+# Revision 1.1.2.1  1994/07/26  21:41:48  fadden
+# 	Initial version
+# 	[1994/07/26  19:50:58  fadden]
+# 
+# $EndLog$
+#
+#   TEST_NAME: dcdrel003
+#
+#   COMPONENT_NAME: dce.systest
+#
+#   FUNCTIONS: See ./dcdrel.functions
+#
+#   FILES: 
+#	  
+#        
+#      
+#     
+#
+#   REQUIREMENTS:
+#      Threads, rpc, cds, security 
+#
+#   RESTRICTIONS:
+#      None
+#
+#   DESCRIPTION:
+#	This is the shell script for the dcdrel003 test case.  It does the
+#	following:
+#           1) TBD
+################################################################################
+
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="dcdrel003"
+testlist="$ic1"
+
+startup ()
+{
+	# INITIALIZE VARIABLES
+
+	tet_infoline "startup ... STTMPDIR: ${STTMPDIR}"
+	echo "startup ... STTMPDIR: ${STTMPDIR}"
+
+        export TCDIR=$TET_ROOT/dced/ts/dcdrel003
+        tet_infoline "test case dir is ${TCDIR}"
+
+	export LOCAL_HOST=`hostname`
+	CLIENT_MACHINES=${CLIENT_MACHINES:-$(dcecp -c "directory list -dir -simple /.:/hosts")}
+	tet_infoline "TEST MACHINES: ${CLIENT_MACHINES}"
+	echo "TEST MACHINES: ${CLIENT_MACHINES}"
+
+	CELL_NAME=` /opt/dcelocal/bin/getcellname | awk -F/ '{ print $3}'`
+	export CELL_NAME
+
+	ping_hosts
+
+	RC=0
+
+}
+
+dcdrel003 ()
+{
+
+	start_hd_test 
+        tet_infoline "Attempted to start a dcdrel003_hd test on each node"
+
+	start_ktb_test
+	tet_infoline "Attempted to start a dcdrel003_ktb test on each node"
+
+	start_acl_test
+	tet_infoline "Attempted to start a dcdrel003_acl test on each node"
+
+	echo "Completed starting test scripts on all nodes"
+
+	wait_for_done
+        tet_infoline "Test scripts done on all nodes"
+
+	check_results_003 ${STTMPDIR}/dcdrel003.results
+        tet_infoline "Completed processing log files"
+	echo "Completed processing log files"
+
+  	if [[ -s ${STTMPDIR}/dcdrel003.results ]] 
+  	then
+      		tet_result FAIL
+      		tet_infoline "Summary results were as follows:"
+      		infofile "${STTMPDIR}/dcdrel003.results" "results: "
+  	else
+      		tet_result PASS
+  	fi
+}
+
+cleanup ()
+{
+	for HOST in ${HOSTLIST}; do
+            if [ "${RHOST}" = $(uname -n) ]; then
+                tet_infoline "NOT removing ${STTMPDIR}/dcdrel*"
+#               rm ${STTMPDIR}/dcdrel*
+            else
+                ${RSH_COMM} ${RHOST} "rm ${STTMPDIR}/dcdrel*"
+            fi
+        done
+	return
+}
+
+# tcc will fail if these files don't exist and get sourced
+# so there is no need to check that this happens
+
+. $TET_ROOT/profile.dcest
+. $TET_ROOT/dced/ts/common_functions
+. $TET_ROOT/dced/ts/dcdrel.functions
+. $TCM

@@ -1,0 +1,196 @@
+*
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+* 
+* USAGE: ./file_test -l /.:/dfs_test/a    (for hub)
+*        ./file_test -c /.:/dfs_test/a    (for two spokes)
+*
+
+* Note:
+*     1. This test should be run only from DFS.
+
+*
+* misc.dist.scr.
+*    This script implements the followings.
+*
+
+*
+* Have some tests that keep files open while the files are the target
+* of renames, unlinks, and rmdirs, to test code that determines whether
+* to call TryToSmush.  All involved are "test" processes.
+*
+
+!* Include config file.
+include config
+
+set loopTimes 10
+
+
+* 
+* The procedure will create files and leaves file opened.
+*
+set test1_Proc proc END_PROC
+
+  echo
+  echo Test1 process.
+
+  getwd myDir
+  chdir $testDir
+
+  sync_join "begin_sync" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    open @fileName (@O_CREAT|@O_RDWR) 0777 fileId[@x]
+    write @fileId[@x] @fileName
+  endloop
+
+  sync_join "rename" $timeout
+  sync_join "unlink" $timeout
+  sync_join "rmdir" $timeout
+  sync_join "rmdir_done" $timeout
+
+* Those files should be accessable until we close them
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x)
+    write @fileId[@x] @fileName
+  endloop
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x)
+    close @fileId[@x]
+  endloop
+  
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x)
+    stat @fileName var
+    if ( @ITL_Status == 0 ) {
+      echo FAILED: file has been deleted, stat should failed
+    }
+  endloop
+  verifyStatus true
+
+  sync_join "finish_sync" $timeout
+
+  chdir @myDir
+
+  echo End test1 process.
+  echo
+
+END_PROC
+
+* 
+* The procedure will rename opened file and rmdir.
+*
+set test2_Proc proc END_PROC
+
+  echo
+  echo Test2 process.
+
+  getwd myDir
+  chdir $testDir
+  sync_join "begin_sync" $timeout
+
+  sync_join "rename" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName1 ( "temp" + @x )
+    set fileName ( $testFile + @x )
+    rename @fileName @fileName1
+  endloop
+
+  sync_join "unlink" $timeout
+  loop x 1 1 $loopTimes
+    set fileName1 ( "temp" + @x )
+    unlink @fileName1
+  endloop
+
+  sync_join "rmdir" $timeout
+
+  chdir ..
+  rmdir $testDir
+
+  sync_join "rmdir_done" $timeout
+
+  sync_join "finish_sync" $timeout
+  chdir @myDir
+
+  echo End test2 process.
+  echo
+
+END_PROC
+
+
+***********************************************************************
+echo
+* Check if there are enogh spokes.
+if ( $ITL_nspokes < 2 ) {
+  echo To run the test you have to have at least two spokes.
+}
+
+* This loop will do more stress test.
+loop loopVar 1 1 $loopTimes
+
+rexec_async $ITL_spoke[0] test2_Proc result[0] fsyncId[0]
+loop x 1 1 ($ITL_nspokes-1)
+  rexec_async $ITL_spoke[$x] test1_Proc result[$x] fsyncId[$x]
+endloop
+
+sync_create "begin_sync" $ITL_nspokes  $timeout
+sync_release "begin_sync"
+
+sync_create "rename" $ITL_nspokes  $timeout
+sync_release "rename"
+
+sync_create "unlink" $ITL_nspokes  $timeout
+sync_release "unlink"
+
+sync_create "rmdir" $ITL_nspokes  $timeout
+sync_release "rmdir"
+
+sync_create "rmdir_done" $ITL_nspokes  $timeout
+sync_release "rmdir_done"
+
+sync_create "finish_sync" $ITL_nspokes  $timeout
+sync_release "finish_sync"
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $fsyncId[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+mkdir $testDir 0777
+
+endloop
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+
+echo
+
+echo Hub done.

@@ -1,0 +1,363 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: pgo.idl,v $
+ * Revision 1.1.37.1  1996/07/08  18:34:09  arvind
+ * 	Fix commentsfor sec_rgy_pgo_get_members()
+ * 	[1996/03/09  23:28:01  marty  1.1.35.2]
+ *
+ * Revision 1.1.35.2  1996/03/09  23:28:01  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:29  marty]
+ * 
+ * Revision 1.1.35.1  1995/12/08  17:32:03  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:55:03  root]
+ * 
+ * Revision 1.1.33.1  1994/05/05  20:44:40  hasbrouc
+ * 	add group override support (RFC 55)
+ * 	[1994/05/05  19:21:29  hasbrouc]
+ * 
+ * Revision 1.1.31.1  1993/10/05  22:30:48  mccann
+ * 	CR8651 64 bit porting changes
+ * 	[1993/10/04  19:11:55  mccann]
+ * 
+ * Revision 1.1.2.2  1992/12/29  13:29:44  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:16:52  zeliff]
+ * 
+ * Revision 1.1  1992/01/19  14:54:39  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+
+/*  pgo.idl
+**
+** Copyright (c) Hewlett-Packard Company 1991, 1996
+** Unpublished work. All Rights Reserved.
+**
+*/
+/*
+ * User Registry - PGO management - client agent 
+ */
+
+[local]
+interface sec_rgy_pgo
+
+{
+
+    import "dce/rgybase.idl";
+
+
+    /*
+     * s e c _ r g y _ p g o _ a d d 
+     *
+     * add a person, group or organization item to the database. domain specifies
+     * the name domain of the operation. the name field of item is the key. 
+     *
+     * Errors: Not Authorized Object already exists 
+     */
+    void sec_rgy_pgo_add (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      name,
+        [in]        sec_rgy_pgo_item_t  *pgo_item,
+        [out]       error_status_t      *status
+    );
+
+    /*
+     * s e c _ r g y _ p g o _ d e l e t e 
+     *
+     * deletes a person, group or organization item from the database. 
+     *
+     * Errors: 
+     *  Not Authorized 
+     */
+    void sec_rgy_pgo_delete (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      name,
+        [out]       error_status_t      *status
+    );
+
+    /*
+     * s e c _ r g y _ p g o _ r e p l a c e 
+     *
+     * replaces a person, group or organization item from the database.  The name
+     * field identifies the item to be modified. The uuid field cannot be
+     * changed, an explicit delete and add must occur effect this change.  If
+     * the unix num for this entry is changed, it will affect all aliases for 
+     * this PGO object
+     *
+     * Errors: 
+     *  Not Authorized 
+     *  Object not found 
+     *  UUID mapping changed 
+     */
+    void sec_rgy_pgo_replace (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      pgo_name,
+        [in]        sec_rgy_pgo_item_t  *pgo_item,
+        [out]       error_status_t      *status
+    );
+
+    /*
+     * s e c _ r g y _ p g o _ r e n a m e 
+     *
+     * Rename a pgo object. 
+     */
+    void sec_rgy_pgo_rename (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      old_name,
+        [in]        sec_rgy_name_t      new_name,
+        [out]       error_status_t      *status
+    );
+
+    /*
+     * Queries
+     * All of the following query operations have the same general form;
+     * they take a domain specifier, a key and yield an appropriate
+     * item.  They also take a rgy_cursor_t which is a cursor into the
+     * database.  This cursor contains an opaque handle that identifies
+     * a position to the server, a location specification that makes
+     * sure that these database positions are always interpreted by
+     * the same server (they are meaningless across servers), and
+     * a valid flag which when cleared indicates that searches should 
+     * begin at the beginning of the database.  (i.e., the cursor is
+     * not valid and should be ignored)
+     *
+     * Queries by UUID or by unix id take an "allow_aliases" argument.
+     * If true, this means that any alias for this identity will be acceptable
+     * if false, the primary name for the identity should be returned.  An
+     * Error is returned if a primary name is required and all nodes in the
+     * database are marked as aliases.
+     * 
+     * Errors:
+     * Object not found
+     * No more entries
+     * Is an alias
+     */
+
+    /* s e c _ r g y _ p g o _ g e t _ b y _ n a m e
+     *
+     */
+    [idempotent] void sec_rgy_pgo_get_by_name (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      pgo_name,
+        [out]       sec_rgy_cursor_t    *item_cursor,
+        [out]       sec_rgy_pgo_item_t  *pgo_item,
+        [out]       error_status_t      *status
+    );
+
+    /* s e c _ r g y _ p g o _ g e t _ b y _ i d
+     *
+     */
+    [idempotent] void sec_rgy_pgo_get_by_id (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      scope,
+        [in]        uuid_t              *item_id,
+        [in]        boolean32           allow_aliases,
+        [in, out]   sec_rgy_cursor_t    *item_cursor,
+        [out]       sec_rgy_pgo_item_t  *pgo_item,
+        [out]       sec_rgy_name_t      name,
+        [out]       error_status_t      *status
+    );
+
+    /* s e c _ r g y _ p g o _ g e t _ b y _ u n i x _ n u m
+     *
+     */
+    [idempotent] void sec_rgy_pgo_get_by_unix_num (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      scope,
+        [in]        signed32            unix_id,
+        [in]        boolean32           allow_aliases,
+        [in, out]   sec_rgy_cursor_t    *item_cursor,
+        [out]       sec_rgy_pgo_item_t  *pgo_item,
+        [out]       sec_rgy_name_t      name,
+        [out]       error_status_t      *status
+    );
+
+    /* s e c _ r g y _ p g o _ g e t _ b y _ e f f _ u n i x _ n u m
+     *
+     * like sec_rgy_pgo_get_by_unix_num above, except it goes to the local machine's
+     * override_buffer first to see if UID or GID is overridden locally
+     */
+    [idempotent] void sec_rgy_pgo_get_by_eff_unix_num (
+        [in]		sec_rgy_handle_t		context,
+        [in]		sec_rgy_domain_t		name_domain,
+        [in]		sec_rgy_name_t			scope,
+        [in]		signed32			unix_id,
+        [in]		boolean32			allow_aliases,
+        [in,out]	sec_rgy_cursor_t		*item_cursor,
+        [out]		sec_rgy_pgo_item_t		*pgo_item,
+        [out]		sec_rgy_name_t			name,
+	[out]		boolean32			*overriden,
+        [out]		error_status_t			*status
+    );
+
+    /* s e c _ r g y _ p g o _ g e t _ n e x t
+     *
+     */
+    [idempotent] void sec_rgy_pgo_get_next (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      scope,
+        [in, out]   sec_rgy_cursor_t    *item_cursor,
+        [out]       sec_rgy_pgo_item_t  *pgo_item,
+        [out]       sec_rgy_name_t      name,
+        [out]       error_status_t      *status
+    );
+
+    /*
+     * Membership list functions
+     */
+    /*
+     * s e c _ r g y _ p g o _ a d d _ m e m b e r 
+     *
+     * add a member to the membership list for a group or organization.  An error
+     * is returned if this operation is performed on the person domain. 
+     *
+     * Errors: 
+     *  Not Authorized 
+     *  No such group 
+     *  Bad Domain
+     */
+    void sec_rgy_pgo_add_member (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      go_name,
+        [in]        sec_rgy_name_t      person_name,
+        [out]       error_status_t      *status
+    );
+
+    /*
+     * s e c _ r g y _ p g o _ d e l e t e _ m e m b e r 
+     *
+     * delete a member from the membership list for a group or organization.  An
+     * error is returned if this operation is performed on the person domain.
+     * Any accounts held by this person with the specified group or
+     * organization are also deleted. 
+     *
+     * Errors: 
+     *  Not Authorized 
+     *  No such group 
+     *  Person not member 
+     *  Bad domain 
+     */
+    void sec_rgy_pgo_delete_member (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      go_name,
+        [in]        sec_rgy_name_t      person_name,
+        [out]       error_status_t      *status
+    );
+
+    /*
+     * s e c _ r g y _ p g o _ i s _ m e m b e r 
+     *
+     * Predicate will return true32 if the person is a member of the named group
+     * or org. 
+     *
+     * Errors: 
+     *  Object not found  - group or org does not exist 
+     */
+    [idempotent] boolean32 sec_rgy_pgo_is_member (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      go_name,
+        [in]        sec_rgy_name_t      person_name,
+        [out]       error_status_t      *status
+    );
+
+
+    /*
+     * s e c _ r g y _ p g o _ g e t _ m e m b e r s 
+     *
+     * return the membership list for a principal, group or organization. 
+     *
+     * Errors: 
+     *  No such group 
+     */
+    [idempotent] void sec_rgy_pgo_get_members (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      go_name,
+        [in, out]   sec_rgy_cursor_t    *member_cursor,
+        [in]        signed32            max_members,
+        [out, v1_array, length_is(*number_supplied), size_is(max_members)] 
+                    sec_rgy_member_t    member_list[],
+        [out]       signed32            *number_supplied,
+        [out]       signed32            *number_members,
+        [out]       error_status_t      *status
+    );
+
+    /*
+     * K E Y   T R A N S F E R S 
+     *
+     * Convert one key format into another - many operations on pgo items really
+     * only need to convert from names to ids or unix numbers. 
+     *
+     * Errors 
+     *  Object not found
+     */
+
+     [idempotent] void sec_rgy_pgo_name_to_id (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      pgo_name,
+        [out]       uuid_t              *item_id,
+        [out]       error_status_t      *status
+    );
+
+    [idempotent] void sec_rgy_pgo_id_to_name (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        uuid_t              *item_id,
+        [out]       sec_rgy_name_t      pgo_name,
+        [out]       error_status_t      *status
+    );
+
+     [idempotent] void sec_rgy_pgo_name_to_unix_num (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        sec_rgy_name_t      pgo_name,
+        [out]       signed32            *item_unix_id,
+        [out]       error_status_t      *status
+    );
+
+    [idempotent] void sec_rgy_pgo_unix_num_to_name (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        signed32            item_unix_id,
+        [out]       sec_rgy_name_t      pgo_name,
+        [out]       error_status_t      *status
+    );
+
+    [idempotent] void sec_rgy_pgo_id_to_unix_num (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        uuid_t              *item_id,
+        [out]       signed32            *item_unix_id,
+        [out]       error_status_t      *status
+    );
+
+    [idempotent] void sec_rgy_pgo_unix_num_to_id (
+        [in]        sec_rgy_handle_t    context,
+        [in]        sec_rgy_domain_t    name_domain,
+        [in]        signed32            item_unix_id,
+        [out]       uuid_t              *item_id,
+        [out]       error_status_t      *status
+    );
+}

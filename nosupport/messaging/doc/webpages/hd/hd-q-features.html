@@ -1,0 +1,207 @@
+<HTML>
+<HEAD>
+<TITLE>High Level Design - Infrastructure -- Queue Features</TITLE>
+</HEAD>
+<!-- $Header: -->
+<BODY>
+<H1 ALIGN=CENTER>High Level Design - Infrastructure -- Queue Features</H1>
+
+<P ALIGN=CENTER>
+<EM>August 21, 1998</EM>
+</P>
+
+As described in the model, queues are managed by queue managers. A queue
+manager is a standard DCE server, managing queues and serving requests for
+operations on queues. There can be any number of queue managers
+running in the environment. In this section, we describe the features
+with queues.
+<P>
+
+<H2>Multiple Queue Support</H2>
+
+Each queue manager is capable of supporting multiple queues. Each of the
+queues can be configured so that certain principals can use it. The
+number of queues a queue manager can have depends on the physical resource
+limitation (virtual memory for example).
+<P>
+
+This multiple queue support makes it possible to configure just one queue
+manager in the system and still provide the full support that our
+queuing system can offer. 
+<P>
+
+<H2>Queue Name and Alias</H2>
+
+Each queue has a name that is relative to the queue manager. In other word,
+the queue name is a junction name composed of the queue manager's name and
+a relative name. For example, a queue named "cf/hotline" on the queue manager
+"/.:/subsys/queues/osf-qmgr1" has a complete name of
+"/.:/subsys/queues/osf-qmgr1/cf/hotline".
+<P>
+
+A queue can have multiple aliases, also relative to the queue manager. We
+further allow the user to have CDS links to point to the queue manager. For
+example, a user can create a cds link "/.:/my_qmgr" to point to
+"/.:/subsys/queues/osf-qmgr1" and create an alias for the queue "cf/hotline"
+as "hotline". He can then reference the queue by the name of
+"/.:/my_qmgr/hotline".
+<P>
+
+<H2>Finding A Queue Manager For An Application</H2>
+
+For applications that want to send or receive messages from a known queue,
+finding the queue manager that manages the queue is done by the APIs. The
+applications does not need to know where to find the queue manager.
+<P>
+
+For applications that want to create queues for their use, they need to
+supply additional information for APIs to locate a queue manager for
+the queue creation operation. The application can either name the
+queue manager directly by its NSI name, or it can use a default queue
+manager.
+<P>
+
+There are several ways to specify a default queue manager, searched in
+the following order:
+
+<OL>
+  <LI>from the environment variable MOS_DFLT_QUEMGR_NAME
+  <LI>from the per host default queue manager specification.
+       <BR>
+       This can be either from a per host profile where a list of queue
+       managers can be specified. The name is /.:/hosts/$HOSTNAME/msg.profile.
+       Or it can be from a per host data element (hostdata object) managed
+       by the DCE Daemon (dced).
+  <LI>from the per cell default queue manager specification from
+       /.:/cell-profile.
+</OL>
+
+The DCE profile is good for this purpose because it allows the user to
+specify priority to guide the ordered search. The priority can be set based
+on certain criteria: availability, closeness, etc.
+<P>
+
+Once a queue manager can be reached, the application can use APIs to create
+queues for its use and export those queues for other applications to talk
+to.
+<P>
+
+<H2>Load Distribution Among Queue Managers</H2>
+
+By allocating different queue managers to different hosts and
+applications, an administrator can achieve static load distribution
+among queue managers. 
+<P>
+
+<H2>Scalability Support</H2>
+
+The queuing system can be scaled up or down to suit for the
+application environment.  
+<P>
+
+If the environment does not have many applications running, the system
+can be scaled down to even one queue manager. On the other hand, for a large
+environment where there are many messaging applications running and they
+scatter across different places on the network, it is possible to configure
+many queue managers and use profile to allocate the "right" queue
+manager for each application.
+<P>
+
+<H2>Queue Ordering</H2>
+
+The queue order defines how messages on the queue are sorted for dequeue
+operation, which normally takes a message from the top of the queue. 
+<P>
+
+In our design, messages are sorted based on their priorities, 
+then sorted based on their enqueue time (FIFO) within a priority level. 
+<P>
+
+<H2>Queue Persistency</H2>
+
+A queue's persistency determines whether and how it saves messages. A queue
+creates persistent storage to save messages. A
+persistent queue always saves all its messages, including volatile ones.
+A volatile (non-persistent) queue never saves any message. Sending a
+persistent message to a volatile queue will result in an warning and the
+messages is treated as volatile.
+A conditional persistent queue only saves persistent messages, but not
+volatile messages. This is the default behavior of a queue if nothing is
+explicitly specified.
+<P>
+
+This persistent attribute can be changed after the queue has been created..
+<P>
+
+A queue manager can start with an option to restore from its or specified
+persistent storage. An administrator can also instruct a queue to be
+restored from its persistent storage.
+<P>
+
+<H2>Queue Attributes</H2>
+
+Each queue can have certain attributes. These attributes have their default
+values. They can be set at the queue's creation time, they can also be
+modified later programmatically or through an administrative interface. This
+allows for dynamic configuration of a queue.
+<P>
+
+<H3>* Maximum Length</H3>
+
+Each queue has a size which defines how many messages it can keep. When the
+maximum is reached, a non-blocking enqueue operation returns with an error
+indicating that the queue is full. A blocking enqueue operation is blocked
+until the queue is not full any more. If there are multiple blocking
+enqueue calls, they are sorted based on their arrival time.
+<P>
+
+The queue size can be changed programmatically, or through an
+administrative interface.
+<P>
+
+<H3>* Current Length</H3>
+
+This is a read-only attribute for a queue. It shows the current length of
+the queue. Note, this is not to be confused with queue size, which specifies
+the maximum length of a queue.
+
+<H3>* Maximum Message Size</H3>
+
+This determines the maximum size for a message that this queue will take.
+Max length and max message size together defines the maximum space
+requirement for the queue.
+
+<H3>* Empty Idle Expiration</H3>
+
+This attributes control how long a queue should be kept alive when it is
+empty before it is to be deleted by the queue manager. The default is
+24 hours.
+
+<H3>* Ability To Enqueue and Dequeue</H3>
+
+A queue can be disabled or enabled for either enqueue or dequeue
+operation. When an operation is disabled, such requests will be rejected. 
+
+<H3>* Annotation</H3>
+
+A queue can have an annotation which can be used to describe the use/purpose
+of the queue. This attribute is not interpreted by the queue manager.
+<P>
+
+<H3>* Creation And Last Activity Timestamp</H3>
+
+These two are read-only attributes for a queue. The creation timestamp
+records when the queue is created; the last activity timestamp records
+the queue's last activity time.
+<P>
+
+<P> <!--EndPage-->
+<HR> <!-- __________________________________________________ -->
+<P ALIGN=CENTER>
+[
+<A HREF="index.html">High-level Design TOC</A> |
+<A HREF="../index.html">Messaging</A>
+]
+</P>
+</BODY>
+</HTML>

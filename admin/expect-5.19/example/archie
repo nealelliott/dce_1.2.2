@@ -1,0 +1,52 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: archie,v $
+# Revision 1.1.2.1  1996/08/09  17:27:51  arvind
+# 	DCE 1.2.2 Intermediate drop (post bl3/pre bl4)
+# 	[1996/08/09  14:09:27  arvind]
+#
+# $EndLog$
+#
+
+#!../expect -f
+
+# archie
+
+# Log in to the archie ftp-catalog at McGill University, and mail back results
+# Brian P. Fitzgerald
+# Department of Mechanical Engineering
+# Rensselaer Polytechnic Institute
+
+set CINTR \003	;# ^C
+set CSUSP \032	;# ^Z
+
+set timeout -1
+spawn telnet quiche.cs.mcgill.ca
+
+expect_after eof exit	;# archie logs us out if too many people are logged in
+
+expect {
+	login:		{send archie\r}
+	"unknown"	{exit 1}
+	"unreachable"	{exit 1}
+}
+
+expect	"archie>" {send "set pager\r"}
+expect	"archie>" {send "set maxhits 20\r"}
+expect	"archie>" {send "set term vt100\r"}
+expect	"archie>" {send "set sortby time\r"}
+expect	"archie>" {
+	send "set mailto [exec whoami]@[exec hostname].[exec domainname]\r"
+}
+
+send_user "type ^C to exit, ^Z to suspend\n"
+interact {
+	-reset	$CSUSP  {exec kill -STOP [pid]}
+		$CINTR  {exit 0}
+}

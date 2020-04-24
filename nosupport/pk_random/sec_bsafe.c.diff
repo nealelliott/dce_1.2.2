@@ -1,0 +1,52 @@
+The following patch to sec_bsafe.c enables use of /dev/random as a
+source of randomness for key generation.
+
+The choice of 32 bytes (256 bits) of randomness as input is somewhat
+arbitrary; it should probably be dependant on the key size desired,
+but that would require greater changes to the existing code.
+
+*** /vob/dce/src/security/psm/domestic/sec_bsafe.c@@/main/DCE_1.2.2/sommerfeld_pk_kdc_6/0	Tue Dec  3 17:56:51 1996
+--- /vob/dce/src/security/psm/domestic/sec_bsafe.c	Tue Dec  3 19:08:54 1996
+***************
+*** 81,86 ****
+--- 81,87 ----
+  
+  #include  <pthread.h>
+  #include  <time.h>
++ #include <fcntl.h>
+  #include  <string.h>
+  #include  <bsafe/global.h>
+  #include  <bsafe/bsafe2.h>
+***************
+*** 260,265 ****
+--- 261,268 ----
+      unsigned int seedLen;
+      time_t absolute_clock_ticks;    
+      clock_t process_clock_ticks;    
++     int fd;
++     char buf[32];
+      
+  
+      LOCK_RANDOMALG;
+***************
+*** 295,300 ****
+--- 298,316 ----
+                                      seedLen,
+                                      (A_SURRENDER_CTX *)NULL_PTR)) break;
+  
++ 	fd = open ("/dev/random", O_RDONLY, 0);
++ 	if (fd < 0) break;
++ 	
++ 	seedLen = read(fd, buf, sizeof(buf));
++ 	close(fd); 
++ 	if (seedLen <= 0)
++ 	    break;
++ 	
++ 	seed = (unsigned char *)buf;
++ 	if (status = B_RandomUpdate(randomAlgorithm,
++                                     seed,
++                                     seedLen,
++                                     (A_SURRENDER_CTX *)NULL_PTR)) break;
+  
+      } while (0);
+  

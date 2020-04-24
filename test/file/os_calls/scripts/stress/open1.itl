@@ -1,0 +1,193 @@
+*
+* @OSF_COPYRIGHT@
+*
+* (C) Copyright 1992 Transarc Corporation.
+* All Rights Reserved.
+*
+*  open1.scr --
+*    Tests open file semantics for DFS across multiple machines.  It 
+*    validates that an open file remains accessible on one machine even
+*    though it has been deleted on another or the same machine.
+*
+*  Requirements -
+*	Minimum:  2 machines
+*	Maximum:  3 machines (master (hub) would run on separate machine)
+*
+*  Setup - (2 machine)
+*	The master and two clients are started on one machine.  One of the
+*	clients is started in DFS and the other in the local path.  The third
+*	client is started on a second machine in DFS.
+* 
+* HISTORY
+* $Log:$
+*
+* $EndLog$
+******************************************************************************
+
+*
+* Check that we have enough clients.
+*
+if ($ITL_nspokes < 3) {
+  error "This test requires at least 3 clients."
+}
+
+*
+!* Include common configuration.
+*
+include common_dist.config
+
+*
+*  The variable newline allows us to create strings with newlines in them.
+*
+set newline vector "0x0a0d"
+set noErrors string "NoErrors"
+
+*
+*  The procedures, openProcClient[0-2] are the procedures executed by 
+*  the spoke clients.
+*
+*  0 - Opens the file, waits till all clients have opened the file, then
+*      closes the file and removes it.
+*  1 - Opens the file, waits till all clients have opened the file, waits
+*      till client 0 removes the file, then does a write and fsync on the 
+*      file.  It verifies the write and closes and removes the file.
+*  2 - Opens the file, waits till all clients have opened the file, waits
+*      till client 0 removes the file, and waits till client 1 removes the
+*      file.  It then does a write and fsync.  It verifies the
+*      write and closes and removes the file.
+*
+set openProcClient0 proc END_PROC
+  open $testFileName @O_RDWR 0 fileId
+  sync_join "completed_open" $syncPointTimeout
+  close @fileId
+  unlink $testFileName
+END_PROC
+
+set openProcClient1 proc END_PROC
+  set ioData string "Open Client 2 data"
+  set errorString vector $noErrors
+
+  open $testFileName @O_RDWR 0 fileId
+  sync_join "completed_open" $syncPointTimeout
+  sync_join "completed_unlink0" $syncPointTimeout
+  write @fileId @ioData
+  fsync @fileId
+  lseek @fileId @SEEK_SET 0
+  read @fileId #@ioData readBuffer
+  if (@readBuffer != @ioData) {
+    set errorString vector ("IO Validation FAILED - client 1" + $newline + "  Expected: " + @ioData + $newline + "  Actual: " + @readBuffer)
+  }
+  close @fileId
+*
+*  The unlink here should fail since it was already unlinked by client 0.
+*
+  verifyStatus false
+  unlink $testFileName
+  if ((@ITL_Status == 0) || (@ITL_Status != @ENOENT)) {
+    set errorString vector (@errorString + $newline + "Unlink success not expected, status is " + @ITL_Status)
+  }
+  verifyStatus true
+*
+*  Whitespace character after noErrors is required by ITL.
+*
+  if (@errorString != $noErrors ) {
+    set ITL_SpokeResult int -1
+    error @errorString
+  }
+END_PROC
+
+set openProcClient2 proc END_PROC
+  set ioData string "Open Client 2 data - final file data."
+  set errorString vector $noErrors
+
+  open $testFileName @O_RDWR 0 fileId
+  sync_join "completed_open" $syncPointTimeout
+  sync_join "completed_unlink0" $syncPointTimeout
+  sleep 5000
+  sync_join "completed_unlink1" $syncPointTimeout
+  write @fileId @ioData
+  fsync @fileId
+  lseek @fileId @SEEK_SET 0
+  read @fileId #@ioData readBuffer
+  if (@readBuffer != @ioData) {
+    set errorString vector ("IO Validation FAILED - client 2" + $newline + "  Expected: " + @ioData + $newline + "  Actual: " + @readBuffer)
+  }
+  close @fileId
+  verifyStatus false
+  unlink $testFileName
+  if ((@ITL_Status == 0) || (@ITL_Status != @ENOENT)) {
+    set errorString vector (@errorString + $newline + "Unlink success not expected, status is " + @ITL_Status)
+  }
+  verifyStatus true
+*
+*  Whitespace character after noErrors is required by ITL.
+*
+  if (@errorString != $noErrors ) {
+    set ITL_SpokeResult int -1
+    error @errorString
+  }
+END_PROC
+
+set clientErrors int 0
+
+*
+*  Loop so that each of the spoke clients get a chance to execute as each
+*  of the 3 client types.
+*
+loop y 0 1 2
+  set spokeIndex int $y
+*
+!* Executing loop $y.
+*
+!*   Creating test file.
+*
+open $testFileName ($O_CREAT| $O_RDWR) 0644 fileId
+close $fileId
+
+*
+!*   Send test procedures to clients.
+*
+  loop x 0 1 2
+    set procName string ("openProcClient" + $x)
+    rexec_async $ITL_spoke[$spokeIndex] $procName clientResults[$x] asyncId[$x]
+    set spokeIndex ($spokeIndex + 1)
+    if ($spokeIndex > 2) {
+      set spokeIndex 0
+    }
+  endLoop
+
+*
+!*   Create and release "completed_open" sync point.
+*
+  sync_create "completed_open" 3 $syncPointTimeout
+  sync_release "completed_open"
+
+  set syncClients int 2
+
+  loop x 0 1 2
+    async_join $asyncId[$x] $syncPointTimeout
+*
+!*   Validating results after async join number $x
+*
+    if ($clientResults[$x] != 0) {
+      echo Client $x had a failure, status was $clientResults[$x]
+      set clientErrors ($clientErrors + 1)
+    }
+    if ($syncClients > 0) {
+      set syncName string ("completed_unlink" + $x)
+      sync_create $syncName $syncClients $syncPointTimeout
+      sync_release $syncName
+    }
+    set syncClients ($syncClients - 1)
+  endLoop
+endLoop
+
+if ($clientErrors == 0) {
+  echo Test completed successfully.
+}
+else {
+  error Test FAILED - with $clientErrors client failures.
+}
+
+quit
+

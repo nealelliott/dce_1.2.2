@@ -1,0 +1,77 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: check,v $
+# Revision 1.1.8.1  1996/10/17  18:18:12  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:49:59  damon]
+#
+# Revision 1.1.3.2  1993/01/11  16:32:38  htf
+# 	Add file leader with embedded copyright notice
+# 	[1993/01/11  16:29:14  htf]
+# 
+# $EndLog$
+#
+#
+P=`basename $0`
+fsflag=TRUE
+lowflag=TRUE
+tfile=/tmp/$P.$$
+
+if test $# -lt 1; then echo "usage: $P filename-to-check"; exit 1; fi
+if test ! -f $1; then echo "$P: cannot open $1"; exit 1; fi
+
+if test $# -gt 1
+   then if test $2 = "-fsonly"; then lowflag=FALSE; fi
+        if test $2 = "-lowonly"; then fsflag=FALSE; fi
+   fi
+
+grep return $1 | sed 's/ in \/[^ ]*$//'  > chk.got
+
+cat > chk.should << ==END==
+fs/test1 returning 0
+fs/test2 returning 0
+fs/test2b returning 0
+fs/test2s returning 0
+fs/test3 returning 0
+fs/test4 returning 0
+fs/test5 returning 0
+fs/test6 returning 0
+fs/test7 returning 0
+fs/rtest1 returning 0
+low/test1 returning 0
+low/test3 returning 0
+low/test5 returning 0
+low/test6 returning 0
+low/test7 returning 0
+low/test8 returning 0
+low/test9 returning 0
+low/test10 returning 0
+low/test11 returning 0
+low/test12 returning 0
+==END==
+
+if test $fsflag = FALSE
+   then
+   sed '/^fs/d' chk.should > $tfile; cp $tfile chk.should; rm -f $tfile
+   fi
+
+if test $lowflag = FALSE
+   then
+   sed '/^low/d' chk.should > $tfile; cp $tfile chk.should; rm -f $tfile
+   fi
+
+diff chk.got chk.should > chk.diff; rf=$?
+if test $rf -eq 0
+then echo "$1 PASSED"
+else echo "$1 FAILED"
+     echo " "; echo "< FROM $1     > SHOULD BE"; echo " "; cat chk.diff
+fi
+
+rm -f chk.got chk.should chk.diff
+exit $rf

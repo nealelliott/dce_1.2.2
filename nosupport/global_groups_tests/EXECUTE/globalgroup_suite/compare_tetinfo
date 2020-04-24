@@ -1,0 +1,49 @@
+#!/bin/sh
+#
+# compare the logged information written with tet_infoline
+#
+workdir="/tmp/`basename ${0}`-`id -u -n`-${$}"
+
+trap "cd `dirname ${workdir}`; rm -rf ${workdir}; exit" 0 1 2 3 15
+
+usage() {
+	cat << E_O_F
+usage: ${0} journal-directory-1 journal-directory-2
+E_O_F
+}
+
+#
+# main procedure
+#
+
+# check argument
+if [ $# -ne 2 ]; then
+	usage
+	exit
+fi
+dir1="${1}"
+dir2="${2}"
+
+# prepare for working directory
+mkdir -p ${workdir} || exit	# if fail, exit
+
+# pick-up the tet_infoline'd messages from journal files
+for i in ${dir1} ${dir2}; do
+	journal="${i}/journal"
+	if [ ! -r ${journal} ]; then
+		echo "Cannot read file: ${journal}"
+		exit
+	fi
+
+	awk -F'|' '
+	{
+		printf("%s\n", $3)
+	} ' ${journal} > ${workdir}/`basename ${i}`
+done
+
+# compare the pick-up'd information
+cd ${workdir}
+diff `basename ${dir1}` `basename ${dir2}`
+
+# done successfully
+exit

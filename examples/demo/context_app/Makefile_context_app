@@ -1,0 +1,141 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: Makefile_context_app,v $
+# Revision 1.1.7.3  1996/03/09  23:15:07  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:32:25  marty]
+#
+# Revision 1.1.7.2  1995/12/08  20:54:15  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/08  20:49:26  root]
+# 
+# Revision 1.1.2.2  1994/10/27  20:06:19  rrizzo
+# 	expand copyright
+# 	[1994/10/27  19:38:42  rrizzo]
+# 
+# Revision 1.1.2.1  1994/10/21  19:09:11  weir
+# 	Submit sample sources (CR 12635)
+# 	[1994/10/21  19:08:05  weir]
+# 
+# $EndLog$
+# 
+# 
+##############################################################################
+# [22.VI.94]                                                                 #
+#                                                                            #
+# Makefile: A generic makefile suitable for building the context             #
+#           application.                                                     #
+#                                                                            #
+#                               -77 cols-                                    #
+##############################################################################
+#
+# 
+# library and include paths...
+
+DCEROOT		= /opt/dcelocal
+
+CC		= /bin/cc
+
+IDLC		= /bin/idl
+
+LIBDIRS		= -L$(DCEROOT)/usr/lib
+
+LIBS		= -ldce
+
+LIBALL		= $(LIBDIRS) $(LIBS)
+
+INC		= -I. -I$(DCEROOT)/share/include -I$(DCEROOT)/usr/include
+
+#
+# NOTE: The following four lines are needed on HPUX...
+# 
+#
+# LDFLAGS =-Wl,-Bimmediate,-Bnonfatal
+# IDLCOPT=-cc_opt -D_HPUX_SOURCE
+# CDEFS = -D_HPUX_SOURCE
+# CC = c89
+#
+
+
+# CC flags
+
+CFLAGS = -g $(CDEFS) $(INC)
+
+# IDL compiler flags
+
+IFLAGS = -v $(INC) -cc_cmd "$(CC) $(CFLAGS) -c" -keep all $(IDLCOPT)
+
+# Interface name 
+
+IF = context
+
+# TARGETS 
+
+# executables
+
+CLIENT = $(IF)_client
+SERVER = $(IF)_server
+
+# objects
+
+CLIENTO = $(IF)_client.o
+SERVERO = $(IF)_server.o
+MGRO = $(IF)_manager.o
+CLIENTSO = $(IF)_cstub.o
+SERVERSO = $(IF)_sstub.o
+
+# IDL generated
+
+HDR = $(IF).h
+CLIENTSC = $(IF)_cstub.c
+SERVERSC = $(IF)_sstub.c
+FROMIDL = $(HDR) $(CLIENTSC) $(SERVERSC)
+
+# DEPENDENCIES
+
+all: $(CLIENT) $(SERVER)
+
+# Executables (.o dependencies)
+
+$(SERVER):	$(SERVERSO) $(SERVERO) $(MGRO)
+		$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(SERVERSO) $(SERVERO) $(MGRO) $(LIBALL)
+
+$(CLIENT):	$(CLIENTSO) $(CLIENTO)
+		$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(CLIENTSO) $(CLIENTO) $(LIBALL)
+
+# Object files (.c and .h dependencies)
+
+$(SERVERSO):	$(SERVERSC) $(HDR) 
+
+$(CLIENTSO):	$(CLIENTSC) $(HDR)
+
+$(SERVERO):	$(IF)_server.c $(HDR) 
+
+$(CLIENTO):	$(IF)_client.c	$(HDR) 
+
+$(MGRO):	$(IF)_manager.c $(HDR)
+
+
+# IDL generated files (.idl and .acf dependencies)
+
+$(FROMIDL):	$(IF).idl $(IF).acf
+	$(IDLC) $(IF).idl $(IFLAGS)
+
+clean:
+	rm -f $(FROMIDL) $(SERVERSO) $(SERVERO) $(MGRO) $(CLIENTSO) $(CLIENTO)
+
+rmtarget:
+	rm -f $(CLIENT) $(SERVER) core
+
+clobber: clean rmtarget
+
+# 
+# 
+# 
+# 

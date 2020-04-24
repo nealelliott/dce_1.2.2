@@ -1,0 +1,491 @@
+#!/bin/ksh
+# 
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: cds_abuse,v $
+# Revision 1.1.2.2  1996/03/09  20:50:40  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:28:43  marty]
+#
+# 	DCE 1.0.1 Release
+# 	[1993/02/01  20:20:06  mgm]
+#
+# Revision 1.1.2.1  1995/12/11  21:56:57  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/02  20:30 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/04/01  17:44 UTC  truitt
+# 
+# 	HP revision /main/truitt_junk/1  1994/04/01  16:58 UTC  truitt
+# 	move file to cds directory
+# 	[1995/12/11  20:56:46  root]
+# 
+# 	    Loading drop Dce1_0_1fnl
+# 	[1992/09/21  18:36:03  osfrcs]
+# 
+# Revision 1.1.6.2  1993/07/09  11:03:24  root
+# 	Initial King Kong branch
+# 	[1993/07/09  11:02:53  root]
+# 
+# Revision 1.1.4.2  1993/03/31  12:16:02  mgm
+# 	Initial GAMERA branch
+# 
+# $EndLog$
+# 
+# (c) Copyright 1990, 1991, 1992 OPEN SOFTWARE FOUNDATION, INC.
+# ALL RIGHTS RESERVED
+#
+# OSF DCE Version 1.0, UPDATE 1.0.1
+#
+# Definitions
+
+tet_startup="startup"
+tet_cleanup=""
+iclist="ic1"
+ic1="run_test"
+
+startup ()
+{
+	COMMAND=cdscp
+	COMP=cds
+	COUNT=0
+	FAILED=0
+	FAILMAX=1000
+	HOSTNAME=`hostname`
+	LOOPS=1
+	PASSED=0
+	PASSWORD=-dce-
+	PID=$$
+	PLATFORM=`uname -s`
+	PRINC=`whoami`
+	PRINCIPAL=cell_admin
+	STDOUT=/tmp/$HOSTNAME-$PRINC-$PID-STDOUT
+	STDERR=/tmp/$HOSTNAME-$PRINC-$PID-STDERR
+	TESTDIR=$HOSTNAME-$PRINC-$PID
+	WORKDIR=`pwd`
+#	use these two lines to debug
+#	WORKDIR=`pwd`/logdir
+#	test -d "$WORKDIR" || mkdir $WORKDIR
+
+	# Initialize the duration information (IBM-style)
+
+	tet_infoline "EXECUTING for $HOURS_TO_EXECUTE HOURS"
+
+	# Initialize the logfiles
+
+	FULLLOG=$WORKDIR/$COMP-$HOSTNAME-$PRINC-$PID-FULL
+	SHRTLOG=$WORKDIR/$COMP-$HOSTNAME-$PRINC-$PID-SHORT
+	ERRORLOG=$WORKDIR/$COMP-$HOSTNAME-$PRINC-$PID-ERRORS
+
+	if [ -f "${FULLLOG}" ]; then
+	        mv ${FULLLOG} ${FULLLOG}.old
+	fi
+
+	if [ -f "${SHRTLOG}" ]; then
+	        mv ${SHRTLOG} ${SHRTLOG}.old
+	fi
+
+	if [ -f "${ERRORLOG}" ]; then
+	        mv ${ERRORLOG} ${ERRORLOG}.old
+	fi
+
+	tet_infoline "Initializing logfiles..."
+	tet_infoline "	Full Log : ${FULLLOG}"
+	tet_infoline "	Short Log: ${SHRTLOG}"
+	tet_infoline "	Error Log: ${ERRORLOG}"
+	echo "# Invocation: $0 $*" | tee ${FULLLOG} | tee ${SHRTLOG} > $ERRORLOG
+	echo "# Date:       `date +'%m-%d-%y %T'`" | tee -a ${FULLLOG} | tee -a ${SHRTLOG} >> $ERRORLOG
+	echo "" | tee -a ${FULLLOG} | tee -a ${SHRTLOG} >> ${ERRORLOG}
+
+	# Create dce_login_noexec symbolic link if there isn't one
+
+	if [ ! -f /usr/bin/dce_login_noexec ]; then
+	        echo "? $0: Creating dce_login_noexec symbolic link"
+	        ln -s /usr/bin/dce_login /usr/bin/dce_login_noexec
+	fi
+
+	# Use IBM timer information (for now)
+	#-----------------------------------------------------------------------
+	# TIMER: called like [T=`$TIMER`].  T equals seconds since beg. of year
+	# TIME_DATE: called like [T=`$TIME_DATE`].  T = 11:44:50-03/16
+	#-----------------------------------------------------------------------
+	TIMER='eval echo `awk "BEGIN { printf (\"%d\", \`date +"%j"\`*86400 + \`date +"%H"\`*3600
+	+ \`date +"%M"\`*60 + \`date +"%S"\`); exit}"`'
+	TIME_DATE="date +%H:%M:%S-%m/%d"
+}
+
+stats()
+{
+	# Capture some statistics
+
+	tet_infoline "Capturing statistics ..."
+	echo "Capturing statistics ..."
+	echo "#" >> ${FULLLOG}
+	echo "# `date +'%m-%d-%y %T'` - Statistics" >> ${FULLLOG}
+	echo "#" >> ${FULLLOG}
+	echo "" >> ${FULLLOG}
+
+	# Disk Information
+	#if [ $PLATFORM = "OSF1" ]
+	#then
+		#df -k >> ${FULLLOG}
+	#else
+		#df
+	#fi
+	#echo "" >> ${FULLLOG}
+
+	# Interprocess Information
+
+	ipcs >> ${FULLLOG}
+	echo "" >> ${FULLLOG}
+
+	# Process Information
+
+	#ps aux >> ${FULLLOG}
+	ps -ef >> ${FULLLOG}
+	echo "" >> ${FULLLOG}
+	#ps ax -o ucomm,logname,vsize,rssize,cputime,usertime,systime | egrep '(USER|cds|gdad|sec)' | egrep -v "egrep"
+
+	# Virtual Memory Information
+
+	vmstat -s >> ${FULLLOG}
+	echo "" >> ${FULLLOG}
+
+	# Who else is logged in?
+
+	w -s >> ${FULLLOG}
+	echo "" >> ${FULLLOG}
+	who -s >> ${FULLLOG}
+	echo "" >> ${FULLLOG}
+}
+
+# Define Ending Statistics Routine
+
+end_stats()
+{
+	# Output Test Summary
+
+	tet_infoline "===== End Of Testing ====="
+	echo "===== End Of Testing ===========================================================" >> ${FULLLOG}
+	echo "" | tee -a ${FULLLOG}
+	echo "Test Results:" | tee -a ${FULLLOG}
+	tet_infoline "Test Results:" 
+	echo "" | tee -a ${FULLLOG}
+	echo "	Total Passed = $PASSED" | tee -a ${FULLLOG}
+	tet_infoline "	Total Passed = $PASSED" 
+	echo "	Total Failed = $FAILED" | tee -a ${FULLLOG}
+	tet_infoline "	Total Failed = $FAILED" 
+	echo "	Total Tests  = $COUNT" | tee -a ${FULLLOG}
+	tet_infoline "	Total Tests  = $COUNT" 
+	echo "" | tee -a ${FULLLOG}
+	echo "================================================================================" >> ${FULLLOG}
+	tet_infoline "===== done =====" 
+}
+
+# Define Test Routine
+
+exec_test()
+{
+	COUNT=`expr $COUNT + 1`
+	echo "--------------------------------------------------------------------------------" | tee -a ${FULLLOG} >> ${ERRORLOG}
+	echo "" >> ${FULLLOG}
+	echo "Test Case # $COUNT	\c" | tee -a ${FULLLOG} | tee -a ${SHRTLOG}
+	tet_infoline "Starting Test Case # $COUNT" 
+	echo "" >> ${FULLLOG}
+	STARTTIME=`date +"%m-%d-%y %T"`
+	tet_infoline "$COMMAND $SUBCOMMAND $OPTIONS"
+	$COMMAND $SUBCOMMAND $OPTIONS 1>$STDOUT 2>$STDERR
+	STATUS=$?
+	ENDTIME=`date +"%m-%d-%y %T"`
+	if [ $STATUS -eq $ESTATUS ]
+	then
+		echo "$SUBCOMMAND	\c" | tee -a ${SHRTLOG}
+		echo "Command: $SUBCOMMAND $OPTIONS" >> ${FULLLOG}
+		echo "Result = \c" >> ${FULLLOG}
+		echo "	PASSED" | tee -a ${FULLLOG} | tee -a ${SHRTLOG}
+		PASSED=`expr $PASSED + 1`
+	else
+		echo "Test Case # $COUNT" >> ${ERRORLOG}
+		echo "$SUBCOMMAND	\c" | tee -a ${SHRTLOG}
+		echo "Command: $SUBCOMMAND $OPTIONS" | tee -a ${FULLLOG} >> ${ERRORLOG}
+		echo "Result = \c" | tee -a ${FULLLOG} >> ${ERRORLOG}
+		echo "	FAILED" | tee -a ${FULLLOG} | tee -a ${SHRTLOG} | tee -a ${ERRORLOG}
+		echo "Actual Status   = $STATUS" | tee -a ${FULLLOG} >> ${ERRORLOG}
+		echo "Expected Status = $ESTATUS" | tee -a ${FULLLOG} >> ${ERRORLOG}
+		echo "See logfile ${FULLLOG}" >> ${ERRORLOG}
+		echo "" >> ${FULLLOG}
+		echo "STDOUT:" >> ${FULLLOG}
+		if [ -s ${STDOUT} ] ; then
+			cat ${STDOUT} >> ${FULLLOG}
+		else
+			echo "	EMPTY" >> ${FULLLOG}
+		fi
+		echo "" >> ${FULLLOG}
+		echo "STDERR:" >> ${FULLLOG}
+		if [ -s ${STDERR} ] ; then
+			cat ${STDERR} >> ${FULLLOG} ; echo "" >> ${FULLLOG}
+		else
+			echo "	EMPTY" >> ${FULLLOG}
+		fi
+		FAILED=`expr $FAILED + 1`
+		fail=`expr $fail + 1`
+	fi
+	echo "" >> ${FULLLOG}
+	echo "Start Time : \c" >> ${FULLLOG}
+	echo "$STARTTIME" >> ${FULLLOG}
+	echo "End Time   : \c" >> ${FULLLOG}
+	echo "$ENDTIME" >> ${FULLLOG}
+	echo "" >> ${FULLLOG}
+}
+
+run_test ()
+{
+	# Define trap to cleanup after break
+
+	fail=0
+	trap 'echo ""
+	      echo "----> ABORTING TEST... <----"
+	      echo ""
+	      $COMMAND del link /.:/$TESTDIR/testdir/w0/x0.softlink >/dev/null
+	      $COMMAND del obj /.:/$TESTDIR/testdir/w0/x0.object >/dev/null
+	      $COMMAND del dir /.:/$TESTDIR/testdir/w0 >/dev/null
+	      $COMMAND delete directory /.:/$TESTDIR/testdir >/dev/null
+	      $COMMAND delete directory /.:/$TESTDIR >/dev/null
+	      echo "" | tee -a ${FULLLOG} | tee -a ${SHRTLOG}
+	      echo "----> TEST ABORTED <----" | tee -a ${FULLLOG} | tee -a ${SHRTLOG}
+	      echo "" | tee -a ${FULLLOG} | tee -a ${SHRTLOG}
+	      end_stats
+	      stats
+	      exit 1' 1 2 3 15
+
+
+	# Define trap on clean break
+
+	trap 'end_stats
+	      exit 0' 0
+
+	# Gather Statistics
+
+	stats
+
+	# Tests
+
+	#while [ $FAILED -le $FAILMAX ] ; do
+
+	WS_START_TIME_DATE=`$TIME_DATE`
+	echo "WS_START_TIME_DATE = $WS_START_TIME_DATE"
+	START_TIME=`$TIMER`
+	DONE="FALSE"
+
+	# login
+
+	KRB5CCNAME=`dce_login_noexec $PRINCIPAL $PASSWORD`
+	export KRB5CCNAME
+	klist >> ${FULLLOG}
+
+	# set up directory to loop doing work in 
+	SUBCOMMAND="create directory"
+	OPTIONS="/.:/$TESTDIR"
+	ESTATUS=0
+
+	exec_test
+
+	SUBCOMMAND="set directory"
+	OPTIONS="/.:/$TESTDIR CDS_Convergence = high"
+	ESTATUS=0
+
+	exec_test
+
+	kdestroy >> ${FULLLOG}
+	klist >> ${FULLLOG}
+
+	# Loop doing work
+
+	while [ "$DONE" = "FALSE" ]; do
+
+	        #-----------------------------------------------------------------------
+	       	#  Check to see if we should run the workstation again
+	        #-----------------------------------------------------------------------
+	        CURRENT_TIME=`$TIMER`
+	        SECONDS_EXECUTED=`expr $CURRENT_TIME - $START_TIME`
+	        if [ "$SECONDS_EXECUTED" -gt "$SECONDS_TO_EXECUTE" ]; then
+	        	DONE="TRUE"
+	        else
+	        	#
+		        # login
+			#
+			KRB5CCNAME=`dce_login_noexec $PRINCIPAL $PASSWORD`
+			export KRB5CCNAME
+			klist >> ${FULLLOG}
+			#
+			SUBCOMMAND="list dir"
+			OPTIONS="/.:/$TESTDIR"
+			ESTATUS=0
+			exec_test
+			#
+			SUBCOMMAND="set dir"
+			OPTIONS="/.:/$TESTDIR to skulk"
+			ESTATUS=0
+			exec_test
+			#
+			SUBCOMMAND="create directory"
+			OPTIONS="/.:/$TESTDIR/testdir"
+			ESTATUS=0
+			exec_test
+			#
+			SUBCOMMAND="show dir"
+			OPTIONS="/.:/$TESTDIR/testdir"
+			ESTATUS=0
+			exec_test
+			#
+			SUBCOMMAND="cre dir"
+			OPTIONS="/.:/$TESTDIR/testdir/w0"
+			ESTATUS=0
+			exec_test
+			#
+			SUBCOMMAND="list dir"
+			OPTIONS="/.:/$TESTDIR/testdir/w0"
+			ESTATUS=0
+			exec_test
+			#
+			SUBCOMMAND="cre obj"
+			OPTIONS="/.:/$TESTDIR/testdir/w0/x0.object \
+			 	CDS_Class = object_class CDS_ClassVersion = 1.0"
+			ESTATUS=0
+			exec_test
+			#
+			SUBCOMMAND="show obj"
+			OPTIONS="/.:/$TESTDIR/testdir/w0/x0.object"
+			ESTATUS=0
+			exec_test
+			#
+			SUBCOMMAND="cre link"
+			OPTIONS="/.:/$TESTDIR/testdir/w0/x0.softlink \
+			 	CDS_LinkTarget = /.:/$TESTDIR/testdir/w0/x0.object"
+			ESTATUS=0
+			exec_test
+			#
+			SUBCOMMAND="show link"
+			OPTIONS="/.:/$TESTDIR/testdir/w0/x0.softlink"
+			ESTATUS=0
+			exec_test
+			#
+			SUBCOMMAND="del link"
+			OPTIONS="/.:/$TESTDIR/testdir/w0/x0.softlink"
+			ESTATUS=0
+			exec_test
+			#
+			SUBCOMMAND="show link"
+			OPTIONS="/.:/$TESTDIR/testdir/w0/x0.softlink"
+			ESTATUS=1
+			exec_test
+			#
+			SUBCOMMAND="del obj"
+			OPTIONS="/.:/$TESTDIR/testdir/w0/x0.object"
+			ESTATUS=0
+			exec_test
+			#
+			SUBCOMMAND="show obj"
+			OPTIONS="/.:/$TESTDIR/testdir/w0/x0.object"
+			ESTATUS=1
+			exec_test
+			#
+			SUBCOMMAND="del dir"
+			OPTIONS="/.:/$TESTDIR/testdir/w0"
+			ESTATUS=0
+			exec_test
+			#
+			SUBCOMMAND="show dir"
+			OPTIONS="/.:/$TESTDIR/testdir/w0"
+			ESTATUS=1
+			exec_test
+			#
+			SUBCOMMAND="delete directory"
+			OPTIONS="/.:/$TESTDIR/testdir"
+			ESTATUS=0
+			exec_test
+			#
+			SUBCOMMAND="show dir"
+			OPTIONS="/.:/$TESTDIR/testdir"
+			ESTATUS=1
+			exec_test
+			#
+			# destroy credentials
+			kdestroy >> ${FULLLOG}
+			klist >> ${FULLLOG}
+			#
+			SUBCOMMAND="create directory"
+			OPTIONS="/.:/$TESTDIR/testdir"
+			ESTATUS=1
+			exec_test
+			#
+			# Output Current Test Summary
+			#
+			echo "===============================" | tee -a ${FULLLOG}
+			echo "" | tee -a ${FULLLOG}
+			echo "Number of Test Loop(s) = $LOOPS" | tee -a ${FULLLOG}
+			echo "" | tee -a ${FULLLOG}
+			echo "Test Results:" | tee -a ${FULLLOG}
+			echo "" | tee -a ${FULLLOG}
+			echo "	Total Passed = $PASSED" | tee -a ${FULLLOG}
+			echo "	Total Failed = $FAILED" | tee -a ${FULLLOG}
+			echo "	Total Tests  = $COUNT" | tee -a ${FULLLOG}
+			echo "" | tee -a ${FULLLOG}
+			echo "===============================" | tee -a ${FULLLOG}
+	
+			#
+			# Up the Loop Count
+			#
+	
+			LOOPS=`expr $LOOPS + 1`
+		fi
+	done
+
+	cleanup
+
+	if [ $fail -ne 0 ]
+	then
+		tet_infoline "Number of failures: $fail"
+		tet_infoline "See logdir in results directory for more info"
+		tet_result FAIL
+	else
+		tet_result PASS
+	fi
+}
+
+cleanup ()
+{
+	#
+	# Finally, cleanup directory we worked in
+	#
+	tet_infoline "Cleaning up working directory"
+	KRB5CCNAME=`dce_login_noexec $PRINCIPAL $PASSWORD`
+	export KRB5CCNAME
+	klist >> ${FULLLOG}
+	SUBCOMMAND="delete directory"
+	OPTIONS="/.:/$TESTDIR"
+	ESTATUS=0
+	exec_test
+	#
+	# Doublecheck that it's really gone
+	#
+	SUBCOMMAND="show dir"
+	OPTIONS="/.:/$TESTDIR"
+	ESTATUS=1
+	exec_test
+	kdestroy >> ${FULLLOG}
+	klist >> ${FULLLOG}
+	#
+	# End
+	#####
+	tet_infoline "Cleanup done"
+}
+. $TCM

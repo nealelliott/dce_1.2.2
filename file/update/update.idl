@@ -1,0 +1,163 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for 
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: update.idl,v $
+ * Revision 1.1.9.1  1996/10/02  21:05:57  damon
+ * 	Newest DFS from Transarc
+ * 	[1996/10/01  18:50:06  damon]
+ *
+ * Revision 1.1.4.1  1994/06/09  14:23:47  annie
+ * 	fixed copyright in src/file
+ * 	[1994/06/09  13:35:42  annie]
+ * 
+ * Revision 1.1.2.5  1993/01/21  16:28:06  cjd
+ * 	embedded copyright notice
+ * 	[1993/01/20  18:21:08  cjd]
+ * 
+ * Revision 1.1.2.4  1993/01/13  19:28:11  shl
+ * 	Transarc delta: cfe-ot6054-genl-and-i18n-spares 1.1
+ * 	  Selected comments:
+ * 	    Add spares to several RPC structures, with two goals:
+ * 	    - general future usage
+ * 	    - allow for at least some internationalization designs
+ * 	    The only tricky part of this work is that the on-the-wire representation for
+ * 	    directory contents is expanded.
+ * 	[1993/01/12  22:17:02  shl]
+ * 
+ * Revision 1.1.2.3  1992/11/24  19:49:49  bolinger
+ * 	Change include file install directory from .../afs to .../dcedfs.
+ * 	[1992/11/22  19:34:51  bolinger]
+ * 
+ * Revision 1.1.2.2  1992/08/31  21:41:31  jaffe
+ * 	Transarc delta: cfe-ot4029-portable-rpc-data-types 1.2
+ * 	  Selected comments:
+ * 	    If ``long'' could possibly mean ``64 bits'' any time soon, we need to keep
+ * 	    our RPC interfaces from breaking.
+ * 	    see above
+ * 	    More of the same.  Forgot a couple of .idl files, and needed to change
+ * 	    a couple of procedure signatures to match.
+ * 	[1992/08/30  13:29:36  jaffe]
+ * 
+ * Revision 1.1  1992/01/19  02:56:32  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+/*
+ *      Copyright (C) 1990 Transarc Corporation
+ *      All rights reserved.
+ */
+
+
+/* 
+ * 
+ *       UPDATE Server (AFS 4.0) Interface Definition
+ *
+ */
+
+
+[
+uuid(4d37f2dd-ed43-0000-02c0-37cf1e001000),
+version(4.0)
+/* provider_version(1) */
+]
+
+
+interface UPDATE
+{
+
+/* 
+ * Include the AFS basic Header files 
+ */
+
+	/**
+	 **   import "cellconfig.idl" ; 
+	 **/
+	import "dcedfs/common_data.idl";
+
+	const	long	TIMEOUT		= 300;
+	const  	long	MAX_PROTSEQ_LEN = 32;
+	const	long	BINDING_LEN     = 256;
+	const	long	MAX_BINDING_LEN = 1024;
+	const 	long	MAX_NAME_SIZE   = 256;  /* include null byte at end */
+
+	typedef	struct updateFileStatS 
+	{
+	    afsHyper fileLength;
+	    unsigned32 mode;
+	    unsigned32 uid;
+	    unsigned32 gid;
+	    unsigned32 mtime;		/* modify time */
+	    unsigned32 atime;		/* access time */
+	    unsigned32 spare1;
+	    unsigned32 spare2;
+	    unsigned32 spare3;
+	    unsigned32 spare4;
+	} updateFileStatT;
+
+/* UPDATE_GetServerInterfaces
+ * 
+ * This exported procedure is called by the upclient to fetch the interfaces
+ * supported by the upserver. A bulk parameter of upto MAXINTERFACES number
+ * of interfaces are returned.
+ *
+ */
+
+error_status_t UPDATE_GetServerInterfaces
+(	/* provider_version(1) */
+	[in]	    handle_t		h,
+	[in, out]   dfs_interfaceList 	*serverInterfaces
+);
+
+/* 
+ * UPDATE_FetchInfo
+ *
+ * This exported procedure is called by a client to fetch the information (ie.,
+ * the status) of a specified directory in the remote host. 
+ *
+ * An  AFS client calls this remote procedure periodically
+ * to bring object files at its site update-to-date. 
+ *
+ */
+
+error_status_t UPDATE_FetchInfo
+(	/* provider_version(1) */
+	[in]	handle_t	h, 	/* Necessary for explicit_handle */
+	[in]	NameString_t	DirName,
+	[out]   pipe_t		*Stream
+);
+
+/* 
+ * UPDATE_FetchFile 
+ *
+ * This exported procedure is called by a client to fetch the whole data from 
+ * a specified file in the remote host.
+ *
+ * An AFS client calls this remote procedure periodically to bring object files
+ * at the client site update-to-date. 
+ *
+ */
+/*error_status_t */
+error_status_t UPDATE_FetchFile
+(	/* provider_version(1) */
+	[in]	handle_t	h, 	  /* Necessary for explicit_handle */
+	[in]	NameString_t	FileName,
+	[out]   pipe_t		*Stream
+);
+
+error_status_t UPDATE_FetchObjectInfo
+(	/* provider_version(1) */
+	[in]	handle_t	h,	  /* Necessary for explicit_handle */
+	[in]	NameString_t	objectName,
+	[out]	updateFileStatT *fileStatP
+);
+
+}

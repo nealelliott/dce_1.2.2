@@ -1,0 +1,94 @@
+#!/usr/bin/dcecp
+#
+# FILE NAME: DCPSAN004
+#
+# COMPONENT NAME: dcecp -> DCE unconfigure client
+#
+# USAGE: DCPSAN001 <hostname>
+#		   Where <hostname> is the name of the client to unconfigure.
+#
+# DESCRIPTION:
+#	
+#	The purpose of this dcecp script is to unconfigure a DCE client.
+#	
+# PREREQUISITS and SETUP:
+#
+#	The user must be logged in as cell_admin. 
+#	This script must be run on the DCE server machine.
+#
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+proc run_cmd {cmd} {
+
+   set sts  [catch {uplevel $cmd} answer]
+   
+   if {$sts == 0} {
+       return 0
+   } else {
+	puts "$answer"
+        return 1
+   }
+}
+
+# 1. Get the hostname of the DCE client to unconfigure.
+
+   if { $argc != 1 } {
+      error "Usage: DCPSAN004 <dce-clientname>"
+   }
+
+   set HOSTNAME [lindex $argv 0]
+   set HOSTNAME [lindex [split $HOSTNAME .] 0]
+
+#puts $HOSTNAME
+
+# The hostname must not include the internet domain suffix from hostname.
+   puts " "
+   puts "\tUnconfiguring DCE client host: $HOSTNAME"
+   puts "\t---------------------------------------" 
+   puts " "
+   puts "\t** Deleting host entries from the Security database."
+
+# 2. Login as cell_admin
+
+  if { [run_cmd {login cell_admin -password -dce-}] == 1} {
+     error "Failed to login as cell_admin."
+  }
+
+# 3. Deleting SECURITY registry database entries.
+#delete principals:
+#	hosts/$HOSTNAME/self
+#	hosts/$HOSTNAME/cds-server
+#	hosts/$HOSTNAME/gda
+
+   puts "\tExecuting: principal delete hosts/$HOSTNAME/self"
+   puts "\tExecuting: principal delete hosts/$HOSTNAME/cds-server"
+   puts "\tExecuting: principal delete hosts/$HOSTNAME/gda"
+   if { [run_cmd {principal delete hosts/$HOSTNAME/self}] == 1 ||
+        [run_cmd {principal delete hosts/$HOSTNAME/cds-server}] == 1 ||
+        [run_cmd {principal delete hosts/$HOSTNAME/gda}] == 1 } {
+       puts "Failed to delete $HOSTNAME entries from the registry database."
+   }
+
+# 3. Deleting client entries in CDS.
+# Delete the following CDS objects and directory:
+#    /.:/hosts/$HOSTNAME/dts-entity
+#    /.:/hosts/$HOSTNAME/profile
+#    /.:/hosts/$HOSTNAME/cds-clerk
+#    /.:/hosts/$HOSTNAME/self
+#    /.:/hosts/$HOSTNAME
+# Directory /.:/hosts to skulk
+
+puts "\t** Deleting entries from the namespace."
+    foreach i [directory list /.:/hosts/$HOSTNAME] {
+         puts "\tExecuting: object delete $i"
+         run_cmd {object delete $i}
+    }
+    puts "\tExecuting: directory delete /.:/hosts/$HOSTNAME"
+    run_cmd {directory delete /.:/hosts/$HOSTNAME}
+    puts "\tExecuting: directory synchronize /.:/hosts"
+    run_cmd {directory synchronize /.:/hosts}
+    run_cmd {logout}
+
+puts "\t**Host $HOSTNAME was successfully unconfigured."
+puts "\t**Now run dce.rm on host - $HOSTNAME."
+puts " "

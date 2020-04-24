@@ -1,0 +1,114 @@
+#!/bin/sh
+
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: remotelock,v $
+# Revision 1.1.116.1  1996/10/17  18:36:52  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:58:07  damon]
+#
+# Revision 1.1.111.1  1994/02/04  20:47:35  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:25:36  devsrc]
+# 
+# Revision 1.1.109.1  1993/12/07  17:46:36  jaffe
+# 	New File from Transarc 1.0.3a
+# 	[1993/12/02  22:06:14  jaffe]
+# 
+# $EndLog$
+
+# Copyright (C) 1993 Transarc Corporation
+# Licensed Materials - Property of Transarc
+# All rights reserved.
+
+# functions in the file allow us to compile and call a locking test program on
+# the specified remote host.
+
+# define global for remote directory
+REMOTEDIR=
+
+# Check to see if rsh functionality works properly
+checkrsh() {
+	_host=$1
+	if rsh $_host pwd > /dev/null 2>&1
+	  then :
+	  else
+		return 1
+	fi
+	return 0
+}
+
+# Install trylock program on remote
+reminstlocker() {
+	_host=$1
+	_errorfile=/tmp/errs.$$
+	_error=0
+
+	REMOTEDIR=/tmp/tsrtest.$$
+	if rsh $_host "mkdir $REMOTEDIR && echo SUCCESS" | tee $_errorfile | grep SUCCESS
+	  then
+		> $_errorfile
+		# copy file to remote
+		if rsh $_host "cat - > $REMOTEDIR/trylock.c" < trylock.c
+		  then
+			# compile the thing
+			if rsh $_host "cd $REMOTEDIR; cc trylock.c -o trylock && echo SUCCESS" | tee -a $_errorfile | grep SUCCESS > /dev/null 2>&1
+			  then 
+				> $_errorfile
+			  else
+				ErrorLog "Failed to create test program on remote"
+				cat $_errorfile
+				rsh $_host "/bin/rm -rf $REMOTEDIR"
+				_error=1
+			fi
+		  else
+			ErrorLog "Failed to create test program on remote"
+			rsh $_host "/bin/rm -rf $REMOTEDIR"
+			_error=1
+		fi
+	  else
+		ErrorLog "Failed to create test directory on remote"
+		cat $_errorfile
+		_error=1
+	fi
+
+	/bin/rm -f $_errorfile
+
+	return $_error
+}
+
+# Try to get remote lock of file on host.  Builds trylock on host, if necessary.
+# Calls the non-blocking verions of trylock (i.e., just try to grab the lock and
+# then return status).
+getremotelock() {
+	_host=$1
+	_file=$2
+
+	if [ ! "$REMOTEDIR" ]
+	  then
+		# try to set up locking on remote
+		if reminstlocker $_host
+		  then :
+		  else
+			return 1
+		fi
+	fi
+
+	# locking program is installed on the remote in $REMOTEDIR
+	rsh $_host "$REMOTEDIR/trylock -nopause $_file && echo SUCCESS" | grep SUCCESS > /dev/null 2>&1
+}
+
+# clean up trylock and trylock.c on remote
+cleanremote() {
+	_host=$1
+
+	if [ "$REMOTEDIR" ]
+	  then
+		rsh $_host "/bin/rm $REMOTEDIR/trylock* ; rmdir $REMOTEDIR"
+	fi
+}

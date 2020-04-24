@@ -1,0 +1,113 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: TET_filter.gdssetup,v $
+# Revision 1.1.4.2  1996/03/11  02:33:38  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  19:39:13  marty]
+#
+# Revision 1.1.4.1  1995/12/11  15:23:33  root
+# 	Submit
+# 	[1995/12/11  14:35:17  root]
+# 
+# Revision 1.1.2.3  1994/08/19  13:54:15  marrek
+# 	Improve testcode coverage OT11586.
+# 	[1994/08/19  11:46:16  marrek]
+# 
+# Revision 1.1.2.2  1994/07/14  20:57:53  keutel
+# 	OT 11310: missing ksh in first line
+# 	[1994/07/14  20:10:53  keutel]
+# 
+# Revision 1.1.2.1  1994/07/08  09:53:08  marrek
+# 	July 1994 code drop (OT 11195)
+# 	[1994/07/08  09:51:15  marrek]
+# 
+# $EndLog$
+#
+# $RCSfile: TET_filter.gdssetup,v $ $Revision: 1.1.4.2 $ $Date: 1996/03/11 02:33:38 $
+#
+
+#simple report filter
+
+vv ()
+{
+   awk ' BEGIN { FS="|"; N_SUCCESS=0; N_FAIL=0; } 
+   {
+      if ($1 == 520) 
+      {
+         if ($3 ~ /FAILED/)  
+	    {
+	     split(FILENAME, array1, " ")
+	     if ( array1[1] == "GDSSETUP:" )
+		{
+	        print FILENAME " -> " $3
+		}
+	     else
+		{
+		print EXITCODE " -> " $3
+		}
+	     N_FAIL++ 
+	    }
+         if ($3 ~ /PASSED/)  { N_SUCCESS++ }
+	 FILENAME = EXITCODE
+         EXITCODE = $3
+      }
+      else
+      {
+         if ($1 == 0 || $1 == 10 || $1 == 70 || $1 == 400 || $1 == 900)
+         {
+            if ($1 != 400)
+            {
+               line=$3
+               for (i=4; i<=NF; i++)
+                  line = line "|" $i
+               if ($1 == 10)
+               {
+                  print "\n"line"\n"
+               }
+               else
+               {
+                  print line
+               }
+            }
+            flag = 0;
+         }  
+         else
+         {
+            if ($1 == 220) 
+            {
+               line=$3
+               if ($3 == "PASS" || $3 == "FAIL")
+               {
+                  for (i=4; i<=NF; i++)
+                     line = line "|" $i
+                  print "--> Test cases: " line"ED\n"
+               }
+               flag = 0;
+            } 
+         }
+      }
+   } END { print "\n-----------------------------------------------------------\n"; 
+           print "Total PASSED = ",N_SUCCESS;
+           print "Total FAILED = ",N_FAIL } ' $1 >> $1.log
+}   
+
+scriptname=`basename $0`
+
+if [ $# -lt 1 ]
+then
+  echo "\nUsage: $scriptname   <Name of TET journal file>  "
+  echo ""
+  exit
+fi
+
+echo "Results of GDSSETUP Tests:  `date`" > $1.log
+echo "-----------------------------------------------------------\n" >> $1.log
+vv $1  | grep -v Restore | grep -v Save | grep -v NORESULT 
+
+echo "\n --> vi $1.log   to show the results\n"

@@ -1,0 +1,115 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: big-vm.test,v $
+# Revision 1.1.10.1  1996/10/02  17:16:23  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:07:14  damon]
+#
+# Revision 1.1.4.1  1994/06/09  13:56:44  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:31:30  annie]
+# 
+# Revision 1.1.2.3  1993/01/18  20:55:33  cjd
+# 	embedded copyright notice
+# 	[1993/01/18  17:42:32  cjd]
+# 
+# Revision 1.1.2.2  1992/11/09  21:33:02  jaffe
+# 	Transarc delta: ota-ot3804-new-block-security 1.1
+# 	  Selected comments:
+# 	    This is a super-delta comprising changes necessary to accomplish both
+# 	    deltas which are a very tough import and are really intertwined anyway.
+# 	    Transarc delta: ota-new-block-security-2467 1.9
+# 	    Selected comments:
+# 	    Changes to strategy.c for VM support.  This involves significant rewrite
+# 	    of the handling of async I/O events.  The test_anode code was fixed to
+# 	    start the async daemon by default.
+# 	    While I tried to maintain the SunOS specific code, it is likely that
+# 	    this has broken.
+# 	    Status:
+# 	    All logbuf module calls for undo zero transactions continue to be stubs.
+# 	    Otherwise, changes to anode level seem to work in all user space tests.
+# 	    Can be tried in the kernel (the logbuf stubs should be okay) but hasn't
+# 	    been.
+# 	    Several bug fixes and a better test_anode script to test them.
+# 	    Added conditional support for malloc plumber.  Use "build PLUMBER=".
+# 	    Status: Now runs w/o Tony's part in AIX 3.2.  Successfully copies 10M
+# 	    files and ran AimIII test to 30 users.
+# 	    Much more thorough VM test.  Tries various combinations of long
+# 	    transfers with allocated and unallocated blocks.
+# 	    Several cleanups necessary after merging with Tony's deltas an upgrading
+# 	    to epi-102 1.17.
+# 	    The logbuf code is still stubbed out for the VM paths.
+# 	    Fix up buffer-deadlock script which requires more space that all_tests
+# 	    allows.
+# 	    Part of the problem is that the script doesn't really do what Tony
+# 	    thought it did since all the threads really end up executing in the 64K
+# 	    aggregate.  Fixed this.
+# 	    Still gets intermittent aggregate full conditions.
+# 	    Fix a couple of bugs in logbuf code.
+# 	    Status: Tony's nbs_tests script which calls all the variants of
+# 	    new-block-security.{,rcvr.}test now runs successfully.
+# 	    Next:	Unstub the VM calls.
+# 	    Now passes all_tests in user space.
+# 	    One bug just fixed found on power7 should be fixed, but untested as yet.
+# 	    Minor OSF/1 compilation fix for Tony.
+# 	[1992/11/09  17:49:03  jaffe]
+# 
+# $EndLog$
+
+# /* Copyright (C) 1992 Transarc Corporation - All rights reserved */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/big-vm.test,v 1.1.10.1 1996/10/02 17:16:23 damon Exp $
+
+big-vm 1
+modify_afsdb anode on 31		# turn on code block counting
+
+open_device 1 8192 1024 1500
+create_aggregate
+
+# we assume epia_maxExtentBlks is 32
+set_vm on 4096 1048576			# 4K pages, 1M extents
+
+exist_vol foo 0,,0 8400
+
+# Because test_anode always forces VM after every write_file, it these
+# fsyncs aren't necessary.  I'd like to change this test_anode by using
+# the quota reservation stuff.  If this happens this test will continue
+# to work.
+create_file small
+write_file 32768 8192
+write_file 57344 8192
+fsync
+write_file 32768 32768			# only beg and end of xfer allocated
+fsync
+write_file 16384 81920			# allocated blks in middle of xfer
+fsync
+write_file 0 49152			# allocated blks at end of xfer
+fsync
+write_file 49152 49152			# allocated blks at beg of xfer
+
+create_file alternate
+write_file 16384 8192
+write_file 32768 16384
+write_file 49152 24576
+write_file 65536 32768
+write_file 131072 65536
+fsync
+write_file 0 270336			# xfer larger than max extent
+
+create_file medium
+write_file 0 262144
+write_file 4096 8192			# dirty existing data
+write_file 282624 528384		# (34.5 64.5) * 8K
+
+create_file big
+write_file 0 7340032			# 7M
+(code = VOLUMEFULL) write_file 7340032 1048576	# one more meg
+read_file 0 7340032
+
+check_device
+coverage
+end

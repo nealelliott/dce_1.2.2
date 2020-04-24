@@ -1,0 +1,427 @@
+*
+* @OSF_COPYRIGHT@
+*
+* (C) Copyright 1993 Transarc Corporation.
+* All Rights Reserved.
+*
+*  movingIO.scr --
+*	Tests if fileset moves, work in the face of concurrent I/O.
+*	This is a simplified version of the movingLocks.scr script.
+*
+*  Requirements -
+*	2 machine with 2 episode aggregates.
+*
+* 
+* HISTORY
+* $Log:$
+*
+* $EndLog$
+******************************************************************************
+
+*
+!* Include test configuration.
+*
+include movingIO.config.itl
+
+set testRuns int 0
+
+*
+!* Validating configuration.
+*
+assert ($fileSize > 0)
+assert ($numFiles > 0)
+assert ($ITL_nspokes > 0)
+assert (($doLocalMoveTest != 0) || ($doRemoteMoveTest != 0))
+assert ($aggregateDevice1 != "")
+
+if ($doLocalMoveTest != 0) {
+  assert ($aggregateDevice2 != "")
+  set testRuns int ($testRuns + 1)
+}
+if ($doRemoteMoveTest != 0) {
+  assert (remoteAggregateDevice != "")
+  assert (remoteHostName != "")
+  set testRuns int ($testRuns + 1)
+}
+
+set numClients int $ITL_nspokes
+*
+*  filesetQuota is calculated based on the testing environment.  An
+*  additional 2 Episode blocks are allocated per file, for overhead costs and
+*  indirect blocks.  Finally, 100K is added for safety.
+*
+set filesetQuota int ((($fileSize * $numFiles * $numClients) / 1024) + (($numFiles * $efsBlockSize * $numClients * 2) / 1024) + 100)
+if ( ($totalFilesetKB + 100) > $filesetQuota ) {
+	set extraFilesetSize int (($totalFilesetKB + 100) - $filesetQuota)
+	set filesetQuota int ($totalFilesetKB + 100)
+} else {
+	set extraFilesetSize int 0
+}
+
+*
+*  Hub code.
+*
+*  This variable just simplifies the creation of shell scripts to do 
+*  fts commands.
+*
+if ($showVerboseFts != 0) {
+	set dumpOutput string ""
+	set verbFlag string " -verbose "
+} else {
+	set dumpOutput string " > /dev/null"
+	set verbFlag string ""
+}
+
+if ($createFileset != 0) {
+*
+!*  Creating fileset, $filesetName, on $aggregateDevice1 ...
+*
+  set shellScript string ("fts create -ftname " + $filesetName + " -server " + $ITL_HostName + " -aggregate " + $aggregateDevice1 + $verbFlag + $dumpOutput )
+  shellExec shellScript
+}
+
+*
+!*  Creating DFS mount point for fileset, $filesetName
+*
+set shellScript string ("fts crmount -dir " + $dfsMountPoint + " -fileset " + $filesetName + $dumpOutput )
+shellExec shellScript
+
+*
+!*  Setting quota on fileset, $filesetName
+*
+set shellScript string ("fts setquota -fileset " + $filesetName + " -size " + $filesetQuota + $verbFlag + $dumpOutput )
+shellExec shellScript
+
+*
+!*  Setting root directory modes on fileset, $filesetName
+*
+chmod $dfsMountPoint 0777 
+
+*
+*  Issue the cm checkfilesets command.  This ensures this cache manager
+*  knows about our newly created fileset.  This should not be necessary, but..
+*
+set shellScript string ("cm checkfilesets" + $dumpOutput )
+shellExec shellScript
+
+getwd originalDirectory
+chdir $dfsMountPoint
+
+*
+* Adding extra file size as necessary
+*
+if ( $extraFilesetSize != 0 ) {
+*
+!*  Creating extra space allocation ($extraFilesetSize blocks)
+*
+    set y int 0
+    do
+	set y int ($y + 1)
+	set fileName string ($baseFileName + $y + "_Extra")
+	open $fileName ($O_CREAT | $O_RDWR) 0644 fid
+* Create files up to 1200K long as necessary
+	if ((1200+(5*$efsBlockSize/1024)+1) > $extraFilesetSize) {
+		set newSize int (($extraFilesetSize - 1) * 1024)
+	} else {
+		set newSize int (1200*1024)
+	}
+	set z int 1000
+	do
+		lseek $fid $SEEK_SET $z
+		write $fid "X"
+		set z int ($z + 1024)
+	while ( $z < $newSize )
+	close $fid
+	set extraFilesetSize int ($extraFilesetSize - (($newSize + 5*$efsBlockSize)/1024 + 1))
+    while ( $extraFilesetSize > (3*$efsBlockSize/1024) )
+!*  Created $y files for extra space
+}
+
+
+*
+*  Now finally start the actual tests.  The outer loop controls whether
+*  we run the local move test, the remote move test, or both.
+*  Use the hack of defining the procedure that is executed remotely inside 
+*  of a loop so we can pass parameters based on values that change with
+*  each loop iteration, i.e. array data.  This could be changed when
+*  we get interpretive RPC's, i.e. pass procedure arguments over the wire.
+*
+loop t 1 1 $testRuns
+  if ($doLocalMoveTest != 0) {
+    set toHostName string $ITL_HostName
+    set toAggregate string $aggregateDevice2
+    set testName string "LOCAL"
+    set doLocalMoveTest int 0
+  }
+  else {
+    set toHostName string $remoteHostName
+    set toAggregate string $remoteAggregateDevice
+    set testName string "REMOTE"
+  }
+  echo Starting $testName fileset move test.
+
+  loop x 0 1 ($numClients - 1)
+    set clientProc proc END_PROC
+*
+*  Set the number of background I/O threads to 2.  No special significance to
+*  this number.
+*
+      set numIoThreads int 2
+      set myData string ("Client " + $x + " data for file I/O.")
+*
+*  Get a "local" copy of numFiles and fileSize
+*
+      set localNumFiles int $numFiles
+      set localFileSize int $fileSize
+*
+*  Issue the cm checkfilesets command.  This ensures this cache manager
+*  knows about our newly created fileset.  This should not be necessary, but..
+*
+      set shellScript string ("cm checkfilesets" + " > /dev/null")
+      shellExec shellScript
+
+      getwd startDirectory
+      chdir $dfsMountPoint
+*
+!*  Creating and opening all files
+*
+      loop y 1 1 $numFiles
+        set fileName string ($baseFileName + @y + "_client" + $x)
+        open @fileName (@O_CREAT | @O_RDWR) 0644 fileIds[@y]
+*
+*  Write one character at the end of the file, so that reads will always
+*  return the number of bytes requested, even though the data will be
+*  all nulls.
+*
+        lseek @fileIds[@y] @SEEK_SET (@localFileSize - 1)
+        write @fileIds[@y] "1"
+      endLoop
+
+      sync_join "completed_opens" $syncPointTimeout
+
+*
+* The ioThread procedure just executes random read/write calls on the
+* files that are open.  It must be defined after the opens are issued
+* above, since by the time it is executed ITL will have evaluated it once
+* and replaced the '@' signs with '$' signs.  So since it references the 
+* fileIds array, that array better exist.
+*
+      set ioThread func IO_PROC_END
+        set ioLength int #@myData
+        set doRead int 0
+        set writeData string @myData
+
+*
+* Loop alternating between reads and writes, and randomly selecting
+* a file to do the I/O to.
+*
+        do
+          set index int (1 .. @localNumFiles)
+          set seekOffset int (0..(@localFileSize - @ioLength))
+*
+* Ensure only one thread at a time does I/O to a particular file.
+*
+          do
+            test&set ioInProgress[@index] == 0 1
+            if (@CommandResult == 0) {
+              sleep 2000
+            }
+          while (@CommandResult == 0)
+
+          lseek @fileIds[@index] @SEEK_SET @seekOffset
+          if (@doRead == 1) {
+            read @fileIds[@index] @ioLength readData
+            if (@CommandResult != @ioLength) {
+              echo Read failure: Host @ITL_HostName, Process @ITL_ProcessId, ThreadId @ThreadId
+              error Bytes read - EXPECTED: @ioLength, ACTUAL: @CommandResult
+            }
+
+            set doRead 0
+          }
+          else {
+            write @fileIds[@index] @myData
+            if (@CommandResult != @ioLength) {
+              echo Write failure: Host @ITL_HostName, Process @ITL_ProcessId, ThreadId @ThreadId
+              error Bytes written - EXPECTED: @ioLength, ACTUAL: @CommandResult
+            }
+            set doRead 1
+          }
+          test&set ioInProgress[@index] == 1 0
+          assert (@CommandResult == 1)
+          fetch&Op testRunning + 0
+        while (@testRunning == 1)
+	fetch&Op ioThreadsCompleted + 1
+IO_PROC_END
+
+*
+* Start background threads that will issue I/O requests.  This just
+* adds another dimension of stress (realism ?) to the test.
+* Initialize an array of "booleans".  They are used to ensure that the 
+* background I/O threads never issue concurrent I/O against the same file.
+* Otherwise, lseek offsets get screwed up.
+*
+      set testRunning global int 1
+      loop fileIndex 1 1 $numFiles
+        set ioInProgress[@fileIndex] global int 0
+      endLoop
+
+      set ioThreadsCompleted global int 0
+      loop loopIndex 0 1 (@numIoThreads - 1)
+	threadExec ioThread
+      endLoop
+
+      sync_join "started_io" $syncPointTimeout
+*
+!* Waiting for fileset to be moved by hub
+*
+      sync_join "wait_for_first_move" $moveTimeout
+
+*
+!* Waiting for the fileset to be moved back
+*
+      sync_join "wait_for_second_move" $moveTimeout
+
+*
+!* Stopping background threads and letting them quiesce
+*
+      fetch&Op testRunning + 1
+      set waitLoops int 0
+      do
+	sleep (@numIoThreads * 5000)
+	set waitLoops (@waitLoops + 1)
+        fetch&Op ioThreadsCompleted + 0
+      while ((@waitLoops < 5) && (@ioThreadsCompleted != @numIoThreads))
+
+*
+!* Verifying all I/O threads stopped.
+*
+      if (@ioThreadsCompleted != @numIoThreads) {
+        error Client on @ITL_HostName, process @ITL_ProcessId: expected @numIoThreads, but only @ioThreadsCompleted finished without error
+      }
+
+      sync_join "io_threads_quiesced" $syncPointTimeout
+
+*
+!* Closing and removing all files
+*
+      loop y 1 1 $numFiles
+        close @fileIds[@y]
+        set fileName string ($baseFileName + @y + "_client" + $x)
+        unlink @fileName
+      endLoop
+
+      chdir @startDirectory
+
+      sync_join "all_files_closed_and_removed" $syncPointTimeout
+
+END_PROC
+
+    rexec_async $ITL_spoke[$x] clientProc clientResults[$x] asyncIds[$x]
+
+  endLoop
+
+*
+!*  All clients running $testName fileset move test
+*
+*
+!*   Sync-point: completed_opens
+*
+* Wait additonal 30 seconds since files are being created.
+*
+  sync_create "completed_opens" $numClients ($syncPointTimeout + 30)
+  sync_release "completed_opens"
+
+*
+!*   Sync-point: started_io
+*
+  sync_create "started_io" $numClients $syncPointTimeout
+  sync_release "started_io"
+
+*
+!* Moving fileset from $ITL_HostName $aggregateDevice1 to $toHostName $toAggregate
+*
+  chdir $originalDirectory
+  set shellScript string ("fts move -fileset " + $filesetName + " -fromserver " + $ITL_HostName + " -fromaggregate " + $aggregateDevice1 + " -toserver " + $toHostName + " -toaggregate " + $toAggregate + $verbFlag + $dumpOutput )
+  shellExec shellScript
+
+*
+!*   Sync-point: wait_for_first_move
+*
+  sync_create "wait_for_first_move" $numClients $syncPointTimeout
+  sync_release "wait_for_first_move"
+
+*
+*  Move the fileset back to its original location.
+!* Moving fileset from $toHostName $toAggregate to $ITL_HostName $aggregateDevice1
+*
+  set shellScript string ("fts move -fileset " + $filesetName + " -fromserver " + $toHostName + " -fromaggregate " + $toAggregate + " -toserver " + $ITL_HostName + " -toaggregate " + $aggregateDevice1 + $verbFlag + $dumpOutput )
+  shellExec shellScript
+
+*
+!*   Sync-point: wait_for_second_move
+*
+  sync_create "wait_for_second_move" $numClients $syncPointTimeout
+  sync_release "wait_for_second_move"
+
+*
+!*   Sync-point: io_threads_quiesced
+*
+*  Triple the timeout since we don't know how long the I/O threads in
+*  the clients will take to quiesce.
+*
+  sync_create "io_threads_quiesced" $numClients ($syncPointTimeout * 3)
+  sync_release "io_threads_quiesced"
+
+*
+!*   Sync-point: all_files_closed_and_removed
+*
+* Wait additonal 5 seconds per file, since they are being removed.
+*
+  sync_create "all_files_closed_and_removed" $numClients ($syncPointTimeout + ($numFiles * $numClients * 5))
+  sync_release "all_files_closed_and_removed"
+
+chdir $originalDirectory
+	
+*
+* Now just wait for all of the clients to finish.
+*
+!* Waiting for clients to complete $testName fileset move test
+*
+  set clientErrors int 0
+  loop x 0 1 ($numClients - 1)
+    async_join $asyncIds[$x] $syncPointTimeout
+
+    if ($clientResults[$x] != 0) {
+      echo Client $x had a failure, status was $clientResults[$x]
+      set clientErrors ($clientErrors + 1)
+    }
+  endLoop
+endLoop
+
+*
+* Only cleanup if test was successful.
+*
+if ($clientErrors == 0) {
+*
+!* Cleanup
+!* Removing mount point, $dfsMountPoint
+*
+  set shellScript string ("fts delmount -dir " + $dfsMountPoint + $dumpOutput )
+  shellExec shellScript
+
+  if ($createFileset != 0) {
+*
+!*  Deleting fileset, $filesetName, on $aggregateDevice1
+*
+    set shellScript string ("fts delete -fileset " + $filesetName + " -server " + $ITL_HostName + " -aggregate " + $aggregateDevice1 + $verbFlag + $dumpOutput )
+    shellExec shellScript
+  }
+
+  echo Test completed successfully.
+}
+else {
+  error Test FAILED - with $clientErrors client failures.
+}
+
+quit
+

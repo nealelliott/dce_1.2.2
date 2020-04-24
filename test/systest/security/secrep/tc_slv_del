@@ -1,0 +1,122 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: tc_slv_del,v $
+# Revision 1.1.2.2  1996/03/09  20:52:26  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:59  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:58  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:32 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  20:28 UTC  bissen
+# 	 merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:54 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  19:39 UTC  gordon_l
+# 	Fixes for change_master/becom
+# 	e_master
+# 	[1995/12/11  22:22:43  root]
+# 
+# Revision 1.1.2.2  1993/08/02  17:41:37  sekhar
+# 	Replication system test. Initial version
+# 	[1993/08/02  17:32:08  sekhar]
+# 
+# $EndLog$
+#
+
+if [ -z "${TC_SLV_DEL_DEFINED}" ] ; then
+
+TC_SLV_DEL_DEFINED=1
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  DESCRIPTION: 
+#      This test case is part of the security replication system test
+#      and tests the following:
+#
+#      This tests that a slave can be deleted gracefully i.e.
+#      using the sec_admin delrep command. A slave when deleted
+#      gracefully is removed from all the replica lists.
+#      The secd is stopped and the registry deleted on the slave 
+#      host.
+#
+#      The slave is deleted using the function slv_del(). slv_del()
+#      also verifies the removal from replica lists, secd is realldy
+#      stopped and the registry is deleted.
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+tet_startup="tc_slv_del_init"
+tet_cleanup="tc_slv_del_cleanup"
+tet_testlist="tc_slv_del"
+
+iclist="ic1"
+ic1="tc_slv_del"
+
+tc_slv_del_init()
+{
+    typeset st
+    tet_infoline "............... Test: tc_slv_del"
+    tc_common_init ; st=$?
+    if [ $st -ne 0 ] ; then
+        tet_delete $ic1 "tc_slv_del_init(): Initialization failed"
+        return 
+    fi
+    if [ $SLV_CNT -eq 0 ] ; then
+        tet_delete $ic1 "tc_slv_del_init(): Test requires at least one slave in the cell"
+        return 
+    fi
+}
+
+tc_slv_del_cleanup()
+{
+    tc_common_cleanup
+}
+
+tc_slv_del()
+{
+    typeset st slvhost slvnm
+
+    testdesc="Deleting replica gracefully"
+    replog_testhdr "$testdesc"
+
+    slvhost=${SLV_HOSTNAMES[0]} ; slvnm=${SLV_NAMES[0]}
+
+    sa_delete $slvnm ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_abort "tc_slv_del()" "sa_delete()"
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    slv_v_del $slvhost $slvnm ; st=$?  # Verify slave deletion
+    replog_testresult "$testdesc" $st
+
+    # Cleanup - reconfigure the slave
+    slv_config  $slvhost $slvhost
+    return
+}
+
+. $TET_ROOT/profile.dcest
+. ./profile
+. $PHOME/replog
+. $PHOME/tc_common
+. $PHOME/sa
+. $PHOME/slv
+. $TCM
+#. $TET_ROOT/lib/xpg3sh/tcm.sh
+
+fi

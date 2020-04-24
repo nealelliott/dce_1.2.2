@@ -1,0 +1,134 @@
+
+Update test coverage
+
+The uptest test program takes the following parameters on the command line.
+
+ -cell: The cellname in which the test is to be run
+ -control: The cell control machine.
+ -fileserver: The fileserver on which the upclient is to be run.
+ -case[n]...
+
+ -case1 tests basic propagation mechanism by creating a subdirectory
+        in /tmp and placing a file there on the server side.  The
+        user is prompted to check for the existence of the file on the
+        client side after 2 periods.
+ -case2 tests that the upclient cannot receive updates from the upserver
+        when the directory the upclient is watching does not correspond to
+        one that the server distributes.  The user is prompted to check
+        in the directory created on the client side for the non-existence
+        of a file in a subdirectory of /tmp.
+ -case3 tests that the upclient may receive updates of only one file when
+        the upclient specifies a directory/file combination of whose
+        directory corresponds to a directory specified on the command
+        line of the upserver.
+ -case4 tests that the upclient may receive only one file when both, the 
+	upclient and the upserver, specify a directory/file combination.
+
+The following are the assumptions about the setup that this test makes.
+
+ 1-    The BOS server is running on the fileservers being used in this
+       test.
+ 2-    The test will be run on the fileserver that will be running
+       the upserver.
+ 3-    The user executing this script has read/write access to the
+       correct directories.
+ 4-    The user executing the script has either an entry in the admin.bos
+       list or is executing the bos commands with -noauth set.
+
+
+The steps to follow in setting up machines to run this test are as follows.
+
+ 0.0   Make copies of the admin.up file and the BosConfig
+       located in /opt/dcelocal/var/dfs to the /tmp directory. 
+
+ 0.1   Stop any running upserver/upclient processes on the target
+       cell control machine and fileserver.
+
+ 0.2   Delete the entries for the upclient and upserver from the
+       BosConfig file (bos delete).
+
+ 0.3   Create a test file in the command line specified test directory
+       on the system control machine.
+
+ 1.    Start upserver process on cell system control machine.
+
+ 2.    Run everything -noauth for now.  This allows for a non-priv
+       user of this script to see it to its successful completion.
+
+ 3.    Start upclient process on a second fileserver machine.  This
+       instance of the upclient is brought up searching a local
+       directory for the testfile that was placed on the system
+       control machine earlier.
+
+ 5.    Prompt the user to check for the extence of the testfile in the
+       target directory on the fileserver machine after 2 periods of
+       time have elapsed.
+
+
+New tests
+
+Upserver
+
+1. Upserver command line testing
+
+   upserver -path     	valid/invalid/unexisting file/dir names,
+			".", "..", relative path names, very long absolute
+			path names and long list of path names are different
+			test cases.
+
+	-adminlist	valid/invalid/unexisting admin file name, absolute,
+			relative path names,
+			valid/invalid/empty/many entries in admin file
+			required entry present/not present in admin file.
+
+2. Multiple upservers with same/different path names.
+3. Run upserver on a directory path when the directory has a huge number of
+   files/directories (large tree).
+4. Run upserver to track a very large binary file (several Mb). Change this
+   file and compare this file at source and destination. This would test the
+   pipe data transfer.
+
+Upclient
+
+1. Upclient command line testing
+
+  upclient -path 	test similar cases as upserver. In addition test
+			cases where multiple paths given intersect heavily,
+			files/directories that upserver is not permitted to
+			distribute.
+
+	-server		try just host name, host name followed by domain name,
+			fully qualified CDS server name, valid/invalid/
+			unexisting server names, server name where no upserver
+			is running, server where there are multiple upservers
+			running.
+
+	-time		valid/invalid time values, very small time interval
+			(stress), overflow value for time, large time interval
+			Use the default 5 min. and time to see if it restarts
+			in ~5min.
+
+	-file		valid/invalid/exist/not existing file names. Absolute
+			and relative path names for the log file name. Path
+			name to an aggregate with insufficient space.
+
+2. Use paths that heavily intersect. Use the -verbose option to see if the
+   already covered paths are culled out and printed.
+
+3. Use paths that upserver is not allowed to distribute and see of these are
+   omitted by upclient.
+
+4. Run multiple clients at a single upserver with small -time value and see if
+   things go ok.
+
+5. Kill the upserver and restart it and see if upclient can restore connection.
+
+6. Kill the upclients and see if server deadlocks.
+
+7. Run upserver and upclient for a long time to detect resource exhaustion.
+
+8. Run upserver with a directory and upclient with a directory/file and see
+   if upclient gets the file. Run upserver with a directory/file and upclient
+   with directory and see if it fails.
+
+  

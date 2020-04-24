@@ -1,0 +1,143 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: id_base.idl,v $
+ * Revision 1.1.6.2  1996/03/09  23:27:52  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:19  marty]
+ *
+ * Revision 1.1.6.1  1995/12/08  17:31:20  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:54:54  root]
+ * 
+ * Revision 1.1.4.1  1994/01/28  23:10:44  burati
+ * 	Delegation/EPAC changes (dlg_bl1)
+ * 	[1994/01/18  20:52:05  burati]
+ * 
+ * Revision 1.1.2.2  1992/12/29  13:29:11  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:16:38  zeliff]
+ * 
+ * Revision 1.1  1992/01/19  14:54:52  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+
+/*
+** Copyright (c) Hewlett-Packard Company 1991, 1993
+** Unpublished work. All Rights Reserved.
+**
+*/
+/* Identity base type definitions
+** 
+*/
+
+[
+    uuid(47EAABA3-3000-0000-0D00-01DC6C000000)
+]
+
+interface sec_id_base {
+
+    import "dce/nbase.idl";
+
+    /*  s e c _ i d _ t
+     *
+     *  A sec_id_t is the basic unit for identifying principals or groups etc.
+     *  It contains the uuid (object handle for the identity) and an optional
+     *  printstring name.
+     *
+     *  This datatype requires a destructor function since the printstring
+     *  name is dynamically allocated.  Generally this datatype is embedded
+     *  in other datatypes (like acl's) which have their own destructor which
+     *  will release the printstring storage as well.
+     */
+    typedef struct {
+        uuid_t              uuid;
+        [ string,ptr ] char *name;
+    } sec_id_t;
+
+    /* s e c _ i d _ f o r e i g n _ t
+     *
+     *  A foreign id (sec_id_foreign_t) is an identity from a foreign realm.
+     *  It contains a sec_id_t for the foreign user or group and a sec_id_t
+     *  for the foreign realm.
+     */
+    typedef struct {
+        sec_id_t            id;
+        sec_id_t            realm;
+    } sec_id_foreign_t;
+
+    /* Set of groups all associated with the same foreign cell */
+    typedef struct {
+        sec_id_t realm;
+        unsigned16 num_groups;
+        [size_is(num_groups), ptr]
+            sec_id_t *groups;
+    } sec_id_foreign_groupset_t;
+
+    /* s e c _ i d _ p a c _ f o r m a t _ t
+     * 
+     *  A format label to indicate which PAC format is being used.
+     */
+    typedef enum {
+        sec_id_pac_format_v1
+    } sec_id_pac_format_t;
+
+    /* s e c _ i d _ p a c _ t      (sec_id_pac_format_v1)
+     * 
+     *  A privilege attribute certificate contains the principal's identity
+     *  along with the current group and concurrent group set.  The pac is
+     *  generally not directly visible to applications.  It is normally included
+     *  in an authentication ticket where it appears as a sealed certificate.
+     *  Anticipating future systems that wish to extend the PAC structure, we
+     *  include a format label (which takes the value sec_id_pac_format_t)
+     *  and we also add version specific encodings of the type.  Applications
+     *  that wish to provide persistent storage of a PAC should
+     *  use the version specific type name, applications that wish the latest
+     *  version should use the simple sec_id_pac_t generic type name.
+     *
+     *  The pac contains an "authenticated" field which when set indicates that
+     *  the certificate was obtained from an authenticated source.  When unset
+     *  the certificate should not be trusted.  (The field is unset - false -
+     *  when it is obtained from the rpc_auth layer and the "assert_id" mode
+     *  was selected.  This indicates that no authentication protocol was
+     *  actually used in the rpc, the identity was simply transmitted from the
+     *  caller to the callee.  If an authentication protocol was used, then
+     *  the flag is set to true)
+     */
+    typedef struct {
+        sec_id_pac_format_t pac_type;
+        boolean32           authenticated;
+        sec_id_t            realm;
+        sec_id_t            principal;
+        sec_id_t            group;
+        unsigned16          num_groups;
+        unsigned16          num_foreign_groups;
+        [size_is(num_groups), ptr]
+            sec_id_t        *groups;
+        [size_is(num_foreign_groups), ptr]
+            sec_id_foreign_t *foreign_groups;
+    } sec_id_pac_t, sec_id_pac_format_v1_t;
+
+    /* s e c _ i d _ p i c k l e d _ p a c _ t
+     * 
+     *  An pickled privilege attribute certificate is a labeled pac.  It
+     *  contains an ndr_format_t label which describes the pickle format.
+     *  Generally a pickled pac occurs in an authentication ticket where
+     *  the data is also encrypted.
+     */
+    typedef struct {
+        ndr_format_t        format_label;
+        unsigned32          num_bytes;
+        [size_is(num_bytes)]
+            byte            pickled_data[];
+    } sec_id_pickled_pac_t;    
+
+}

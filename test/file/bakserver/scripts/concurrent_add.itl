@@ -1,0 +1,105 @@
+
+echo Test concurrent  additions and deletions
+
+* define boundary conditions
+set numdumps int 5		* Number of dumps
+set numtapes int 4 		* Number of tapes
+set numfilesets int 2 		* Number of filesets per tape
+set DUMPID int 5000
+set DUMPINCR int 100
+
+* define variables
+set startdumpid int $DUMPID
+set dumpincr int $DUMPINCR
+set maxdumpid ($startdumpid  + $dumpincr * $numdumps - 1)
+
+set tapeset fs_bakTapeSet 11 "olorin" "%s" 0 1 1 1 2 3 4
+set principal fs_bakPrincipal "cell_admin" " " " " 0 1 2 3 4 
+
+* define a function for dumping
+
+set addtodb func 1 did int ENDFUNC
+
+set dumpid local int $did
+
+set dumpentry local fs_bakDumpEntry $dumpid 0 1 0 test /full ("test.full." + $dumpid)  "" "" 1 $tapeset $principal 1 2 3 4
+
+set tapecount local int 0 
+set fscount local int 0
+
+* Delete old dump, to prevent failure 
+
+echo Deleting $dumpid 
+verifyStatus false
+bakDeleteDump $hand $dumpid
+verifyStatus true
+
+echo Create Dump $dumpid
+
+bakCreateDump $hand dumpentry
+
+repeat
+* set tape entry
+
+set tapeentry  local fs_bakTapeEntry ("test.full." +$tapecount) 0   "" ""  200 10 12 1 1 $tapecount 1 1 $dumpid  1 2 3 4
+set new local 0 
+* Issue a use tape 
+
+bakUseTape $hand $tapeentry $new
+set tapeentry  local fs_bakTapeEntry ("test.full." +$tapecount) $BUDB_TAPE_BEINGWRITTEN  "" ""  200 10 12 1 1 $tapecount 1 1 $dumpid  1 2 3 4
+set fscount local 0 
+* Use tape done, now add volume 
+repeat 
+set volentry local fs_bakVolumeEntry ("usr.lucifer." + $fscount)  0 1 1000  "olorin" 1 1 12 "" "" 1 200 1000 $dumpid ("test.full." +$tapecount) 1  2 3 4
+
+bakAddvolume $hand $volentry
+* increment filesets
+set fscount ($fscount + 1)
+while ($fscount < $numfilesets)  
+* increment tape count
+* show tapeentry
+* bakFinishTape $hand $tapeentry
+
+set tapecount ($tapecount + 1)
+while ($tapecount < $numtapes)
+
+* Now finish dump 
+
+
+
+ENDFUNC
+
+echo connect to the bakserver
+
+bakServerConnect init hand
+
+coLoop dmpid $startdumpid $dumpincr $maxdumpid
+exec addtodb $dmpid
+endloop
+echo Finished Adding. Now verify
+
+set status int 0
+set orphans int 0 
+set host int 0 
+
+bakDbVerify $hand status orphans host
+
+if ($status == 1) {
+	echo Insertion Test Failed : Database cannot be verified
+	} else {
+	echo Insertion Test Succeeded : Database verified
+	}
+
+echo Testing Deletion
+
+coLoop dmpid $startdumpid $dumpincr $maxdumpid
+bakDeleteDump $hand $dmpid
+endloop
+
+bakDbVerify $hand status orphans host
+
+if ($status == 1) {
+	echo Deletion Test Failed : Database cannot be verified
+	} else {
+	echo Deletion Test Succeeded : Database verified
+	}

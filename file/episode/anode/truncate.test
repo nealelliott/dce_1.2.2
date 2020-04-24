@@ -1,0 +1,130 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: truncate.test,v $
+# Revision 1.1.12.1  1996/10/02  17:19:38  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:29:07  damon]
+#
+# Revision 1.1.6.2  1994/06/09  13:59:15  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:34:33  annie]
+# 
+# Revision 1.1.6.1  1994/02/04  20:12:18  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:09:45  devsrc]
+# 
+# Revision 1.1.4.1  1994/01/28  20:43:38  annie
+# 	expand OSF copyright
+# 	[1994/01/28  20:42:13  annie]
+# 
+# 	expand OSF copyright
+# 
+# Revision 1.1.2.2  1993/01/28  16:41:48  shl
+# 	Transarc delta: ota-ot5926-AFS-quota 1.7
+# 	  Selected comments:
+# 	    Motivation:
+# 	    This delta augments Episode to maintain two types of size
+# 	    information about filesets and their constituent anodes.  Further,
+# 	    independent limits are omposed for each size measures.  The two
+# 	    measures are called allocated and visible.  The first matches the
+# 	    old semantics and counts fragments actually allocated to the anode
+# 	    or fileset.  The second (new) measure counts fragments visible in an
+# 	    anode or fileset.  The principle difference appears when COW is
+# 	    being used.  A freshly cloned anode will have zero allocated size
+# 	    but visible size which is the same as that for its backing anode.
+# 	    Similarly deleting a large file which was just clones will not
+# 	    reduce the allocated usage of the containing fileset but will return
+# 	    the expected amount of space to the visible usage, even if not
+# 	    blocks were actually freed in the underlying aggregate.
+# 	    Details of the implementation strategy are in:
+# 	    ~ota/doc/episode/FilesetQuota.text.
+# 	    Status:
+# 	    This delta is restricted to Episode only changes.  The corresponding
+# 	    changes in the fileset layers (including ftutil, ftserver, and the
+# 	    fts command, not to mention the doc changes) are in other OTs and
+# 	    deltas.
+# 	    Run above script in aggregates of 1K/1K, 8K/1K and 64K/1K.  Best with VM
+# 	    turned on.
+# 	    Introduced a bug in recloning an already recloned fragmented fileset.
+# 	    This was exposed by the fts tests.
+# 	    Fix several problems that turned up when running the fts tests.
+# 	    All_tests was failing on multi-block-frag.int.test.  The cause was a
+# 	    confusion of the calling conventions of MoveUnblockedAnodes; it can be
+# 	    called with the backing container BLOCKED, with the visible field not
+# 	    yet updated.
+# 	    A typo augmented by liberal cut-and-paste caused several volume quota
+# 	    updates to be done with a transaction id of zero (and therefore not
+# 	    logged).  This lead to errors after recovery.
+# 	    Found several salvage problems while tracking down another problem.  But
+# 	    since the afflicted code had been modified in this delta, I thought it
+# 	    would be reduce the risk of merge conflicts to make the change as part
+# 	    of this delta.
+# 	    Changing the IsAnodeAllEmpty predicate to use the visible field is a
+# 	    great efficiency win but the salvager gets really unhappy when it tries
+# 	    to read in directories with a zero visible field (i.e. running on
+# 	    -verify on an old aggregate).
+# 	    For now, for upward compatibility, go back to the old scheme.
+# 	[1993/01/27  17:08:58  shl]
+# 
+# $EndLog$
+# /* Copyright (C) 1992 Transarc Corporation - All rights reserved */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/truncate.test,v 1.1.12.1 1996/10/02 17:19:38 damon Exp $
+
+truncate 1
+modify_afsdb anode on 31		# turn on code block counting
+
+open_device 1 1024 1024 1000
+create_aggregate
+create_vol foo 0,,0 1000
+create_file deep_and_wide
+create_file log_deep_and_wide
+
+fork truncate.int.test
+wait
+# sizes empirically determined
+open_file deep_and_wide
+get_info z=232
+open_file log_deep_and_wide
+get_info z=36
+check_device
+delete_volume
+
+open_device -1
+open_device 1 8192 1024 300
+set_vm "" 8192
+create_aggregate
+create_vol foo 0,,0 8000
+create_file deep_and_wide
+create_file log_deep_and_wide
+
+fork truncate.int.test
+wait
+open_file deep_and_wide
+get_info z=1336
+open_file log_deep_and_wide
+get_info z=72
+check_device
+delete_volume
+
+open_device -1
+open_device 1 65536 1024 200
+create_aggregate
+create_vol foo 0,,0 64000
+create_file deep_and_wide
+create_file log_deep_and_wide
+
+fork truncate.int.test
+wait
+open_file deep_and_wide
+get_info z=6144
+open_file log_deep_and_wide
+get_info z=320
+check_device
+delete_volume
+
+end

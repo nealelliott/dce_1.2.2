@@ -1,0 +1,891 @@
+#! /afs/tr/proj/tools/bin/perl 
+
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: checkaggr,v $
+# Revision 1.1.10.1  1996/10/17  18:33:58  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:56:52  damon]
+#
+# Revision 1.1.2.3  1993/01/11  18:36:39  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:20:25  htf]
+# 
+# Revision 1.1.2.2  1992/11/19  13:35:39  jaffe
+# 	New File
+# 	[1992/11/18  16:43:47  jaffe]
+# 
+# $EndLog$
+
+#
+# Copyright (C) 1992 Transarc Corporation - All rights reserved
+# 
+
+# 
+# Checkaggr -  a generic aggregate verification tool.
+#
+# Description
+#
+#   This tool can freeze an aggregate, copy the aggregate into another
+#   device/file, recover/salvage/verify it. Also it can execute a supplied
+#   program after recover/salvage and can unfreeze the aggregate.
+#
+# Assumptions   
+#
+#   Path setting should be able to access asdb, salvage, dd,
+#   metamucil, scp.
+#
+# Interface arguments
+#
+#   [   -log    <log file name> ]   
+#   [   -srcAggr    <source aggregate name> ]  
+#   [   -backupAggr <backup aggregate name> ]
+#   [   -copyAggr   <copy aggregate name>   ]
+#   
+#   [   -freezeOnly     ]
+#   [   -freezeAsync    ] - do not wait for aggregate to be frozen
+#                           If this option is specified, -freezeOnly also
+#                           should be. 
+#   [   -unfreezeOnly   ]
+#   [   -leaveFrozen    ]
+#   [   -noRecovery     ]
+#   [   -noSalvage      ]   
+#
+#   [   -numIOBeforeFreeze <number of I/Os allowed before aggregate freezes> ] 
+#   [   -postRecoveryVerifyCmd  <command>  ]
+#
+#   [   -postSalvageVerifyCmd   <command>  ]
+#
+#   [   -badAggrDir <pathname>  ]
+#   [   -badAggrNamePrefix  <string> ]
+#   [   -saveBadAggrUserData ]
+#
+#   [   -help   ]
+#
+#
+# Global variables
+#   $debug                              Debug mode indicator 
+#
+#   $logName                            Log file path name
+#
+#   $AggrSrc                            Main aggregate file name
+#   $AggrSrcPathName                    Main aggregate path name
+#   $AggrBackup                         Backup aggregate file name
+#   $AggrBackupPathName                 Backup aggregate path name
+#   $AggrCopy                           Copy aggregate file name
+#   $AggrCopyPathName                   Copy aggregate path name
+#
+#   $FreezeOnly                         Freeze the main aggregate and return
+#   $FreezeAsync                        Do not wait for freeze of main
+#                                       aggregate to complete 
+#   $IOCountBeforeFreeze                Number of I/Os allowed before
+#                                       main aggregate is frozed  
+#   $UnfreezeOnly                       Unfreeze the main aggregate
+#                                       and return
+#   $LeaveFrozen                        Do not unfreeze the main
+#                                       aggregate after running this tool
+#   $NoRecovery                         Do not recover the copy aggregate
+#   $NoSalvage                          Do not salvage the copy aggregate
+#
+#   $PostRecoveryVerifyCmd              Driver's verifier to execute
+#                                       on recovery of copy aggregate
+#
+#   $PostSalvageVerifyCmd               Driver's verifier to execute
+#                                       on salvage of copy aggregate
+#
+#   $BadAggrDirPathName					Directory to store bad aggregates
+#   $BadAggrNamePrefix					Driver supplied prefix component of 
+#					            		filename storing bad aggregates
+#   $BadAggrNameDefaultPrefix			Default prefix component of 
+#										filename storing bad aggregates
+#   $SaveBadAggrUserData				Save aggregates with user data	
+#
+#
+#   @flag                               Array to indicate if the
+#                                       switch is an option or a flag.
+#                                       If 1 -> flag, else option
+#                                               
+#   %flag2var                           Associative array, 
+#                                       key = flag switch name, 
+#                                       value = corresponding variable name
+#   %var2flag                           Associative array, 
+#                                       key = variable name, 
+#                                       value= corresponding flag switch name 
+#   %option2var                         Associative array, 
+#                                       key = option switch name, 
+#                                       value = corresponding variable name
+#   %var2option                         Associative array, 
+#                                       key = variable name, 
+#                                       value=corresponding option switch name 
+#   @XOR                                2D array holding pairs of
+#                                       incompatible switches
+#   @AND                                2D array holding the pairs of
+#                                       switches, if the first switch
+#                                       in the pair is specified, the
+#                                       second must also be specified.
+#  
+
+# Debug variable. Set this to zero to prevent tool debug messages.
+$debug=0;
+
+print "Number of arguments are $#ARGV \n" if $debug;
+
+# Save stderr file handle and Unbuffered stdout and stder
+open(CONSOLE, ">&STDERR");
+select(STDERR); $|=1;
+select(STDOUT); $|=1;
+
+$datetime=sprintf("%s.%s",
+                  join('-',(localtime())[5,4,3]),
+                  join(':',(localtime())[2,1])
+                  );					
+
+#
+# Handle -log switch if specified. Needed here to avoid
+# bootstrapping problem.
+#
+@args=@ARGV;
+&processLogSwitch;
+&logStartMsg(@args);
+
+#
+# Command parser initialisation 
+#
+&initCmdParser;
+
+#
+# Parse command line arguments.
+#
+&parseCmd;
+
+#
+# Handle -help  
+#
+&handleHelp;
+
+#
+# Defaults Initialisation
+#
+$AggrSrc="epia" if !defined($AggrSrc);
+$AggrBackup="epib" if !defined($AggrBackup);
+$AggrCopy="epic" if !defined($AggrCopy);
+
+#
+# Setup $AggrXXXPathName to aggregate device pathname
+# and $AggrXXX to aggregate device filename (last pathname component) 
+#
+&setupAllAggrNames;
+
+#
+# Check for unique aggregates
+#
+&aggrUniquenessCheck;
+
+#
+# Main code
+#
+
+if ($FreezeOnly) {
+    &freezeAggr($AggrSrc);
+    &getIOStatusAggr($AggrSrc);
+    &log("completed");
+    &closeLog;
+    exit 0;
+}
+
+if ($UnfreezeOnly) {
+    &unfreezeAggr($AggrSrc);    
+    &getIOStatusAggr($AggrSrc);
+    &log("completed");
+    &closeLog;
+    exit 0;
+}
+
+
+#
+# Handle dir to store bad aggregates
+#
+&setupBadAggrHandling;
+
+# The default behaviour, with option handling as necessary.
+
+&freezeAggr($AggrSrc);
+&getIOStatusAggr($AggrSrc);
+
+# create copy and backup of aggregate
+&copyAggr($AggrSrcPathName,$AggrBackupPathName);
+&copyAggr($AggrSrcPathName,$AggrCopyPathName);
+
+# check to see if the aggregate is inconsistent initially. 
+# this may be a red herring. 
+&verifyAggrConsistency($AggrCopy);
+
+### handle driver's post recovery verification test
+if ( ! $NoRecovery ) {
+    &recoverAggr($AggrCopyPathName);
+    if ($PostRecoveryVerifyCmd) { 
+        local($PostRecoveryBadAggrNameSuffix) = ".failedPostRecoveryDriverVerify"
+        &log("execute driver's verification test on aggregate $AggrCopy after recovery"); 
+        &verifyAggr($AggrCopyPathName,
+                    $PostRecoveryBadAggrNameSuffix,
+                    $PostRecoveryVerifyCmd,
+                   );
+    }
+}
+
+# handle driver's post recovery verification test
+if ( !$NoSalvage ){
+	$failedVerification=&verifyAggrConsistency($AggrCopy);
+	if ($failedVerification) {
+	    &salvageAggr($AggrCopyPathName);
+	    if ($PostSalvageVerifyCmd) { 
+	        local($PostSalvageBadAggrNameSuffix) = ".failedPostSalvageDriverVerify"
+	        &log("execute driver's verification test on aggregate $AggrCopy after salvage"); 
+	        &verifyAggr($AggrCopyPathName,
+	                    $PostSalvageBadAggrNameSuffix,
+	                    $PostSalvageVerifyCmd,
+	                    );
+	    }
+	} else {
+		&log("Skiping salvage phase as aggregate verifies ok");
+	}
+}
+
+
+
+# handle -leaveFrozen switch
+if ( ! $LeaveFrozen ) {
+    &unfreezeAggr($AggrSrc);
+}
+
+# get final I/O freeze status of an aggregate
+&getIOStatusAggr($AggrSrc);
+
+# finish up
+&finishUp;
+
+exit($exitval);
+
+############################################################################
+
+#
+# Subroutine definitions
+#
+
+#
+# Command parser subroutines
+#
+
+sub createFlag {
+    local($flag,$var)=@_;
+    $flag{$flag}=1;
+    $var2flag{$var}=$flag;
+    $flag2var{$flag}=$var;
+}
+
+sub createOption{
+    local($option,$var)=@_;
+    $flag{$option}=0;
+    $var2option{$var}=$option;
+    $option2var{$option}=$var;
+}
+
+sub enterXORSwitchPair {
+    local($sw1, $sw2)=@_;
+    push(@XOR,join(':',$sw1, $sw2));
+}
+
+sub enterANDSwitchPair {
+    local($sw1, $sw2)=@_;
+    push(@AND,join(':',$sw1, $sw2));
+}
+
+sub initCmdParser {
+    &createOption('-srcAggr','$AggrSrc');
+    &createOption('-backupAggr','$AggrBackup');
+    &createOption('-copyAggr','$AggrCopy');
+
+    &createFlag('-freezeOnly','$FreezeOnly');
+    &createFlag('-freezeAsync','$FreezeAsync');
+    &createFlag('-unfreezeOnly','$UnfreezeOnly');
+    &createFlag('-leaveFrozen','$LeaveFrozen');
+    &createFlag('-noRecovery','$NoRecovery');
+    &createFlag('-noSalvage','$NoSalvage');
+
+    &createOption('-numIOBeforeFreeze','$IOCountBeforeFreeze');
+    &createOption('-postRecoveryVerifyCmd','$PostRecoveryVerifyCmd');
+    &createOption('-postSalvageVerifyCmd','$PostSalvageVerifyCmd');
+    
+    &createOption('-badAggrDir','$BadAggrDirPathName');
+    &createOption('-badAggrNamePrefix','$BadAggrNamePrefix');
+    &createFlag('-saveBadAggrUserData','$SaveBadAggrUserData');
+    
+    &createFlag('-help','$Help');
+
+    # Check for switch compatiblity
+    &enterANDSwitchPair('-freezeAsync', '-freezeOnly');
+    &enterANDSwitchPair('-badAggrNamePrefix','-badAggrDir');
+    &enterANDSwitchPair('-saveBadAggrUserData','-badAggrDir');
+
+    &enterXORSwitchPair('-freezeAsync', '-unfreezeOnly');
+    &enterXORSwitchPair('-freezeAsync', '-leaveFrozen');
+    &enterXORSwitchPair('-freezeAsync', '-noRecovery');
+    &enterXORSwitchPair('-freezeAsync', '-noSalvage');
+    &enterXORSwitchPair('-freezeAsync', '-postRecoveryVerifyCmd');
+    &enterXORSwitchPair('-freezeAsync', '-postSalvageVerifyCmd');
+    &enterXORSwitchPair('-freezeAsync', '-badAggrDir');
+    &enterXORSwitchPair('-freezeAsync', '-saveBadAggrUserData');
+
+    &enterXORSwitchPair('-freezeOnly', '-unfreezeOnly');
+    &enterXORSwitchPair('-freezeOnly', '-leaveFrozen');
+    &enterXORSwitchPair('-freezeOnly', '-noRecovery');
+    &enterXORSwitchPair('-freezeOnly', '-noSalvage');
+    &enterXORSwitchPair('-freezeOnly', '-postRecoveryVerifyCmd');
+    &enterXORSwitchPair('-freezeOnly', '-postSalvageVerifyCmd');
+    &enterXORSwitchPair('-freezeOnly', '-badAggrDir');
+    &enterXORSwitchPair('-freezeOnly', '-saveBadAggrUserData');
+    
+    &enterXORSwitchPair('-unfreezeOnly', '-leaveFrozen');
+    &enterXORSwitchPair('-unfreezeOnly', '-noRecovery');
+    &enterXORSwitchPair('-unfreezeOnly', '-noSalvage');
+    &enterXORSwitchPair('-unfreezeOnly', '-numIOBeforeFreeze'); 
+    &enterXORSwitchPair('-unfreezeOnly', '-postRecoveryVerifyCmd');
+    &enterXORSwitchPair('-unfreezeOnly', '-postSalvageVerifyCmd');
+    &enterXORSwitchPair('-unfreezeOnly', '-badAggrDir');
+    &enterXORSwitchPair('-unfreezeOnly', '-badAggrNamePrefix');
+    &enterXORSwitchPair('-unfreezeOnly', '-saveBadAggrUserData');
+    
+    &enterXORSwitchPair('-noRecovery', '-postRecoveryVerifyCmd');
+    &enterXORSwitchPair('-noSalvage', '-postSalvageVerifyCmd');
+}
+
+sub findVar {
+    local($sw)=@_;
+    if ( $flag{$sw} ) {
+        return $flag2var{$sw};
+    } else {
+        return $option2var{$sw};
+    }
+}
+
+# parseOption(option)
+# Assumption - The argument for a switch will not have a leading dash "-"
+sub parseOption {
+    local($option)=@_; 
+    local($i,$var);
+    $var=$option2var{$option};
+
+    for ( $i=0; $i<=$#ARGV; $i++ ) {
+        if ( $ARGV[$i] eq $option ) {
+            &myDie("option \"$option\" needs argument", __FILE__, __LINE__) 
+                if !defined($ARGV[$i+1]) ;
+            eval("$var=\$ARGV[$i+1]"); 
+            if ( substr($var,0,1) eq "-") {
+                &myDie("option \"$option\" given a argument \"$var\" with a leading dash", __FILE__, __LINE__)
+            }
+     # Remove the processed option switch and its argument from the array
+            splice(@ARGV,$i,2);
+            last;
+        }
+    }
+}
+
+# parseFlag(flag)
+sub parseFlag {
+    local($flag)=@_;
+    local($i,$var);
+    $var=$flag2var{$flag};
+    for ( $i=0; $i<=$#ARGV; $i++ ) {
+        if ( $ARGV[$i] eq $flag ) {
+            eval("$var=1");
+            # Remove processed flag from the array.
+            splice(@ARGV,$i,1);
+            last;
+        }
+    }
+}
+
+sub completeParse {
+    local($i, $endArgs);
+    if ( $#ARGV >= 0 ) {
+        # error, after complete parsing the array should be empty
+        for($i=0; $i<=$#ARGV; $i++ ) {
+            $endArgs .= $ARGV[$i];
+        }
+        
+        &error("invalid command line arguments \" $endArgs\"");
+        &usage;
+        &myDie("", __FILE__, __LINE__);
+    }
+}
+
+# Check for switch compatibility
+sub checkSwitchCompatibility {
+    local ($pair,$sw1,$sw2,$var1,$var2);
+    foreach $pair (@XOR) {
+        ($sw1,$sw2)=split(':',$pair);
+        print "sw1 = $sw1, sw2 = $sw2 \n" if $debug;
+        $var1=&findVar($sw1);   
+        $var2=&findVar($sw2);   
+        print "var1 = $var1, var2 = $var2 \n" if $debug;
+        if ( eval("defined($var1)") & eval("defined($var2)") ) {
+            &myDie("cannot specify both \"$sw1\" and \"$sw2\"",
+                   __FILE__, __LINE__);
+        }
+    }
+}
+
+sub parseCmd {
+    local($option,$flag);
+    foreach $option (keys(%option2var)) {
+        &parseOption("$option");
+    }   
+    foreach $flag (keys(%flag2var)) {
+        &parseFlag("$flag");
+    } 
+    &completeParse;
+    &checkSwitchCompatibility;
+}
+
+#
+# Routines to setup aggregate filenames and pathnames
+#
+
+sub setupAllAggrNames {
+    &setupAggrNames(*AggrSrc,*AggrSrcPathName);
+    &setupAggrNames(*AggrBackup,*AggrBackupPathName);
+    &setupAggrNames(*AggrCopy,*AggrCopyPathName);
+}
+
+sub setupAggrNames {
+    local(*fileName,*pathName)=@_;
+    if ( $fileName =~ m#^/dev/(.*)# ) {
+        # Variable $1 holds the part matched within parens above
+        $pathName = $fileName;
+        $fileName = $1;
+    } else {
+        $pathName = "/dev/$fileName";
+    }
+}
+
+#
+# Debug routines
+#
+
+sub printAssocArray{
+    local(%array)=@_;
+    while ( ($k,$v)=each(%array)) {
+        print (" Key $k - Value $v \n");
+    }
+}
+
+# usage
+sub usage {
+    print CONSOLE "$0: is a aggregate verification tool. \n"; 
+    print CONSOLE "Switches are \n";
+    print CONSOLE "\t [ -log <log file name> ] \n";
+
+    print CONSOLE "\n";
+    print CONSOLE "\t [ -srcAggr <source aggregate name>    ] \n";  
+    print CONSOLE "\t [ -backupAggr <backup aggregate name> ] \n";
+    print CONSOLE "\t [ -copyAggr <copy aggregate name> ] \n";
+
+    print CONSOLE "\n";
+    print CONSOLE "\t [ -freezeOnly   ] \n";
+    print CONSOLE "\t [ -freezeAsync  ] \n";
+    print CONSOLE "\t [ -unfreezeOnly ] \n";
+    print CONSOLE "\t [ -leaveFrozen  ] \n";
+    print CONSOLE "\t [ -noRecovery   ] \n";
+    print CONSOLE "\t [ -noSalvage    ] \n";
+
+    print CONSOLE "\n";
+    print CONSOLE "\t [ -numIOBeforeFreeze <number of I/Os allowed before aggregate freezes> ] \n";
+
+    print CONSOLE "\n";	
+    print CONSOLE "\t [ -postRecoveryVerifyCmd <filename> ] \n";
+    print CONSOLE "\t [ -postSalvageVerifyCmd <filename> ] \n";
+
+    print CONSOLE "\n";
+    print CONSOLE "\t [ -badAggrDir <pathname>  ] \n";
+    print CONSOLE "\t [ -badAggrNamePrefix <string>    ] \n";
+    print CONSOLE "\t [ -saveBadAggrUserData    ] \n";
+
+    print CONSOLE "\n";
+    print CONSOLE "\t [ -help   ] \n";
+    print CONSOLE "\n";
+}
+
+sub handleHelp {
+    if ($Help) {
+        &usage;
+        exit 0;
+    }
+}
+#
+# Other subroutines
+#
+
+sub processLogSwitch {
+    $option="-log";
+    for ( $i=0; $i<=$#ARGV; $i++ ) {
+        if ( $ARGV[$i] eq $option ) {
+            &myDie("option \"$option\" needs argument", __FILE__, __LINE__) 
+                if !defined($ARGV[$i+1]) ;
+            $logName=$ARGV[$i+1];
+# Remove the processed log option switch and its argument from the array
+            splice(@ARGV,$i,2);
+            last;
+        }
+    }
+	if ( !$logName ) {
+	    $logName="/tmp/checkaggr.log.$datetime";
+        warn "[ $0: WARNING - No log file specified via \"-log\" switch] \n Assuming log file is $logName";
+    } else {
+		print "[ $0: log file is $logName ] \n";
+	}
+
+	open(LOGHANDLE,">>$logName") ||
+		&myDie("could not open log file $logName", __FILE__, __LINE, $!);
+	local($prevFileHandle);
+
+	# Force flush on each write to log.
+	# Compact code  
+	select( (select(LOGHANDLE), $|=1 )[0]);
+        
+	# Instead of above line, could also use the following equivalent code
+	#$prevFileHandle= select(LOGHANDLE);
+	#$| = 1;
+	#select($prevFileHandle);
+
+	close STDERR;
+	close STDOUT;
+	open(STDOUT,">&LOGHANDLE");
+	open(STDERR,">&STDOUT");
+	select(STDERR); $| = 1;  # unbuffered output
+	select(STDOUT); $| = 1;
+}
+
+sub closeLog {
+    if ( $logName ) {
+        close LOGHANDLE;
+    }
+}
+
+sub logStartMsg {
+    local(@args)=@_;
+    &log("=====================================================");	
+    &log("$0 starting at $datetime");
+    &log(sprintf("command line args are: %s ",join(' ',@args)));
+    &log("WARNING debug mode enabled") if $debug;  
+};
+
+sub aggrUniquenessCheck {
+# Check source aggregate, backup aggregate and copy aggregate are not same;
+
+    if ( $AggrSrc eq $AggrBackup) { 
+        &myDie("source aggregate \"$AggrSrc\" and backup aggregate \"$AggrBackup\" are same", __FILE__, __LINE);
+    } 
+    if ($AggrBackup eq $AggrCopy) { 
+        &myDie("backup aggregate \"$AggrBackup\" and copy aggregate \"$AggrCopy\" are same", __FILE__, __LINE);
+        }
+    if ( $AggrCopy eq $AggrSrc) {
+        &myDie("copy aggregate \"$AggrCopy\" and source aggregate y\"$AggrSrc\" are same", __FILE__, __LINE);
+    }
+}
+
+sub setupBadAggrHandling { 
+    # The default bad aggregate name prefix format is
+    # badAggr.year-month-day-hour-minute.
+#    local(@time)=localtime;
+
+    $BadAggrNameDefaultPrefix=sprintf("badAggr.%s.%s",
+                                     join('-',(localtime())[5,4,3]),
+                                     join(':',(localtime())[2,1])
+                                   );
+    # User Data Tag 
+    if ($SaveBadAggrUserData) {
+        $BadAggrNameSuffix1="withUserData";
+    } else { 
+        $BadAggrNameSuffix1="noUserData";
+    }
+
+    # Decide the pathname of the bad aggregates to which specific
+    # uniqifier suffix can be added.
+    if ( !$BadAggrDirPathName) {
+        # Choose default dir and issue any warnings necessary 
+        $BadAggrDirPathName="/tmp/badaggr";
+        &log("WARNING option \"-badAggrDir\" not specified. \n Using $BadAggrDirPathName to store bad aggregates");
+    }
+    
+   	#Ensure badAggrDir exists. If not make one.
+    if ( ! -d $BadAggrDirPathName ) {
+		&log("BadAggrDir $BadAggrDirPathName does not exist. Creating one");
+        mkdir($BadAggrDirPathName,0755)
+			|| &myDie(
+				"unable to create bad aggregate directory $BadAggrDirPathName",
+				 __FILE__,
+				 __LINE__,
+				 $!
+					);
+	}
+
+    # Directory to store bad aggregates specified
+    if ($BadAggrNamePrefix) {
+    	$BadAggrPathNamePrefix=
+		    "$BadAggrDirPathName/$BadAggrNamePrefix.$BadAggrNameSuffix1";
+    } else {
+		$BadAggrPathNamePrefix=
+			"$BadAggrDirPathName/$BadAggrNameDefaultPrefix.$BadAggrNameSuffix1";
+    }
+}
+
+sub freezeAggr {
+    local($Aggr) = @_;
+    if ($FreezeAsync) { 
+        if ($IOCountBeforeFreeze) {
+            &freezeAggrAsync($Aggr,$IOCountBeforeFreeze);   
+        } else {
+            &freezeAggrAsync($Aggr);    
+        }
+    } else {
+        if ($IOCountBeforeFreeze) {
+            &freezeAggrSync($Aggr,$IOCountBeforeFreeze);    
+        } else {
+            &freezeAggrSync($Aggr); 
+        }
+    }
+}
+
+# freezeAggrSync(Aggr,[IOCnt])
+sub freezeAggrSync {
+    local($Aggr, $IOCnt) = @_;
+    if ( $IOCnt ) {
+        &sys("asdb -f -w -c $IOCnt $Aggr");
+    } else { 
+        &sys("asdb -f -w $Aggr");
+    }
+}
+
+# freezeAggrAsync(Aggr,[IOCnt])
+sub freezeAggrAsync {
+    local($Aggr, $IOCnt) = @_;
+    if ( $IOCnt ) {
+        &sys("asdb -f -c $IOCnt $Aggr");
+    } else { 
+        &sys("asdb -f $Aggr");
+    }
+}
+
+# unfreezeAggr(Aggr)
+sub unfreezeAggr {
+    local($Aggr) = @_;
+    &sys("asdb -u $Aggr");
+}
+
+#getIOStatusAggr(aggr)
+sub getIOStatusAggr {
+    local($Aggr) = @_;
+    &sys("asdb -s $Aggr");
+}
+ 
+# recoverAggr(Aggr)
+# recover and verify
+sub recoverAggr {
+    local($Aggr) = @_;
+    local($result,$BadAggrDumpFile);
+    $result=&sys("salvage -recover -verify $Aggr");
+    if ( $result != 0  ) {
+        &error(" salvager verification test, after recovery on aggregate $Aggr failed");
+	if ($BadAggrDirPathName) {
+            $BadAggrDumpFile="$BadAggrPathNamePrefix.failedPostRecoveryVerify";
+            &processBadAggr($Aggr,$BadAggrDumpFile);
+        } else {
+		    &log(" cannot save bad aggregate as bad aggregate directory \" -badAggrDir \" not specified");
+       }
+    }
+}
+
+# salvageAggr(Aggr)
+# Salvage and verify, no recover, 
+sub salvageAggr {
+    local($Aggr) = @_;
+    local($result,$BadAggrDumpFile);
+    $result=&sys("salvage -norecover $Aggr");
+	if ( $result & 0x4 ) {
+		&log(" salvaging again as 0x4 bit returned by salvager");
+	    $result=&sys("salvage -norecover $Aggr");	
+	}
+    if ( $result != 0 && $result != 3 ) {
+        &error(" salvager verification test, after salvage on aggregate $Aggr failed");
+        if ($BadAggrDirPathName) {
+            $BadAggrDumpFile="$BadAggrPathNamePrefix.failedPostSalvageVerify";
+            &processBadAggr($Aggr,$BadAggrDumpFile);
+        } else {
+	    &log(" cannot save bad aggregate as bad aggregate directory \" -badAggrDir \" not specified");
+       }
+    }
+}
+
+# verifyAggrConsistency(Aggr) 
+# only verify, no recover, no salvage
+sub verifyAggrConsistency {
+    local($Aggr) = @_;
+    local($result);
+    $result=&sys("salvage -verify $Aggr");
+    if ($result != 0 ) {
+        &log(" salvager verification on aggregate $Aggr failed");
+    } 
+	return $result;
+}
+    
+#copyAggr(srcAggr, destAggr)
+sub copyAggr {
+    local($srcAggr, $destAggr) = @_;
+    &sys("dd if=$srcAggr of=$destAggr bs=1024k");
+}
+
+#verifyAggr(Aggr, BadAggrDumpFileSuffix, VerifyCmd)
+# executes aggregate verification script passed in from the driver.
+# expects aggregate device's complete pathname e.g. /dev/XXXX.
+sub verifyAggr {
+    local($Aggr,$BadAggrDumpFileSuffix,$VerifyCmd)=@_;
+    local($result,$BadAggrDumpFile);
+    &log("executing driver's verification test \"$VerifyCmd -aggr $Aggr \"");
+    $result=&sys("$VerifyCmd -aggr $Aggr");
+    if ($result != 0 ) {
+        &error(" driver's verification test on aggregate $Aggr failed");
+    	if ($BadAggrDirPathName) {
+ 			$BadAggrDumpFile="$BadAggrPathNamePrefix.$BadAggrDumpFileSuffix";
+            &processBadAggr($Aggr,$BadAggrDumpFile);
+		} else {
+		    &log(" cannot save bad aggregate as bad aggregate directory \" -badAggrDir \" not specified");
+		}
+	}
+}
+
+sub processBadAggr {
+    local($BadAggr,$BadAggrDumpFile)=@_;
+    local($result);
+    &log("dumping a compressed copy of the bad aggregate to $BadAggrDumpFile");
+    if ($SaveBadAggrUserData) {
+        &sys("dd if=$BadAggr | compress > $BadAggrDumpFile") && 
+            &myDie("unable to compress $BadAggr to $BadAggrDumpFile",
+                   __FILE__,__LINE__,$!
+                   );
+    } else {
+		$result=&sys("metamucil $BadAggr | scp - $BadAggrDumpFile");
+		if ($result) {
+			    &myDie("unable to copy bad aggregate $BadAggr to $BadAggrDumpFile",__FILE__,__LINE__);
+		}
+		$result=&sys("compress $BadAggrDumpFile");
+		if ($result) {
+		    &log("WARNING: unable to compress $BadAggrDumpFile");    
+		}
+    }
+}
+
+# sys(cmd)
+# return codes
+#    0 success
+#    1 non-zero exit
+#    2 killed by signal, no core file 
+#    3 killed by signal, core file
+#    4 command suspended
+#
+
+sub sys {
+    local(@args)=@_;    
+    local($result, $retValue);
+
+    &log(" execute \"@args\"");
+#    if ($logName) {
+#        $result=system("@args | tee -a $logName");
+#    } else {
+        $result=system("@args");        
+#    }
+
+    # Exit status handling
+
+    if ( $result & 0xFF ) {
+        if ( ($result & 0xFF) == 0x7F ) {
+	    &log("\"@args\" was suspended");
+            $retVal = -4;
+        } else {
+            if ($result & 0x80) {
+                &log("\"@args\" produced core file");
+                $retVal = -3;                        
+            } else {
+                $retVal = -2;                                        
+            }
+            &log(sprintf("\"@args\" killed by signal %d", 
+                         $result & 0x7F ));
+        }
+    } else {
+        $result >>= 8;
+        if ( $result ) {
+            &log(sprintf("\"@args\" exit with nonzero value %d",
+                         $result));
+            $retVal = $result;
+        } else {
+            &log("  success of \"@args\" "); 
+            $retVal = $result;
+        }
+    }
+    return $retVal;
+}
+
+# special &myDie function to allow logging
+# $err argument optional. If present indicates errno.
+sub myDie {
+    local($msg,$file,$line,$err)=@_;    
+    local($dieMsg);
+    if ($err) {
+        $dieMsg = sprintf("DIE in file %s, line %d, %s, errno %d",
+                          $file,$line,$msg,$err);
+    } else {
+        $dieMsg = sprintf("DIE in file %s, line %d, %s",
+                          $file,$line,$msg);
+    }
+    &closeLog;
+    die("[ $dieMsg ]\n");
+}
+
+# log(logfilehandle,message)
+sub log {
+    if ( $logName) {
+	print CONSOLE "[ $0: @_ ] \n";
+	print "[ $0: @_ ] \n";
+    } else {
+	print "[ $0: @_ ] \n";
+	print LOGHANDLE "[ $0: @_ ] \n";
+    }
+}
+
+sub error {
+    local($msg)=@_;
+    $error=1;
+    &log("  ERROR: $msg");
+}
+
+sub finishUp {
+  if ($error) {
+     &log("completed, with errors");
+	  $exitval=1;
+  } else {
+     &log("completed");
+     &closeLog;
+	 $exitval=0;
+  }
+}
+
+__END__
+
+# Emacs Variable settings.
+# Local Variables:
+# tab-width:4
+# End:

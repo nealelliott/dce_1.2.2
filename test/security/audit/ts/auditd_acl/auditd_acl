@@ -1,0 +1,119 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# (c) Copyright International Business Machines Corp. 1994, 1996
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+#
+#  03/14/94	Weisz 	Initial design.  
+
+#auditd_acl: test case for audit
+
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="auditd_acl01"
+
+    host_name=$(uname -n)
+
+#========================================================================
+
+startup() {
+#set -x
+
+
+	print "\nSTART DCE audit functional: auditd_acl; DATE: `date`"
+	tet_infoline "START DCE audit functional: ${TET_PNAME}; DATE: `date`"
+
+ cdscp delete object /.:/hosts/$host_name/audit-server
+
+# assumption is that auditd is not started
+# start audit daemon
+
+  auditd
+  sleep 10
+
+}
+
+#========================================================================
+
+auditd_acl01() {
+#set -x
+
+ print "\nSTART: auditd_acl01 started"
+ tet_infoline "START: auditd_acl01 started"
+
+# host_name=$(hostname -s)
+
+ print "\ncall acl_edit to list audit daemon's ACL"
+ tet_infoline "call acl_edit to list audit daemon's ACL"
+
+ acl_edit /.:/hosts/$host_name/audit-server -l > /tmp/auditd_acl.out
+
+ if (( $? == 0 ))
+ then
+   if (( $(grep -c 'self:crw' /tmp/auditd_acl.out) ))
+   then
+      if (( $(grep -c 'any_other:-r--' /tmp/auditd_acl.out) ))
+      then
+         FAIL=N
+         print "\nOK: ACL for audit daemon read successfuly"
+         tet_infoline "OK: ACL for audit daemon read successfuly"
+      else 
+         FAIL=Y
+         print "\nERROR: ACL for audit daemon not set properly"
+         tet_infoline "ERROR: ACL for audit daemon not set properly"
+      fi
+   else 
+      FAIL=Y
+      print "\nERROR: ACL for audit daemon not set properly"
+      tet_infoline "ERROR: ACL for audit daemon not set properly"
+   fi
+ else
+   acl_edit_rc=$?
+   print "\nERROR: acl_edit returns: $acl_edit_rc"
+   tet_infoline "ERROR: acl_edit returns: $acl_edit_rc"
+   FAIL=Y
+ fi
+
+ if [[ $FAIL = N ]]
+ then
+   tet_result PASS
+   print "\nPASS: auditd_acl01 passed"
+   tet_infoline "PASS: auditd_acl01 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: auditd_acl01 failed"
+   tet_infoline "ERROR: auditd_acl01 failed"
+ fi
+}
+
+
+#===================================================================
+# cleanup of DCE audit test                                                Ú
+
+cleanup() {
+
+# stop audit daemon 
+
+if (( $AUDITCP ))
+then
+  print "\ninvoking auditcp aud stop"
+  auditcp aud stop
+else
+  print "\ninvoking dcecp -c aud stop"
+  dcecp -c aud stop
+fi
+
+       rm /tmp/auditd_acl.out
+
+	print "\nEND DCE audit functional: auditd_acl; DATE: `date`"
+	tet_infoline "END DCE audit functional: ${TET_PNAME}; DATE: `date`"
+}
+
+#source tcm
+. $TET_ROOT/lib/ksh/tcm.ksh

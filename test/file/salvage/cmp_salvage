@@ -1,0 +1,153 @@
+#!/afs/tr/fs/dev/perl
+
+# canonicalize -- maps the specified line into a canonical form by modifying it
+#     in-place.
+#
+# RETURN CODES -- normally returns zero.  If -1 then caller should delete line
+#     entirely.
+
+sub canonicalize {
+    # This may help a little, but doesn't seem to make a big difference.
+#    study $_[0];
+
+    # punt quickly on most common lines from ReportError
+#    return 0 if ($_[0] =~ /^  /);
+
+    $_[0] =~ s///g;			# com_err puts these out
+    $_[0] =~ s=/\S+/(rvgaggr\.[0-9]+|epi-blake|sfile|\w+_salvage.aggr)=/tmp/aggr=;
+    $_[0] =~ s=in vol@0x[0-9a-f]+=in vol@0x0=;
+    # this msgs has been fixed
+    $_[0] =~ s=Repairing duplicate block reference at anode ([0-9a-f]+) \(volume [0-9a-f]+\)=Repairing duplicate block reference at anode \1 (volume 0x0)=;
+    # new recovery statistics
+    $_[0] =~ s=^\tElapsed time was \d+ ms=\tElapsed time was X ms=;
+    # afsl_Trace output: Note \043 == '#', \051 == ')'
+    $_[0] =~ s=\.c rev\. \d+\.\d+ \043\d+\)=.c rev. 0.0 \04300\051=;
+
+    # Perl on Sun and AIX differ
+    $_[0] =~ s=\b(0x)?0+\b=0=g;		# in treatment of 0 in %#x format
+    $_[0] =~ s=\b0x0+([0-9a-f])=0x\1=g;
+    $_[0] =~ s=/\S*/obj/(rios|sparc_solaris2|sparc_sol23|@sys)/=/SB-path/obj/<platform>/=;
+    $_[0] =~ s=at /\S+/(\w+) line \d+=at \1 line X=;
+
+    return 0;
+}
+
+$twohash = '##';
+$tenhash = '##########';
+
+sub more_ref {
+    $ref = <REF>;
+    if (!$ref) {
+	return 1;		# pretend we're pinned
+    }
+    return $ref =~ m/^$tenhash$/;
+}
+
+sub more_line {
+    $line = <NEW>;
+    if (!$line) {
+	return 1;		# pretend we're pinned
+    }
+    $number++;
+    return $line =~ m/^$tenhash$/;
+}
+
+sub next_group
+{
+    local ($source, $tmpfile, *locator, *bash) = @_;
+    $bash = -1;
+    $locator = 0;
+
+    open (TMP, ">$tmpfile") || die "Can't temp new: $!";
+    while (<$source>) {
+	if (!$locator && /^$twohash test ([^,]*)/) {
+	    $locator = "Running test $1 at line $.";
+	    $bash = $1;
+	}
+	elsif (!$locator && /^$twohash (Setting .*)/) {
+	    $locator = "$1 at line $.";
+	}
+	elsif (!$locator && /^$twohash ((copy|swap) [^ ]+ (\d+) [\d ]*)/) {
+	    $locator = "$1 at line $.";
+	    $bash = $3;
+	}
+	elsif (!$locator && /(Salvaging .*$|Verifying .*)$/) {
+	    $locator = "$1 at line $.";
+	}
+	elsif (/^$twohash bash [^ ]* ([0-9]+) /) {
+	    $bash = $1;
+	}
+	last if (/^$tenhash$/);
+	$delete = &canonicalize($_);
+	print TMP $_ if (!$delete);
+    }
+    close (TMP);
+}
+
+$diffs = 0;
+foreach $file (@ARGV) {
+    local ($file_reference) = $file . ".Z";
+    local ($code);
+    local ($new) = "/tmp/perl.$$.new";
+    local ($ref) = "/tmp/perl.$$.ref";
+    local ($newBash,$refBash) = (-1,-1); # bash values of output being compared
+
+    if (!open (NEW, "<$file")) {
+	print "File $file doesn't exist\n";
+	next;
+    }
+    if (! -e $file_reference) {
+	print "Reference file $file_reference doesn't exist\n";
+	next;
+    }
+    open (REF, "zcat $file_reference|") || die "Can't zcat ref: $!";
+    $show_file_name = 1;
+    $| = 1;				# so we interact well with "system"
+
+    local ($locator);		# position id
+    local ($dummy);
+
+    while (!(eof(NEW) && eof(REF))) {
+	## compare new and ref numerically or lexigraphically
+	$notsame = (($newBash <=> $refBash) || ($newBash cmp $refBash));
+	if ($notsame) {
+	    print "Trying to resync by advancing only ";
+	    if ($notsame < 0) {
+		print "NEW\n";
+		&next_group (NEW, $new, *locator, *newBash);
+	    } else {
+		print "REF\n";
+		&next_group (REF, $ref, *dummy, *refBash);
+	    }
+	} else {
+	    # just advance both normally
+	    &next_group (NEW, $new, *locator, *newBash);
+	    $line = $startLine;
+	    &next_group (REF, $ref, *dummy, *refBash);
+	}
+
+	if ($newBash == -1) {
+	    $newBash = $refBash;
+	} elsif ($refBash == -1) {
+	    $refBash = $newBash;
+	} elsif ($newBash != $refBash) {
+	    print "Diff may be out of sync new bash is $newBash but ref is bashing $refBash\n";
+	}
+	if (system("cmp -s $ref $new")) {
+	    print "Comparing uncompress($file_reference) with $file\n"
+		if ($show_file_name);
+	    $show_file_name = 0;
+	    if ($locator) {
+		print "While $locator\n";
+	    } elsif ($newBash >= 0) {
+		print "After bashing @ $newBash\n";
+	    }
+	    system ("diff $ref $new");
+	    print "\n";
+	    $diffs++;
+	}
+    }
+    unlink $new,$ref;
+
+}
+exit ($diffs != 0);

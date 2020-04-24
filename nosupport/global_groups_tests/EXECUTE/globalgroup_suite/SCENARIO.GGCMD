@@ -1,0 +1,385 @@
+Details for manipulating foreign principals by COMMAND's
+
+   `dcecp` and `rgy_edit' are modified in DCE 1.2.2
+    - `dcecp' allows not only `principal_name' but also
+     `/.../cell_name/principal_name' for token of `group' sub command.
+      for detail:
+        (a) `group add <group_name_list> -member <member_name_list>'
+        (b) `group remove <group_name_list> -member <member_name_list>'
+        (c) `group list <group_name_list>' [-simplename]
+
+          (note) If the `-simplename' option is given to the `group list'
+                sub-command on dcecp command, the operation will return
+                 the list of group names like following;
+
+                  dcecp> group list mygroup -simplename
+                  local_user1
+                  local_user2
+                  /.../remote_cell.mycompany.com/remote_user1
+
+    - `rgy_edit' support foreign principals as local group members.
+      for detail:
+        (a) `member <group_name> [-a member_list] [-r member_list]
+        (b) `view pgo_name -m'
+
+    We will plan to do the testing bellow (see ATTACH 1), and these tests will
+    be written as scripts for automatic testing.
+
+    Basic test plan of this term is:
+    - giving various cases of global name argument to each sub-command of
+      dcecp and rgy_edit.
+      The variety of cases are similar to the GlobalGroup API testing.
+    - verify if the exit value returned to the shell is correct.
+    - verify if the error messages, and the errorInfo variable also,
+      are correct.
+    - verify if Database is actually modified or not.
+      For checking Database's status, APIs sec_rgy_pgo_is_member() and
+      sec_rgy_pgo_group_lists() will be used.
+
+
+------------------------------ ATTACH 1 ------------------------------
+
+GLOBALGROUP TEST SCENARIO (COMMAND testing)
+
+1. Prerequisites
+
+    We need two DCE cells in this test.
+
+	cL	local cell (cell on the local host)
+	cR	remote cell (cell on the remote host)
+
+
+2. Test Scenario
+2.1 Setting up test condition
+
+    Create a group and an account into the local cell like bellow;
+
+	dcecp> group create gG
+	dcecp> group create gGo
+	dcecp> principal create pL
+	dcecp> account create pL -group none -organization none
+
+	- gG means a group object which will include local/remote principals
+	- gGo means other group object
+	- pL means a principal object which belongs to the local cell
+
+    Create a group and some accounts into the remote cell like bellow;
+
+	dcecp> group create gR
+	dcecp> principal create pR
+	dcecp> principal create pRl
+	dcecp> principal create pRs
+	dcecp> account create pR -group none -organization none
+	dcecp> account create pRl -group none -organization none
+	dcecp> account create pRs -group none -organization none
+
+	- gR means a group object which belongs to the remote cell
+	- pR means a principal object which belongs to the remote cell
+	- pRl means a principal object which belongs to the remote cell, and
+	  has a long enough principal name (maximal length of principal name)
+	- pRs means a principal object which belongs to the remote cell, and
+	  has a short enough principal name (minimal length of principal name)
+
+    (note)
+	In the testing scenario bellow, you will see the principal `pU' and
+	the group `gU'.  These objects will be used as UNKNOWN objects, so
+	we DON'T create these objects.
+
+    NOTICE:
+	At this time, these cells don't know each other; cannot see in the
+	name space.
+	Exporting/importing the name space, or authorizing each other will be
+	executed in the test scripts.
+
+
+2.2 Details for testing
+
+    The following shows how and what we verify in our globalgroup testing.
+
+	- The first column in the following means an operation in the scenario;
+	  the abbreviations bellow show the operation for dcecp or rgy_edit.
+
+	  group_add	dcecp -c group add <group> -member <principal>
+	  group_remove	dcecp -c group remove <group> -member <principal>
+	  group_list	dcecp -c group list <group>
+	  principal_show	dcecp -c principal show <principal>
+
+	  rgy_add	rgy_edit> member <group> -a <principal>
+	  rgy_remove	rgy_edit> member <group> -r <principal>
+	  rgy_view	rgy_edit> view <group|principal> -m
+
+	- The second column, S or F listed, means a exit value from the
+	  command to be verified; S requires to succeed and F requires to fail.
+
+	- The third column shows what we should verify in the operation.
+	  In the failure case testing, it is associated with error messages in
+	  each command.
+
+(1) Login to local cell and verify the initial condition
+
+	dce_login cell_admin	S	login to cell /.../cL
+	group_list(gG)		S	(no entries)
+	rgy_view(gG)		S	(no entries)
+
+(2) Verify adding/deleting local principal
+
+	group_add(gG, pL)	S	add principal as a member
+	group_list(gG)		S	principal exist as a member
+	group_add(gG, pL)	F	principal ALREADY exist as a member
+	group_list(gG)		S	principal exist as a member
+	group_remove(gG, pL)	S	delete from membership list
+	group_list(gG)		S	(no entries)
+	group_remove(gG, pL)	F	principal is NOT registered
+	group_list(gG)		S	(no entries)
+
+	rgy_add(gG, pL)		S	add principal as a member
+	rgy_view(gG)		S	principal exist as a member
+	rgy_add(gG, pL)		F	principal ALREADY exist as a member
+	rgy_view(gG)		S	principal exist as a member
+	rgy_remove(gG, pL)	S	delete from membership list
+	rgy_view(gG)		S	(no entries)
+	rgy_remove(gG, pL)	F	principal is NOT registered
+	rgy_view(gG)		S	(no entries)
+
+(3) Verify adding/deleting local principal (with fully qualified name format)
+
+	group_add(gG, /.../cL/pL)	S	add principal as a member
+	group_list(gG)			S	principal exist as a member
+	group_add(gG, /.../cL/pL)	F	principal ALREADY exist as a member
+	group_list(gG)			S	principal exist as a member
+	group_remove(gG, /.../cL/pL)	S	delete from membership list
+	group_list(gG)			S	(no entries)
+	group_remove(gG, /.../cL/pL)	F	principal is NOT registered
+	group_list(gG)			S	(no entries)
+
+	rgy_add(gG, /.../cL/pL)		S	add principal as a member
+	rgy_view(gG)			S	principal exist as a member
+	rgy_add(gG, /.../cL/pL)		F	principal ALREADY exist as a member
+	rgy_view(gG)			S	principal exist as a member
+	rgy_remove(gG, /.../cL/pL)	S	delete from membership list
+	rgy_view(gG)			S	(no entries)
+	rgy_remove(gG, /.../cL/pL)	F	principal is NOT registered
+	rgy_view(gG)			S	(no entries)
+
+(4) Verify adding/deleting remote principal in the UNKNOWN cell
+
+    NOTICE:
+	At this time, these cells don't know each other; cannot see in the
+	name space.
+
+	group_add(gG, /.../cR/pR)	F	object not found
+	group_list(gG)			S	(no entries)
+	group_remove(gG, /.../cR/pR)	F	principal is NOT registered
+	group_list(gG)			S	(no entries)
+
+	rgy_add(gG, /.../cR/pR)		F	object not found
+	rgy_view(gG)			S	(no entries)
+	rgy_remove(gG, /.../cR/pR)	F	principal is NOT registered
+	rgy_view(gG)			S	(no entries)
+
+    - After these tests, enable to show each name space using
+      "dcecp cdscache create".
+      This operation is done automatically in the script.
+
+(5) Verify adding/deleting remote principal in the UNTRUSTED cell
+
+    NOTICE:
+	At this time, these cells are not authorized each other.
+
+	group_add(gG, /.../cR/pR)	F	not authorized
+	group_list(gG)			S	(no entries)
+	group_remove(gG, /.../cR/pR)	F	not authorized
+	group_list(gG)			S	(no entries)
+
+	rgy_add(gG, /.../cR/pR)		F	not authorized
+	rgy_view(gG)			S	(no entries)
+	rgy_remove(gG, /.../cR/pR)	F	not authorized
+	rgy_view(gG)			S	(no entries)
+
+    - After these tests, connect to remote cell using "dcecp registry connect".
+      This operation is done automatically in the script.
+
+(6) Verify adding/deleting UNKNOWN principal in the remote cell
+
+	group_add(gG, /.../cR/pU)	F	object not found
+	group_list(gG)			S	(no entries)
+	group_remove(gG, /.../cR/pU)	F	principal is NOT registered
+	group_list(gG)			S	(no entries)
+
+	rgy_add(gG, /.../cR/pU)		F	object not found
+	rgy_view(gG)			S	(no entries)
+	rgy_remove(gG, /.../cR/pU)	F	principal is NOT registered
+	rgy_view(gG)			S	(no entries)
+
+(7) Verify adding/deleting object which is NOT the principal in the remote cell
+
+	group_add(gG, /.../cR/gR)	F	object not found
+	group_list(gG)			S	(no entries)
+	group_remove(gG, /.../cR/gR)	F	principal is NOT registered
+	group_list(gG)			S	(no entries)
+
+	rgy_add(gG, /.../cR/gR)		F	object not found
+	rgy_view(gG)			S	(no entries)
+	rgy_remove(gG, /.../cR/gR)	F	principal is NOT registered
+	rgy_view(gG)			S	(no entries)
+
+(8) Verify adding/deleting remote principal
+
+	group_add(gG, /.../cR/pR)	S	add principal as a member
+	group_list(gG)			S	principal exist as a member
+	group_add(gG, /.../cR/pR)	F	principal ALREADY exist as a member
+	group_list(gG)			S	principal exist as a member
+	group_remove(gG, /.../cR/pR)	S	delete from membership list
+	group_list(gG)			S	(no entries)
+	group_remove(gG, /.../cR/pR)	F	principal is NOT registered
+	group_list(gG)			S	(no entries)
+
+	rgy_add(gG, /.../cR/pR)		S	add principal as a member
+	rgy_view(gG)			S	principal exist as a member
+	rgy_add(gG, /.../cR/pR)		F	principal ALREADY exist as a member
+	rgy_view(gG)			S	principal exist as a member
+	rgy_remove(gG, /.../cR/pR)	S	delete from membership list
+	rgy_view(gG)			S	(no entries)
+	rgy_remove(gG, /.../cR/pR)	F	principal is NOT registered
+	rgy_view(gG)			S	(no entries)
+
+(9) Variety of remote principal names
+
+	group_add(gG, /.../cR/pRs)	S	add principal as a member
+	group_list(gG)			S	principal exist as a member
+	principal_show(/.../cR/pRs)	S	globalgroup is in the list
+	group_remove(gG, /.../cR/pRs)	S	delete from membership list
+	group_add(gG, /.../cR/pRl)	S	add principal as a member
+	group_list(gG)			S	principal exist as a member
+	principal_show(/.../cR/pRl)	S	globalgroup is in the list
+	group_remove(gG, /.../cR/pRl)	S	delete from membership list
+
+	rgy_add(gG, /.../cR/pRs)	S	add principal as a member
+	rgy_view(gG)			S	principal exist as a member
+	rgy_view(/.../cR/pRs)		S	globalgroup is in the list
+	rgy_remove(gG, /.../cR/pRs)	S	delete from membership list
+	rgy_add(gG, /.../cR/pRl)	S	add principal as a member
+	rgy_view(gG)			S	principal exist as a member
+	rgy_view(/.../cR/pRl)		S	globalgroup is in the list
+	rgy_remove(gG, /.../cR/pRl)	S	delete from membership list
+
+(10) Verify containing multiple members in the group membership list
+
+	group_add(gG, /.../cR/pRl pL /.../cR/pRs)	S	add principal as a member
+	group_list(gG)			S	principal exist as a member
+	group_remove(gG, /.../cR/pRl pL /.../cR/pRs)	S	delete from membership list
+	group_list(gG)			S	(no entries)
+
+	group_add(gG, /.../cR/pU pL /.../cR/pR)	F	object not found/add principal as a member
+	group_list(gG)			S	principal exist as a member
+	group_remove(gG, /.../cR/pU pL /.../cR/pR)	F	object not found/delete from membership list
+	group_list(gG)			S	(no entries)
+
+	group_add(gG, /.../cR/pR pL /.../cR/pR)	F	add principal as a member/principal ALREADY exist as a member
+	group_list(gG)			S	principal exist as a member
+	group_remove(gG, /.../cR/pR pL /.../cR/pR)	F	delete from membership list/principal is NOT registered
+	group_list(gG)			S	(no entries)
+
+	rgy_add(gG, /.../cR/pRl pL /.../cR/pRs)	S	add principal as a member
+	rgy_view(gG)			S	principal exist as a member
+	rgy_remove(gG, /.../cR/pRl pL /.../cR/pRs)	S	delete from membership list
+	rgy_view(gG)			S	(no entries)
+
+	rgy_add(gG, /.../cR/pU pL /.../cR/pR)	F	object not found/add principal as a member
+	rgy_view(gG)			S	principal exist as a member
+	rgy_remove(gG, /.../cR/pU pL /.../cR/pR)	F	object not found/delete from membership list
+	rgy_view(gG)			S	(no entries)
+
+	rgy_add(gG, /.../cR/pR pL /.../cR/pR)	F	add principal as a member/principal ALREADY exist as a member
+	rgy_view(gG)			S	principal exist as a member
+	rgy_remove(gG, /.../cR/pR pL /.../cR/pR)	F	delete from membership list/principal is NOT registered
+	rgy_view(gG)			S	(no entries)
+
+(11) Verify manipulating multiple groups in one operation
+
+	group_add(gG gGa, /.../cR/pR)	S	add principal as a member
+	group_list(gG gGa)		S	principal exist as a member
+	group_add(gG gGa, /.../cR/pRl pL /.../cR/pRs)	S	add principal as a member
+	group_list(gG gGa)		S	principal exist as a member
+	group_list(gG gGa) -simplename	S	principal exist as a member
+	group_remove(gG gGa, /.../cR/pR)	S	delete from membership list
+	group_list(gG gGa)		S	principal exist as a member
+	group_remove(gG gGa, /.../cR/pRl pL /.../cR/pRs)	S	delete from membership list
+	group_list(gG gGa)		S	(no entries)
+	group_list(gG gGa) -simplename	S	(no entries)
+
+	group_add(gU gGa, /.../cR/pR)	F	object not found/add principal as a member
+	group_list(gU gG)		F	object not found/principal exist as a member
+	group_remove(gU gGa, /.../cR/pR)	F	object not found/delete from membership list
+	group_list(gU gG)		F	object not found/(no entries)
+
+	group_add(gG gGa, /.../cR/pR)	F	add principal as a member/principal ALREADY exist as a member
+	group_list(gG gG)		S	principal exist as a member
+	group_remove(gG gGa, /.../cR/pR)	F	delete from membership list/principal is NOT registered
+	group_list(gG gG)		S	(no entries)
+
+(12) Verify sub effects in the membership operation
+
+	group_add(gG, pL)		S	add principal as a member
+	group_add(gG, /.../cR/pR)	S	add principal as a member
+
+	group_list(gG)			S	principal exist as a member
+	group_list(gG) -simplename	S	principal exist as a member
+	principal_show(pL)		S	globalgroup is in the list
+	principal_show(/.../cL/pL)	S	globalgroup is in the list
+	principal_show(/.../cR/pR)	S	globalgroup is in the list
+
+	rgy_view(gG)			S	principal exist as a member
+	rgy_view(pL)			S	globalgroup is in the list
+	rgy_view(/.../cL/pL)		S	globalgroup is in the list
+	rgy_view(/.../cR/pR)		S	globalgroup is in the list
+
+	exit from /.../cL		S	logout from /.../cL
+
+	dce_login /.../cR/cell_admin	S	login to cell /.../cR
+
+	group_list(/.../cL/gG)		S	principal exist as a member
+	group_list(/.../cL/gG) -simplename	S	principal exist as a member
+	principal_show(pR)		S	globalgroup is in the list
+	principal_show(/.../cR/pR)	S	globalgroup is in the list
+	principal_show(/.../cL/pL)	S	globalgroup is in the list
+
+	rgy_view(/.../cL/gG)		S	principal exist as a member
+	rgy_view(pR)			S	globalgroup is in the list
+	rgy_view(/.../cR/pR)		S	globalgroup is in the list
+	rgy_view(/.../cL/pL)		S	globalgroup is in the list
+
+	exit from /.../cR		S	logout from /.../cR
+
+	dce_login cell_admin		S	login to cell /.../cL
+
+	group_remove(gG, pL)		S	delete from membership list
+	group_remove(gG, /.../cR/pR)	S	delete from membership list
+
+	group_list(gG)			S	(no entries)
+	group_list(gG) -simplename	S	(no entries)
+	principal_show(pL)		S	(no entries)
+	principal_show(/.../cL/pL)	S	(no entries)
+	principal_show(/.../cR/pR)	S	(no entries)
+
+	rgy_view(gG)			S	(no entries)
+	rgy_view(pL)			S	(no entries)
+	rgy_view(/.../cL/pL)		S	(no entries)
+	rgy_view(/.../cR/pR)		S	(no entries)
+
+	exit from /.../cL		S	logout from /.../cL
+
+	dce_login /.../cR/cell_admin	S	login to cell /.../cR
+
+	group_list(/.../cL/gG)		S	(no entries)
+	group_list(/.../cL/gG) -simplename	S	(no entries)
+	principal_show(pL)		S	(no entries)
+	principal_show(/.../cR/pR)	S	(no entries)
+	principal_show(/.../cL/pL)	S	(no entries)
+
+	rgy_view(/.../cL/gG)		S	(no entries)
+	rgy_view(pL)			S	(no entries)
+	rgy_view(/.../cR/pR)		S	(no entries)
+	rgy_view(/.../cL/pL)		S	(no entries)
+
+	exit from /.../cR		S	logout from /.../cR

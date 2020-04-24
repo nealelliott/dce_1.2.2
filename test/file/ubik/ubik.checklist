@@ -1,0 +1,65 @@
+
+Ubik test coverage
+------------------
+
+Ubik is tested using the utst_server, utst_client and udebug binaries. The
+tests present setup the utst_server on all ubik server machines, and use the
+utst_client with { -get, -trunc, -inc, -qget, -mget, -minc, -incf } switches
+to make changes to the database. udebug is used to display the state of each
+utst_server.  Most of the necessary tasks can be completed using the
+utst_driver script, which will use 'bos' for most of its remote actions.
+If you want to do things by hand, then read the information in HANDTEST.
+
+utst_driver -init
+
+This configures the name space and security for utst_server, installs and
+runs the server.  After completing this stage, you could use bos to kill
+and disable the server and then start the server by hand and run various
+actions by hand.  You must be cell_admin to run this command.
+
+utst_driver -trunc|-inc|-qget|-get|-mget|-minc|-incf
+
+This runs the utst_client command with the various switches.  Run
+"utst_driver -info" or "utst_driver -proc" for more information.
+
+utst_driver -shut
+
+This will kill all of the processes started by "utst_driver -init" and
+will remove the entries from the DCE space (rpc groups, security, etc.)
+You must be cell_admin to run this command.
+
+utst_driver -status
+
+Run the 'udebug' command with one or more servers (running utst_server)
+specified as on the command line.
+
+
+New tests
+
+1. utst_server command line testing
+
+	-nsgroup	CDS group name	This should be setup beforehand
+					/.:/subsys/dce/dfs/utst should be the
+					default. Use valid/invalid/existing/
+					non-existing group names and check for
+					expected behavior. Setup CDS group
+					with empty/1/2/3 members.
+	-sleep				valid/invalid values for sleep time.
+
+2. utst_server running on 1, 2, 3 servers (in same cell). Use udebug on the
+   utst_server to figure out which is sync site and which server votes for 
+   which. Kill one server after another and use udebug to monitor the sync site
+   and votes. Restart the killed utst_server(s) and monitor the results again.
+   Measure time to reach quorum in each case.
+
+3. utst_client command line testing - same as utst_server.
+   Use -trunc, -try, -get, -inc, -mget repeatedly and check results.
+
+4. Run multiple utst_clients and do -mget (stress). While running multiple
+   clients, kill each utst_server and monitor results. Killing 2 servers out
+   of 3 should break quorum causing clients to return UNOQUORUM error.
+
+5. Try a 3 server configuration with IP addresses A, B and C (A < B < C).
+   Start server on C and then "utst_client -incf".  Wait 5 minutes.
+   Then start the servers on B and A.  After a few minutes, quorum should
+   be reached.

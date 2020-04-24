@@ -1,0 +1,127 @@
+/*
+ * @OSF_COPYRIGHT@
+ * Copyright (c) 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+
+/*
+ * HISTORY
+ * $Log: svcbin.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:11:21  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:28:45  marty]
+ *
+ * Revision 1.1.4.1  1995/12/08  21:38:03  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  18:09:57  root]
+ * 
+ * Revision 1.1.2.3  1994/08/31  14:24:17  bowe
+ * 	In svc_bin_data_t make progname be [string] (no "ref") [CR 11860]
+ * 	[1994/08/31  14:15:28  bowe]
+ * 
+ * Revision 1.1.2.2  1994/05/27  18:27:04  bowe
+ * 	Import utctypes.idl, not dce/utctypes.idl [CR 10797]
+ * 	[1994/05/27  18:17:02  bowe]
+ * 
+ * Revision 1.1.2.1  1994/05/26  18:51:44  bowe
+ * 	Initial checkin
+ * 	[1994/05/26  18:08:59  bowe]
+ * 
+ * $EndLog$
+ */
+
+/*
+ * IDL specification for encoding and decoding binary files.
+ */
+
+[
+    uuid(00135222-637f-1ddb-ba9e-0000c09ce054),
+    version(1),
+    pointer_default(ptr)
+]
+
+interface svcbin
+{
+
+/* Change back when top-level Makefile visits time (or time/common?)
+ * before dce/utils/svc in the export pass. */
+/*import "dce/utctypes.idl";*/
+import "utctypes.idl";
+
+typedef enum {
+    svc_bin_type_int,
+    svc_bin_type_long,
+    svc_bin_type_uint,
+    svc_bin_type_ulong,
+    svc_bin_type_string,
+    svc_bin_type_ptr,
+    svc_bin_type_double,
+    svc_bin_type_char,
+    svc_bin_type_bytes
+} svc_bin_type_e;
+
+typedef struct svc_bin_bytes_s_t {
+    unsigned32			size;
+    [ptr,size_is(size)] byte	*data;
+} svc_bin_bytes_t;
+
+typedef union svc_bin_value_u
+    switch (svc_bin_type_e bin_encoding)
+    tagged_union {
+    case svc_bin_type_int:
+	signed32		i;
+    case svc_bin_type_long:
+	signed32		l;
+    case svc_bin_type_uint:
+	unsigned32		ui;
+    case svc_bin_type_ulong:
+	unsigned32		ul;
+    case svc_bin_type_string:
+	[ptr,string] char	*s;
+    case svc_bin_type_ptr:
+	unsigned32		v;
+    case svc_bin_type_double:
+	double			d;
+    case svc_bin_type_char:
+	char			c;
+    case svc_bin_type_bytes:
+	svc_bin_bytes_t		bytes;
+} svc_bin_arg_t;
+
+typedef struct svc_bin_data_s_t {
+    /* prolog */
+    unsigned32			version;
+    utc_t			t;
+    unsigned32			attributes;
+    unsigned32			message_index;
+    unsigned32			thread_code;
+    [string] char		*argtypes;
+    [string] char		*fac_name;
+    [string] char		*format;
+    [string] char		*progname;
+    [string] char		*file;
+    unsigned32			line;
+
+    /* the real data */
+    unsigned32			count;
+    [ptr,size_is(count)]
+	svc_bin_arg_t		*args;
+} svc_bin_data_t;
+
+void dce_svc_bin_data_encode(
+    [in]	handle_t	h,
+    [in]	svc_bin_data_t	*data,	
+    [in,out]	error_status_t	*st
+);
+void dce_svc_bin_data_decode(
+    [in]	handle_t	h,
+    [in,out]	svc_bin_data_t	*data,	
+    [in,out]	error_status_t	*st
+);
+
+/* Note: a single [encode,decode] function would not work because of
+ * memory alignment problems.	*/
+
+}
+

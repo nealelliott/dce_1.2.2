@@ -1,0 +1,282 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: SCENARIO.GGACL,v $
+BINRevision 1.1.2.1  1996/10/16  14:06:50  arvind
+BIN	OSF DCE 1.2.2 Drop 4.5
+BIN
+# $EndLog$
+#
+
+Details for EPAC verification (ACL testing)
+
+    - test a foreign principal group ACL ability.  Details are in ATTACH 1.
+
+    We will plan to do the testing bellow (see ATTACH 1), and these tests will
+    be written as scripts for automatic testing.
+
+    Basic test plan of this term is:
+    - verify the access rights accrued from various ACL entries and various
+      group membership list
+    - verify the access rights accrued from some ACL entries to be matched
+    - verify to access from the remote account which has an alias name
+    - verify the access rights accrued from the group ACL entry which prohibits
+      from inclusion in a project list.
+    - verify to access the object which has an group ACL entry defined with
+      an alias.
+
+
+------------------------------ ATTACH 1 ------------------------------
+
+GLOBALGROUP TEST SCENARIO (ACL testing)
+
+1. Prerequisites
+
+    We need two DCE cells in this test.
+
+	cL	local cell (cell on the local host)
+	cR	remote cell (cell on the remote host)
+
+
+2. Test Scenario
+2.1 Setting up test condition
+
+    Create groups and an account into the local cell like bellow;
+
+	dcecp> group create gG
+	dcecp> group create gGa -gid nnn -alias
+	dcecp> group create gGnp -inprojlist no
+	dcecp> principal create pL
+	dcecp> account create pL -group none -organization none
+	dcecp> principal create pA
+
+	- gG means a group object which will include foreign principals
+	- gGa means a group object which is an alias to the group `gG'
+	- gGnp means the other group object which will include foreign
+	  principals, and is prohibited from inclusion in a project list
+	- pL means a principal object which belongs to the local cell
+	- pA means a principal object which is used for ACL testing
+
+    (note)
+	In the testing scenario bellow, you will see the principal `pA'.
+	This object will be used as the object to be accessed in the test.
+	The object will have various ACLs to be tested.
+
+    Create a group and two accounts into the remote cell like bellow;
+
+	dcecp> group create gR
+	dcecp> principal create pR
+	dcecp> principal create pRa -uid nnn -alias
+	dcecp> account create pR -group gR -organization none
+	dcecp> account create pRa -group gR -organization none
+
+	- gR means a group object which belongs to the remote cell
+	- pR means a principal object which belongs to the remote cell
+	- pRa means a principal object which is an alias to the principal `pR'.
+
+    NOTICE:
+	At this time, these cells don't know each other; cannot see the
+	name space.
+	Exporting/importing the name space, or authorizing each other will be
+	executed in the test scripts.
+
+
+2.2 Details for testing
+
+    The following shows how and what we verify in our globalgroup testing.
+
+	- The first column in the following means a operation in the scenario;
+	  the abbreviations bellow show the operation for dcecp.
+
+	  group_add	dcecp -c group add <group> -member <principal>
+	  group_remove	dcecp -c group remove <group> -member <principal>
+
+	  acl_add	dcecp -c acl modify <acl_name> -add <acl_entry>
+	  acl_remove	dcecp -c acl modify <acl_name> -remove <acl_entry>
+	  acl_show	dcecp -c acl show <acl_name>
+	  acl_check	dcecp -c acl check <acl_name>
+	  verify_show	dcecp -c principal show <principal>
+
+	- The second column, S or F listed, means a exit value from the
+	  command to be verified; S requires to succeed and F requires to fail.
+
+	- The third column shows what we should verify in the operation.
+	  In the failure case testing, it is associated with error messages in
+	  each command.
+
+(1) Login to local cell and verify the initial condition
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+
+    - After these tests, enable the cells to show each name space using
+      "dcecp cdscache create".
+      Next, connect to remote cell by using "dcecp registry connect".
+      These operations are done automatically in the script.
+
+(2) Verifying the access as an any_other ACL entry
+
+	dce_login /.../cR/pR	S	login to cell /.../cR as pR
+	acl_show(/.../cL/pA)	S	list ACL entries (including any_other)
+	acl_check(/.../cL/pA)	S	get current ACL(use any_other)
+	verify_show(/.../cL/pA)	S	/.../cR/pR CAN show pA
+	exit from /.../cR	S	logout from /.../cR
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+	acl_remove(any_other:w)	S	delete ACL entry (delete any_other)
+	exit from /.../cL	S	logout from /.../cL
+
+	dce_login /.../cR/pR	S	login to cell /.../cR as pR
+	acl_show(/.../cL/pA)	S	list ACL entries (NO any_other)
+	acl_check(/.../cL/pA)	S	get current ACL(no permission)
+	verify_show(/.../cL/pA)	F	/.../cR/pR CANNOT show pA
+	exit from /.../cR	S	logout from /.../cR
+
+(3) Verifying the access as a group ACL entry
+
+	dce_login /.../cR/pR	S	login to cell /.../cR as pR
+	acl_show(/.../cL/pA)	S	list ACL entries (NO group)
+	acl_check(/.../cL/pA)	S	get current ACL(no permission)
+	verify_show(/.../cL/pA)	F	/.../cR/pR CANNOT show pA
+	exit from /.../cR	S	logout from /.../cR
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+	group_add(gG, /.../cR/pR)	S	add principal as a member
+	exit from /.../cL	S	logout from /.../cL
+
+	dce_login /.../cR/pR	S	login to cell /.../cR as pR
+	acl_show(/.../cL/pA)	S	list ACL entries (NO group)
+	acl_check(/.../cL/pA)	S	get current ACL(no permission)
+	verify_show(/.../cL/pA)	F	/.../cR/pR CANNOT show pA
+	exit from /.../cR	S	logout from /.../cR
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+	acl_add(group:gG:r)	S	add ACL entry (add group)
+	exit from /.../cL	S	logout from /.../cL
+
+	dce_login /.../cR/pR	S	login to cell /.../cR as pR
+	acl_show(/.../cL/pA)	S	list ACL entries (including group)
+	acl_check(/.../cL/pA)	S	get current ACL(use group)
+	verify_show(/.../cL/pA)	S	/.../cR/pR CAN show pA
+	exit from /.../cR	S	logout from /.../cR
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+	group_remove(gG, /.../cR/pR)	S	delete from membership list
+	exit from /.../cL	S	logout from /.../cL
+
+	dce_login /.../cR/pR	S	login to cell /.../cR as pR
+	acl_show(/.../cL/pA)	S	list ACL entries (including group)
+	acl_check(/.../cL/pA)	S	get current ACL(no permission)
+	verify_show(/.../cL/pA)	F	/.../cR/pR CANNOT show pA
+	exit from /.../cR	S	logout from /.../cR
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+	group_add(gG, /.../cR/pR)	S	add principal as a member
+	exit from /.../cL	S	logout from /.../cL
+
+	dce_login /.../cR/pR	S	login to cell /.../cR as pR
+	acl_show(/.../cL/pA)	S	list ACL entries (including group)
+	acl_check(/.../cL/pA)	S	get current ACL(use group)
+	verify_show(/.../cL/pA)	S	/.../cR/pR CAN show pA
+	exit from /.../cR	S	logout from /.../cR
+
+(4) Verify to find the particular ACL entry to be applied
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+	acl_add(foreign_user:/.../cR/pR:w)	S	add ACL entry (add foreign_user)
+	exit from /.../cL	S	logout from /.../cL
+
+	dce_login /.../cR/pR	S	login to cell /.../cR as pR
+	acl_check(/.../cL/pA)	S	get current ACL(use foreign_user)
+	exit from /.../cR	S	logout from /.../cR
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+	acl_remove(foreign_user:/.../cR/pR:w)	S	delete ACL entry (delete foreign_user)
+	exit from /.../cL	S	logout from /.../cL
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+	acl_add(foreign_group:/.../cR/gR:w)	S	add ACL entry (add foreign_group)
+	exit from /.../cL	S	logout from /.../cL
+
+	dce_login /.../cR/pR	S	login to cell /.../cR as pR
+	acl_check(/.../cL/pA)	S	get current ACL(use group | foreign_group)
+	exit from /.../cR	S	logout from /.../cR
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+	acl_remove(foreign_group:/.../cR/gR:w)	S	delete ACL entry (delete foreign_group)
+	exit from /.../cL	S	logout from /.../cL
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+	acl_add(foreign_other:/.../cR:w)	S	add ACL entry (add foreign_other)
+	exit from /.../cL	S	logout from /.../cL
+
+	dce_login /.../cR/pR	S	login to cell /.../cR as pR
+	acl_check(/.../cL/pA)	S	get current ACL(use group)
+	exit from /.../cR	S	logout from /.../cR
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+	acl_remove(foreign_other:/.../cR:w)	S	delete ACL entry (delete foreign_other)
+	exit from /.../cL	S	logout from /.../cL
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+	acl_add(any_other:w)	S	add ACL entry (add any_other)
+	exit from /.../cL	S	logout from /.../cL
+
+	dce_login /.../cR/pR	S	login to cell /.../cR as pR
+	acl_check(/.../cL/pA)	S	get current ACL(use group)
+	exit from /.../cR	S	logout from /.../cR
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+	acl_remove(any_other:w)	S	delete ACL entry (delete any_other)
+	exit from /.../cL	S	logout from /.../cL
+
+(5) Verify the access from the principal using the alias name
+
+	dce_login /.../cR/pRa	S	login to cell /.../cR
+	acl_show(/.../cL/pA)	S	list ACL entries (including group)
+	acl_check(/.../cL/pA)	S	get current ACL(no permission)
+	verify_show(/.../cL/pA)	F	/.../cR/pRa CANNOT show pA
+	exit from /.../cR	S	logout from /.../cR
+
+(6) Verify to apply the prohibit inclusion correctly
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+	group_remove(gG, /.../cR/pR)	S	delete from membership list
+	acl_remove(group:gG:r)	S	delete ACL entry (delete group)
+	group_add(gGnp, /.../cR/pR)	S	add principal as a member
+	acl_add(group:gGnp:r)	S	add ACL entry (add group)
+	exit from /.../cL	S	logout from /.../cL
+
+	dce_login /.../cR/pR	S	login to cell /.../cR as pR
+	acl_show(/.../cL/pA)	S	list ACL entries (including group)
+	acl_check(/.../cL/pA)	S	get current ACL(no permission)
+	verify_show(/.../cL/pA)	F	/.../cR/pR CANNOT show pA
+	exit from /.../cR	S	logout from /.../cR
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+	group_remove(gGnp, /.../cR/pR)	S	delete from membership list
+	acl_remove(group:gGnp:r)	S	delete ACL entry (delete group)
+	exit from /.../cL	S	logout from /.../cL
+
+(7) Verify to access the object which has an group ACL entry defined with an alias
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+	group_add(gGa, /.../cR/pR)	S	add principal as a member
+	acl_add(group:gGa:r)	S	add ACL entry (add group)
+	exit from /.../cL	S	logout from /.../cL
+
+	dce_login /.../cR/pR	S	login to cell /.../cR as pR
+	acl_show(/.../cL/pA)	S	list ACL entries (including group)
+	acl_check(/.../cL/pA)	S	get current ACL(use group)
+	verify_show(/.../cL/pA)	S	/.../cR/pR CAN show pA
+	exit from /.../cR	S	logout from /.../cR
+
+	dce_login cell_admin	S	login to cell /.../cL as cell_admin
+	group_remove(gGa, /.../cR/pR)	S	delete from membership list
+	acl_remove(group:gGa:r)	S	delete ACL entry (delete group)
+	exit from /.../cL	S	logout from /.../cL
+

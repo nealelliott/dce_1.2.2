@@ -1,0 +1,198 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: README.RWALL,v $
+# Revision 1.1.8.2  1996/03/11  02:43:32  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:07:11  marty]
+#
+# Revision 1.1.8.1  1995/12/11  21:59:13  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/jrr_1.2_mothra/1  1995/12/06  16:08 UTC  bell_d
+# 	Updated to reflect changes for non-lfs
+# 	[1995/12/11  20:58:34  root]
+# 
+# Revision 1.1.6.3  1994/10/06  18:27:03  gmd
+# 	Updated with rgy_edit/dcecp steps for resetting the
+# 	self principal tickets back to 10h if default tickets
+# 	more than 10h.
+# 	[1994/10/06  18:26:15  gmd]
+# 
+# Revision 1.1.6.2  1994/06/10  20:48:17  devsrc
+# 	cr10872 - fixed copyright
+# 	[1994/06/10  17:18:39  devsrc]
+# 
+# Revision 1.1.6.1  1994/06/03  16:22:36  annie
+# 	fixed incorrect comment leader
+# 	[1994/06/03  16:14:22  annie]
+# 
+# Revision 1.1.4.1  1993/10/01  21:04:49  gmd
+# 	 	CR 8891 - Reorganized due to changes in test ie.
+# 	 		no longer warns about no cleanup but
+# 	 		DOES stress UNIX user uid setup.
+# 	 	[1993/10/01  20:59:52  gmd]
+# 
+# 	 	CR 8891 Porting changes plus cleanup:
+# 	 		Removed UNIX user setup code
+# 	 		Added variables for HP-UX commands/syntax
+# 	 		Added more verification routines
+# 	 		Changed exitting code
+# 	 	[1993/10/01  20:41:42  gmd]
+# 
+# Revision 1.1.2.4  1993/08/02  18:28:41  dassarma
+# 	Made the README easier to read and understand for someone who is
+# 	running the test for the first time.
+# 	[1993/08/02  18:17:06  dassarma]
+# 
+# Revision 1.1.2.3  1993/07/20  14:52:35  dassarma
+# 	Added information to avoid the problem described in OT 8284.
+# 	[1993/07/20  14:52:05  dassarma]
+# 
+# Revision 1.1.2.2  1993/07/09  20:18:26  dassarma
+# 	This is the README file for the system test dfs.read.write_all
+# 	[1993/07/09  20:12:19  dassarma]
+# 
+# $EndLog$
+
+
+	  PLEASE READ COMPLETELY BEFORE STARTING THE TEST 
+	    =IMPORTANT SETUP STEPS ARE HEREIN INCLUDED =
+
+
+dfs.read_write_all
+------------------
+
+Usage
+-----
+
+The script is invoked as follows:
+
+login or become unix user 'root':
+
+if $BASE_MOUNT_POINTS are in a LFS fileset that cell_admin has write access to:
+
+   dce_login cell_admin -dce-
+   dfs.read_write_all -f <datafile> -t <nr_of_hrs> 
+
+if $BASE_MOUNT_POINTS are in a NATIVE (UFS, JFS) filesystem fileset that root has write 
+access to:
+
+   dce_login cell_admin -dce-
+   add_root_as_admin.ksh
+   dce_login root -dce-
+   dfs.read_write_all -f <datafile> -t <nr_of_hrs> 
+
+where:
+
+   datafile     is the name of a datafile containing information used by
+                the driver script; the name is usually dfs.read.write.data
+                (see "Setup before running the test" below).
+
+   nr_of_hrs    is an integer specifying the number of hours you wish to
+                run the test. Note that this must be less than the default
+		certificate lifetime of your dce test principals.
+		IF YOU ALTER THE DEFAULT CERTIFICATE LIFETIME IN YOUR CELL
+		TO BE GREATER THAN 10h, BE SURE TO:
+
+		rgy_edit> domain account
+		rgy_edit> change -p hosts/<machine>/self -mcl 10h
+
+		FOR EVERY MACHINE IN YOUR CELL or:
+
+		dcecp>	foreach h [dir list /.:/hosts -simplename] {
+ 			account modify hosts/$h/self -maxtktlife 10
+			}
+
+		This will force the self principals to refresh their tickets
+		AND their credentials cache, keeping the credentials cache
+		from becoming too large and degrading the performance of
+		dce daemons that rely on the self principal.
+		
+The following files are necessary to run the test:
+	  
+   dfs.read_write_all       - the main driver script
+
+   dfs.read.write.data      - the data file
+
+   profile		    - this is a *sample* .profile to set up
+			      the test users environment (sourced by do.ksh)
+
+   do.ksh                   - this is a *sample* kshell script 
+		   	      containing a predetermined sequence of UNIX 
+		              commands that each user will execute repeatedly 
+		              for a duration of time specified in nr_of_hrs.
+
+Purpose  
+-------
+
+This script simulates the presence of a number of users working in their own ufs or lfs 
+filesets in a DFS environment simultaneously.
+
+Steps to follow before running the test
+--------------------------------------
+
+1. Review the data file dfs.read.write.data and make sure all the variables are set 
+   correctly and their values correspond to those in your environment. In particular,
+   be sure that:
+
+	- the GROUP_NAME and GROUP_ID correspond to an existing entry in /etc/group
+	on all your machines
+
+	- the BASE_USER_NAME concatenated with the sequential #s from 1 to NUMBER_OF_USERS
+	corresponds to existing entries in /etc/passwd on all your MACHINES. That is if
+
+BASE_USER_NAME=dfs_
+NUMBER_OF_USERS=3
+
+	then
+		dfs_1, dfs_2 and dfs_3 must be valid unix users on your MACHINES.
+
+	These test users should be members of GROUP_NAME.
+	The uids for these test users should equal BASE_UID + (n - 1) where n is
+	the number of the test user.  For example, if
+
+BASE_UID=201
+
+	then dfs_1 uid is 201, dfs_2 uid is 202, dfs_3 uid is 203 (through the number of users
+	specified).  The program has been modified to count the number of machines present
+	in the cell and use this number to create the number of users (one/machine).
+	Therefore it is recommended that sufficient users be added to the /etc/passwd table
+	to cover the number of machines expected to be present at any time.
+
+	It is convenient (for this test) if all test users share the same home
+	directory (and therefore the same .rhosts file - see below).
+
+	- the COMMON_LOG_DIR path is visible and writeable to all MACHINES (either via DFS or NFS)
+
+	- SETUP_RGY_ACCOUNTS, CREATE_FILESETS, POPULATE_USERS_ENV are all TRUE if this is the first 
+	  time you are running this test in this cell, FALSE otherwise
+
+	- DELETE_RGY_ACCOUNTS and DELETE_FILESETS are FALSE unless this is the last time you will
+	  be running this test in this cell.  In most cases, SETUP_RGY_ACCOUNTS etc. and 
+	  DELETE_RGY_ACCOUNTS etc. will be set TRUE to create and delete the filesets at the
+	  start and end of the tests to keep storage usage to a minimum.
+
+	- MACHINES, AGGR_SERVERS, AGGR_NAMES, AGGR_SIZES are determined by using the /.:/hosts file
+	  in the cell, and the 'fts aggr' information on aggregates within the cell as well as their 
+	  sizes.
+	
+	- AGGR_SIZES, FILESETS_PER_AGGR, and FILESETS_QUOTA, and BASE_MOUNT_POINTS should be set 
+	  to reflect (respectively) the  aggregate free space, number of filesets, fileset quotas 
+	  and base user directory for user fileset mount points. 
+
+
+2. The name of the machine on which you are running the test and the user "root" needs to be 
+   in the ~testuser/.rhosts file. If the testuser home directory/directories is/are local to 
+   each machine, this means this entry must be made in the ~testuser/.rhosts file on every 
+   machine used for the test!  (It is a good idea to create a ~testuser/.rhosts file containing
+   the names of each machine which can be used in the test, the user "root" for each machine,
+   and put this file on each machine to be used for the test.)
+
+
+
+

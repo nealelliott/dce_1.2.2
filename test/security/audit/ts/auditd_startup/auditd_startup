@@ -1,0 +1,512 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# (c) Copyright International Business Machines Corp. 1994, 1996
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+#  06/23/95    kline_s  Modified logic so that Tet PASS/ERROR logic check
+#                       is done independently of determining whether
+#                       auditd is running and then attempting to stop it.
+#                       This is to minimize the number of cascading error  
+#                       conditions due to auditd not being stopped. 
+#                       Created check_audit_daemons() to eliminate redundant code.  
+#                       Inserted auditd informational messages to advertise number of
+#                       auditd that are expected to be running in contrast to the 
+#                       actual number.
+#  02/11/94	Weisz 	Initial design.  
+
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1 ic2 ic3 ic4 ic5"
+ic1="auditd_startup01"
+ic2="auditd_startup02"
+ic3="auditd_startup03"
+ic4="auditd_startup04"
+ic5="auditd_startup05"
+
+startup() {
+
+	print "\nSTART DCE audit functional test: auditd_startup; DATE: `date`"
+	tet_infoline "START DCE audit functional test: ${TET_PNAME}; DATE: `date`"
+	if [ "`uname`" = "OSF1" ]
+	then
+		PS_FLAGS="-e -o ucomm"
+	else
+		PS_FLAGS="-e"
+	fi
+}
+
+
+check_daemon_identity() {  # input parameter is expected identity
+#set -x
+
+ sleep 5
+ rc=$(grep -c $1 /opt/dcelocal/var/audit/daemon_identity)
+ tet_infoline "expected daemon id = $1, rc = $rc"
+ return $rc
+
+} 
+
+cleanup_audit_daemons() {
+#set -x
+   if (( $AUDITCP ))
+   then
+     print "auditcp aud stop\n"
+     auditcp aud stop      #cleanup 
+   else
+     print "dcecp -c aud stop\n"
+     dcecp -c aud stop      #cleanup 
+   fi
+
+   time_elapsed=0
+   while (( time_elapsed < 120 ))
+   do
+      sleep 5
+      (( time_elapsed = time_elapsed + 5 ))
+
+      ps $PS_FLAGS >  $TET_TMP_DIR/_auditd.out
+      total_auditd=$( grep -c auditd $TET_TMP_DIR/_auditd.out)
+      auditd_startup=$( grep -c auditd_startup $TET_TMP_DIR/_auditd.out)
+      ((nr_of_auditds = total_auditd - auditd_startup))
+
+      if (( $nr_of_auditds == 0 ))
+      then
+         break
+      fi
+   done
+
+   if (( time_elapsed < 120 ))
+   then
+       print "\n time elapsed till auditd stopped = $time_elapsed"
+   else
+       print "\nError: auditd was not successfully stopped (Timeout error)"
+       print "Other subsequent audit tests (especially auditd_startup) tests"
+       print "will likely fail."
+   fi
+}
+
+auditd_startup01() {
+#set -x
+
+ print "\nSTART: auditd_startup01 started"
+ tet_infoline "START: auditd_startup01 started"
+ sleep 1
+
+ ps $PS_FLAGS >  $TET_TMP_DIR/_auditd.out
+ total_auditd=$( grep -c auditd $TET_TMP_DIR/_auditd.out)
+ auditd_startup=$( grep -c auditd_startup $TET_TMP_DIR/_auditd.out)
+ ((nr_of_auditds = total_auditd - auditd_startup))
+
+ print "\n    *** auditd_startup01 - pre-test phase..."
+ print   "    *** Number of auditd processes (0 expected): $nr_of_auditds"
+ print   "    *** Total number of auditd processes (0 expected): $total_auditd\n"
+
+ print "nr of auditd running = $nr_of_auditds "
+ tet_infoline "nr of auditd running = $nr_of_auditds "
+ if ((nr_of_auditds!=0))
+ then
+   print "\nERROR: precondition not met - auditd running"
+   tet_infoline "ERROR: precondition not met - auditd running"
+
+   print "Attempting to stop auditd due to error condition..."
+   cleanup_audit_daemons
+
+   tet_result FAIL
+   print "\nERROR: auditd_startup01 failed"
+   tet_infoline "ERROR: auditd_startup01 failed"
+   return 1
+ fi 
+
+ auditd
+ sleep 15
+
+ ps $PS_FLAGS >  $TET_TMP_DIR/_auditd.out
+ total_auditd=$( grep -c auditd $TET_TMP_DIR/_auditd.out)
+ auditd_startup=$( grep -c auditd_startup $TET_TMP_DIR/_auditd.out)
+ ((nr_of_auditds = total_auditd - auditd_startup))
+
+ tet_infoline "nr of auditd running = $nr_of_auditds "
+
+ print "\n    *** auditd_startup01 - post-test phase..."
+ print   "    *** Total number of auditd processes (1 expected): $total_auditd"
+ print   "    *** Number of auditd's running (1 expected): $nr_of_auditds \n"
+
+if ((nr_of_auditds==1))
+ then
+   check_daemon_identity self
+   if (( $? == 1 ))
+   then
+     FAIL=N
+   else
+     FAIL=Y
+   fi
+ else
+   FAIL=Y
+ fi
+
+
+ if ((nr_of_auditds > 0))
+ then  
+   cleanup_audit_daemons
+
+   ps $PS_FLAGS >  $TET_TMP_DIR/_auditd.out
+   total_auditd=$( grep -c auditd $TET_TMP_DIR/_auditd.out)
+
+   print "\n   *** auditd_startup01 - clean-up phase..."
+   print   "   *** total number of auditd processes still running (0 expected): $total_auditd"
+ fi
+
+ if [ $FAIL = N ] 
+ then  
+   tet_result PASS
+   print "\nPASS: auditd_startup01 passed"
+   tet_infoline "PASS: auditd_startup01 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: auditd_startup01 failed"
+   tet_infoline "ERROR: auditd_startup01 failed"
+ fi
+}
+
+
+auditd_startup02() {
+#set -x
+
+ print "\nSTART: auditd_startup02 started"
+ tet_infoline "START: auditd_startup02 started"
+
+ ps $PS_FLAGS >  $TET_TMP_DIR/_auditd.out
+ total_auditd=$( grep -c auditd $TET_TMP_DIR/_auditd.out)
+ auditd_startup=$( grep -c auditd_startup $TET_TMP_DIR/_auditd.out)
+ ((nr_of_auditds = total_auditd - auditd_startup))
+
+ print "\n    *** auditd_startup02 - pre-test phase..."
+ print   "    *** Total number of auditd processes (0 expected): $total_auditd"
+ print   "    *** Number of auditd's running (0 expected): $nr_of_auditds \n"
+
+ auditd -a -s 500 -t /tmp/central_trail
+ sleep 15
+ ps $PS_FLAGS >  $TET_TMP_DIR/_auditd.out
+ total_auditd=$( grep -c auditd $TET_TMP_DIR/_auditd.out)
+ auditd_startup=$( grep -c auditd_startup $TET_TMP_DIR/_auditd.out)
+ ((nr_of_auditds = total_auditd - auditd_startup))
+
+ print "\n    *** auditd_startup02 - post-test phase..."
+ print   "    *** Total number of auditd processes (1 expected): $total_auditd"
+ print   "    *** Number of auditd's running (1 expected): $nr_of_auditds \n"
+
+ tet_infoline "nr of auditd running = $nr_of_auditds "
+
+ FAIL=Y
+
+ if ((nr_of_auditds==1))
+ then
+    dcecp -c aud show
+    if (( $? == 0 ))
+    then
+       dcecp -c aud show
+       if (( $? == 0 ))
+       then
+          number_of_central_trail_files=$( ls /tmp | grep -c central_trail)
+          print "\nnumber_of_central_trail_files = $number_of_central_trail_files"
+          if (( $number_of_central_trail_files > 2 ))
+          then
+             FAIL=N
+          fi
+       fi
+    fi
+ fi
+
+ if ((nr_of_auditds > 0))
+ then  
+   cleanup_audit_daemons
+
+   ps $PS_FLAGS >  $TET_TMP_DIR/_auditd.out
+   total_auditd=$( grep -c auditd $TET_TMP_DIR/_auditd.out)
+
+   print "\n   *** auditd_startup02 - clean-up phase..."
+   print   "   *** total number of auditd processes still running (0 expected): $total_auditd"
+ fi
+
+
+ if [ $FAIL = N ]
+ then
+   tet_result PASS
+   print "\nPASS: auditd_startup02 passed"
+   tet_infoline "PASS: auditd_startup02 passed"
+
+ else
+   tet_result FAIL
+   print "\nERROR: auditd_startup02 failed"
+   tet_infoline "ERROR: auditd_startup02 failed"
+ fi
+ rm /tmp/central_trail* 
+}
+
+
+auditd_startup03() {
+#set -x
+
+ print "\nSTART: auditd_startup03 started"
+ tet_infoline "START: auditd_startup03 started"
+ ps $PS_FLAGS >  $TET_TMP_DIR/_auditd.out
+ total_auditd=$( grep -c auditd $TET_TMP_DIR/_auditd.out)
+ auditd_startup=$( grep -c auditd_startup $TET_TMP_DIR/_auditd.out)
+ ((nr_of_auditds = total_auditd - auditd_startup))
+
+ print "\n    *** auditd_startup03 - pre-test phase..."
+ print   "    *** Total number of auditd processes (0 expected): $total_auditd"
+ print   "    *** Number of auditd's running (0 expected): $nr_of_auditds \n"
+
+ auditd -a -wrap -s 500 -t /tmp/central_trail
+ sleep 15
+ ps $PS_FLAGS >  $TET_TMP_DIR/_auditd.out
+ total_auditd=$( grep -c auditd $TET_TMP_DIR/_auditd.out)
+ auditd_startup=$( grep -c auditd_startup $TET_TMP_DIR/_auditd.out)
+ ((nr_of_auditds = total_auditd - auditd_startup))
+
+ print "\n    *** auditd_startup03 - post-test phase..."
+ print   "    *** Total number of auditd processes (1 expected): $total_auditd"
+ print   "    *** Number of auditd's running (1 expected): $nr_of_auditds \n"
+
+ tet_infoline "nr of auditd running = $nr_of_auditds "
+
+ FAIL=Y
+
+ if ((nr_of_auditds==1))
+ then
+    dcecp -c aud show
+    if (( $? == 0 ))
+    then
+       dcecp -c aud show
+       if (( $? == 0 ))
+       then
+          number_of_central_trail_files=$( ls /tmp | grep -c central_trail)
+          print "\nnumber_of_central_trail_files = $number_of_central_trail_files"
+          if (( $number_of_central_trail_files > 2 ))
+          then
+             FAIL=Y
+          else
+             FAIL=N
+          fi
+       fi
+    fi
+ fi
+
+ if ((nr_of_auditds > 0))
+ then  
+   cleanup_audit_daemons
+
+   ps $PS_FLAGS >  $TET_TMP_DIR/_auditd.out
+   total_auditd=$( grep -c auditd $TET_TMP_DIR/_auditd.out)
+
+   print "\n   *** auditd_startup03 - clean-up phase..."
+   print   "   *** total number of auditd processes still running (0 expected): $total_auditd"
+ fi
+
+ if [ $FAIL = N ]
+ then
+   tet_result PASS
+   print "\nPASS: auditd_startup03 passed"
+   tet_infoline "PASS: auditd_startup03 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: auditd_startup03 failed"
+   tet_infoline "ERROR: auditd_startup03 failed"
+ fi
+ rm /tmp/central_trail* 
+}
+
+
+
+auditd_startup04() {
+#set -x
+
+integer size_of_trail
+integer size_rewound
+
+ print "\nSTART: auditd_startup04 started"
+ tet_infoline "START: auditd_startup04 started"
+ ps $PS_FLAGS >  $TET_TMP_DIR/_auditd.out
+ total_auditd=$( grep -c auditd $TET_TMP_DIR/_auditd.out)
+ auditd_startup=$( grep -c auditd_startup $TET_TMP_DIR/_auditd.out)
+ ((nr_of_auditds = total_auditd - auditd_startup))
+
+ print "\n    *** auditd_startup04 - pre-test phase..."
+ print   "    *** Number of auditd processes (0 expected): $total_auditd"
+ print   "    *** Number of auditd's running (0 expected): $nr_of_auditds \n"
+
+ auditd -a -s 1000 -t /tmp/central_trail
+ sleep 15
+ ps $PS_FLAGS >  $TET_TMP_DIR/_auditd.out
+ total_auditd=$( grep -c auditd $TET_TMP_DIR/_auditd.out)
+ auditd_startup=$( grep -c auditd_startup $TET_TMP_DIR/_auditd.out)
+ ((nr_of_auditds = total_auditd - auditd_startup))
+
+ print "\n    *** auditd_startup04 - post-test phase..."
+ print   "    *** Number of auditd processes (1 expected): $total_auditd"
+ print   "    *** Number of auditd's running (1 expected): $nr_of_auditds \n"
+
+ tet_infoline "nr of auditd running = $nr_of_auditds "
+
+ FAIL=Y
+
+ if ((nr_of_auditds==1))
+ then
+    dcecp -c aud show
+    if (( $? == 0 ))
+    then
+       ls -l /tmp/central_trail > /tmp/central_trail.size
+       read -r perms nrnames owner group size_of_trail rest < /tmp/central_trail.size
+       print "\n auditd_startup04: size = $size_of_trail"
+
+       dcecp -c aud rewind
+
+       if (( $? == 0 ))
+       then
+          ls -l /tmp/central_trail > /tmp/central_trail.size
+          read -r perms nrnames owner group size_rewound rest < /tmp/central_trail.size
+          print "\n auditd_startup04: size = $size_rewound"
+
+          if (( $size_rewound < $size_of_trail ))
+          then
+             FAIL=N
+          fi
+       fi
+    fi
+ fi
+
+ if ((nr_of_auditds > 0))
+ then  
+   cleanup_audit_daemons
+
+   ps $PS_FLAGS >  $TET_TMP_DIR/_auditd.out
+   total_auditd=$( grep -c auditd $TET_TMP_DIR/_auditd.out)
+
+   print "\n   *** auditd_startup04 - clean-up phase..."
+   print   "   *** total number of auditd processes still running (0 expected): $total_auditd"
+ fi
+
+ if [ $FAIL = N ]
+ then
+   tet_result PASS
+   print "\nPASS: auditd_startup04 passed"
+   tet_infoline "PASS: auditd_startup04 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: auditd_startup04 failed"
+   tet_infoline "ERROR: auditd_startup04 failed"
+ fi
+ rm /tmp/central_trail*
+}
+
+
+auditd_startup05() {
+#set -x
+
+ print "\nSTART: auditd_startup05 started"
+ tet_infoline "START: auditd_startup05 started"
+ ps $PS_FLAGS >  $TET_TMP_DIR/_auditd.out
+ total_auditd=$( grep -c auditd $TET_TMP_DIR/_auditd.out)
+ auditd_startup=$( grep -c auditd_startup $TET_TMP_DIR/_auditd.out)
+ ((nr_of_auditds = total_auditd - auditd_startup))
+
+ print "\n    *** auditd_startup05 - pre-test phase..."
+ print   "    *** Number of auditd processes (0 expected): $total_auditd"
+ print   "    *** Number of auditd's running (0 expected): $nr_of_auditds \n"
+
+ FAIL=N
+#use non existent flag - auditd should not start
+ auditd -x
+ if (( $? == 0 ))
+ then
+    FAIL=Y
+ fi
+
+ sleep 15
+ ps $PS_FLAGS >  $TET_TMP_DIR/_auditd.out
+ total_auditd=$( grep -c auditd $TET_TMP_DIR/_auditd.out)
+ auditd_startup=$( grep -c auditd_startup $TET_TMP_DIR/_auditd.out)
+ ((nr_of_auditds = total_auditd - auditd_startup))
+ tet_infoline "nr of auditd running = $nr_of_auditds "
+
+ if ((nr_of_auditds!=0))
+ then 
+    print "\nERROR: auditd started despite invalid flag"
+    dcecp -c aud stop
+    FAIL=Y
+ fi  
+
+#use -s flag, without providing a size parameter - auditd should not start
+ if [ $FAIL = N ]
+ then
+   auditd -s
+   if (( $? == 0 ))
+   then
+      FAIL=Y
+   fi
+ fi
+
+ sleep 15
+ ps $PS_FLAGS >  $TET_TMP_DIR/_auditd.out
+ total_auditd=$( grep -c auditd $TET_TMP_DIR/_auditd.out)
+ auditd_startup=$( grep -c auditd_startup $TET_TMP_DIR/_auditd.out)
+ ((nr_of_auditds = total_auditd - auditd_startup))
+ tet_infoline "nr of auditd running = $nr_of_auditds "
+
+ if ((nr_of_auditds!=0))
+ then
+    print "\nERROR: auditd started despite flag -s supplied without size parameter"
+    dcecp -c aud stop
+    FAIL=Y
+ fi
+
+#use -t flag, without providing a trail file name - auditd should not start
+ if [ $FAIL = N ]
+ then
+   auditd -t
+   if (( $? == 0 ))
+   then
+      FAIL=Y
+   fi
+ fi
+
+ sleep 10
+ ps $PS_FLAGS >  $TET_TMP_DIR/_auditd.out
+ total_auditd=$( grep -c auditd $TET_TMP_DIR/_auditd.out)
+ auditd_startup=$( grep -c auditd_startup $TET_TMP_DIR/_auditd.out)
+ ((nr_of_auditds = total_auditd - auditd_startup))
+ tet_infoline "nr of auditd running = $nr_of_auditds "
+
+ if ((nr_of_auditds!=0))
+ then
+    print "\nERROR: auditd started despite flag -t supplied without trail file name"
+    dcecp -c aud stop
+    FAIL=Y
+ fi
+
+ if [ $FAIL = N ]
+ then
+   tet_result PASS
+   print "\nPASS: auditd_startup05 passed"
+   tet_infoline "PASS: auditd_startup05 passed"
+ else
+   tet_result FAIL
+   print "\nERROR: auditd_startup05 failed"
+   tet_infoline "ERROR: auditd_startup05 failed"
+ fi
+ 
+}
+
+# cleanup of DCE audit test
+cleanup() {
+        rm $TET_TMP_DIR/_auditd.out
+	print "\nEND DCE audit functional test: auditd_startup; DATE: `date`"
+	tet_infoline "END DCE audit functional test: ${TET_PNAME}; DATE: `date`"
+}
+
+#source tcm
+. $TET_ROOT/lib/ksh/tcm.ksh

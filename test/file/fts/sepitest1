@@ -1,0 +1,436 @@
+#!/bin/sh
+
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: sepitest1,v $
+# Revision 1.1.8.1  1996/10/17  18:22:33  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:51:43  damon]
+#
+# Revision 1.1.2.3  1993/01/11  18:28:16  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:04:15  htf]
+# 
+# Revision 1.1.2.2  1992/10/28  17:30:55  jaffe
+# 	New File
+# 	[1992/10/27  19:39:38  jaffe]
+# 
+# $EndLog$
+
+###############################################################################
+#    Copyright (C) 1991, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This test is only applicable to local Episode (not exported Episode or UFS).
+# It tests basic aggregate and fileset operations like creation, mounting,
+# modification, unmounting, and remounting. It does not use any distributed
+# operations whatsoever, only local ones.
+
+# This is a basic local-Episode correctness test.
+
+###############################################################################
+
+# Usage:                sepitest1
+
+# Typically run via:    sepitest1 >& sepitest1.out
+
+###############################################################################
+
+# Test environment:
+# The system must be capable of running local Episode (i.e., it must be
+# able to do epimounts). DFS is not required, just local Episode.
+# $EPI_PART_1 and $EPI_PART_2 must be Episode aggregates. This script does
+# not run newaggr on those partitions - that must be done before the test
+# is run. $dir[12][12] will be used as Episode mount points; if those
+# directories already exist, then they will be destroyed by this test.
+# Filesets named $ft_[12][12]_name and fileset ID's $ft_[12][12]_id must
+# not yet exist.
+
+# Privilege required:
+# You must be local root (in order to run epimount and epiunmount); you must
+# be able to create and delete $dir[12][12].
+
+# Notes:
+# This test should really delete the $ft_??_name filesets when it's done,
+# but there's not yet a way to do that in standalone Episode. I don't want
+# to use 'fts delete' since that would make this test depend on fts (and
+# thus the DFS kernel extensions), so for now the test filesets just hang
+# around until you run newaggr on the aggregates again.
+#
+# The assignments of ft_??_id using $$ could conceivably collide with
+# filesets that were created by earlier instances of this test.
+
+# Highest error number is: 64.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+rc=0
+ty=fts
+
+: ${EPI_PART_1=/dev/epi1}
+: ${EPI_PART_2=/dev/epi2}
+
+: ${bin_dir=/opt/dcelocal/bin}
+
+PATH=":"$bin_dir":"$PATH
+
+ft_11_name=ft.$$.11
+ft_11_id=$$
+dir11=/efs.$$.11
+
+ft_12_name=ft.$$.12
+ft_12_id=`expr $$ + 1`
+dir12=/efs.$$.12
+
+ft_21_name=ft.$$.21
+ft_21_id=`expr $$ + 2`
+dir21=/efs.$$.21
+
+ft_22_name=ft.$$.22
+ft_22_id=`expr $$ + 3`
+dir22=/efs.$$.22
+
+###############################################################################
+
+echo ""
+echo "$ty/$p running on $hn at `date`."
+echo "Using Episode partitions $EPI_PART_1 and $EPI_PART_2."
+echo "Filesets: $ft_11_name (ID $ft_11_id) at $dir11"
+echo "          $ft_12_name (ID $ft_12_id) at $dir12"
+echo "          $ft_21_name (ID $ft_21_id) at $dir21"
+echo "          $ft_22_name (ID $ft_22_id) at $dir22"
+
+###############################################################################
+
+echo ""; echo "Creating mount directories..."
+for dir in $dir11 $dir12 $dir21 $dir22
+    do
+
+    rm -rf $dir
+    if test $? -ne 0
+       then echo "- rm -rf $dir failed; $p ABORTING ($p: E1)"
+            rc=`expr $rc + 1`; exit $rc
+       fi
+
+    mkdir $dir
+    if test $? -ne 0
+       then echo "- mkdir $dir failed; $p ABORTING ($p: E2)"
+            rc=`expr $rc + 1`; exit $rc
+       fi
+
+    done
+
+###############################################################################
+
+echo ""; echo "Creating filesets..."
+
+newvol -volid $ft_11_id -volname $ft_11_name $EPI_PART_1
+if test $? -ne 0
+   then echo "- newvol failed; $p ABORTING ($p: E3)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+newvol -volid $ft_12_id -volname $ft_12_name $EPI_PART_1
+if test $? -ne 0
+   then echo "- newvol failed; $p ABORTING ($p: E4)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+newvol -volid $ft_21_id -volname $ft_21_name $EPI_PART_2
+if test $? -ne 0
+   then echo "- newvol failed; $p ABORTING ($p: E5)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+newvol -volid $ft_22_id -volname $ft_22_name $EPI_PART_2
+if test $? -ne 0
+   then echo "- newvol failed; $p ABORTING ($p: E6)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+###############################################################################
+
+echo ""; echo "Mounting filesets..."
+
+epimount $ft_11_name $dir11
+if test $? -ne 0
+   then echo "- epimount failed; $p ABORTING ($p: E7)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+epimount $ft_12_name $dir12
+if test $? -ne 0
+   then echo "- epimount failed; $p ABORTING ($p: E8)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+epimount ft_21_name $dir21
+if test $? -ne 0
+   then echo "- epimount failed; $p ABORTING ($p: E9)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+epimount $ft_22_name $dir22
+if test $? -ne 0
+   then echo "- epimount failed; $p ABORTING ($p: E10)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+###############################################################################
+
+echo ""; echo "Doing work in filesets..."
+
+for dir in $dir11 $dir12 $dir21 $dir22
+    do
+
+    echo ""; echo "Testing $dir..."
+    cd /tmp; cd $dir
+    if test `pwd` != $dir -o $? -ne 0
+       then echo "- cd $dir failed ($p: E11)"; rc=`expr $rc + 1`
+       fi
+
+    x="This is directory $dir."
+    echo $x > x
+    if test $? -ne 0; then echo "- echo failed ($p: E42)"; rc=`expr $rc + 1`; fi
+    mkdir d
+    if test $? -ne 0
+       then echo "- mkdir failed ($p: E43)"; rc=`expr $rc + 1`
+       fi
+    cp x d/y
+    if test $? -ne 0; then echo "- cp failed ($p: E44)"; rc=`expr $rc + 1`; fi
+
+    echo $x | diff - x > /dev/null 2> /dev/null
+    if test $? -ne 0; then echo "- diff error ($p: E12)"; rc=`expr $rc + 1`; fi
+
+    echo $x | diff - d/y > /dev/null 2> /dev/null
+    if test $? -ne 0; then echo "- diff error ($p: E13)"; rc=`expr $rc + 1`; fi
+
+    mv x z
+    if test $? -ne 0; then echo "- mv failed ($p: E45)"; rc=`expr $rc + 1`; fi
+    ln z a
+    if test $? -ne 0; then echo "- ln failed ($p: E46)"; rc=`expr $rc + 1`; fi
+
+    echo $x | diff - z > /dev/null 2> /dev/null
+    if test $? -ne 0; then echo "- diff error ($p: E14)"; rc=`expr $rc + 1`; fi
+
+    echo $x | diff - a > /dev/null 2> /dev/null
+    if test $? -ne 0; then echo "- diff error ($p: E15)"; rc=`expr $rc + 1`; fi
+
+    ln -s z b
+    if test $? -ne 0
+       then echo "- ln -s failed ($p: E47)"; rc=`expr $rc + 1`
+       fi
+
+    echo $x | diff - b > /dev/null 2> /dev/null
+    if test $? -ne 0; then echo "- diff error ($p: E64)"; rc=`expr $rc + 1`; fi
+
+    echo ""; echo "Contents of $dir:"
+    ls -CAR $dir
+
+    rm a b z d/y
+    if test $? -ne 0; then echo "- rm failed ($p: E48)"; rc=`expr $rc + 1`; fi
+    rmdir d
+    if test $? -ne 0
+       then echo "- rmdir failed ($p: E49)"; rc=`expr $rc + 1`
+       fi
+
+    if test `ls -a $dir | wc -l` -ne 2
+       then echo "- $dir should be empty, but isn't ($p: E16)"
+            rc=`expr $rc + 1`
+       fi
+
+    done
+
+###############################################################################
+
+echo ""; echo "Doing work across filesets..."
+
+cd /tmp; cd $dir11
+if test `pwd` != $dir11 -o $? -ne 0
+   then echo "- cd $dir11 failed ($p: E17)"; rc=`expr $rc + 1`
+   fi
+
+x1="This is a test of the emergency broadcast system."
+x2="This is only a test. Do not adjust your set."
+
+echo $x1 > file1
+if test $? -ne 0; then echo "- echo failed ($p: E50)"; rc=`expr $rc + 1`; fi
+
+echo $x2 > file2
+if test $? -ne 0; then echo "- echo failed ($p: E51)"; rc=`expr $rc + 1`; fi
+
+mkdir dir
+if test $? -ne 0; then echo "- mkdir failed ($p: E52)"; rc=`expr $rc + 1`; fi
+
+cp file1 dir
+if test $? -ne 0; then echo "- cp failed ($p: E53)"; rc=`expr $rc + 1`; fi
+
+cp file1 $dir12
+if test $? -ne 0; then echo "- cp failed ($p: E54)"; rc=`expr $rc + 1`; fi
+cp file1 $dir21
+if test $? -ne 0; then echo "- cp failed ($p: E55)"; rc=`expr $rc + 1`; fi
+cp file1 $dir22
+if test $? -ne 0; then echo "- cp failed ($p: E56)"; rc=`expr $rc + 1`; fi
+
+cp -r dir $dir12
+if test $? -ne 0; then echo "- cp failed ($p: E57)"; rc=`expr $rc + 1`; fi
+cp -r dir $dir21
+if test $? -ne 0; then echo "- cp failed ($p: E58)"; rc=`expr $rc + 1`; fi
+cp -r dir $dir22
+if test $? -ne 0; then echo "- cp failed ($p: E59)"; rc=`expr $rc + 1`; fi
+
+ln -s $dir11/file2 $dir12
+if test $? -ne 0; then echo "- ln -s failed ($p: E60)"; rc=`expr $rc + 1`; fi
+ln -s $dir11/file2 $dir21
+if test $? -ne 0; then echo "- ln -s failed ($p: E61)"; rc=`expr $rc + 1`; fi
+ln -s $dir11/file2 $dir22
+if test $? -ne 0; then echo "- ln -s failed ($p: E62)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Contents of Episode directories:"
+ls -CAR $dir11 $dir12 $dir21 $dir22
+
+for dir in $dir11 $dir12 $dir21 $dir22
+    do
+
+    cd /tmp; cd $dir
+    if test `pwd` != $dir -o $? -ne 0
+       then echo "- cd $dir failed ($p: E18)"; rc=`expr $rc + 1`
+       fi
+    echo $x1 | diff - file1 > /dev/null 2> /dev/null
+    if test $? -ne 0; then echo "- diff error ($p: E19)"; rc=`expr $rc + 1`; fi
+    echo $x2 | diff - file2 > /dev/null 2> /dev/null
+    if test $? -ne 0; then echo "- diff error ($p: E20)"; rc=`expr $rc + 1`; fi
+    diff file1 dir > /dev/null 2> /dev/null
+    if test $? -ne 0; then echo "- diff error ($p: E21)"; rc=`expr $rc + 1`; fi
+
+    done
+
+###############################################################################
+
+echo ""; echo "Unmounting filesets..."
+cd /tmp
+
+epiunmount $dir11
+if test $? -ne 0
+   then echo "- epiunmount failed ($p: E22)"; rc=`expr $rc + 1`
+   fi
+
+epiunmount $dir12
+if test $? -ne 0
+   then echo "- epiunmount failed ($p: E23)"; rc=`expr $rc + 1`
+   fi
+
+epiunmount $dir21
+if test $? -ne 0
+   then echo "- epiunmount failed ($p: E24)"; rc=`expr $rc + 1`
+   fi
+
+epiunmount $dir22
+if test $? -ne 0
+   then echo "- epiunmount failed ($p: E25)"; rc=`expr $rc + 1`
+   fi
+
+###############################################################################
+
+echo ""; echo "Mounting filesets again..."
+
+epimount $ft_11_name $dir11
+if test $? -ne 0; then echo "- epimount failed ($p: E26)"; rc=`expr $rc + 1`; fi
+
+epimount $ft_12_name $dir12
+if test $? -ne 0; then echo "- epimount failed ($p: E27)"; rc=`expr $rc + 1`; fi
+
+epimount $ft_21_name $dir21
+if test $? -ne 0; then echo "- epimount failed ($p: E28)"; rc=`expr $rc + 1`; fi
+
+epimount $ft_22_name $dir22
+if test $? -ne 0; then echo "- epimount failed ($p: E29)"; rc=`expr $rc + 1`; fi
+
+###############################################################################
+
+echo ""; echo "Checking..."
+for dir in $dir11 $dir12 $dir21 $dir22
+    do
+
+    cd /tmp; cd $dir
+    if test `pwd` != $dir -o $? -ne 0
+       then echo "- cd $dir failed ($p: E30)"; rc=`expr $rc + 1`
+       fi
+    echo $x1 | diff - file1 > /dev/null 2> /dev/null
+    if test $? -ne 0; then echo "- diff error ($p: E31)"; rc=`expr $rc + 1`; fi
+    echo $x2 | diff - file2 > /dev/null 2> /dev/null
+    if test $? -ne 0; then echo "- diff error ($p: E32)"; rc=`expr $rc + 1`; fi
+    diff file1 dir > /dev/null 2> /dev/null
+    if test $? -ne 0; then echo "- diff error ($p: E33)"; rc=`expr $rc + 1`; fi
+
+    done
+
+echo ""; echo "Contents of Episode directories:"
+ls -CAR $dir11 $dir12 $dir21 $dir22
+
+###############################################################################
+
+echo ""; echo "Unmounting filesets again..."
+
+cd /tmp
+
+epiunmount $dir11
+if test $? -ne 0
+   then echo "- epiunmount failed ($p: E34)"; rc=`expr $rc + 1`
+   fi
+
+epiunmount $dir12
+if test $? -ne 0
+   then echo "- epiunmount failed ($p: E35)"; rc=`expr $rc + 1`
+   fi
+
+epiunmount $dir21
+if test $? -ne 0
+   then echo "- epiunmount failed ($p: E36)"; rc=`expr $rc + 1`
+   fi
+
+epiunmount $dir22
+if test $? -ne 0
+   then echo "- epiunmount failed ($p: E37)"; rc=`expr $rc + 1`
+   fi
+
+###############################################################################
+
+echo ""; echo "Checking mount directories..."
+if test `ls -a $dir11 | wc -l` -ne 2
+   then echo "- something is wrong with $dir11. ($p: E38)"; rc=`expr $rc + 1`
+   fi
+if test `ls -a $dir12 | wc -l` -ne 2
+   then echo "- something is wrong with $dir12. ($p: E39)"; rc=`expr $rc + 1`
+   fi
+if test `ls -a $dir21 | wc -l` -ne 2
+   then echo "- something is wrong with $dir21. ($p: E40)"; rc=`expr $rc + 1`
+   fi
+if test `ls -a $dir22 | wc -l` -ne 2
+   then echo "- something is wrong with $dir22. ($p: E41)"; rc=`expr $rc + 1`
+   fi
+
+###############################################################################
+
+echo ""; echo "Removing mount directories..."
+rmdir $dir11 $dir12 $dir21 $dir22
+if test $? -ne 0; then echo "- rmdir failed ($p: E63)"; rc=`expr $rc + 1`; fi
+
+###############################################################################
+
+echo ""; echo "All done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$ty/$p PASSED"
+   else echo "$ty/$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################

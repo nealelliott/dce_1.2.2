@@ -1,0 +1,132 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# @HP_COPYRIGHT@
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dced.functions,v $
+# Revision 1.1.2.1  1996/10/03  20:35:48  arvind
+# 	OSF DCE 1.2.2 Drop 4
+# 	[1996/10/03  19:43:41  arvind]
+#
+# 	OSF DCE 1.2.2 Drop 4
+#
+# Revision /main/DCE_1.2.2/2  1996/09/30  15:43 UTC  arvind
+# 	Add OSF copyright
+# 
+# Revision /main/DCE_1.2.2/1  1996/08/15  22:22 UTC  mullan_s
+# 	Submit fix for CHFts19700
+# 
+# Revision /main/mullan_dce122_bugs_1/1  1996/08/14  19:45 UTC  mullan_s
+# 	Merge from HPDCE02 branch.
+# 
+# Revision /main/HPDCE02/1  1996/01/15  23:07 UTC  jss
+# 	Merge in all changes to dced tests for new ACLs.
+# 
+# Revision /main/jss_dced_acl/1  1996/01/15  22:54 UTC  jss
+# 	Initial Revision.
+# 
+# Revision 1.0  1995/10/26  21:26:59  jss
+# 	Initial version
+# 
+# $EndLog$
+#
+#======================================
+#
+#   Contains the following functions
+#   to support ERA in security tests:
+#
+# file_to_journal
+# acl_save_and_modify
+# acl_restore
+#
+
+#===============================================================================
+# Function:     file_to_journal filename
+# Purpose:      output contents of specified file to tet journal
+#===============================================================================
+file_to_journal() {
+
+            tet_infoline "Output of previous command:"
+            cat ${1} |
+            while read line ; do
+                tet_infoline "${line}"
+            done
+}
+
+#===============================================================================
+# Function:     acl_save_and_modify acl entry_name entry [-io]
+# Purpose:      Execute dcecp command to modify an acl. The operation is done
+#               in -local mode
+#===============================================================================
+acl_save_and_modify()
+{
+
+   DCECP_CMD="acl show ${4} ${1} -local"
+   tet_infoline "Executing dcecp -local -c ${DCECP_CMD}"
+   dcecp -local -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+
+   if [ "$?" != 0 ]
+   then
+        tet_infoline "ERROR: dcecp ${DCECP_CMD} failed in acl_save_and_modify"
+        cat ${DCECP_OUTPUT}
+        file_to_journal ${DCECP_OUTPUT}
+        fail=1
+        return 1
+   fi
+   print "acl modify ${4} ${1} -change `grep ${2} ${DCECP_OUTPUT}` -local" \
+	>> ${DCED_ACL_SAVE}
+
+   DCECP_CMD="acl modify ${4} ${1} -change ${3} -local"
+   tet_infoline "Executing dcecp -local -c ${DCECP_CMD}"
+   dcecp -local -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+
+   if [ "$?" != 0 ]
+   then
+        tet_infoline "ERROR: dcecp ${DCECP_CMD} failed in acl_save_and_modify"
+        cat ${DCECP_OUTPUT}
+        file_to_journal ${DCECP_OUTPUT}
+        fail=1
+        return 1
+   fi
+} 
+
+#===============================================================================
+# Function:     acl_restore
+# Purpose:      Execute dcecp commands to restore previous acls. The operation is 
+#               done in -local mode
+#===============================================================================
+acl_restore()
+{
+
+   if [[ ! -f ${DCED_ACL_SAVE} ]]
+   then 
+        tet_infoline "ERROR: failed to find file ${DCED_ACL_SAVE} in acl_restore"
+        fail=1
+        return 1
+   fi
+
+   while read DCECP_CMD
+   do
+      tet_infoline "Executing dcecp -local -c ${DCECP_CMD}"
+      dcecp -local -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+
+      if [ "$?" != 0 ]
+      then
+           tet_infoline "ERROR: dcecp ${DCECP_CMD} failed in acl_restore"
+           cat ${DCECP_OUTPUT}
+           file_to_journal ${DCECP_OUTPUT}
+           fail=1
+           return 1
+      fi
+   done < ${DCED_ACL_SAVE}
+} 
+
+

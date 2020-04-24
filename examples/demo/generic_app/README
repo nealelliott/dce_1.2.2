@@ -1,0 +1,988 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: README,v $
+# Revision 1.1.7.3  1996/03/09  23:15:20  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:32:35  marty]
+#
+# Revision 1.1.7.2  1995/12/08  20:54:34  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/08  20:49:45  root]
+# 
+# Revision 1.1.2.3  1994/10/27  20:06:42  rrizzo
+# 	expand copyright
+# 	[1994/10/27  19:39:02  rrizzo]
+# 
+# Revision 1.1.2.2  1994/10/21  20:43:45  weir
+# 	Added build section (CR 12635)
+# 	[1994/10/21  20:43:37  weir]
+# 
+# Revision 1.1.2.1  1994/10/21  19:13:18  weir
+# 	Submit sample program sources (CR 12635)
+# 	[1994/10/21  19:12:35  weir]
+# 
+# $EndLog$
+#
+# 
+------------------------------------------------------------------------------
+# [3.VIII.94]                                                                #
+#                               -77 cols-                                    #
+------------------------------------------------------------------------------
+
+Directory:
+
+  <dce-root-dir>/dce/src/examples/demo/generic_app
+
+
+This directory contains the source code for a generic sample DCE client/server
+application. This application consists almost entirely of initialization and
+cleanup code, including extensive examples of ACL management, serviceability
+code, security setup, and signal handling. The actual manager code consists of
+one generic remote call that does no actual work, but which does make use of
+the ACL manager and the serviceability code.
+
+The following files are contained in this directory:
+
+    Makefile
+    README (this file)
+    sample.acf
+    sample.idl
+    sample_bind.acf
+    sample_bind.c
+    sample_bind.idl
+    sample_client.c
+    sample_db.acf
+    sample_db.idl
+    sample_manager.c
+    sample_server.c
+    sample_server.h
+    smp.sams
+
+
+------------------------------------------------------------------------------
+
+                    BUILDING THE SAMPLE APPLICATION
+
+To build the sample application program, you must first install the DCE
+Application Development Environment (by running dce_config). After this has
+been done, you can type:
+
+    make -f Makefile_generic_app
+
+to build the example. Note that in order to build the program on the HP
+platform, you must uncomment several lines in Makefile_generic_app; see
+that file for further details.
+
+
+
+------------------------------------------------------------------------------
+
+                     INSTALLING THE SAMPLE APPLICATION
+
+
+Before you can run the sample application, you must install sample_client
+and sample_server on the machines you want to use. This involves performing
+the following steps:
+
+
+  1. Adding the client and server principals and server group to the Security
+     registry.
+
+  2. Creating a keyfile to be used by the server.
+
+  3. Creating a CDS namespace entry for the server to export its binding
+     information to (and for the clients to import binding information from).
+
+  4. Setting up the correct permissions on the namespace entry to allow the
+     server to use it (i.e., write to it) correctly.
+
+
+Assuming that the server's principal name will be sample_server and that
+the client's principal name will be sample_client, you should perform these
+steps as follows:
+
+  1. Login as the cell administrator:
+
+      $ dce_login cell_admin -dce-
+
+     You must first login as the cell administrator in order to be able to
+     execute the following registry operations. Note that the password at
+     your site will be different from that given above (as the last param-
+     eter). For further information about the use of dce_login, see the
+     OSF DCE Administration Guide.
+
+  2. Add the server and client principals to the registry, and set up the
+     server's keyfile:
+
+      $ rgy_edit
+      $ Current site is: registry server at \
+            /.../your_cell/subsys/dce/sec/master
+      rgy_edit=> domain group
+      Domain changed to: group
+      rgy_edit=> add sample_servers
+      rgy_edit=> domain principal
+      Domain changed to: principal
+      rgy_edit=> add sample_server
+      rgy_edit=> add sample_client
+      rgy_edit=> domain account
+      Domain changed to: account
+      rgy_edit=> add sample_server -g sample_servers -o none \
+            -pw <server_password> -mp -dce-
+      rgy_edit=> add sample_client -g none -o none -pw <client_password> \
+            -mp -dce-
+      rgy_edit=> ktadd -p sample_server -pw <server_password> \
+            -f /tmp/sample_keytab
+      rgy_edit=> quit
+      bye.
+
+     Note that <server_password> and <client_password> in the examples above
+     are the passwords that you assign to the server and client, respectively.
+     You can substitute any other values that you wish, but be sure to remem-
+     ber what the values were: you will need to use them in order to
+     dce_login before executing the client and server programs. For further
+     information about rgy_edit, see the OSF DCE Administration Guide -- Core
+     Components, the OSF DCE Administration Reference, and the OSF DCE Com-
+     mand Reference.
+
+     The name of the server's keyfile, /tmp/sample_keytab, is specified by
+     the value of the KEYTAB constant in the sample_server.c file; the name
+     you give to the ktadd sub-command must be identical to the value of
+     this constant.
+
+  3. Create the CDS entry that will be used to hold the server's binding
+     information. For example:
+
+      $ cdscp create directory /.:/sample
+      $ rpccp add entry /.:/sample/sample_server_entry
+
+     Of course, you can substitute any legal CDS name for sample. For fur-
+     ther information about cdscp and rpccp, see the OSF DCE Administration
+     Guide -- Core Components, and the OSF DCE Administration Reference.
+
+  4. Set up the ACL on the entry to allow access to the server:
+
+      $ acl_edit -e /.:/sample/sample_server_entry -m user:sample_server:rwdtc
+
+     Note that sample_server is the principal name used in the previous steps,
+     and must be identical to the value of the <principal_name> argument you
+     specify on the command line to sample_server.
+
+
+
+You have now installed the sample application.
+
+
+------------------------------------------------------------------------------
+                     RUNNING THE SAMPLE APPLICATION
+
+
+The server is invoked as follows:
+
+    sample_server <principal_name> <CDS_dir_name>/
+
+(NOTE THE SLASH!)
+
+where:
+
+    principal_name   is the server's principal name; there has to be
+                     an account in the registry for this principal in
+                     order for the program to be run successfully. Note
+                     that this name is not specified anywhere in the
+                     program source; it is determined solely by the user,
+                     who must make sure that the name he specifies here is
+                     the same as the one he set up in the registry.
+
+    CDS_dir_name     is the full name (terminated by a "/") of the CDS
+                     directory in which the server's namespace entry is
+                     to be located; this is where the bindings are exported
+                     to. Note that this argument is NOT the name of the ser-
+                     ver entry; that is determined by the value of the con-
+                     stant DEFNAME, defined in sample_server.c: the entry is
+                     created in this directory.
+
+For example (with setup done as described in first section):
+
+    ./sample_server sample_server /.:/sample/
+
+Note that BEFORE YOU RUN THE SERVER you must create in the local directory
+a subdirectory called "db_sample_acl"; this is where the sample application's
+backing store database files will be created. The pathname to these files is
+determined by the value of the ACL_DB_PATH constant at the top of the
+sample_server.c file; you can change this value if you wish.
+
+At present, the server's serviceability messages are routed by default
+values coded at the top of the sample_server.c file. The default is that
+full debugging is set and everything is routed to stderr. So if you compile
+the server as is, you will get lots of messages appearing on your screen
+when you run it (for an example, see the end of this file). To change this
+you have to change the hard-coded defaults, because at present there is no
+way to change routing via the command line.
+
+------------------------------------------------------------------------------
+
+The client is invoked as follows:
+
+    sample_client <object_name> | kill
+
+where:
+
+    object_name      is the name of the object you want the client to bind
+                     to. Note that this is not the entry name of some export-
+                     ed entity; it is some object managed by the server and
+                     held in a backing store. However, the object name should
+                     be expressed as a full CDS name qualified by the full
+                     server entry name; that is, the object should be express-
+                     ed as if the server entry were a directory, and the ob-
+                     ject an entry within that directory. The alternative is
+                     to just give the simple object name; if you do that, the
+                     client will try to bind through the RPC_DEFAULT_ENTRY
+                     value, whatever that is (or isn't).
+
+                     If you do give the overqualified object name, then the
+                     client will bind to the object through the server junc-
+                     tion, as described below in the comments to
+                     do_client_command_line() in sample_client.c
+
+    kill             specifies that the server be killed via a call through
+                     the remote management interface.
+
+Note that to use the "kill" option you must first set the environment variable
+RPC_DEFAULT_ENTRY to the value of the full name of the server's CDS name entry.
+For example (with setup done as described in first section):
+
+    setenv RPC_DEFAULT_ENTRY /.:/sample/sample_server_entry
+
+Now you can try any of the following three command forms (since at present
+there are only two objects set up by the server):
+
+    ./sample_client /.:/sample/sample_server_entry/sample_object
+
+to bind via the junction to the mgmt object and view its contents, or:
+
+    ./sample_client /.:/sample/sample_server_entry/server_mgmt
+
+to bind to the sample object and view its contents, or:
+
+    ./sample_client kill
+
+to kill the server via the remote management interface.
+
+For examples of what you should see when you do this, see the end of this
+file.
+
+Note also that you must be dce_login'd as the Cell Administrator (cell_admin)
+in order for the client to be able to be properly allowed to do what it needs
+to do. This is because the only principal who is given any meaningful permis-
+sions on the objects managed by the application are their owner, and this is
+defined at the top of server_sample.c to be cell_admin.
+
+
+                             *****
+
+------------------------------------------------------------------------------
+
+                 WHAT THE SAMPLE APPLICATION DOES
+
+
+There are two modes for running the client: you can either specify that
+the server be killed, or you can specify a single object to bind to. The
+object name is specified by a namespace pathname, but neither of the two
+possible objects is a namespace entry. Instead, the sample application
+implements a "junction" located at its server entry in the namespace, and
+clients bind to objects through this junction.
+
+Essentially this happens as follows. The client tries to bind to the over-
+qualified CDS entry formed by concatenating the specified object name to the
+server entry name; instead, it ends up getting a partial binding to the
+server. It then makes a call to the remote bind operation with that bind-
+ing, ostensibly to get the object UUID of the object whose name was specified
+(to bind to) when the client was invoked. These objects are held in a backing
+store database. The remote call makes its way by the familiar procedure to the
+server; the application's name_to_object() routine (defined in sample_bind.c)
+then simply looks up the desired object UUID by accessing the name-indexed
+backing store. When the remote call completes, the client finds itself with a
+full binding and the desired object UUID.
+
+
+
+------------------------------------------------------------------------------
+                           Using acl_edit
+
+With the sample_server running, you can also access the server's ACL managers
+using acl_edit. For example:
+
+    acl_edit /.:/sample/sample_server_entry/sample_object
+
+should get you bound to the sample_object ACL:
+
+    sec_acl_edit>
+
+You should now be able to list the contents of the ACL:
+
+    sec_acl_edit> l
+
+    # SEC_ACL for /.:/sample/sample_server_entry/sample_object:
+    # Default cell = /.../<your_cellname>
+    unauthenticated:r---t-
+    user:cell_admin:rwdctx
+    any_other:r---t-
+
+
+The same commands can be used to bind to and list the contents of the
+server_mgmt ACL.
+
+For further information on acl_edit, see the "OSF DCE Command Reference".
+
+
+------------------------------------------------------------------------------
+
+                                NOTES
+
+The source code in this directory is reprinted in full as the text of
+Appendix A of the OSF DCE Application Development Guide -- Introduction
+and Style Guide volume. Excerpts from the code are also used in other
+parts of the volume.
+
+A detailed explanation of the operation of the ACL management code can
+be found in Chapter 3, "Security", of the OSF DCE Application Development
+Guide -- Introduction and Style Guide.
+
+The sample application does not make use of the new DCE 1.1 dced facilities,
+by which a DCE application can be registered (either via calls to the
+dced_server_ routines, or via dcecp by a system administrator) with dced,
+and then, by means of calls to the dce_server_ routines, have dced do
+almost all of its namespace and security initialization for it. For further
+information on the dced_server_ and dce_server_ routines and their use, see
+the OSF DCE Application Development Guide; Chapter 1 of the OSF DCE Applica-
+tion Development Guide -- Introduction and Style Guide; and the RPC part of
+the OSF DCE Application Development Guide -- Core Components volume.
+
+
+
+
+
+----------------------------------------------------------------------------------
+SERVER OUTPUT
+
+
+./sample_server sample_server /.:/sample/ 
+          Setting default route FATAL:STDERR: ...
+          Setting default route ERROR:STDERR: ...
+          Setting default route WARNING:STDERR: ...
+          Setting default route NOTICE:STDERR: ...
+          Setting default route NOTICE_VERBOSE:STDERR: ...
+1994-07-20-11:06:37.773-04:00I----- ./sample_server NOTICE smp server sample_server.c 482 0xa44b0c18
+Starting up
+1994-07-20-11:06:37.793-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling server_register_get_bindings()
+1994-07-20-11:06:37.803-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering server_register_get_bindings()
+1994-07-20-11:06:37.813-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_server_register_if()
+1994-07-20-11:06:37.893-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_server_use_all_protseqs()
+1994-07-20-11:06:37.913-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_server_inq_bindings()
+1994-07-20-11:06:37.933-04:00I----- ./sample_server NOTICE smp server sample_server.c 813 0xa44b0c18
+Nr of sample bindings received == 2
+1994-07-20-11:06:37.953-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_binding_to_string_binding()
+1994-07-20-11:06:37.963-04:00I----- ./sample_server NOTICE smp server sample_server.c 825 0xa44b0c18
+Full sample binding in string form == ncacn_ip_tcp:130.105.1.33[2971]
+1994-07-20-11:06:37.983-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_string_free()
+1994-07-20-11:06:37.993-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_binding_to_string_binding()
+1994-07-20-11:06:38.003-04:00I----- ./sample_server NOTICE smp server sample_server.c 825 0xa44b0c18
+Full sample binding in string form == ncadg_ip_udp:130.105.1.33[3329]
+1994-07-20-11:06:38.013-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_string_free()
+1994-07-20-11:06:38.023-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Exiting server_register_get_bindings()
+1994-07-20-11:06:38.043-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_server_register_auth_info()
+1994-07-20-11:06:38.123-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling server_get_identity()
+1994-07-20-11:06:38.133-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering server_get_identity()
+1994-07-20-11:06:38.153-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling pthread_create()
+1994-07-20-11:06:38.163-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling sec_login_setup_identity()
+1994-07-20-11:06:38.263-04:00I----- ./sample_server DEBUG7 smp server ? 0 0x0040c200
+Entering managekey()
+1994-07-20-11:06:38.263-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x0040c200
+Calling sec_key_mgmt_manage_key()
+1994-07-20-11:06:40.453-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling sec_key_mgmt_get_key()
+1994-07-20-11:06:40.483-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling sec_login_validate_identity()
+1994-07-20-11:06:44.183-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling sec_login_set_context()
+1994-07-20-11:06:44.833-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Exiting server_get_identity()
+1994-07-20-11:06:44.843-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Spawning signal handler thread
+1994-07-20-11:06:44.853-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling server_export_objects()
+1994-07-20-11:06:44.863-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering server_export_objects()
+1994-07-20-11:06:44.873-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_ep_register()
+1994-07-20-11:06:44.913-04:00I----- ./sample_server DEBUG7 smp server ? 0 0x004da030
+Entering signal_handler()
+1994-07-20-11:06:44.943-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x004da030
+Calling sigemptyset()
+1994-07-20-11:06:44.953-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x004da030
+Calling sigaddset()
+1994-07-20-11:06:44.973-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x004da030
+Calling sigaddset()
+1994-07-20-11:06:44.983-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x004da030
+Calling sigprocmask()
+1994-07-20-11:06:44.993-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x004da030
+Calling sigwait()...
+1994-07-20-11:06:45.603-04:00I----- ./sample_server NOTICE smp server sample_server.c 901 0xa44b0c18
+Exporting to /.:/sample/sample_server_entry
+1994-07-20-11:06:45.613-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_ns_binding_export()
+1994-07-20-11:06:54.742-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Exiting server_export_objects()
+1994-07-20-11:06:54.762-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling server_acl_mgr_setup()
+1994-07-20-11:06:54.772-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering server_acl_mgr_setup()
+1994-07-20-11:06:54.782-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling bzero()
+1994-07-20-11:06:54.792-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling uuid_create_nil()
+1994-07-20-11:06:54.822-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_db_open()
+1994-07-20-11:06:54.932-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_db_open()
+1994-07-20-11:06:54.992-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_db_open()
+1994-07-20-11:06:55.062-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_acl_register_object_type()
+1994-07-20-11:06:55.112-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_acl_register_object_type()
+1994-07-20-11:06:55.122-04:00I----- ./sample_server NOTICE smp server sample_server.c 1983 0xa44b0c18
+ACL databases not found, creating them from scratch
+1994-07-20-11:06:55.132-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling server_create_acl()
+1994-07-20-11:06:55.142-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering server_create_acl()
+1994-07-20-11:06:55.162-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling uuid_create()
+1994-07-20-11:06:55.172-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_acl_obj_init()
+1994-07-20-11:06:57.392-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling server_get_local_principal_id()
+1994-07-20-11:06:57.582-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering server_get_local_principal_id()
+1994-07-20-11:06:57.772-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_cf_get_cell_name()
+1994-07-20-11:06:57.962-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling sec_rgy_site_open()
+1994-07-20-11:06:58.142-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling free()
+1994-07-20-11:06:58.192-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling sec_rgy_pgo_name_to_id()
+1994-07-20-11:06:58.362-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Exiting server_get_local_principal_id()
+1994-07-20-11:06:58.372-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_acl_obj_add_user_entry()
+1994-07-20-11:06:58.382-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Exiting server_create_acl()
+1994-07-20-11:06:58.402-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling uuid_to_string()
+1994-07-20-11:06:58.412-04:00I----- ./sample_server DEBUG8 smp server ? 0 0xa44b0c18
+String form of mgmt_acl_uuid == 39341cd4-a3d4-11cd-b66e-08002b0f59ba
+1994-07-20-11:06:58.422-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_string_free()
+1994-07-20-11:06:58.442-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling server_get_local_principal_id()
+1994-07-20-11:06:58.452-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering server_get_local_principal_id()
+1994-07-20-11:06:58.462-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_cf_get_cell_name()
+1994-07-20-11:06:58.472-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling sec_rgy_site_open()
+1994-07-20-11:06:58.482-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling free()
+1994-07-20-11:06:58.492-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling sec_rgy_pgo_name_to_id()
+1994-07-20-11:06:58.522-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Exiting server_get_local_principal_id()
+1994-07-20-11:06:58.542-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_acl_obj_add_user_entry()
+1994-07-20-11:06:58.552-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_acl_obj_add_unauth_entry()
+1994-07-20-11:06:58.562-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_acl_obj_add_any_other_entry()
+1994-07-20-11:06:58.572-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling server_store_acl()
+1994-07-20-11:06:58.592-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering server_store_acl()
+1994-07-20-11:06:58.602-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling bzero()
+1994-07-20-11:06:58.612-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_db_store_by_uuid()
+1994-07-20-11:06:58.672-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_db_std_header_init()
+1994-07-20-11:06:58.682-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_db_store_by_uuid()
+1994-07-20-11:06:58.702-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_db_store_by_name(server_mgmt)
+1994-07-20-11:06:58.722-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Exiting server_store_acl()
+1994-07-20-11:06:58.732-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling server_create_acl()
+1994-07-20-11:06:58.742-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering server_create_acl()
+1994-07-20-11:06:58.752-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling uuid_create()
+1994-07-20-11:06:58.762-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_acl_obj_init()
+1994-07-20-11:06:58.782-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling server_get_local_principal_id()
+1994-07-20-11:06:58.792-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering server_get_local_principal_id()
+1994-07-20-11:06:58.802-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_cf_get_cell_name()
+1994-07-20-11:06:58.862-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling sec_rgy_site_open()
+1994-07-20-11:06:58.872-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling free()
+1994-07-20-11:06:58.882-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling sec_rgy_pgo_name_to_id()
+1994-07-20-11:06:58.912-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Exiting server_get_local_principal_id()
+1994-07-20-11:06:58.922-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_acl_obj_add_user_entry()
+1994-07-20-11:06:59.362-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Exiting server_create_acl()
+1994-07-20-11:06:59.512-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling bzero()
+1994-07-20-11:06:59.522-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling server_store_acl()
+1994-07-20-11:06:59.532-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering server_store_acl()
+1994-07-20-11:06:59.712-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling bzero()
+1994-07-20-11:06:59.892-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling uuid_create()
+1994-07-20-11:07:00.032-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling uuid_create()
+1994-07-20-11:07:00.062-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_db_store_by_uuid()
+1994-07-20-11:07:00.082-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_db_store_by_uuid()
+1994-07-20-11:07:00.132-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_db_store_by_uuid()
+1994-07-20-11:07:00.182-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_db_std_header_init()
+1994-07-20-11:07:00.192-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_db_store_by_uuid()
+1994-07-20-11:07:00.202-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_db_store_by_name(sample_object)
+1994-07-20-11:07:00.232-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Exiting server_store_acl()
+1994-07-20-11:07:00.242-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_acl_obj_free_entries()
+1994-07-20-11:07:00.252-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling uuid_to_string()
+1994-07-20-11:07:00.262-04:00I----- ./sample_server DEBUG8 smp server ? 0 0xa44b0c18
+String form of mgmt_acl_uuid == 39341cd4-a3d4-11cd-b66e-08002b0f59ba
+1994-07-20-11:07:00.282-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_string_free()
+1994-07-20-11:07:00.292-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_mgmt_set_authorization_fn()
+1994-07-20-11:07:00.302-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_server_register_if()
+1994-07-20-11:07:00.312-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Exiting server_acl_mgr_setup()
+1994-07-20-11:07:00.322-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling uuid_to_string()
+1994-07-20-11:07:00.332-04:00I----- ./sample_server DEBUG8 smp server ? 0 0xa44b0c18
+String form of mgmt_acl_uuid == 39341cd4-a3d4-11cd-b66e-08002b0f59ba
+1994-07-20-11:07:00.342-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_string_free()
+1994-07-20-11:07:00.352-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling server_rdacl_export()
+1994-07-20-11:07:00.362-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering server_rdacl_export()
+1994-07-20-11:07:00.372-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_ep_register()
+1994-07-20-11:07:00.572-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Exiting server_rdacl_export()
+1994-07-20-11:07:00.582-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling sample_bind_export()
+1994-07-20-11:07:00.592-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering sample_bind_export()
+1994-07-20-11:07:00.602-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_server_register_if()
+1994-07-20-11:07:00.612-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_ep_register()
+1994-07-20-11:07:01.182-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Exiting sample_bind_export()
+1994-07-20-11:07:01.222-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_server_listen()
+
+
+
+  [Here the client is invoked: ./sample_client /.:/sample/sample_server_entry/sample_object]
+
+
+
+1994-07-20-11:09:30.502-04:00I----- ./sample_server DEBUG7 smp server ? 0 0x005ec640
+Entering sample_mgmt_auth()
+1994-07-20-11:09:30.512-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x005ec640
+Calling uuid_to_string()
+1994-07-20-11:09:30.522-04:00I----- ./sample_server DEBUG8 smp server ? 0 0x005ec640
+String form of mgmt_acl_uuid == 39341cd4-a3d4-11cd-b66e-08002b0f59ba
+1994-07-20-11:09:30.592-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x005ec640
+Calling rpc_string_free()
+1994-07-20-11:09:30.602-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x005ec640
+Calling dce_acl_is_client_authorized()
+1994-07-20-11:09:30.632-04:00I----- ./sample_server DEBUG7 smp server ? 0 0x005ec640
+Exiting sample_mgmt_auth()
+1994-07-20-11:09:35.162-04:00I----- ./sample_server DEBUG6 smp binder ? 0 0x005ec640
+Entering name_to_object()...
+1994-07-20-11:09:35.182-04:00I----- ./sample_server DEBUG6 smp binder ? 0 0x005ec640
+Calling dce_db_fetch_by_name()...
+1994-07-20-11:09:35.192-04:00I----- ./sample_server DEBUG6 smp binder ? 0 0x005ec640
+Calling uuid_create_nil()...
+1994-07-20-11:09:35.212-04:00I----- ./sample_server DEBUG6 smp binder ? 0 0x005ec640
+Successfully exiting name_to_object()
+1994-07-20-11:09:35.242-04:00I----- ./sample_server DEBUG6 smp manager ? 0 0x005ec640
+Entering sample_get_text()...
+1994-07-20-11:09:35.252-04:00I----- ./sample_server DEBUG6 smp manager ? 0 0x005ec640
+Calling dce_db_fetch_by_uuid()...
+1994-07-20-11:09:35.282-04:00I----- ./sample_server DEBUG8 smp manager ? 0 0x005ec640
+Text exists
+1994-07-20-11:09:35.302-04:00I----- ./sample_server DEBUG8 smp manager ? 0 0x005ec640
+Recovered text == THIS IS AN OFFICIAL SAMPLE OBJECT TEXT!
+1994-07-20-11:09:35.322-04:00I----- ./sample_server DEBUG8 smp manager ? 0 0x005ec640
+Message == THIS IS AN OFFICIAL SAMPLE OBJECT TEXT!
+1994-07-20-11:09:35.332-04:00I----- ./sample_server DEBUG6 smp manager ? 0 0x005ec640
+Successfully exiting sample_get_text()
+1994-07-20-11:09:35.732-04:00I----- ./sample_server DEBUG6 smp manager ? 0 0x005ec640
+Entering sample_call()...
+1994-07-20-11:09:35.742-04:00I----- ./sample_server DEBUG6 smp manager ? 0 0x005ec640
+Calling dce_acl_is_client_authorized()...
+1994-07-20-11:09:35.772-04:00I----- ./sample_server DEBUG8 smp manager ? 0 0x005ec640
+Call authorized
+1994-07-20-11:09:35.782-04:00I----- ./sample_server DEBUG6 smp manager ? 0 0x005ec640
+Successfully exiting sample_call()
+
+
+
+  [Here the client is invoked: ./sample_client /.:/sample/sample_server_entry/server_mgmt]
+
+
+
+1994-07-20-11:10:26.548-04:00I----- ./sample_server DEBUG7 smp server ? 0 0x005ec640
+Entering sample_mgmt_auth()
+1994-07-20-11:10:26.568-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x005ec640
+Calling uuid_to_string()
+1994-07-20-11:10:26.578-04:00I----- ./sample_server DEBUG8 smp server ? 0 0x005ec640
+String form of mgmt_acl_uuid == 39341cd4-a3d4-11cd-b66e-08002b0f59ba
+1994-07-20-11:10:26.598-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x005ec640
+Calling rpc_string_free()
+1994-07-20-11:10:26.608-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x005ec640
+Calling dce_acl_is_client_authorized()
+1994-07-20-11:10:26.618-04:00I----- ./sample_server DEBUG7 smp server ? 0 0x005ec640
+Exiting sample_mgmt_auth()
+1994-07-20-11:10:31.388-04:00I----- ./sample_server DEBUG6 smp binder ? 0 0x005ec640
+Entering name_to_object()...
+1994-07-20-11:10:31.398-04:00I----- ./sample_server DEBUG6 smp binder ? 0 0x005ec640
+Calling dce_db_fetch_by_name()...
+1994-07-20-11:10:31.408-04:00I----- ./sample_server DEBUG6 smp binder ? 0 0x005ec640
+Calling uuid_create_nil()...
+1994-07-20-11:10:31.438-04:00I----- ./sample_server DEBUG6 smp binder ? 0 0x005ec640
+Successfully exiting name_to_object()
+1994-07-20-11:10:31.478-04:00I----- ./sample_server DEBUG6 smp manager ? 0 0x005ec640
+Entering sample_get_text()...
+1994-07-20-11:10:31.488-04:00I----- ./sample_server DEBUG6 smp manager ? 0 0x005ec640
+Calling dce_db_fetch_by_uuid()...
+1994-07-20-11:10:31.498-04:00I----- ./sample_server DEBUG8 smp manager ? 0 0x005ec640
+Text exists
+1994-07-20-11:10:31.508-04:00I----- ./sample_server DEBUG8 smp manager ? 0 0x005ec640
+Recovered text == THIS IS AN OFFICIAL MGMT OBJECT SAMPLE TEXT!
+1994-07-20-11:10:31.528-04:00I----- ./sample_server DEBUG8 smp manager ? 0 0x005ec640
+Message == THIS IS AN OFFICIAL MGMT OBJECT SAMPLE TEXT!
+1994-07-20-11:10:31.538-04:00I----- ./sample_server DEBUG6 smp manager ? 0 0x005ec640
+Successfully exiting sample_get_text()
+1994-07-20-11:10:31.868-04:00I----- ./sample_server DEBUG6 smp manager ? 0 0x005ec640
+Entering sample_call()...
+1994-07-20-11:10:31.888-04:00I----- ./sample_server DEBUG6 smp manager ? 0 0x005ec640
+Calling dce_acl_is_client_authorized()...
+1994-07-20-11:10:31.898-04:00I----- ./sample_server DEBUG8 smp manager ? 0 0x005ec640
+Call authorized
+1994-07-20-11:10:31.918-04:00I----- ./sample_server DEBUG6 smp manager ? 0 0x005ec640
+Successfully exiting sample_call()
+
+
+
+  [Here the client is invoked: ./sample_client kill]
+
+
+
+1994-07-20-11:11:06.886-04:00I----- ./sample_server DEBUG7 smp server ? 0 0x005ec640
+Entering sample_mgmt_auth()
+1994-07-20-11:11:06.896-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x005ec640
+Calling uuid_to_string()
+1994-07-20-11:11:06.906-04:00I----- ./sample_server DEBUG8 smp server ? 0 0x005ec640
+String form of mgmt_acl_uuid == 39341cd4-a3d4-11cd-b66e-08002b0f59ba
+1994-07-20-11:11:06.926-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x005ec640
+Calling rpc_string_free()
+1994-07-20-11:11:06.936-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x005ec640
+Calling dce_acl_is_client_authorized()
+1994-07-20-11:11:06.966-04:00I----- ./sample_server DEBUG7 smp server ? 0 0x005ec640
+Exiting sample_mgmt_auth()
+1994-07-20-11:11:09.656-04:00I----- ./sample_server DEBUG7 smp server ? 0 0x005ec640
+Entering sample_mgmt_auth()
+1994-07-20-11:11:09.666-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x005ec640
+Calling uuid_to_string()
+1994-07-20-11:11:09.676-04:00I----- ./sample_server DEBUG8 smp server ? 0 0x005ec640
+String form of mgmt_acl_uuid == 39341cd4-a3d4-11cd-b66e-08002b0f59ba
+1994-07-20-11:11:09.686-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x005ec640
+Calling rpc_string_free()
+1994-07-20-11:11:09.706-04:00I----- ./sample_server DEBUG4 smp server ? 0 0x005ec640
+Calling dce_acl_is_client_authorized()
+1994-07-20-11:11:09.716-04:00I----- ./sample_server DEBUG7 smp server ? 0 0x005ec640
+Exiting sample_mgmt_auth()
+1994-07-20-11:11:09.736-04:00I----- ./sample_server NOTICE smp server sample_server.c 637 0xa44b0c18
+Cleaning up
+1994-07-20-11:11:09.776-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling server_renew_identity()
+1994-07-20-11:11:09.786-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering server_renew_identity()
+1994-07-20-11:11:09.806-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling sec_login_get_expiration()
+1994-07-20-11:11:09.816-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling time()
+1994-07-20-11:11:09.826-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Successfully exiting server_renew_identity()
+1994-07-20-11:11:09.906-04:00I----- ./sample_server FATAL smp server sample_server.c 2851 0xa44b0c18
+server_renew_identity(): login context has not been certified (dce / sec)
+1994-07-20-11:11:09.926-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling server_cleanup_objects()
+1994-07-20-11:11:09.936-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering server_cleanup_objects()
+1994-07-20-11:11:09.956-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_ep_unregister()
+1994-07-20-11:11:10.166-04:00I----- ./sample_server NOTICE smp server sample_server.c 995 0xa44b0c18
+Unexporting from /.:/sample/sample_server_entry
+1994-07-20-11:11:10.186-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_ns_binding_unexport()
+1994-07-20-11:11:12.545-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Exiting server_cleanup_objects()
+1994-07-20-11:11:12.555-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling server_acl_mgr_close()
+1994-07-20-11:11:12.565-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering server_acl_mgr_close()
+1994-07-20-11:11:12.575-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_db_close()
+1994-07-20-11:11:12.635-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_db_close()
+1994-07-20-11:11:12.745-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling dce_db_close()
+1994-07-20-11:11:12.835-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Exiting server_acl_mgr_close()
+1994-07-20-11:11:12.845-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling server_rdacl_cleanup()
+1994-07-20-11:11:12.855-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering server_rdacl_cleanup()
+1994-07-20-11:11:12.865-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_ep_unregister()
+1994-07-20-11:11:13.065-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Exiting server_rdacl_cleanup()
+1994-07-20-11:11:13.075-04:00I----- ./sample_server DEBUG5 smp server ? 0 0xa44b0c18
+Calling server_bind_cleanup()
+1994-07-20-11:11:13.095-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Entering server_bind_cleanup()
+1994-07-20-11:11:13.105-04:00I----- ./sample_server DEBUG4 smp server ? 0 0xa44b0c18
+Calling rpc_ep_unregister()
+1994-07-20-11:11:13.335-04:00I----- ./sample_server DEBUG7 smp server ? 0 0xa44b0c18
+Exiting server_bind_cleanup()
+1994-07-20-11:11:13.355-04:00I----- ./sample_server NOTICE smp server sample_server.c 690 0xa44b0c18
+Exiting
+
+
+
+
+----------------------------------------------------------------------------------
+CLIENT OUTPUT
+
+
+
+
+[senegal]:/usr/users/weir/dce/dce1.1/1_1sb/src/examples/demo/generic_app# ./sample_client /.:/sample/sample_server_entry/sample_object
+sample_client: Entering do_client_command_line()...
+sample_client: Remote call option selected.
+sample_client: objectname_vector->name == /.:/sample/sample_server_entry/sample_object
+sample_client: Calling rpc_ns_binding_import_begin()...
+sample_client: Calling rpc_ns_binding_import_next()...
+sample_client: Calling rpc_ns_binding_import_done()...
+sample_client: Calling rpc_ep_resolve_binding()...
+sample_client: Calling rpc_binding_to_string_binding()...
+sample_client: Imported resolved binding == 2ecda08a-a3d4-11cd-b66e-08002b0f59ba@ncacn_ip_tcp:130.105.1.33[2971]
+sample_client: Calling rpc_string_free()...
+sample_client: Calling rpc_mgmt_inq_server_princ_name()...
+sample_client: Principal name returned == /.../over_cell/sample_server
+sample_client: Calling is_valid_principal()...
+sample_client: Entering is_valid_principal()...
+sample_client: Initial principal name == /.../over_cell/sample_server
+sample_client: Initial group name     == sample_servers
+sample_client: Calling dce_cf_get_cell_name()...
+sample_client: Calling sec_rgy_site_open()...
+sample_client: Calling sec_id_parse_name()...
+sample_client: Full principal name  == /.../over_cell/sample_server
+sample_client: Local principal name == sample_server
+sample_client: Calling sec_rgy_pgo_is_member()...
+sample_client: Calling rpc_binding_set_auth_info()...
+sample_client: Remote call option enacted...
+sample_client: Preparing to bind to object /.:/sample/sample_server_entry/sample_object
+sample_client: Calling bind_to_object()...
+sample_client: Entering bind_to_object()...
+sample_client: Object name == /.:/sample/sample_server_entry/sample_object
+sample_client: Calling rpc_ns_entry_inq_resolution()...
+ Client: rpc_ns_entry_inq_resolution(): partial results (dce / rpc)
+sample_client: Binding to resolved name...
+sample_client: Calling rpc_ns_binding_import_begin()...
+sample_client: Calling rpc_ns_binding_import_next()...
+sample_client: Calling rpc_ns_binding_import_done()...
+sample_client: Imported partial binding.
+sample_client: Calling rpc_ns_binding_inq_entry_name()...
+sample_client: Calling [remote] rs_bind_to_object()...
+sample_client: Fully bound to object.
+sample_client: Calling rpc_string_free()...
+View object /.:/sample/sample_server_entry/sample_object:
+     Via junction: /.../over_cell/sample/sample_server_entry
+     Object name: sample_object
+sample_client: Calling rpc_binding_to_string_binding()...
+     Binding: 2ecda08a-a3d4-11cd-b66e-08002b0f59ba@ncadg_ip_udp:130.105.1.33[3329]
+sample_client: Calling uuid_to_string()...
+     Manager Type UUID: 00000000-0000-0000-0000-000000000000
+sample_client: Calling uuid_to_string()...
+     Object UUID: 00415371-f29a-1d3d-b8c8-0000c0d4de56
+sample_client: Calling [remote] sample_get_text()...
+     Object Text: THIS IS AN OFFICIAL SAMPLE OBJECT TEXT!
+sample_client: Calling rpc_binding_to_string_binding()...
+sample_client: Binding about to be used == ncacn_ip_tcp:130.105.1.33[2971]
+sample_client: Calling [remote] sample_call()...
+sample_client: Remote call option successfully completed.
+
+sample_client: Calling rpc_string_free()...
+
+
+
+----------------------------------------------------------------------------------
+
+
+
+[senegal]:/usr/users/weir/dce/dce1.1/1_1sb/src/examples/demo/generic_app# ./sample_client /.:/sample/sample_server_entry/server_mgmt
+sample_client: Entering do_client_command_line()...
+sample_client: Remote call option selected.
+sample_client: objectname_vector->name == /.:/sample/sample_server_entry/server_mgmt
+sample_client: Calling rpc_ns_binding_import_begin()...
+sample_client: Calling rpc_ns_binding_import_next()...
+sample_client: Calling rpc_ns_binding_import_done()...
+sample_client: Calling rpc_ep_resolve_binding()...
+sample_client: Calling rpc_binding_to_string_binding()...
+sample_client: Imported resolved binding == 2ecda08a-a3d4-11cd-b66e-08002b0f59ba@ncacn_ip_tcp:130.105.1.33[2971]
+sample_client: Calling rpc_string_free()...
+sample_client: Calling rpc_mgmt_inq_server_princ_name()...
+sample_client: Principal name returned == /.../over_cell/sample_server
+sample_client: Calling is_valid_principal()...
+sample_client: Entering is_valid_principal()...
+sample_client: Initial principal name == /.../over_cell/sample_server
+sample_client: Initial group name     == sample_servers
+sample_client: Calling dce_cf_get_cell_name()...
+sample_client: Calling sec_rgy_site_open()...
+sample_client: Calling sec_id_parse_name()...
+sample_client: Full principal name  == /.../over_cell/sample_server
+sample_client: Local principal name == sample_server
+sample_client: Calling sec_rgy_pgo_is_member()...
+sample_client: Calling rpc_binding_set_auth_info()...
+sample_client: Remote call option enacted...
+sample_client: Preparing to bind to object /.:/sample/sample_server_entry/server_mgmt
+sample_client: Calling bind_to_object()...
+sample_client: Entering bind_to_object()...
+sample_client: Object name == /.:/sample/sample_server_entry/server_mgmt
+sample_client: Calling rpc_ns_entry_inq_resolution()...
+ Client: rpc_ns_entry_inq_resolution(): partial results (dce / rpc)
+sample_client: Binding to resolved name...
+sample_client: Calling rpc_ns_binding_import_begin()...
+sample_client: Calling rpc_ns_binding_import_next()...
+sample_client: Calling rpc_ns_binding_import_done()...
+sample_client: Imported partial binding.
+sample_client: Calling rpc_ns_binding_inq_entry_name()...
+sample_client: Calling [remote] rs_bind_to_object()...
+sample_client: Fully bound to object.
+sample_client: Calling rpc_string_free()...
+View object /.:/sample/sample_server_entry/server_mgmt:
+     Via junction: /.../over_cell/sample/sample_server_entry
+     Object name: server_mgmt
+sample_client: Calling rpc_binding_to_string_binding()...
+     Binding: 2ecda08a-a3d4-11cd-b66e-08002b0f59ba@ncacn_ip_tcp:130.105.1.33[2971]
+sample_client: Calling uuid_to_string()...
+     Manager Type UUID: 00000000-0000-0000-0000-000000000000
+sample_client: Calling uuid_to_string()...
+     Object UUID: 00573b0e-bcc2-1d35-a7e3-0000c0d4de56
+sample_client: Calling [remote] sample_get_text()...
+     Object Text: THIS IS AN OFFICIAL MGMT OBJECT SAMPLE TEXT!
+sample_client: Calling rpc_binding_to_string_binding()...
+sample_client: Binding about to be used == ncacn_ip_tcp:130.105.1.33[2971]
+sample_client: Calling [remote] sample_call()...
+sample_client: Remote call option successfully completed.
+
+sample_client: Calling rpc_string_free()...
+
+
+
+----------------------------------------------------------------------------------
+
+
+
+[senegal]:/usr/users/weir/dce/dce1.1/1_1sb/src/examples/demo/generic_app# ./sample_client kill
+sample_client: Entering do_client_command_line()...
+sample_client: Kill server option selected.
+sample_client: Calling rpc_ns_binding_import_begin()...
+sample_client: Calling rpc_ns_binding_import_next()...
+sample_client: Calling rpc_ns_binding_import_done()...
+sample_client: Calling rpc_ep_resolve_binding()...
+sample_client: Calling rpc_binding_to_string_binding()...
+sample_client: Imported resolved binding == 2ecda08a-a3d4-11cd-b66e-08002b0f59ba@ncadg_ip_udp:130.105.1.33[3329]
+sample_client: Calling rpc_string_free()...
+sample_client: Calling rpc_mgmt_inq_server_princ_name()...
+sample_client: Principal name returned == /.../over_cell/sample_server
+sample_client: Calling is_valid_principal()...
+sample_client: Entering is_valid_principal()...
+sample_client: Initial principal name == /.../over_cell/sample_server
+sample_client: Initial group name     == sample_servers
+sample_client: Calling dce_cf_get_cell_name()...
+sample_client: Calling sec_rgy_site_open()...
+sample_client: Calling sec_id_parse_name()...
+sample_client: Full principal name  == /.../over_cell/sample_server
+sample_client: Local principal name == sample_server
+sample_client: Calling sec_rgy_pgo_is_member()...
+sample_client: Calling rpc_binding_set_auth_info()...
+sample_client: Kill server option enacted...
+sample_client: Calling rpc_ep_resolve_binding()...
+sample_client: Calling rpc_mgmt_stop_server_listening()...
+sample_client: Server successfully killed.
+
+sample_client: Calling rpc_string_free()...
+
+
+
+----------------------------------------------------------------------------------
+

@@ -1,0 +1,214 @@
+#!/bin/ksh
+# 
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: dceth002,v $
+# Revision 1.1.15.2  1996/03/11  02:49:00  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:09:42  marty]
+#
+# Revision 1.1.15.1  1995/12/11  22:49:18  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/1  1994/07/05  18:03 UTC  bissen
+# 	Merge hpdce02 (DCE 1.1 beta) and HPDCE01 into HPDCE02
+# 
+# 	HP revision /main/HPDCE01/2  1994/04/12  15:45 UTC  truitt
+# 
+# 	HP revision /main/HPDCE01/truitt_junk/1  1994/04/12  15:31 UTC  truitt
+# 	clean up reference to profile
+# 
+# 	HP revision /main/HPDCE01/1  1994/01/31  19:24  bissen
+# 	merge kk and hpdce01
+# 	[1995/12/11  22:23:09  root]
+# 
+# Revision 1.1.7.2  1993/07/09  14:50:59  root
+# 	Initial King Kong branch
+# 	[1993/07/09  14:50:26  root]
+# 
+# Revision 1.1.5.3  1993/04/27  14:45:46  eheller
+# 	Removed characters left behind by emerge.ls
+# 	[1993/04/27  14:45:07  eheller]
+# 
+# Revision 1.1.5.2  1993/04/23  13:52:38  eheller
+# 	Merged time looping changes
+# 	[1993/04/23  13:26:22  eheller]
+# 
+# 	Merged Hp_dce1_0_1 changes
+# 	[1993/04/16  17:14:41  eheller]
+# 
+# Revision 1.1.1.7  1993/03/11  22:14:53  osfrcs
+# 	    Loading drop DCE1_0_2B18
+# 
+# Revision 1.1.5.2  1993/02/05  15:26:22  cjd
+# 	Embedded copyright notice
+# 	[1993/02/05  14:47:37  cjd]
+# 
+# Revision 1.1.3.2  1993/02/04  22:18:43  cjd
+# 	Embedded copyright notice
+# 
+# Revision 1.1.3.3  1992/11/11  12:42:47  mgm
+# 	Fixed I in PROCESSES.
+# 	[1992/11/11  12:42:18  mgm]
+# 	Revision 1.1.3.2  1992/11/04  18:20:59  mgm
+# 	DCE 1.0.1 Release
+# 	[1992/11/04  18:20:15  mgm]
+# 	Revision 1.1.1.6  1992/09/21  18:41:13  osfrcs
+# 	    Loading drop Dce1_0_1fnl
+# 	Revision 1.1.2.2  1992/06/07  15:41:41  ramb
+# 	Changed script to pass in number_of_threads as an argument when
+# 	dceth002_c program is invoked. The number_of_threads is derived from
+# 	the environment variable NUMBER_OF_THREADS.
+# 	[1992/04/06  15:21:06  ramb]
+# 
+# $EndLog$
+#
+#
+#
+#
+#   TEST_NAME: dceth002
+#
+#   COMPONENT_NAME: dce.systest
+#
+#   FUNCTIONS: Execute_code
+#
+#   ORIGINS: 27
+#
+#
+#   (C) COPYRIGHT International Business Machines Corp. 1991
+#   All Rights Reseprvbed
+#
+#
+#   FILES: dceth002
+#	   dceth002_c - prvb_thd_002.c origin
+#	   cts_test.h
+#	   cts_test.c
+#	   driven by $TET_ROOT/threads/bin/run.thr
+#
+#   REQUIREMENTS:
+#      Threads
+#      Note:  This testcase expects certain environment variables to be set
+#	      prior to execution.  The skeleton driver set the following
+#	      variables:  NUMBER_OF_THREADS
+#
+#   RESTRICTIONS:
+#      None
+#
+#   USAGE:
+#
+#      dceth002
+#
+#   TESTCASE OVERVIEW:
+#
+#	dceth002 is designed to exercise the ability of creating threads
+#
+#       dceth002_c creates a NUBMER_OF_THREADS which loop and perform some
+#       simple computations.
+#
+#   DESCRIPTION:
+#	This is the driver for the dceth002 test case.  It starts the thread
+#       process and saves the return code and exits with that code.
+#
+#   HISTORY: 12/11/90   Gerald Cantor     Initial code
+#	     11/04/92   Mary MacGregor	  Ported to TET on HPUX
+#
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="do_tests"
+#ic1="run_tests"
+#ic2="check_results"
+
+startup()
+{
+        tet_infoline "Creating threads using mutual exclusion primitives"
+        tet_infoline "Log workstation parameters"
+        tet_infoline "Number of threads =       $NUMBER_OF_THREADS"
+        tet_infoline "Processes =               $PROCESSES"
+}
+
+cleanup()
+{
+	rm  $STTMPDIR/dceth002.res.*
+}
+
+do_tests()
+{
+	error=0
+	CURRENT_LOOP=1
+	SECONDS=0
+	SECONDS_TO_EXECUTE=`awk "BEGIN { printf (\"%d\", 3600 * $RUN_TIME); exit; }"`
+	while [ $SECONDS -lt $SECONDS_TO_EXECUTE ]
+	do
+		tet_infoline "starting iteration $CURRENT_LOOP"
+		run_tests
+                check_results
+		cleanup
+		CURRENT_LOOP=`expr $CURRENT_LOOP + 1`
+	done
+
+        if [ $error -ne 0 ]
+        then
+                tet_infoline "ERROR:Dceth002 threads test failed"
+                tet_result DCE_ERROR
+        else
+                tet_infoline "Dceth002 threads test succeeded"
+                tet_result PASS
+        fi
+}
+
+run_tests()
+{
+	I=1
+
+	tet_infoline "Starting dceth002 $PROCESSES time(s)"
+	while [ "$I" -le "$PROCESSES" ]
+	do
+		#$WSTMPDIR/$FILE > $WSLOGDIR/$FILE.res.$I 2>&1 &
+		(./dceth002_c $NUMBER_OF_THREADS 2>&1 | tee -a $STTMPDIR/dceth002.res.$I) &
+		PIDS="$PIDS""$! "
+		I=`expr $I + 1`
+	done
+
+	tet_infoline "Waiting for processes to complete"
+	for PID in $PIDS
+	do
+		wait $PID
+	done
+
+# If you get here, then all processes have completed
+# Otherwise, a process is hung
+	
+	return
+}
+
+check_results()
+{
+	I=1
+
+	tet_infoline "Checking results"
+	while [ "$I" -le "$PROCESSES" ]
+	do
+		grep PASSED "$STTMPDIR/dceth002.res.$I" > /dev/null
+		if [ "$?" != 0 ]
+		then
+			error=1
+			tet_infoline "Iteration $I of $PROCESSES failed"
+		else
+			tet_infoline "Iteration $I of $PROCESSES passed"
+		fi
+		I=`expr $I + 1`
+	done
+
+	return
+
+}
+
+. $TET_ROOT/profile.dcest
+. ./dceth002.data
+. $TET_ROOT/lib/ksh/tcm.ksh

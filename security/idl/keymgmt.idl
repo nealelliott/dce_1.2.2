@@ -1,0 +1,573 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: keymgmt.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:27:55  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:24  marty]
+ *
+ * Revision 1.1.4.1  1995/12/08  17:31:36  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:54:57  root]
+ * 
+ * Revision 1.1.2.3  1992/12/29  13:29:14  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:48:17  zeliff]
+ * 
+ * Revision 1.1.2.2  1992/11/29  01:01:20  burati
+ * 	CR4576 Import rpcbase.idl so client app doesn't have to
+ * 	[1992/11/27  22:49:18  burati]
+ * 
+ * Revision 1.1  1992/01/19  14:54:53  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+
+/*  keymgmt.idl V=8 10/04/91 //littl/prgy/src/idl
+**
+** Copyright (c) Hewlett-Packard Company 1991
+** Unpublished work. All Rights Reserved.
+**
+*/
+/* 
+ *  DCE Security key management interface
+ */
+
+[ local ]
+
+interface sec_key_mgmt {
+
+    import  "dce/lbase.idl";
+    import  "dce/rgynbase.idl";
+    import  "dce/rpcbase.idl";
+
+    /*
+     * Identify the underlying authentication scheme/protocol - valid values
+     * are obtained from the rpc_c_authn_... set.
+     */
+    typedef unsigned32  sec_key_mgmt_authn_service;
+
+    /*
+     * NOTE - DCE authenticated RPC related arguments
+     *
+     * In DCE 1.0 the rpc_c_authn_dce_private is the only supported 
+     * authentication service.  For this service the principal name is
+     * either a global name or a relative name implying a principal from 
+     * the local cell.  Operations that take a keydata argument expect
+     * a pointer to a sec_passwd_rec_t structure which contains either 
+     * a plaintext password or a pre-encrypted buffer.  Operations that
+     * yield a keydata argument as output set the pointer to an array
+     * of sec_passwd_rec_t.  The array is terminated by an element with
+     * key_type sec_passwd_none (this is the end of list sentinal).
+     *
+     * Operations that take a keytype argument (void *) expect a pointer
+     * to a sec_passwd_type_t.
+     *
+     * The arg parameter is a character string that optionally names an
+     * alternate local key file - this is the same interpretation applied by
+     * the default key acquisition function.  This comment applies to all
+     * functions in this interface.
+     */
+
+    /* s e c _ k e y _ m g m t _ c h a n g e _ k e y 
+     *
+     * Perform all activities necessary to update a principal's key to 
+     * the specified value.  This includes updating any local storage
+     * for the principal's key and also performing any remote operations
+     * needed to keep the authentication service current.  Old keys for the
+     * principal are garbage collected if appropriate.     
+     *
+     * Argument Usage: 
+     *      INPUT
+     *  authn_service   **  select the underlying authentication scheme
+     *  arg             **  key acquisition function argument (same value
+     *                      that is passed to rpc_server_register_auth_info.)
+     *  principal_name  **  names the principal whose key is to be changed
+     *  key_vno             the new key version number. (0 may be specified 
+     *                      to indicate that the runtime should select the
+     *                      next appropriate key version number)
+     *  keydata         **  the new key value.
+     *
+     *  ** see NOTE on authenticated RPC related arguments above.
+     *
+     *      OUTPUT
+     *  garbage_collect_time    informs the caller of how many seconds in the
+     *                      future the garbage collection function must be
+     *                      called to get rid of any remaining obsolete keys.
+     *                      a 0 return value indicates there is no need to
+     *                      call the garbage collection function.
+     *  err                 error status if any.
+     * 
+     * Any error condition will leave the key state unchanged.
+     *
+     * Errors:
+     *  sec_key_mgmt_e_key_unavailable      Old key not present, unable to use
+     *                                      it to set a client side authentication
+     *                                      context.
+     *  sec_key_mgmt_e_authn_invalid        Authentication service invalid.
+     *  sec_key_mgmt_e_authn_unavailable    Authentication service unavailable
+     *                                      unable to update network database or
+     *                                      obtain necessary network credentials.
+     *  sec_key_mgmt_e_unauthorized         Caller unauthorized to perform op.
+     *  sec_key_mgmt_e_key_unsupported      Key type not supported.
+     *  sec_key_mgmt_e_key_version_exists   Key with this version number already
+     *                                      exists.
+     */
+    void sec_key_mgmt_change_key ( 
+        [in]    sec_key_mgmt_authn_service  authn_service, 
+        [in]    void                        * arg,
+        [in]    char                        * principal_name,
+        [in]    unsigned32                  key_vno,
+        [in]    void                        * keydata,
+        [out]   sec_timeval_period_t        * garbage_collect_time,
+        [out]   error_status_t              * err 
+    );
+
+    /* s e c _ k e y _ m g m t _ d e l e t e _ k e y 
+     *
+     * Delete the specified key from the local key store.  This function
+     * deletes all key types with the same key version number.
+     *
+     * Argument Usage: 
+     *      INPUT
+     *  authn_service   **  select the underlying authentication scheme
+     *  arg             **  key acquisition function argument (same value
+     *                      that is passed to rpc_server_register_auth_info.)
+     *  principal_name  **  names the principal whose key is to be changed
+     *  key_vno             the key version to delete.
+     *
+     *  ** see NOTE on authenticated RPC related arguments above.
+     *
+     *      OUTPUT
+     *  err                 error status if any.
+     * 
+     * Any error condition will leave the key state unchanged.
+     *
+     * Errors:
+     *  sec_key_mgmt_e_key_unavailable      Requested key not present
+     *  sec_key_mgmt_e_authn_invalid        Authentication service invalid
+     *  sec_key_mgmt_e_unauthorized         Caller unauthorized to perform op
+     */
+    void sec_key_mgmt_delete_key ( 
+        [in]    sec_key_mgmt_authn_service  authn_service, 
+        [in]    void                        * arg,
+        [in]    char                        * principal_name,
+        [in]    unsigned32                  key_vno,
+        [out]   error_status_t              * err 
+    );
+
+    /* s e c _ k e y _ m g m t _ d e l e t e _ k e y _ t y p e
+     *
+     * Delete the specified key from the local key store.  This function
+     * deletes only the specified key type of the specified key version.
+     *
+     * Argument Usage: 
+     *      INPUT
+     *  authn_service   **  select the underlying authentication scheme
+     *  arg             **  key acquisition function argument (same value
+     *                      that is passed to rpc_server_register_auth_info.)
+     *  principal_name  **  names the principal whose key is to be changed
+     *  keytype         **  the keytype
+     *  key_vno             the key version to delete.
+     *
+     *  ** see NOTE on authenticated RPC related arguments above.
+     *
+     *      OUTPUT
+     *  err                 error status if any.
+     * 
+     * Any error condition will leave the key state unchanged.
+     *
+     * Errors:
+     *  sec_key_mgmt_e_key_unavailable      Requested key not present
+     *  sec_key_mgmt_e_authn_invalid        Authentication service invalid
+     *  sec_key_mgmt_e_unauthorized         Caller unauthorized to perform op
+     */
+    void sec_key_mgmt_delete_key_type ( 
+        [in]    sec_key_mgmt_authn_service  authn_service, 
+        [in]    void                        * arg,
+        [in]    char                        * principal_name,
+        [in]    void                        * keytype,
+        [in]    unsigned32                  key_vno,
+        [out]   error_status_t              * err 
+    );
+
+    /* s e c _ k e y _ m g m t _ f r e e _ k e y
+     *
+     * Release any storage allocated for this key data by sec_key_mgmt_get_key
+     * or sec_key_mgmt_get_nth_key.
+     *
+     * Argument Usage: 
+     *      INPUT
+     *  keydata         **  the key value extracted.
+     *
+     *      OUTPUT
+     *  err                 error status if any.
+     *
+     * Errors:
+     *	< NONE >
+     */
+    void sec_key_mgmt_free_key (
+        [in]    void                        * keydata,
+        [out]   error_status_t              * err 
+    );
+
+
+    /* s e c _ k e y _ m g m t _ g e t _ k e y 
+     *
+     * Extract the specified key from the local key store.
+     *
+     * Argument Usage: 
+     *      INPUT
+     *  authn_service   **  select the underlying authentication scheme
+     *  arg             **  key acquisition function argument (same value
+     *                      that is passed to rpc_server_register_auth_info.)
+     *  principal_name  **  names the principal whose key is to be changed
+     *  key_vno             the key version to extract.
+     *
+     *  ** see NOTE on authenticated RPC related arguments above.
+     *
+     *      OUTPUT
+     *  keydata         **  the key value extracted.  This data may be released
+     *                      by calling sec_key_mgmt_free_key.
+     *  err                 error status if any.
+     * 
+     * Any error condition will leave the key state unchanged.
+     *
+     * Errors:
+     *  sec_key_mgmt_e_key_unavailable      Requested key not present
+     *  sec_key_mgmt_e_authn_invalid        Authentication service invalid
+     *  sec_key_mgmt_e_unauthorized         Caller unauthorized to perform op
+     */
+    void sec_key_mgmt_get_key ( 
+        [in]    sec_key_mgmt_authn_service  authn_service, 
+        [in]    void                        * arg,
+        [in]    char                        * principal_name,
+        [in]    unsigned32                  key_vno,
+        [out]   void                        ** keydata,
+        [out]   error_status_t              * err 
+    );
+
+
+    /* s e c _ k e y _ m g m t _ g e t _ n e x t _ k e y 
+     *
+     * Extract keys from the local key store.  This operation can be used to
+     * scan all keys in the local key store.
+     *
+     * Argument Usage: 
+     *      INPUT
+     *  authn_service   **  select the underlying authentication scheme
+     *  arg             **  key acquisition function argument (same value
+     *                      that is passed to rpc_server_register_auth_info.)
+     *  cursor              Marker into key storage.
+     *
+     *  ** see NOTE on authenticated RPC related arguments above.
+     *
+     *      OUTPUT
+     *  principal_name      name of the principal assoc with this key
+     *  key_vno             the key version extracted.
+     *  keydata         **  the key value extracted.  This data may be released
+     *                      by calling sec_key_mgmt_free_key.
+     *  err                 error status if any.
+     * 
+     * Errors:
+     *  sec_key_mgmt_e_authn_invalid        Authentication service invalid
+     *  sec_key_mgmt_e_unauthorized         Caller unauthorized to perform op
+     */
+    void sec_key_mgmt_get_next_key ( 
+        [in]    void                        * cursor,
+        [out]   char                        ** principal_name,
+        [out]   unsigned32                  * key_vno,
+        [out]   void                        ** keydata,
+        [out]   error_status_t              * err 
+    );
+
+
+    /* s e c _ k e y _ m g m t _ i n i t i a l i z e _ c u r s o r
+     *
+     * Reset the database cursor to return the first suitable entry. 
+     *
+     * Argument Usage: 
+     *      INPUT
+     *  authn_service   **  select the underlying authentication scheme
+     *  arg             **  key acquisition function argument (same value
+     *                      that is passed to rpc_server_register_auth_info.)
+     *  principal_name  **  name of the principal used in searches (or NULL).
+     *  keytype         **  the keytype
+     *
+     *  ** see NOTE on authenticated RPC related arguments above.
+     *
+     *      OUTPUT
+     *  cursor              Marker into key storage.
+     *  err                 error status if any.
+     * 
+     * Errors:
+     *  sec_key_mgmt_e_authn_invalid        Authentication service invalid
+     *  sec_key_mgmt_e_unauthorized         Caller unauthorized to perform op
+     */
+    void sec_key_mgmt_initialize_cursor (
+        [in]    sec_key_mgmt_authn_service  authn_service, 
+        [in]    void                        * arg,
+        [in]    char                        * principal_name,
+        [in]    void                        * keytype,
+        [out]   void                        ** cursor,
+        [out]   error_status_t              * err 
+    );
+
+    /* s e c _ k e y _ m g m t _ r e l e a s e _ c u r s o r
+     *
+     * Release information associated with the specified cursor
+     */
+    void sec_key_mgmt_release_cursor (
+        [in]    void                        ** cursor,
+        [out]   error_status_t              * err 
+    );
+
+
+    /* s e c _ k e y _ m g m t _ s e t _ k e y
+     *
+     * Perform all local activities necessary to update a principal's key to 
+     * the specified value.  This function will not update the authentication
+     * service's value for the principal's key.  This function is generally
+     * useful for replicated services running on independent machines but
+     * sharing a common key.
+     *
+     *  ** see NOTE on authenticated RPC related arguments above.
+     *
+     * Errors:
+     *  sec_key_mgmt_e_key_unavailable      Old key not present, unable to use
+     *                                      it to set a client side authentication
+     *                                      context.
+     *  sec_key_mgmt_e_authn_invalid        Authentication service invalid.
+     *  sec_key_mgmt_e_unauthorized         Caller unauthorized to perform op.
+     *  sec_key_mgmt_e_key_unsupported      Key type not supported.
+     *  sec_key_mgmt_e_key_version_exists   Key with this version number already
+     *                                      exists.
+     */
+    void sec_key_mgmt_set_key ( 
+        [in]    sec_key_mgmt_authn_service  authn_service, 
+        [in]    void                        * arg,
+        [in]    char                        * principal_name,
+        [in]    unsigned32                  key_vno,
+        [in]    void                        * keydata,
+        [out]   error_status_t              * err 
+    );
+
+    /* s e c _ k e y _ m g m t _ g a r b a g e _ c o l l e c t
+     *
+     * Discard any obsolete key information for this principal.
+     *
+     *  ** see NOTE on authenticated RPC related arguments above.
+     *
+     * Errors:
+     *  sec_key_mgmt_e_authn_invalid        Authentication service invalid.
+     *  sec_key_mgmt_e_unauthorized         Caller unauthorized to perform op.
+     */
+    void sec_key_mgmt_garbage_collect (
+        [in]    sec_key_mgmt_authn_service  authn_service, 
+        [in]    void                        * arg,
+        [in]    char                        * principal_name,
+        [out]   error_status_t              * err 
+    );
+
+    /* s e c _ k e y _ m g m t _ m a n a g e _ k e y
+     *
+     * Change the principal's key on a regular basis determined by the local
+     * cell's policy.  This function will run indefinitely - it will never
+     * return during normal operation.  It should be invoked from a thread
+     * that has been devoted to managing keys.
+     *
+     * This function queries the DCE registry to determine the passwd
+     * expiration policy that applies to the named principal.  It then
+     * idles until a short time before the current key is due to expire
+     * and then uses the sec_key_mgmt_generate_key function to produce
+     * a new random key.  (This function updates both the local key store
+     * and the DCE registry).  This function also invokes 
+     * sec_key_mgmt_garbage_collect as needed.
+     *
+     * Argument Usage: 
+     *      INPUT
+     *  authn_service   **  select the underlying authentication scheme
+     *  arg             **  key acquisition function argument (same value
+     *                      that is passed to rpc_server_register_auth_info.)
+     *  principal_name  **  names the principal whose key is to be changed
+     *
+     *  ** see NOTE on authenticated RPC related arguments above.
+     *
+     *      OUTPUT
+     *  err                 error status if any.
+     * 
+     * Errors:
+     *  sec_key_mgmt_e_key_unavailable      Old key not present, unable to use
+     *                                      it to set a client side authentication
+     *                                      context.
+     *  sec_key_mgmt_e_authn_invalid        Authentication service invalid.
+     *  sec_key_mgmt_e_unauthorized         Caller unauthorized to perform op.
+     */
+    void sec_key_mgmt_manage_key ( 
+        [in]    sec_key_mgmt_authn_service  authn_service, 
+        [in]    void                        * arg,
+        [in]    char                        * principal_name,
+        [out]   error_status_t              * err 
+    );
+
+    /* s e c _ k e y _ m g m t _ g e t _ n e x t _ k v n o
+     *
+     * Determine the next eligible key version number for a given keytype
+     * for a given principal, and/or the current latest version number.
+     *
+     * Argument Usage: 
+     *      INPUT
+     *  authn_service   **  select the underlying authentication scheme
+     *  arg             **  key acquisition function argument (same value
+     *                      that is passed to rpc_server_register_auth_info.)
+     *  principal_name  **  names the principal whose key is to be changed
+     *  keytype         **  the keytype
+     *
+     *  ** see NOTE on authenticated RPC related arguments above.
+     *
+     *      OUTPUT
+     *  key_vno             the current key version number
+     *  next_key_vno        the next eligible key version number
+     *  err                 error status if any.
+     * 
+     *  ** NULL pointers may be passed in for key_vno or next_key_vno if
+     *  ** the caller does not require that value to be returned.
+     * 
+     * Errors:
+     *  sec_key_mgmt_e_key_unavailable      Old key not present, unable to use
+     *                                      it to set a client side authentication
+     *                                      context.
+     *  sec_key_mgmt_e_authn_invalid        Authentication service invalid.
+     *  sec_key_mgmt_e_unauthorized         Caller unauthorized to perform op.
+     */
+
+    void sec_key_mgmt_get_next_kvno ( 
+        [in]    sec_key_mgmt_authn_service  authn_service, 
+        [in]    void                        * arg,
+        [in]    char                        * principal_name,
+        [in]    void                        * keytype,
+        [out]   unsigned32                  * key_vno,
+        [out]   unsigned32                  * next_key_vno,
+        [out]   error_status_t              * err 
+    );
+
+    /* s e c _ k e y _ m g m t _ g e n _ r a n d _ k e y
+     *
+     * Generate a new random key of the specified type.  The output keydata
+     * is suitable for use by sec_key_mgmt_change_key or sec_key_mgmt_set_key.
+     *
+     *  ** see NOTE on authenticated RPC related arguments above.
+     *
+     * Errors:
+     *  sec_key_mgmt_e_authn_invalid        Authentication service invalid.
+     *  sec_key_mgmt_e_unauthorized         Caller unauthorized to perform op.
+     */
+    void sec_key_mgmt_gen_rand_key (
+        [in]    sec_key_mgmt_authn_service  authn_service,
+        [in]    void                        * arg,
+        [in]    char                        * principal_name,
+        [in]    void                        * keytype,
+        [in]    unsigned32                  key_vno,
+        [out]   void                        ** keydata,
+        [out]   error_status_t              * err 
+    );
+
+    /*
+     * Deprecated operations:
+     */
+
+    /* s e c _ k e y _ m g m t _ g e n e r a t e _ k e y
+     *
+     * Perform all activities necessary to generate a new random key for
+     * the named  principal.  The behavior for this function is the same as
+     * sec_key_mgmt_change_key, except that the new key is randomly selected
+     * by the system.
+     *
+     *  ** Use of this function is deprecated - use sec_key_mgmt_gen_rand_key
+     *     followed by sec_key_mgmt_change_key.  This function was deficient
+     *     in that it did not allow the caller to specify the key type.
+     *     the implementation of this function for DCE 1.0 will only
+     *     generate DES keys.
+     *
+     *  ** see NOTE on authenticated RPC related arguments above.
+     *
+     * Errors:
+     *  sec_key_mgmt_e_key_unavailable      Old key not present, unable to use
+     *                                      it to set a client side authentication
+     *                                      context.
+     *  sec_key_mgmt_e_authn_invalid        Authentication service invalid.
+     *  sec_key_mgmt_e_authn_unavailable    Authentication service unavailable
+     *                                      unable to update network database or
+     *                                      obtain necessary network credentials.
+     *  sec_key_mgmt_e_unauthorized         Caller unauthorized to perform op.
+     *  sec_key_mgmt_e_key_version_exists   Key with this version number already
+     *                                      exists.
+     */
+    void sec_key_mgmt_generate_key (
+        [in]    sec_key_mgmt_authn_service  authn_service,
+        [in]    void                        * arg,
+        [in]    char                        * principal_name,
+        [in]    unsigned32                  key_vno,
+        [out]   sec_timeval_period_t        * garbage_collect_time,
+        [out]   error_status_t              * err 
+    );
+
+    /* s e c _ k e y _ m g m t _ g e t _ n t h _ k e y 
+     *
+     * Extract the specified key from the local key store.  This operation 
+     * can be used to scan all keys belonging to the specified principal and
+     * stored in the local key store.
+     *
+     *  ** Use of this function is deprecated - use sec_key_mgmt_get_next_key
+     *     along with the initialize and release cursor functions above.
+     *     This function was deficient in that it made the caller keep track
+     *     of an index into the key storage, and did not return a principal
+     *     name associated with the key.
+     *  ** THIS FUNCTION MAY NOT BE CALLED FROM THE SAME APPLICATION AS
+     *     THE CURSOR ROUTINES OR sec_key_mgmt_get_next_key.  THE BEHAVIOR
+     *     WHEN USING THIS AND THE CURSOR RELATED ROUTINES TOGETHER IS
+     *     UNSPECIFIED.
+     *
+     * Argument Usage: 
+     *      INPUT
+     *  authn_service   **  select the underlying authentication scheme
+     *  arg             **  key acquisition function argument (same value
+     *                      that is passed to rpc_server_register_auth_info.)
+     *  principal_name  **  names the principal whose key is to be read
+     *  index               The nth key to extract.  0 indicates the first
+     *                      key available.
+     *
+     *  ** see NOTE on authenticated RPC related arguments above.
+     *
+     *      OUTPUT
+     *  key_vno             the key version extracted.
+     *  keydata         **  the key value extracted.  This data may be released
+     *                      by calling sec_key_mgmt_free_key.
+     *  err                 error status if any.
+     * 
+     * Any error condition will leave the key state unchanged.
+     *
+     * Errors:
+     *  sec_key_mgmt_e_key_unavailable      Requested key not present
+     *  sec_key_mgmt_e_authn_invalid        Authentication service invalid
+     *  sec_key_mgmt_e_unauthorized         Caller unauthorized to perform op
+     */
+    void sec_key_mgmt_get_nth_key ( 
+        [in]    sec_key_mgmt_authn_service  authn_service, 
+        [in]    void                        * arg,
+        [in]    char                        * principal_name,
+        [in]    signed32                    index,
+        [out]   unsigned32                  * key_vno,
+        [out]   void                        ** keydata,
+        [out]   error_status_t              * err 
+    );
+
+
+}

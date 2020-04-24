@@ -1,0 +1,218 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dcerpary,v $
+# Revision 1.1.6.2  1996/03/09  20:50:58  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:28:56  marty]
+#
+# Revision 1.1.6.1  1995/12/11  22:00:51  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/29  18:16 UTC  bell_d
+# 	Merge in latest version fixed for heterogenous cell operation
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  14:51 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/03/25  16:31 UTC  bissen
+# 
+# 	HP revision /main/bissen_systest/1  1994/03/25  16:24 UTC  bissen
+# 	add TESTNAME for remote host to get own binaries
+# 	[1995/12/11  21:46:30  root]
+# 
+# 	Initial King Kong branch
+# 	[1993/07/09  12:34:35  root]
+# 
+# Revision 1.1.3.4  1993/05/04  15:15:14  bissen
+# 	incorporated test for LOOPS_TO_EXECUTE -bissen
+# 	[1993/05/04  15:14:31  bissen]
+# 
+# Revision 1.1.3.3  1993/04/23  14:42:28  giza
+# 	add time looping
+# 	[1993/04/22  23:36:11  giza]
+# 
+# Revision 1.1.3.2  1993/03/31  12:46:41  mgm
+# 	Initial GAMERA branch
+# 
+# Revision 1.1.2.3  1992/12/09  14:49:00  mgm
+# 	Fixed cleanup()
+# 	[1992/12/09  14:48:36  mgm]
+# 
+# Revision 1.1.2.2  1992/11/03  21:12:25  mgm
+# 	bsubmit'd  TET file
+# 	[1992/11/03  21:11:39  mgm]
+# 
+# $EndLog$
+# 
+# (c) Copyright 1990, 1991, 1992 OPEN SOFTWARE FOUNDATION, INC. 
+# ALL RIGHTS RESERVED 
+#
+#   TEST_NAME: dcerpary
+#
+#   FILES: dcerpary (this file)
+#	   dcerpary.data (Inits variables)
+#	   ary_server
+#	   ary_client
+#	Sources:
+#          ary.idl
+#          ary_server.c
+#          ary_client.c
+#          ary_util.h
+#          ary_util.c
+#          make.ary
+#
+#   REQUIREMENTS:
+#      Threads, rpc
+#
+#   RESTRICTIONS:
+#      Only one ary_server process can run on one machine since 
+#      the process listens on a well known port.
+#
+#   TESTCASE OVERVIEW:
+#
+#       dcerpary is designed to test the ability of the RPC runtime to
+#       transmit array of arrays and array of pointers structures.
+#
+#	Refer to the prologs in ary_client.c and ary_server.c for full
+#	details on how this testing is accomplished.
+#
+#  CHANGE HISTORY
+#  	09/02/92	Rick O'Brien	Ported to TET.
+#
+###########################################################################
+
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="rpc_ary"
+testlist="$ic1"
+
+startup ()
+{
+#===============================================================================
+# INITIALIZE VARIABLES
+# export MACHINES="ob1"
+
+export TESTNAME="dcerpary"
+export TESTDIR="/tet/rpc/ts"
+
+export SERVER_FILE="ary_server"
+export CLIENT_FILE="ary_client"
+
+export PROTO="ncadg_ip_udp"             #Use datagram protocol string
+export MAXCALLS="10"                    #Create 10 listener threads
+export ENDPOINT="5555"                  #Obtain port 5555 from RPC
+
+
+export SERVER_PARMS="-P $PROTO -C $MAXCALLS -X $ENDPOINT"
+export CLIENT_PARMS="-P $PROTO -X $ENDPOINT"
+	
+rm -f $STTMPDIR/ary_client.*
+#===============================================================================
+
+	ping_hosts
+}
+
+
+rpc_ary ()
+{
+	LOOP=1
+	CURRENT_LOOP=1
+        if [ -n "$RUNNING_TIME" ]
+        then
+                SECONDS_TO_EXECUTE=`awk "BEGIN { printf (\"%d\", 3600 * $RUNNING_TIME); exit; }"`
+        fi
+	SECONDS=0
+	while [ $LOOP -eq 1 ]
+	do
+                tet_infoline "Starting iteration $CURRENT_LOOP"
+
+		if [ $CURRENT_LOOP -eq 1 ]
+		then
+			test_fail=0
+		fi
+
+		start_server
+        	if [ $? -ne 0 ]
+        	then
+			tet_result FAIL
+                	return
+        	fi
+
+		start_clients dcerpary
+	        if [ $? -ne 0 ]
+	        then
+			tet_infoline "invocation $CURRENT_LOOP failed"
+			test_fail=1
+	        fi
+
+
+		wait_for_clients
+	        if [ $? -ne 0 ]
+	        then
+                        tet_infoline "invocation $CURRENT_LOOP failed"
+                        test_fail=1
+	        fi
+
+
+		check_results
+		if [ $? -ne 0 ]
+		then
+                        tet_infoline "invocation $CURRENT_LOOP failed"
+                        test_fail=1
+		fi
+
+		cleanup
+
+                CURRENT_LOOP=`expr $CURRENT_LOOP + 1`
+                if [ -n "$LOOPS_TO_EXECUTE" ]
+                then
+                        if [ $CURRENT_LOOP -gt $LOOPS_TO_EXECUTE ]
+                        then
+                                LOOP=0
+                        fi
+                elif [ -n "$RUNNING_TIME" ]
+                then
+                        if [ "$SECONDS" -ge "$SECONDS_TO_EXECUTE" ]
+                        then
+                                LOOP=0
+                        fi
+                else
+                        LOOP=0
+                fi
+	done
+
+	if [ $test_fail -eq 0 ]
+	then
+		tet_result PASS
+	else
+		tet_result FAIL
+	fi
+}
+
+
+cleanup ()
+{
+        killproc $SERVER_FILE
+	sleep 10
+	rm -f $STTMPDIR/$CLIENT_FILE* $STTMPDIR/$SERVER_FILE
+	if [ -f ./core ];then
+	   if [ ! -d $STTMPDIR/rpc ];then
+		mkdir $STTMPDIR/rpc
+	   fi
+	   mv ./core $STTMPDIR/rpc/core$$
+       fi
+}
+
+# tcc will fail if these files don't exist and get sourced
+# so there is no need to check that this happens
+
+. $TET_ROOT/profile.dcest
+. $TET_ROOT/rpc/ts/common_functions
+. $TCM

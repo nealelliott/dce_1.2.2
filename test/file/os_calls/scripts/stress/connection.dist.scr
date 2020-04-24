@@ -1,0 +1,203 @@
+* 
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* Note: Run this scripts solely from both dfs
+*
+
+*
+*> Connection tests.
+*
+* Test concurrent re-establisment of a connection, by authenticating
+* as a new user, and then having a bunch of threads all simultaneously
+* accessing DFS at once.  Must fork to create lots of other processes to
+* simultaneously access the server. 
+*
+
+* Note: 1. This scripts will create some dfs user accounts. In case
+*          of a interruption there will be those account left.
+*       2. Check if you have ../util there.
+*       3. It is pretty stress test. 
+
+umask 0
+include config
+include common3.env
+
+* Set following variables before running the test.
+set baseUserName string jess
+set numUsers int 5
+
+* Repeat times to do the test.
+set loopTimes 2
+
+***********************************************************************
+!* Check if there are enough spokes.
+if ( $ITL_nspokes < $numUsers ) {
+  echo FAILED: To run the test you have to have $numUsers spokes.
+  quit
+}
+
+set dummyCount int 0
+
+* Create DFS users.
+exec addUser_Proc $baseUserName $numUsers
+
+chdir $testDir
+
+loop z 1 1 $loopTimes
+
+loop x 1 1 $loopTimes
+  set fileName ( $testFile + $x )
+  open $fileName ($O_CREAT|$O_RDWR) 0777 fileId[$x]
+  write $fileId[$x] $NUMVEC64K 
+  if ( $CommandResult != $CONST64K ) {
+    echo FAILED: The HUB gets wrong return from write.
+  }
+  close $fileId[$x]
+endloop
+
+!* Dispath tests among spokes.
+loop x 0 1 ($ITL_nspokes-1)
+  set y ( $x + 1 ) 
+  set userName ( $baseUserName + $y ) 
+  if ( $y <= $numUsers ) {
+*
+* This is a procedure to remote login as a dfs user and access dfs.
+* 
+    set remoteDfs_Proc proc ENDPROC
+      echo
+      echo Connection test
+ 
+*
+* Establishing lots connections by dce login as new users
+*
+      sync_join "concurrent_dce_login" $timeout
+
+!* This process will functions as dfs user $userName
+      dce_login $userName $userName
+
+      set junk vector 0x0
+
+      set dataFile vecnum64k
+      set vectorData vector 0x0
+      open @dataFile @O_RDONLY 0777 dataFid
+      read @dataFid $CONST64K vectorData
+      if ( @CommandResult != $CONST64K ) {
+        echo FAILED: A user $userName gets wrong return from read.
+      }
+      close @dataFid
+
+      chdir $testDir
+     
+* Lots dfs user accessing dfs at once
+      sync_join "begin_sync" $timeout
+
+!* Create file $userName
+      open $userName ( @O_CREAT|@O_WRONLY ) 0777 fid
+      write @fid @vectorData
+      if ( @CommandResult != $CONST64K ) {
+        echo FAILED: A user $userName gets wrong return from write.
+      }
+      close @fid
+
+      open $userName  @O_RDONLY  0777 fid
+      read @fid $CONST64K junk
+      if ( @junk != @vectorData ) {
+        echo FAILED: A user $userName reads wrong data.
+      }
+      close @fid
+
+echo File $userName should have size $CONST64K
+set commd ( "ls -l " + $userName )
+shellexec commd
+
+!* Start multi-thread all simutaneously accessing dfs.
+      coloop x 1 1 $loopTimes
+        set fileName ( $testFile + @x )
+        open @fileName  @O_RDWR 0777 fileId
+        read @fileId $CONST64K junk
+        if ( @junk != @vectorData ) {
+          echo @junk
+          echo @vectorData
+          echo FAILED: A thread reads wrong 64k data
+        }
+* It is very stress to the dfs server
+        write @fileId @vectorData
+        if ( @CommandResult != $CONST64K ) {
+          echo FAILED: A thread gets wrong return from write.
+        }
+        close @fileId
+      endloop
+!* Multi-thread file accessing complete
+
+      sync_join "finish_sync" $timeout
+
+      remove $userName
+
+      chdir $currentDir
+      echo 
+      echo Connection test done
+
+    ENDPROC
+
+    rexec_async $ITL_spoke[$x] remoteDfs_Proc result[$x] fsyncId[$x]
+  } 
+  else {
+    rexec_async $ITL_spoke[$x] dummy_Proc result[$x] fsyncId[$x]
+    set dummyCount ( $dummyCount + 1 )
+  }
+endloop
+
+sync_create "concurrent_dce_login" ( $ITL_nspokes - $dummyCount ) $timeout
+sync_release "concurrent_dce_login"
+
+sync_create "begin_sync" ( $ITL_nspokes - $dummyCount ) $timeout
+sync_release "begin_sync"
+
+sync_create "finish_sync" ( $ITL_nspokes - $dummyCount )  $timeout
+sync_release "finish_sync"
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $fsyncId[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+loop x 1 1 $loopTimes
+  set fileName ( $testFile + $x )
+  remove $fileName
+endloop
+
+endloop
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+
+* Delete accounts.
+exec deleteUser_Proc $baseUserName $numUsers
+
+echo
+echo Hub done.
+echo

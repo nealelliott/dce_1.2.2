@@ -1,0 +1,582 @@
+#!/bin/ksh
+
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+#
+# HISTORY
+# $Log: ggapi,v $
+# Revision 1.1.2.1  1996/10/16  14:06:11  arvind
+# 	OSF DCE 1.2.2 Drop 4.5
+# 	[1996/10/16  13:58:17  arvind]
+#
+# $EndLog$
+#
+
+# 
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1 ic2 ic3 ic4 ic6 ic7 ic8 ic9 ic10 ic11 ic12 ic13 ic14" 
+ic1="check_ggapi_1"
+ic2="check_ggapi_2"
+ic3="check_ggapi_3"
+ic4="check_ggapi_4"
+ic6="check_ggapi_6"
+ic7="check_ggapi_7"
+ic8="check_ggapi_8"
+ic9="check_ggapi_9"
+ic10="check_ggapi_10"
+ic11="check_ggapi_11a"
+ic12="check_ggapi_11b"
+ic13="check_ggapi_11c"
+ic14="check_ggapi_11d"
+test_purp_list="check_ggapi_1 check_ggapi_2 check_ggapi_3 check_ggapi_4 check_ggapi_6 check_ggapi_7 check_ggapi_8 check_ggapi_9 check_ggapi_10 check_ggapi_11a check_ggapi_11b check_ggapi_11c check_ggapi_11d"
+
+. $TET_ROOT/test/functional/security/lib/gg.functions
+
+startup ()
+{
+        tet_infoline "Prepare for testing GGAPI"
+
+	if [ ! -f /usr/bin/dce_login_noexec ]; then
+	        ln -s /usr/bin/dce_login /usr/bin/dce_login_noexec 2>/dev/null
+	fi
+
+        dce_auth $CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in startup"
+		del_test_purp
+		return
+        fi
+
+	setup_for_cdscache available
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	setup_for_registry_connect /.../$cR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	setup_pgo_for_local_cell create
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        dce_unauth $CELL_ADMIN
+
+        dce_auth /.../$cR/$CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in startup"
+		del_test_purp
+		return
+        fi
+
+	setup_pgo_for_remote_cell create /.../$cR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        dce_unauth /.../$cR/$CELL_ADMIN
+
+        dce_auth $CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in startup"
+		del_test_purp
+		return
+        fi
+
+	setup_for_registry_connect /.../$cR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	setup_for_cdscache unavailable
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        dce_unauth $CELL_ADMIN
+
+        unset REGISTRY_SITE_NAME
+        tet_infoline "default registry site will be used..."
+}	# end startup ()
+
+# Ensure test accounts are not left in the registry
+cleanup ()
+{
+        dce_auth /.../$cR/$CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in cleanup"
+        fi
+
+	setup_pgo_for_remote_cell clean /.../$cR
+
+        dce_unauth /.../$cR/$CELL_ADMIN
+
+        dce_auth $CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in cleanup"
+        fi
+
+	setup_pgo_for_local_cell clean
+	setup_for_registry_connect /.../$cR
+	setup_for_cdscache unavailable
+
+        dce_unauth $CELL_ADMIN
+
+        rm -f /usr/bin/dce_login_noexec
+
+        rm -f ${GG_INPUT} ${GG_OUTPUT}
+
+}	# end cleanup
+
+check_ggapi_1 ()
+{
+#set -x
+	tet_infoline "(1) Login to local cell and verify the initial condition"
+
+	# Authenticate the cell
+	dce_auth /.../$cL/$CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	check_item_begin "GGAPI-01-01"
+	is_group_member_by_api $gG $pL FALSE
+	check_item_done "$?"
+	check_item_begin "GGAPI-01-02"
+	view_group_members_by_api $gG none
+	check_item_done "$?"
+}
+
+check_ggapi_2 ()
+{
+#set -x
+	tet_infoline "(2) Verify adding/deleting local principal"
+
+	check_item_begin "GGAPI-02-01"
+	add_to_group_by_api $gG $pL
+	check_item_done "$?"
+	check_item_begin "GGAPI-02-02"
+	is_group_member_by_api $gG $pL TRUE
+	check_item_done "$?"
+	check_item_begin "GGAPI-02-03"
+	view_group_members_by_api $gG $pL
+	check_item_done "$?"
+	check_item_begin "GGAPI-02-04"
+	add_to_group_by_api $gG $pL		# already exist, but no error
+	check_item_done "$?"
+	check_item_begin "GGAPI-02-05"
+	is_group_member_by_api $gG $pL TRUE
+	check_item_done "$?"
+	check_item_begin "GGAPI-02-06"
+	view_group_members_by_api $gG $pL
+	check_item_done "$?"
+	check_item_begin "GGAPI-02-07"
+	remove_from_group_by_api $gG $pL
+	check_item_done "$?"
+	check_item_begin "GGAPI-02-08"
+	is_group_member_by_api $gG $pL FALSE
+	check_item_done "$?"
+	check_item_begin "GGAPI-02-09"
+	view_group_members_by_api $gG none
+	check_item_done "$?"
+	check_item_begin "GGAPI-02-10"
+	remove_from_group_by_api $gG $pL	# already removed, but no error
+	check_item_done "$?"
+	check_item_begin "GGAPI-02-11"
+	is_group_member_by_api $gG $pL FALSE
+	check_item_done "$?"
+	check_item_begin "GGAPI-02-12"
+	view_group_members_by_api $gG none
+	check_item_done "$?"
+}
+
+check_ggapi_3 ()
+{
+#set -x
+	tet_infoline "(3) Verify adding/deleting local principal (with fully qualified name format)"
+
+	check_item_begin "GGAPI-03-01"
+	add_to_group_by_api $gG /.../$cL/$pL
+	check_item_done "$?"
+	check_item_begin "GGAPI-03-02"
+	is_group_member_by_api $gG /.../$cL/$pL TRUE
+	check_item_done "$?"
+	check_item_begin "GGAPI-03-03"
+	view_group_members_by_api $gG $pL
+	check_item_done "$?"
+	check_item_begin "GGAPI-03-04"
+	add_to_group_by_api $gG /.../$cL/$pL	# alredy exist, but no error
+	check_item_done "$?"
+	check_item_begin "GGAPI-03-05"
+	is_group_member_by_api $gG /.../$cL/$pL TRUE
+	check_item_done "$?"
+	check_item_begin "GGAPI-03-06"
+	view_group_members_by_api $gG $pL
+	check_item_done "$?"
+	check_item_begin "GGAPI-03-07"
+	remove_from_group_by_api $gG /.../$cL/$pL
+	check_item_done "$?"
+	check_item_begin "GGAPI-03-08"
+	is_group_member_by_api $gG /.../$cL/$pL FALSE
+	check_item_done "$?"
+	check_item_begin "GGAPI-03-09"
+	view_group_members_by_api $gG none
+	check_item_done "$?"
+	check_item_begin "GGAPI-03-10"
+	remove_from_group_by_api $gG /.../$cL/$pL	# already removed, but no error
+	check_item_done "$?"
+	check_item_begin "GGAPI-03-11"
+	is_group_member_by_api $gG /.../$cL/$pL FALSE
+	check_item_done "$?"
+	check_item_begin "GGAPI-03-12"
+	view_group_members_by_api $gG none
+	check_item_done "$?"
+}
+
+check_ggapi_4 ()
+{
+#set -x
+	tet_infoline "(4) Verify adding/deleting remote principal in the UNKNOWN cell"
+
+	check_item_begin "GGAPI-04-01"
+	add_to_group_by_api $gG /.../$cU/$pR sec_rgy_object_not_found
+	check_item_done "$?"
+	check_item_begin "GGAPI-04-02"
+	is_neg_group_member_by_api $gG /.../$cU/$pR sec_rgy_object_not_found
+	check_item_done "$?"
+	check_item_begin "GGAPI-04-03"
+	view_group_members_by_api $gG none
+	check_item_done "$?"
+	check_item_begin "GGAPI-04-04"
+	remove_from_group_by_api $gG /.../$cU/$pR sec_rgy_object_not_found
+	check_item_done "$?"
+	check_item_begin "GGAPI-04-05"
+	is_neg_group_member_by_api $gG /.../$cU/$pR sec_rgy_object_not_found
+	check_item_done "$?"
+	check_item_begin "GGAPI-04-06"
+	view_group_members_by_api $gG none
+	check_item_done "$?"
+
+	setup_for_cdscache available
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+}
+
+check_ggapi_6 ()
+{
+#set -x
+	tet_infoline "(6) Verify adding/deleting UNKNOWN principal in the remote cell"
+	check_item_begin "GGAPI-06-01"
+	add_to_group_by_api $gG /.../$cR/$pU sec_rgy_object_not_found
+	check_item_done "$?"
+	check_item_begin "GGAPI-06-02"
+	is_neg_group_member_by_api $gG /.../$cR/$pU sec_rgy_object_not_found
+	check_item_done "$?"
+	check_item_begin "GGAPI-06-03"
+	view_group_members_by_api $gG none
+	check_item_done "$?"
+	check_item_begin "GGAPI-06-04"
+	remove_from_group_by_api $gG /.../$cR/$pU sec_rgy_object_not_found
+	check_item_done "$?"
+	check_item_begin "GGAPI-06-05"
+	is_neg_group_member_by_api $gG /.../$cR/$pU sec_rgy_object_not_found
+	check_item_done "$?"
+	check_item_begin "GGAPI-06-06"
+	view_group_members_by_api $gG none
+	check_item_done "$?"
+}
+
+check_ggapi_7 ()
+{
+#set -x
+	tet_infoline "(7) Verify adding/deleting object which is NOT the principal in the remote cell"
+
+	check_item_begin "GGAPI-07-01"
+	add_to_group_by_api $gG /.../$cR/$gR sec_rgy_object_not_found
+	check_item_done "$?"
+	check_item_begin "GGAPI-07-02"
+	is_neg_group_member_by_api $gG /.../$cR/$gR sec_rgy_object_not_found
+	check_item_done "$?"
+	check_item_begin "GGAPI-07-03"
+	view_group_members_by_api $gG none
+	check_item_done "$?"
+	check_item_begin "GGAPI-07-04"
+	remove_from_group_by_api $gG /.../$cR/$gR sec_rgy_object_not_found
+	check_item_done "$?"
+	check_item_begin "GGAPI-07-05"
+	is_neg_group_member_by_api $gG /.../$cR/$gR sec_rgy_object_not_found
+	check_item_done "$?"
+	check_item_begin "GGAPI-07-06"
+	view_group_members_by_api $gG none
+	check_item_done "$?"
+}
+
+check_ggapi_8 ()
+{
+#set -x
+	tet_infoline "(8) Verify adding/deleting remote principal"
+
+	check_item_begin "GGAPI-08-01"
+	add_to_group_by_api $gG /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGAPI-08-02"
+	is_group_member_by_api $gG /.../$cR/$pR TRUE
+	check_item_done "$?"
+	check_item_begin "GGAPI-08-03"
+	view_group_members_by_api $gG /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGAPI-08-04"
+	add_to_group_by_api $gG /.../$cR/$pR	# already exist, but no error
+	check_item_done "$?"
+	check_item_begin "GGAPI-08-05"
+	is_group_member_by_api $gG /.../$cR/$pR TRUE
+	check_item_done "$?"
+	check_item_begin "GGAPI-08-06"
+	view_group_members_by_api $gG /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGAPI-08-07"
+	remove_from_group_by_api $gG /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGAPI-08-08"
+	is_group_member_by_api $gG /.../$cR/$pR FALSE
+	check_item_done "$?"
+	check_item_begin "GGAPI-08-09"
+	view_group_members_by_api $gG none
+	check_item_done "$?"
+	check_item_begin "GGAPI-08-10"
+	remove_neg_from_group_by_api $gG /.../$cR/$pR sec_rgy_object_not_found
+	check_item_done "$?"
+	check_item_begin "GGAPI-08-11"
+	is_group_member_by_api $gG /.../$cR/$pR FALSE
+	check_item_done "$?"
+	check_item_begin "GGAPI-08-12"
+	view_group_members_by_api $gG none
+	check_item_done "$?"
+}
+
+check_ggapi_9 ()
+{
+#set -x
+	tet_infoline "(9) Variety of remote principal names"
+
+	check_item_begin "GGAPI-09-01"
+	add_to_group_by_api $gG /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGAPI-09-02"
+	is_group_member_by_api $gG /.../$cR/$pRs TRUE
+	check_item_done "$?"
+	check_item_begin "GGAPI-09-03"
+	view_group_members_by_api $gG /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGAPI-09-04"
+	view_memberships_by_api /.../$cR/$pRs $gG
+	check_item_done "$?"
+	check_item_begin "GGAPI-09-05"
+	remove_from_group_by_api $gG /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGAPI-09-06"
+	add_to_group_by_api $gG /.../$cR/$pRl
+	check_item_done "$?"
+	check_item_begin "GGAPI-09-07"
+	is_group_member_by_api $gG /.../$cR/$pRl TRUE
+	check_item_done "$?"
+	check_item_begin "GGAPI-09-08"
+	view_group_members_by_api $gG /.../$cR/$pRl
+	check_item_done "$?"
+	check_item_begin "GGAPI-09-09"
+	view_memberships_by_api /.../$cR/pRl $gG
+	check_item_done "$?"
+	check_item_begin "GGAPI-09-10"
+	remove_from_group_by_api $gG /.../$cR/$pRl
+	check_item_done "$?"
+}
+
+check_ggapi_10 ()
+{
+#set -x
+	tet_infoline "(10) Verify containing multiple members in the group membership list"
+
+	check_item_begin "GGAPI-10-01"
+	add_to_group_by_api $gG /.../$cR/$pRl
+	check_item_done "$?"
+	check_item_begin "GGAPI-10-02"
+	add_to_group_by_api $gG $pL
+	check_item_done "$?"
+	check_item_begin "GGAPI-10-03"
+	add_to_group_by_api $gG /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGAPI-10-04"
+	view_group_members_by_api $gG /.../$cR/$pRl $pL /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGAPI-10-05"
+	remove_from_group_by_api $gG /.../$cR/$pRl
+	check_item_done "$?"
+	check_item_begin "GGAPI-10-06"
+	remove_from_group_by_api $gG $pL
+	check_item_done "$?"
+	check_item_begin "GGAPI-10-07"
+	remove_from_group_by_api $gG /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGAPI-10-08"
+	view_neg_group_members_by_api $gG sec_rgy_no_more_entries
+	check_item_done "$?"
+}
+
+check_ggapi_11a ()
+{
+#set -x
+	tet_infoline "(11a) Verify sub effects in the membership operation"
+
+	check_item_begin "GGAPI-11-01"
+	add_to_group_by_api $gG $pL
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-02"
+	add_to_group_by_api $gG /.../$cR/$pR
+	check_item_done "$?"
+
+	check_item_begin "GGAPI-11-03"
+	is_group_member_by_api $gG /.../$cR/$pR TRUE
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-04"
+	view_group_members_by_api $gG $pL /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-05"
+	view_memberships_by_api $pL $gG
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-06"
+	view_memberships_by_api /.../$cL/$pL $gG
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-07"
+	view_memberships_by_api /.../$cR/$pR $gG
+	check_item_done "$?"
+
+	dce_unauth /.../$cL
+}
+
+check_ggapi_11b ()
+{
+#set -x
+	tet_infoline "(11b) Verify sub effects in the membership operation"
+
+	# Authenticate the cell
+	dce_auth /.../$cR/$CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+	export REGISTRY_SITE_NAME="/.../$cR"
+	tet_infoline "registry site ${REGISTRY_SITE_NAME} will be used..."
+
+	check_item_begin "GGAPI-11-08"
+	is_group_member_by_api /.../$cL/$gG $pR TRUE
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-09"
+	view_group_members_by_api /.../$cL/$gG $pR /.../$cL/$pL
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-10"
+	view_memberships_by_api pR /.../$cL/$gG
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-11"
+	view_memberships_by_api /.../$cR/$pR /.../$cL/$gG
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-12"
+	view_memberships_by_api /.../$cL/$pL /.../$cL/$gG
+	check_item_done "$?"
+
+	unset REGISTRY_SITE_NAME
+	tet_infoline "default registry site will be used..."
+	dce_unauth /.../$cR
+}
+
+check_ggapi_11c ()
+{
+#set -x
+	tet_infoline "(11c) Verify sub effects in the membership operation"
+
+	# Authenticate the cell
+	dce_auth /.../$cL/$CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	check_item_begin "GGAPI-11-13"
+	remove_from_group_by_api $gG $pL
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-14"
+	remove_from_group_by_api $gG /.../$cR/$pR
+	check_item_done "$?"
+
+	check_item_begin "GGAPI-11-15"
+	is_group_member_by_api $gG /.../$cR/$pR FALSE
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-16"
+	view_neg_group_members_by_api $gG sec_rgy_no_more_entries
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-17"
+	view_neg_memberships_by_api $pL sec_rgy_no_more_entries
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-18"
+	view_neg_memberships_by_api /.../$cL/$pL sec_rgy_no_more_entries
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-19"
+	view_neg_memberships_by_api /.../$cR/$pR sec_rgy_no_more_entries
+	check_item_done "$?"
+
+	dce_unauth /.../$cL
+}
+
+check_ggapi_11d ()
+{
+#set -x
+	tet_infoline "(11d) Verify sub effects in the membership operation"
+
+	# Authenticate the cell
+	dce_auth /.../$cR/$CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+	export REGISTRY_SITE_NAME="/.../$cR"
+	tet_infoline "registry site ${REGISTRY_SITE_NAME} will be used..."
+
+	check_item_begin "GGAPI-11-20"
+	is_group_member_by_api /.../$cL/$gG $pR FALSE
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-21"
+	view_neg_group_members_by_api /.../$cL/$gG sec_rgy_no_more_entries
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-22"
+	view_neg_memberships_by_api $pL sec_rgy_no_more_entries
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-23"
+	view_neg_memberships_by_api /.../$cR/$pR sec_rgy_no_more_entries
+	check_item_done "$?"
+	check_item_begin "GGAPI-11-24"
+	view_neg_memberships_by_api /.../$cL/$pL sec_rgy_no_more_entries
+	check_item_done "$?"
+
+	unset REGISTRY_SITE_NAME
+	tet_infoline "default registry site will be used..."
+	dce_unauth /.../$cR
+}
+
+. $TET_ROOT/lib/ksh/tetapi.ksh
+. $TET_ROOT/lib/ksh/tcm.ksh

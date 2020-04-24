@@ -1,0 +1,1132 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: rep_ch_1_checklist,v $
+# Revision 1.1.6.2  1996/03/11  02:37:05  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:04:44  marty]
+#
+# Revision 1.1.6.1  1995/12/11  21:53:51  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:54:40  root]
+# 
+# Revision 1.1.2.2  1993/02/26  16:26:03  pellis
+# 	Renamed from rep_ch_1.ksh, file named incorrectly.
+# 	[1993/02/26  16:23:41  pellis]
+# 
+# $EndLog$
+#
+#   FILE_NAME: rep_ch_1_checklist
+#
+#   COMPONENT_NAME: dce.admin_test
+#
+#   FUNCTIONS:
+#
+#   USAGE:
+#
+#	Follow steps listed in checklist.
+#
+#   DESCRIPTION:
+#
+#	This test does many manipulations of replicas and clearinghouses:
+#
+#	This test must be run on the master CDS server and all CDS clients
+#	must be stopped before the test can be executed.  The cell must be
+#	configured with at least one additional CDS server, this CDS server
+#	name should be supplied as the "secondary_CDS_server" on the command
+#	line.
+#
+#   DCE 1.0.2 TEST PLAN COVERAGE ( ++ = covered):
+#
+#	II)	CDS
+#
+# ++		A) Install
+# ++			1) Server
+# ++			2) Client
+#		B) Configure
+# ++			1) Initial CDS Server
+# ++			2) Additional CDS Server(s)
+# ++			3) CDS Client
+#			4) Intercell
+#				a) DNS
+#					 i) show cell <cellname> as dns
+#					ii) Update DNS Data File
+#				b) GDS
+#					 i) show cell <cellname> as gds
+#					ii) Update DNS Data File
+#		C) Create
+# ++			1) Clearinghouse
+#			2) Replica Read/Write
+# ++			3) Replica Read Only
+#		D) Disable/Enable
+# ++			1) Master Replica
+# ++				a) How Does the Client React When the Master
+# ++				   Replica is Disabled?
+# ++				b) How Does the Client React When the Master
+# ++				   Replica is Reenabled?
+# ++			2) Secondary Replica
+# ++				a) How Does the Client React When the Secondary
+# ++				   Replica is Disabled?
+# ++				b) How Does the Client React When the Secondary
+# ++				   Replica is Reenabled?
+#			3) Modifying a Directory's Replica Set
+#				a) How Does the Client React When a Replica is
+#				   Excluded From the Replica Set?
+#				b) How Does the Client React When a Replica is
+#				   Reincluded in the Replica Set?
+# ++		E) Update/Modify
+# ++			1) Skulking a Directory
+# ++				a) Modifying a Directory's Convergence
+# ++			2) Modifying a Directory's Replica Set
+# ++				a) Designating a New Master Replica
+# ++					i) How Does the Client React When a New
+# ++					   Master Replica is Designated?
+#		F) Start/Stop
+#			1) GDA
+#				a) kill (Stop)
+#					i) How Does the Client React When GDA is
+#					   Stopped?
+#				b) gdad (Start)
+#					i) How Does the Client React When GDA is
+#					   Restarted?
+# ++		G) Backup
+# ++			1) Clearinghouse
+# ++			2) Namespace
+# ++				a) Remote
+# ++				b) By Replication
+#		H) Cleanup
+#		I) Monitoring
+#		J) Reconfigure
+#			1) Clearinghouse
+#			2) Namespace
+#				a) From Remote Backup
+#				b) From Replica
+#			3) Relocating a Clearinghouse
+#				a) Disassociating a Clearinghouse from its Host
+#				   Server
+#				b) Copying the Clearinghouse Files to the Target
+#				   Server
+#				c) Starting the Clearinghouse on the Target
+#				   Server
+#		K) Unconfigure/Delete
+# ++			1) Replica
+#			2) Clearinghouse
+#			3) Client
+#				a) Remove All Namespace References to Client and
+#				   Attempt to Reconfigure it
+#		L) Crash Response
+#			1) How Does the Client React When the Master Replica
+#			   Goes Away During a Request?
+#				a) Does the Client Switch to a Replica?
+#			2) How Does the Server React When the Client Goes Away
+#			   During a Request?
+# ++			3) What Happens When a Skulk Update is Attempted When
+# ++			   One Replica is Down?
+#		M) Crash Recovery
+#			1) From Remote Backup
+#			2) From Replica
+#		N) Compatibility
+#			1) Use PMAX Namespace on RIOS
+#			2) Use RIOS Namespace on PMAX
+#			3) Use PMAX Clearinghouse on RIOS
+#			4) Use RIOS Clearinghouse on PMAX
+#			5) Use DCE 1.0.1 Namespace With DCE 1.0.2
+#			6) Use DCE 1.0.1 Clearinghouse With DCE 1.0.2
+#
+################################################################################
+#
+# Source the functions file
+#
+. ./tests/functions
+#
+################################################################################
+#
+# Initialize command options
+#
+echo_msg "-log-----: Checking Command Usage (${0})"
+#
+if [ "$#" -ne 1 ]
+then
+        echo_msg "-error---: USAGE: $0 <secondary CDS server>"
+        exit 1
+fi
+#
+ADD_SRV=${1}
+#
+################################################################################
+#
+# Definitions
+#
+echo_msg "-log-----: Defining Test Variables (${0})"
+#
+TESTNAME=reps
+COUNT=0
+FAILED=0
+HOSTNAME=`hostname`
+LOOPS=1
+PASSED=0
+PID=$$
+PLATFORM=`uname -s`
+LOGINNAME=`whoami`
+PRINCIPAL=cell_admin
+OSPASSWORD=systest1
+DCEPASSWORD=-dce-
+DCELOCAL=/opt/dcelocal
+TESTDIR=${TESTNAME}_${HOSTNAME}
+WORKDIR=`pwd`
+TEMPDIR=${WORKDIR}/tmp
+LOGDIR=${WORKDIR}/log
+BACKUPDIR=${WORKDIR}/backup
+ORIGBAK=${BACKUPDIR}/orig_${TESTNAME}_${HOSTNAME}_${PID}
+TESTBAK=${BACKUPDIR}/test_${TESTNAME}_${HOSTNAME}_${PID}
+get_cell_name
+LCHNAME=${CELLNAME}\#${HOSTNAME}
+RCHNAME=${CELLNAME}\#${ADD_SRV}
+STDOUT=${TEMPDIR}/${TESTNAME}_${HOSTNAME}_${PID}_STDOUT
+STDERR=${TEMPDIR}/${TESTNAME}_${HOSTNAME}_${PID}_STDERR
+#
+################################################################################
+#
+# Make sure the temporary working directory exists
+#
+if [ ! -d ${TEMPDIR} ]; then
+	echo_msg "-log-----: Creating ${TEMPDIR}...\c)"
+	mkdir ${TEMPDIR}
+	if [ $? != 0 ] ; then
+		echo_msg ""
+		echo_msg "Unable To Create ${TEMPDIR}, Aborting Test (${0})"
+		exit 1
+	fi
+	echo_msg "Done (${0})"
+fi
+#
+################################################################################
+#
+# Abort test if it's not being run on the CDS Server or if the remote machine
+# is not a CDS Server
+#
+echo_msg "-log-----: Checking To Make Sure ${HOSTNAME} Is A CDS Server (${0})"
+#
+getcdsserver ${HOSTNAME}
+if [ $? -ne 0 ] ; then
+	echo_msg ""
+	echo_msg "-error---: ${HOSTNAME} Is Not Running As A CDS Server, This Test"
+	echo_msg "-error---: Can Only Be Executed On A CDS Server (${0})"
+	exit 1
+fi
+#
+echo_msg "-log-----: Checking To Make Sure ${ADD_SRV} Is A CDS Server (${0})"
+#
+getcdsserver ${ADD_SRV}
+if [ $? -ne 0 ] ; then
+	echo_msg ""
+	echo_msg "-error---: ${ADD_SRV} Is Not Running As A CDS Server, This Test"
+	echo_msg "-error---: Can Only Be Executed On A CDS Server (${0})"
+	exit 1
+fi
+#
+################################################################################
+#
+# Abort test if there are CDS Clients running
+#
+echo_msg "-log-----: Getting The Names Of The CDS Clients If Any (${0})"
+#
+getcdsclients
+STOPCLIENTS=0
+for i in ${CDSCLIENTS} ; do
+	if [ "${HOSTNAME}" != "${i}" ] && [ "${ADD_SRV}" != "${i}" ] ; then
+		dcestatus ${i}
+		if [ $? = 0 ] ; then
+			getsecserver ${i}
+			if [ $? = 1 ] ; then
+				STOPCLIENTS=1
+			fi
+		fi
+	fi
+done
+if [ ${STOPCLIENTS} = 1 ] ; then
+	echo_msg ""
+	echo_msg "-error---: All DCE Clients Must Be Stopped Before Running This Test (${0})"
+	exit 1
+fi
+#
+################################################################################
+#
+# Initialize the logfiles
+#
+initlogs ${TESTNAME}
+#
+################################################################################
+#
+# Create dce_login_noexec symbolic link if there isn't one
+#
+create_login_exec
+#
+################################################################################
+#
+# Define trap to cleanup after break
+#
+#trap '	echo_msg ""
+#	echo_msg "-log-----: Stopping DCE On ${HOSTNAME} (${0})"
+#	ksh /etc/dce.clean
+#	unset KRB5CCNAME
+#	dcestatus ${HOSTNAME}
+#	if [ $? -eq 0 ] ; then
+#		echo_msg ""
+#		echo_msg "-error---: The Following DCE Process(es) Did Not Stop: (${0})"
+#		echo_msg "${DCESTATUS}"
+#	fi
+#
+#	echo_msg "-log-----: Restoring The Original CDS Clearinghouse (${0})"
+#	restore_cds_ch ${CHNAME} ${ORIGBAK} ${DCELOCAL}
+#
+#	echo_msg "-log-----: Starting DCE On ${HOSTNAME} (${0})"
+#	ksh /etc/rc.dce
+#	dcestatus ${HOSTNAME}
+#	if [ $? -eq 1 ] ; then
+#		echo_msg ""
+#		echo_msg "-error---: DCE Did Not Restart (${0})"
+#		exit 1
+#	fi
+#
+#	rm -f ${STDOUT}
+#	rm -f ${STDERR}
+#	rm -r ${TESTBAK}
+#	echo_msg "" | tee -a ${FULLLOG} | tee -a ${SHRTLOG}
+#	end_stats
+#	stats
+#	exit 1' 1 2 3 15
+#
+################################################################################
+#
+# Define check test clearinghouse function, this function checks for the
+# existence of the test directory in the clearinghouse
+#
+check_ns()
+{
+#
+if [ "${1}" = "fail" ] ; then
+	WHEN=1
+elif [ "${1}" = "pass" ] ; then
+	WHEN=0
+else
+	echo_msg ""
+	echo_msg "-error---: Invalid Option Specified (${0})"
+fi
+#
+# login as cell_admin
+#
+do_login
+#
+# set up directory
+#
+MESSAGE="Check existence of test directory (list)"
+COMMAND="cdscp list dir"
+OPTIONS="/.:/${TESTDIR}"
+ESTATUS=${WHEN}
+exec_test
+#
+MESSAGE="Check existence of test directory (show)"
+COMMAND="cdscp show dir"
+OPTIONS="/.:/${TESTDIR}"
+ESTATUS=${WHEN}
+exec_test
+#
+MESSAGE="Check existence of test object (list)"
+COMMAND="cdscp list obj"
+OPTIONS="/.:/${TESTDIR}/object"
+ESTATUS=${WHEN}
+exec_test
+#
+MESSAGE="Check existence of test object (show)"
+COMMAND="cdscp show obj"
+OPTIONS="/.:/${TESTDIR}/object"
+ESTATUS=${WHEN}
+exec_test
+#
+# Destroy Credentials
+#
+kdestroy
+}
+#
+################################################################################
+#
+# Gather starting statistics
+#
+stats
+#
+################################################################################
+#
+# VALIDATE TEST CLEARINGHOUSE (SHOULD FAIL), THE TEST DIRECTORY SHOULD NOT EXIST
+#
+echo_msg "-log-----: Validating Test CDS Clearinghouse (${0})"
+#
+check_ns fail
+#
+################################################################################
+#
+# STOP DCE ON REMOTE MACHINE BEFORE DOING BACKUP
+#
+echo_msg "-log-----: Stopping DCE On ${ADD_SRV} (${0})"
+#
+stop_dce_remote ${ADD_SRV} ${OSPASSWORD}
+dcestatus ${HOSTNAME}
+if [ $? -eq 0 ] ; then
+	echo_msg ""
+	echo_msg "-error---: The Following DCE Processes Did Not Stop On ${HOSTNAME}: (${0})"
+	echo_msg "${DCESTATUS}"
+	exit 1
+fi
+#
+# STOP DCE ON REMOTE MACHINE BEFORE DOING BACKUP
+#
+echo_msg "-log-----: Stopping DCE On ${HOSTNAME} (${0})"
+#
+stop_dce_local
+unset KRB5CCNAME
+dcestatus ${ADD_SRV}
+if [ $? -eq 0 ] ; then
+	echo_msg ""
+	echo_msg "-error---: The Following DCE Processes Did Not Stop On ${ADD_SRV}: (${0})"
+	echo_msg "${DCESTATUS}"
+	exit 1
+fi
+#
+################################################################################
+#
+# BACKUP ORIGINAL CLEARINGHOUSE ON LOCAL MACHINE
+#
+echo_msg "-log-----: Backing Up The Original CDS Clearinghouse On ${HOSTNAME} (${0})"
+#
+backup_cds_ch ${LCHNAME} ${DCELOCAL} ${ORIGBAK}
+#
+################################################################################
+#
+# BACKUP ORIGINAL CLEARINGHOUSE ON REMOTE MACHINE
+#
+#echo_msg "-log-----: Backing Up The Original CDS Clearinghouse On ${ADD_SRV} (${0})"
+#
+#backup_cds_ch ${RCHNAME} ${DCELOCAL} ${ORIGBAK}
+#
+################################################################################
+#
+# START DCE ON LOCAL MACHINE
+#
+echo_msg "-log-----: Starting DCE On ${HOSTNAME} (${0})"
+#
+start_dce_local
+dcestatus ${HOSTNAME}
+if [ $? -eq 1 ] ; then
+	echo_msg ""
+	echo_msg "-error---: DCE Did Not Restart On ${HOSTNAME} (${0})"
+	exit 1
+fi
+#
+# START DCE ON REMOTE MACHINE
+#
+echo_msg "-log-----: Starting DCE On ${HOSTNAME} And ${ADD_SRV} (${0})"
+#
+start_dce_remote ${ADD_SRV} ${OSPASSWORD}
+dcestatus ${ADD_SRV}
+if [ $? -eq 1 ] ; then
+	echo_msg ""
+	echo_msg "-error---: DCE Did Not Restart On ${ADD_SRV} (${0})"
+	exit 1
+fi
+#
+################################################################################
+#
+# CREATE TEST DIRECTORY ENTRIES IN CLEARINGHOUSE
+#
+echo_msg "-log-----: Creating Test CDS Clearinghouse On ${HOSTNAME} (${0})"
+#
+# login as cell_admin
+#
+do_login
+#
+# Create and define directory
+#
+MESSAGE="Create test directory in CDS clearinghouse"
+COMMAND="cdscp create directory"
+OPTIONS="/.:/${TESTDIR}"
+ESTATUS=0
+exec_test
+#
+MESSAGE="Set test directory Convergence to high"
+COMMAND="cdscp set directory"
+OPTIONS="/.:/${TESTDIR} CDS_Convergence = high"
+ESTATUS=0
+exec_test
+#
+MESSAGE="Enable skulking on test directory"
+COMMAND="cdscp set directory"
+OPTIONS="/.:/${TESTDIR} to skulk"
+ESTATUS=0
+exec_test
+#
+MESSAGE="Create test object in CDS clearinghouse"
+COMMAND="cdscp create object"
+OPTIONS="/.:/${TESTDIR}/object \
+ 	CDS_Class = object_class CDS_ClassVersion = 1.0"
+ESTATUS=0
+exec_test
+#
+# Destroy credentials
+#
+kdestroy
+#
+################################################################################
+#
+# VALIDATE TEST CLEARINGHOUSE (SHOULD PASS), TEST DIRECTORY SHOULD EXIST
+#
+echo_msg "-log-----: Validating Test CDS Clearinghouse (${0})"
+#
+check_ns pass
+#
+################################################################################
+#
+# ON REMOTE MACHINE CREATE AND VERIFY TEST CLEARINGHOUSE
+#
+cdscp create clearinghouse /.:/admintest_ch
+cdscp list clearinghouse /.:/admintest_ch
+cdscp show clearinghouse /.:/admintest_ch
+#
+# Check for existence of clearinghouse in Known Clearinghouses
+#
+cdscp show server
+#
+################################################################################
+#
+# CREATE AND VERIFY REPLICA OF TEST DIRECTORY IN TEST CLEARINGHOUSE ON REMOTE
+# MACHINE
+#
+cdscp create replica /.:/testdir clearinghouse /.../<cellname>/admintest_ch
+#
+# Do a show replica of the test directory in the clearinghouse on the local
+# machine, capture the statistics for later use
+#
+cdscp show replica /.:/testdir clearinghouse /.:/<local>_ch (capture stats)
+#
+# Do a show replica of the test directory in the clearinghouse on the remote
+# machine, capture the statistics for later use
+#
+cdscp show replica /.:/testdir clearinghouse /.:/admintest_ch (capture stats)
+#
+# Compare show replica from the local machine against the show replica from
+# the remote machine, check the CDS_ReplicaType fields, one should be the
+# master and one should be the readonly
+#
+# <   CDS_ReplicaType = readonly
+# <   CDS_LastSkulk = 0
+# <   CDS_LastUpdate = 0
+# ---
+# >   CDS_ReplicaType = master
+# >   CDS_LastSkulk = 1992-10-27-15:51:08.108547100/08-00-2b-12-c6-f5
+# >   CDS_LastUpdate = 1992-10-27-15:51:14.448473100/08-00-2b-12-c6-f5
+#
+# Show all directories in test clearinghouse and check for existence of the
+# test directory
+#
+cdscp show clearinghouse /.:/admintest_ch CDS_CHDirectories
+#
+################################################################################
+#
+# SETUP THE REMOTE MACHINE TO USE TEST CLEARINGHOUSE AND VERIFY THAT IT IS
+# USING THE TEST CLEARINGHOUSE
+#
+# Since the "set cdscp preferred clearinghouse" is only effective while in
+# the cdscp session you need to save all output for later validation.  Use
+# the show cdscp preferred clearinghouse command to verify that the Test
+# Clearinghouse is preferred
+#
+cdscp
+set cdscp preferred clearinghouse /.:/admintest_ch
+show cdscp preferred clearinghouse
+#
+# Check for Clearinghouse existence in Known Clearinghouses using show server
+#
+show server
+#
+# Verify which clearinghouse is being used by capturing the clearinghouse
+# statistics of the Master and Test clearinghouses, access the test directory,
+# again capture the Master and Test clearinghouse statistics and compare them.
+# Only the Test clearinghouse statistics should have changed.  Make sure the
+# show dir was successful.
+#
+show cached clearinghouse /.:/<local>_ch
+show cached clearinghouse /.:/admintest_ch
+show dir /.:/testdir
+show cached clearinghouse /.:/<local>_ch
+show cached clearinghouse /.:/admintest_ch
+quit
+#
+################################################################################
+#
+# ON THE LOCAL MACHINE VERIFY THAT THE MASTER CLEARINGHOUSE IS BEING USED
+#
+# Check for Clearinghouse existence in Known Clearinghouses using show server
+#
+cdscp show server
+#
+# Verify which clearinghouse is being used by capturing the clearinghouse
+# statistics of the Master and Test clearinghouses, access the test directory,
+# again capture the Master and Test clearinghouse statistics and compare them.
+# Only the Master clearinghouse statistics should have changed.  Make sure the
+# show dir was successful.
+#
+cdscp show cached clearinghouse /.:/<local>_ch
+cdscp show cached clearinghouse /.:/admintest_ch
+cdscp show dir /.:/testdir
+cdscp show cached clearinghouse /.:/<local>_ch
+cdscp show cached clearinghouse /.:/admintest_ch
+#
+################################################################################
+#
+# ON THE LOCAL MACHINE DISABLE THE MASTER CLEARINGHOUSE AND VERIFY THAT THE
+# LOCAL MACHINE SWITCHES TO THE TEST CLEARINGHOUSE ON THE REMOTE MACHINE
+#
+cdscp disable server
+#
+# Check for Clearinghouse existence in Known Clearinghouses using show server,
+# it should not exist
+#
+cdscp show server
+#
+# Verify which clearinghouse is being used by capturing the clearinghouse
+# statistics of the Master and Test clearinghouses, access the test directory,
+# again capture the Master and Test clearinghouse statistics and compare them.
+# Only the Test clearinghouse statistics should have changed.  Make sure the
+# show dir was successful.
+#
+cdscp show cached clearinghouse /.:/<local>_ch
+cdscp show cached clearinghouse /.:/admintest_ch
+cdscp show dir /.:/testdir
+cdscp show cached clearinghouse /.:/<local>_ch
+cdscp show cached clearinghouse /.:/admintest_ch
+#
+################################################################################
+#
+# ON THE LOCAL MACHINE, RESTART AND VERIFY MASTER CLEARINGHOUSE
+#
+cdsd
+#
+# Check for Clearinghouse existence in Known Clearinghouses using show server,
+# it should exist
+#
+cdscp show server
+#
+# Verify which clearinghouse is being used by capturing the clearinghouse
+# statistics of the Master and Test clearinghouses, access the test directory,
+# again capture the Master and Test clearinghouse statistics and compare them.
+# Only the Master clearinghouse statistics should have changed.  Make sure the
+# show dir was successful.
+#
+cdscp show cached clearinghouse /.:/<local>_ch
+cdscp show cached clearinghouse /.:/admintest_ch
+cdscp show dir /.:/testdir
+cdscp show cached clearinghouse /.:/<local>_ch
+cdscp show cached clearinghouse /.:/admintest_ch
+#
+################################################################################
+#
+# ON THE REMOTE MACHINE DISABLE THE TEST CLEARINGHOUSE
+#
+cdscp disable server
+#
+################################################################################
+#
+# ON THE LOCAL MACHINE ATTEMPT TO SKULK THE TEST DIRECTORY
+#
+# Make sure that the attempted skulk handles the disabled Test clearinghouse
+# correctly, the should be no errors
+#
+cdscp set directory /.:/testdir to skulk
+#
+################################################################################
+#
+# VERIFY THAT THE REMOTE MACHINE SWITCHES TO THE MASTER CLEARINGHOUSE ON THE
+# LOCAL MACHINE
+#
+# Check for Clearinghouse existence in Known Clearinghouses using show server,
+# it should not exist
+#
+cdscp show server
+#
+# Verify which clearinghouse is being used by capturing the clearinghouse
+# statistics of the Master and Test clearinghouses, access the test directory,
+# again capture the Master and Test clearinghouse statistics and compare them.
+# Only the Master clearinghouse statistics should have changed.  Make sure the
+# show dir was successful.
+#
+cdscp show cached clearinghouse /.:/<local>_ch
+cdscp show cached clearinghouse /.:/admintest_ch
+cdscp show dir /.:/testdir
+cdscp show cached clearinghouse /.:/<local>_ch
+cdscp show cached clearinghouse /.:/admintest_ch
+#
+################################################################################
+#
+# ON THE REMOTE MACHINE, RESTART THE TEST CLEARINGHOUSE
+#
+cdsd
+#
+################################################################################
+#
+# SETUP THE REMOTE MACHINE TO USE THE TEST CLEARINGHOUSE AND VERIFY THAT THE
+# TEST CLEARINGHOUSE IS BEING USED
+#
+# Since the "set cdscp preferred clearinghouse" is only effective while in
+# the cdscp session you need to save all output for later validation.  Use
+# the show cdscp preferred clearinghouse command to verify that the Test
+# Clearinghouse is preferred
+#
+cdscp
+set cdscp preferred clearinghouse /.:/admintest_ch
+show cdscp preferred clearinghouse
+#
+# Check for Clearinghouse existence in Known Clearinghouses using show server,
+# it should exist
+#
+show server
+#
+# Verify which clearinghouse is being used by capturing the clearinghouse
+# statistics of the Master and Test clearinghouses, access the test directory,
+# again capture the Master and Test clearinghouse statistics and compare them.
+# Only the Test clearinghouse statistics should have changed.  Make sure the
+# show dir was successful.
+#
+show cached clearinghouse /.:/<local>_ch
+show cached clearinghouse /.:/admintest_ch
+show dir /.:/testdir
+show cached clearinghouse /.:/<local>_ch
+show cached clearinghouse /.:/admintest_ch
+quit
+#
+################################################################################
+#
+# ON THE LOCAL MACHINE ADD A NEW DIRECTORY AND OBJECT TO THE TEST DIRECTORY
+# AND CHECK TO MAKE SURE THE CDS CONVERGENCE = HIGH
+#
+# Login as cell_admin
+#
+dologin
+#
+# Verify that the Test Directory convergence is set to high, then create a new
+# directory and object
+#
+cdscp show directory /.:/testdir CDS_Convergence
+cdscp create dir /.:/testdir/converge_dir
+cdscp create obj /.:/testdir/converge_dir/converge_obj_high
+#
+# Delete cell_admin credentials
+#
+kdestroy
+#
+################################################################################
+#
+# ON THE LOCAL MACHINE VERIFY THAT THE NEW DIRECTORY AND OBJECT ARE IN THE
+# MASTER CLEARINGHOUSE
+#
+# Use show dir and show obj to verify that the new directory and object exist
+#
+cdscp show dir /.:/testdir/converge_dir
+cdscp show obj /.:/testdir/converge_dir/converge_obj_high
+#
+################################################################################
+#
+# ON THE REMOTE MACHINE VERIFY THAT THE NEW DIRECTORY AND OBJECT ARE IN THE
+# TEST CLEARINGHOUSE CHECKING TO MAKE SURE THE TEST CLEARINGHOUSE IS BEING USED
+#
+# Since the "set cdscp preferred clearinghouse" is only effective while in
+# the cdscp session you need to save all output for later validation.  Use
+# the show cdscp preferred clearinghouse command to verify that the Test
+# Clearinghouse is preferred
+#
+cdscp
+set cdscp preferred clearinghouse /.:/admintest_ch
+show cdscp preferred clearinghouse
+#
+# Check for Clearinghouse existence in Known Clearinghouses using show server,
+# it should exist
+#
+show server
+#
+# Verify which clearinghouse is being used by capturing the clearinghouse
+# statistics of the Master and Test clearinghouses, access the test directory,
+# again capture the Master and Test clearinghouse statistics and compare them.
+# Only the Test clearinghouse statistics should have changed.  Make sure the
+# show dir and show obj were successful.
+#
+show cached clearinghouse /.:/<local>_ch
+show cached clearinghouse /.:/admintest_ch
+show dir /.:/testdir/converge_dir
+show obj /.:/testdir/converge_dir/converge_obj_high
+show cached clearinghouse /.:/<local>_ch
+show cached clearinghouse /.:/admintest_ch
+quit
+#
+################################################################################
+#
+# ON THE LOCAL MACHINE SET CDS CONVERGENCE = LOW AND ADD NEW OBJECT TO MASTER
+# CLEARINGHOUSE
+#
+# Login as cell_admin
+#
+dologin
+#
+# Set and verify that the Test Directory convergence is set to low, then create
+# a new directory and object
+#
+cdscp set directory /.:/testdir CDS_Convergence = low
+cdscp show directory /.:/testdir CDS_Convergence
+cdscp create obj /.:/testdir/converge_dir/converge_obj_low
+#
+# Delete cell_admin credentials
+#
+kdestroy
+#
+################################################################################
+#
+# ON THE LOCAL MACHINE VERIFY THAT THE NEW DIRECTORY AND OBJECT ARE IN THE
+# MASTER CLEARINGHOUSE
+#
+# Using show obj verify that the new object exists
+#
+cdscp show obj /.:/testdir/converge_dir/converge_obj_low
+#
+################################################################################
+#
+# ON THE REMOTE MACHINE VERIFY THAT THE NEW DIRECTORY AND OBJECT ARE NOT IN
+# THE TEST CLEARINGHOUSE, CHECK TO MAKE SURE THE TEST CLEARINGHOUSE IS BEING
+# USED
+#
+# Since the "set cdscp preferred clearinghouse" is only effective while in
+# the cdscp session you need to save all output for later validation.  Use
+# the show cdscp preferred clearinghouse command to verify that the Test
+# Clearinghouse is preferred
+#
+cdscp
+set cdscp preferred clearinghouse /.:/admintest_ch
+show cdscp preferred clearinghouse
+#
+# Check for Clearinghouse existence in Known Clearinghouses using show server,
+# it should exist
+#
+show server
+#
+# Verify which clearinghouse is being used by capturing the clearinghouse
+# statistics of the Master and Test clearinghouses, access the test directory,
+# again capture the Master and Test clearinghouse statistics and compare them.
+# Only the Test clearinghouse statistics should have changed.  Make sure the
+# show dir and show obj were not successful, because of the low convergence a
+# skulk should not have occurred.
+#
+show cached clearinghouse /.:/<local>_ch
+show cached clearinghouse /.:/admintest_ch
+show dir /.:/testdir/converge_dir
+show obj /.:/testdir/converge_dir/converge_obj_low
+show cached clearinghouse /.:/<local>_ch
+show cached clearinghouse /.:/admintest_ch
+quit
+#
+################################################################################
+#
+# ON THE LOCAL MACHINE SKULK THE TEST DIRECTORY
+#
+cdscp set directory /.:/testdir to skulk
+#
+################################################################################
+#
+# ON THE REMOTE MACHINE VERIFY THAT THE NEW DIRECTORY AND OBJECT ARE IN
+# THE TEST CLEARINGHOUSE, CHECK TO MAKE SURE THE TEST CLEARINGHOUSE IS BEING
+# USED
+#
+# Since the "set cdscp preferred clearinghouse" is only effective while in
+# the cdscp session you need to save all output for later validation.  Use
+# the show cdscp preferred clearinghouse command to verify that the Test
+# Clearinghouse is preferred
+#
+cdscp
+set cdscp preferred clearinghouse /.:/admintest_ch
+show cdscp preferred clearinghouse
+#
+# Check for Clearinghouse existence in Known Clearinghouses using show server,
+# it should exist
+#
+show server
+#
+# Verify which clearinghouse is being used by capturing the clearinghouse
+# statistics of the Master and Test clearinghouses, access the test directory,
+# again capture the Master and Test clearinghouse statistics and compare them.
+# Only the Test clearinghouse statistics should have changed.  Make sure the
+# show dir and show obj were successful, the explicit skulk should have updated
+# the Test clearinghouse
+#
+show cached clearinghouse /.:/<local>_ch
+show cached clearinghouse /.:/admintest_ch
+show dir /.:/testdir/converge_dir
+show obj /.:/testdir/converge_dir/converge_obj_low
+show cached clearinghouse /.:/<local>_ch
+show cached clearinghouse /.:/admintest_ch
+quit
+#
+################################################################################
+#
+# ON THE LOCAL MACHINE CHANGE THE MASTER TEST DIRECTORY REPLICA TO THE REMOTE
+# MACHINE
+#
+# Use the set directory ... to new epoch master ... readonly command to change
+# the location of the master replica.  Use the show dir command to capture
+# replica types before and after the set dir command to verify the change
+#
+cdscp show directory /.:/testdir CDS_Replicas
+cdscp set directory /.:/testdir to new epoch master /.:/admintest_ch \
+	readonly /.:/<local>_ch
+cdscp show directory /.:/testdir CDS_Replicas
+#
+################################################################################
+#
+# ON THE REMOTE MACHINE VERIFY THAT THE TEST DIRECTORY MASTER REPLICA HAS
+# CHANGED FROM THE LOCAL MACHINE TO THE REMOTE MACHINE
+#
+# Use the show dir command to verify that the change of the master replica
+# successfully completed
+#
+cdscp show directory /.:/testdir CDS_Replicas
+#
+# Check for Clearinghouse existence in Known Clearinghouses using show server,
+# it should exist
+#
+cdscp show server
+#
+# Verify which clearinghouse is being used by capturing the clearinghouse
+# statistics of the Master and Test clearinghouses, access the test directory,
+# again capture the Master and Test clearinghouse statistics and compare them.
+# Only the Test clearinghouse statistics should have changed.  Make sure the
+# show dir was successful
+#
+cdscp show cached clearinghouse /.:/<local>_ch
+cdscp show cached clearinghouse /.:/admintest_ch
+cdscp show dir /.:/testdir
+cdscp show cached clearinghouse /.:/<local>_ch
+cdscp show cached clearinghouse /.:/admintest_ch
+#
+################################################################################
+#
+# ON THE LOCAL MACHINE VERIFY THAT THE TEST DIRECTORY MASTER REPLICA HAS
+# CHANGED FROM THE LOCAL MACHINE TO THE REMOTE MACHINE
+#
+# Use the show dir command to verify the change of the master replica to the
+# remote machine, check which replica is the master and which is the readonly
+#
+cdscp show directory /.:/testdir CDS_Replicas
+#
+################################################################################
+#
+# ON THE LOCAL MACHINE ADD A NEW OBJECT TO THE TEST DIRECTORY
+#
+# Login as cell_admin
+#
+dologin
+#
+# Make sure the test directory convergence is set to high and create a new
+# object in the directory
+#
+cdscp show directory /.:/testdir CDS_Convergence (make sure = high)
+cdscp create obj /.:/testdir/new_master_obj
+#
+# Delete cell_admin credentials
+#
+kdestroy
+#
+################################################################################
+#
+# ON THE REMOTE MACHINE VERIFY THAT THE NEW OBJECT IS IN THE NEW MASTER
+# REPLICA
+#
+# Verify which clearinghouse is being used by capturing the clearinghouse
+# statistics of the Master and Test clearinghouses, access the test directory,
+# again capture the Master and Test clearinghouse statistics and compare them.
+# Only the Test clearinghouse statistics should have changed.  Make sure the
+# show obj was successful
+#
+cdscp show cached clearinghouse /.:/<local>_ch
+cdscp show cached clearinghouse /.:/admintest_ch
+cdscp show obj /.:/testdir/new_master_obj
+cdscp show cached clearinghouse /.:/<local>_ch
+cdscp show cached clearinghouse /.:/admintest_ch
+#
+################################################################################
+#
+# ON THE REMOTE MACHINE DELETE THE READONLY TEST DIRECTORY REPLICA ON THE LOCAL
+# MACHINE
+#
+cdscp delete replica /.:/testdir clearinghouse /.:/<local>_ch
+#
+################################################################################
+#
+# ON THE LOCAL MACHINE VERIFY THAT THE TEST DIRECTORY IS DELETED
+#
+# Use the show dir ... CDS_Replicas command to verify that the readonly test
+# directory replica was deleted
+#
+cdscp show directory /.:/testdir CDS_Replicas
+#
+################################################################################
+#
+# ON THE REMOTE MACHINE VERIFY THAT THE MASTER TEST DIRECTORY REPLICA EXISTS
+#
+# Use the show dir ... CDS_Replicas command to verify that the master test
+# directory replica still exists
+#
+cdscp show directory /.:/testdir CDS_Replicas
+#
+################################################################################
+#
+# ON THE REMOTE MACHINE VERIFY THAT THE READONLY TEST DIRECTORY REPLICA DOES
+# NOT EXIST
+#
+# Use the show dir ... CDS_Replicas command to verify that the readonly test
+# directory replica does not exist, only the master replica should be in the
+# listing
+#
+cdscp show directory /.:/testdir CDS_Replicas
+#
+################################################################################
+#
+# STOP DCE ON LOCAL MACHINE BEFORE RESTORING MASTER CLEARINGHOUSE
+#
+echo_msg "-log-----: Stopping DCE On ${ADD_SRV} (${0})"
+#
+stop_dce_remote ${ADD_SRV} ${OSPASSWORD}
+dcestatus ${HOSTNAME}
+if [ $? -eq 0 ] ; then
+        echo_msg ""
+        echo_msg "-error---: The Following DCE Processes Did Not Stop On ${HOSTNAME}
+: (${0})"
+        echo_msg "${DCESTATUS}"
+        exit 1
+fi
+#
+# STOP DCE ON REMOTE MACHINE BEFORE RESTORING MASTER CLEARINGHOUSE
+#
+echo_msg "-log-----: Stopping DCE On ${HOSTNAME} (${0})"
+#
+stop_dce_local
+dcestatus ${ADD_SRV}
+if [ $? -eq 0 ] ; then
+        echo_msg ""
+        echo_msg "-error---: The Following DCE Processes Did Not Stop On ${ADD_SRV}:
+ (${0})"
+        echo_msg "${DCESTATUS}"
+        exit 1
+fi
+#
+################################################################################
+#
+# DELETE THE TEST CLEARINGHOUSE ON THE REMOTE MACHINE
+#
+delete_cds_ch
+#
+################################################################################
+#
+# DELETE THE TEST CLEARINGHOUSE ON THE LOCAL MACHINE
+#
+delete_cds_ch
+#
+################################################################################
+#
+# RESTORE THE ORIGINAL CLEARINGHOUSE ON THE LOCAL MACHINE
+#
+restore_cds_ch
+#
+################################################################################
+#
+# RESTORE THE ORIGINAL CLEARINGHOUSE ON THE REMOTE MACHINE
+#
+restore_cds_ch
+#
+################################################################################
+#
+# START DCE ON LOCAL MACHINE
+#
+echo_msg "-log-----: Starting DCE On ${HOSTNAME} (${0})"
+#
+start_dce_local
+dcestatus ${HOSTNAME}
+if [ $? -eq 1 ] ; then
+        echo_msg ""
+        echo_msg "-error---: DCE Did Not Restart On ${HOSTNAME} (${0})"
+        exit 1
+fi
+#
+# START DCE ON REMOTE MACHINE
+#
+echo_msg "-log-----: Starting DCE On ${HOSTNAME} And ${ADD_SRV} (${0})"
+#
+start_dce_remote ${ADD_SRV} ${OSPASSWORD}
+dcestatus ${ADD_SRV}
+if [ $? -eq 1 ] ; then
+        echo_msg ""
+        echo_msg "-error---: DCE Did Not Restart On ${ADD_SRV} (${0})"
+        exit 1
+fi
+#
+################################################################################
+#
+# ON THE LOCAL MACHINE VERIFY THAT THE TEST DIRECTORY DOES NOT EXIST
+#
+echo_msg "-log-----: Validating Test CDS Clearinghouse On ${HOSTNAME} (${0})"
+#
+check_ns fail
+#
+################################################################################
+#
+# ON THE REMOTE MACHINE VERIFY THAT THE TEST DIRECTORY DOES NOT EXIST
+#
+echo_msg "-log-----: Validating Test CDS Clearinghouse On ${ADD_SRV} (${0})"
+#
+check_ns fail
+#
+################################################################################
+#
+# REMINDER TO START DCE ON CLIENTS
+#
+if [ ! -z "${CDSCLIENTS}" ] ; then
+	echo_msg "-log-----: The Following DCE Clients Can Now Restarted (${0})"
+	for i in ${CDSCLIENTS} ; do
+		if [ "${HOSTNAME}" != "${i}" ] ; then
+			echo_msg "		${i}"
+		fi
+	done
+	echo_msg ""
+fi
+#
+################################################################################
+#
+# CLEANUP
+#
+echo_msg "-log-----: Test Completed, Doing Cleanup"
+MESSAGE="Remove stdout temporary file"
+COMMAND="rm -f ${STDOUT}" ; OPTIONS="" ; ESTATUS=0 ; exec_test
+MESSAGE="Remove stderr temporary file"
+COMMAND="rm -f ${STDERR}" ; OPTIONS="" ; ESTATUS=0 ; exec_test
+#MESSAGE="Remove original clearinghouse backup directory"
+#COMMAND="rm -r ${ORIGBAK}" ; OPTIONS="" ; ESTATUS=0 ; exec_test
+MESSAGE="Remove test clearinghouse backup directory"
+COMMAND="rm -r ${TESTBAK}" ; OPTIONS="" ; ESTATUS=0 ; exec_test
+#
+################################################################################
+#
+# DONE
+#
+end_stats
+stats
+#
+################################################################################

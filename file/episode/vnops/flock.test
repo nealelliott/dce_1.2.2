@@ -1,0 +1,113 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: flock.test,v $
+# Revision 1.1.11.1  1996/10/02  17:45:02  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:36:21  damon]
+#
+# Revision 1.1.6.1  1994/06/09  14:06:04  annie
+# 	fixed copyright in src/file
+# 	[1994/06/09  13:21:37  annie]
+# 
+# Revision 1.1.4.2  1993/01/21  18:27:59  zeliff
+# 	Embedding copyright notices
+# 	[1993/01/19  16:51:41  zeliff]
+# 
+# Revision 1.1.2.2  1992/05/06  14:16:51  jdp
+# 	Initial revision.
+# 	[1992/05/06  00:25:39  jdp]
+# 
+# $EndLog$
+
+flock 1
+
+# vnode tests
+
+open_device 1 4096 1024 1000
+create_aggregate
+
+exist_vol yyy 777,,888 170
+
+root_vnode
+vn_create foo
+vn_write 0 100 3
+stack_vnode
+
+echo normal setlock
+
+vn_setlock nowait write 10 10
+
+echo blocked setlock
+
+set_proc 30
+vn_setlock nowait write 10 10
+
+echo different range comparisons
+
+vn_getlock write 0 0
+vn_getlock write 0 5
+vn_getlock write 0 10
+vn_getlock write 0 11
+vn_getlock write 0 15
+vn_getlock write 0 20
+vn_getlock write 0 25
+vn_getlock write 10 15
+vn_getlock write 18 7
+vn_getlock write 19 6
+vn_getlock write 20 5
+
+echo blocking, read vs. write
+
+set_proc 10
+vn_setlock nowait read 30 10
+set_proc 30
+vn_getlock write 10 10
+vn_getlock read 10 10
+vn_getlock write 30 10
+vn_getlock read 30 10
+
+echo blocking when multiple locks are set
+
+vn_getlock write 15 10
+vn_getlock write 25 10
+vn_getlock write 15 20
+vn_getlock write 22 5
+
+echo blocking against whole file
+
+set_proc 10
+vn_unlock 10 10
+vn_unlock 30 10
+vn_setlock nowait write 0 0
+set_proc 30
+vn_getlock write 10 10
+
+echo an unlock changes one lock into two
+
+set_proc 10
+vn_unlock 10 10
+set_proc 30
+vn_getlock write 10 10
+vn_getlock write 9 10
+vn_getlock write 11 10
+vn_getlock write 9 12
+
+echo adjacent locks coalesced
+
+set_proc 10
+vn_setlock nowait write 15 5
+set_proc 30
+vn_getlock write 15 5
+
+unstack_vnode
+
+release_vnode
+unmount_vol
+
+check_device
+end

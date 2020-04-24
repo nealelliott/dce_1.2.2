@@ -1,0 +1,362 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dcerpper,v $
+# Revision 1.1.61.2  1996/03/09  20:51:02  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:28:59  marty]
+#
+# Revision 1.1.61.1  1995/12/11  22:00:55  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/29  18:41 UTC  bell_d
+# 	Merge in latest version fixed for heterogenous cell operation - rshell and copy test instead of rcp test.  Also
+# 	standardize set of timing variable.
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  14:42 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/03/25  16:36 UTC  bissen
+# 
+# 	HP revision /main/bissen_systest/1  1994/03/25  16:34 UTC  bissen
+# 	change so remote machines get their own binaries
+# 	[1995/12/11  21:41:44  root]
+# 
+# Revision 1.1.5.2  1993/07/09  12:38:45  root
+# 	Initial King Kong branch
+# 	[1993/07/09  12:38:18  root]
+# 
+# Revision 1.1.3.4  1993/05/04  17:28:21  bissen
+# 	incorporate a LOOPS_TO_EXECUTE test condition -bissen
+# 	[1993/05/04  17:27:59  bissen]
+# 
+# Revision 1.1.3.3  1993/04/23  14:42:35  giza
+# 	add time looping
+# 	[1993/04/22  23:43:14  giza]
+# 
+# Revision 1.1.3.2  1993/03/31  12:49:04  mgm
+# 	Initial GAMERA branch
+# 
+# Revision 1.1.2.7  1992/12/14  17:34:04  mgm
+# 	Added another sleep in floating point to make sure it
+# 	finishes before another test starts.
+# 	[1992/12/14  17:33:38  mgm]
+# 
+# Revision 1.1.2.6  1992/12/09  14:53:57  mgm
+# 	Added rest of tests.  Test 9 core dumps tet and is commented out.
+# 	OT defect has been submitted to OSF.  Fixed cleanup().
+# 	[1992/12/09  14:53:16  mgm]
+# 
+# Revision 1.1.2.5  1992/12/01  19:13:37  mgm
+# 	Fixed start_per_clients to show DCE_ERROR if one of the clients
+# 	doesn't start.
+# 	[1992/12/01  19:12:58  mgm]
+# 
+# Revision 1.1.2.4  1992/11/20  15:10:15  mgm
+# 	Added separate start_per_clients (not same as one in common_functions)
+# 	[1992/11/20  15:08:08  mgm]
+# 
+# Revision 1.1.2.3  1992/11/18  11:48:46  mgm
+# 	Changed CLIENT_PARM to CLIENT_PARMS
+# 	[1992/11/18  11:48:06  mgm]
+# 
+# Revision 1.1.2.2  1992/11/03  22:17:02  mgm
+# 	Created new dcerpper file for TET - Rick OBrien.
+# 	Bsubmit'd by Mary MacGregor
+# 	[1992/11/03  22:16:08  mgm]
+# 
+# $EndLog$
+# 
+#
+# (c) Copyright 1990, 1991, 1992 OPEN SOFTWARE FOUNDATION, INC. 
+# ALL RIGHTS RESERVED 
+#
+#
+#
+#   TEST_NAME: dcerpper
+#
+#   FILES: dcerpper (this file)
+#          perf_server
+#          perf_client
+#
+#   REQUIREMENTS:
+#      Threads, rpc, cds
+#
+#   RESTRICTIONS:
+#      None
+#
+#
+#   (C) COPYRIGHT International Business Machines Corp. 1991
+#   All Rights Reserved
+#
+#   TESTCASE OVERVIEW:
+#       Refer to .c files. Also usage is available by typing perf_server or
+#       perf_client without any arguments.
+#
+#  CHANGE HISTORY
+#  	11/10/90	Gerald Cantor	Initial design.
+#  	11/29/90	Gerald Cantor	Completed coding
+#  	09/10/91	Gerald Cantor	Line 97:  added the su.dce
+#   	10/16/91	Gerald Cantor 	minor file modifications
+#  	09/02/92	Rick O'Brien	Ported to TET.
+#
+###########################################################################
+
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="rpc_per"
+testlist="$ic1"
+
+startup ()
+{
+#===============================================================================
+# INITIALIZE VARIABLES
+#export MACHINES=""			# Can overide command line arg here!
+
+export TESTNAME="dcerpper"
+export TESTDIR="/tet/rpc/ts/$TESTNAME"
+
+export PROTO="ncadg_ip_udp"             #Use datagram protocol string
+export MAXCALLS="10"                    #Create 10 listener threads
+
+#export TEST_NUM=7
+export PORT=2001
+export HOSTNAME=`hostname`
+export SERVER_ADDR=`gethost $HOSTNAME`
+
+export SERVER_FILE="perf_server"
+export CLIENT_FILE="perf_client"
+
+
+export CLIENT_PARMS="$TEST_NUM $PROTO:$SERVER_ADDR[$PORT]"
+export SERVER_PARMS="$MAXCALLS $PROTO"
+export SLEEP_TIME=30
+
+CELL_NAME=` /usr/bin/getcellname | awk -F/ '{ print $3}'`
+export CELL_NAME
+#===============================================================================
+	
+	cleanup
+
+	ping_hosts
+	tet_infoline "HOSTLIST is ${HOSTLIST}"
+}
+
+rpc_per ()
+{
+        LOOP=1
+        CURRENT_LOOP=1
+        if [ -n "$RUNNING_TIME" ]
+	then 
+	  RUN_TIME=$RUNNING_TIME
+	fi
+        if [ -n "$RUN_TIME" ]
+        then
+                SECONDS_TO_EXECUTE=`awk "BEGIN { printf (\"%d\", 3600 * $RUN_TIME); exit; }"`
+        fi
+        SECONDS=0
+        while [ $LOOP -eq 1 ]
+	do
+		tet_infoline "Starting iteration $CURRENT_LOOP"
+
+		if [ $CURRENT_LOOP -eq 1 ]
+		then
+			test_fail=0
+		fi
+
+		start_server
+        	if [ $? -ne 0 ]
+        	then
+			tet_result FAIL
+               		 return
+        	fi
+
+		start_per_clients
+	        if [ $? -ne 0 ]
+	        then
+                        tet_infoline "invocation $CURRENT_LOOP failed"
+                        test_fail=1
+	        fi
+
+
+		wait_for_clients
+	        if [ $? -ne 0 ]
+	        then
+                        tet_infoline "invocation $CURRENT_LOOP failed"
+                        test_fail=1
+	        fi
+
+		sleep $SLEEP_TIME
+
+		check_results
+		if [ $? -ne 0 ]
+		then
+                        tet_infoline "invocation $CURRENT_LOOP failed"
+                        test_fail=1
+		fi
+
+		cleanup
+
+                CURRENT_LOOP=`expr $CURRENT_LOOP + 1`
+                if [ -n "$LOOPS_TO_EXECUTE" ]
+                then
+                        if [ $CURRENT_LOOP -gt $LOOPS_TO_EXECUTE ]
+                        then
+                                LOOP=0
+                        fi
+                elif [ -n "$RUN_TIME" ]
+                then
+                        if [ "$SECONDS" -ge "$SECONDS_TO_EXECUTE" ]
+                        then
+                                LOOP=0
+                        fi
+                else
+                        LOOP=0
+                fi
+	done
+        num_loops=`expr $CURRENT_LOOP - 1`
+        measure="minutes"
+        minutes=`expr $SECONDS / 60`
+        if [ $minutes -lt 2 ]
+        then
+          minutes=$SECONDS
+          measure="seconds"
+        fi
+        tet_infoline "$TESTNAME test ran for $num_loops loops/iterations in $minutes $measure"
+
+        if [ $test_fail -eq 0 ]
+        then
+                tet_result PASS
+        else
+                tet_result FAIL
+        fi
+
+}
+
+cleanup ()
+{
+        killproc $SERVER_FILE
+	sleep 10
+        for RHOST in ${HOSTLIST}; do
+                if [ `hostname` != ${RHOST} ]
+                then
+                        proc=$(${RSH_COMM} $RHOST ps -ef|grep $CLIENT_FILE | grep -v grep|awk '{print $2}')
+                        if [ "$proc" != "" ];then
+                                ${RSH_COMM} $RHOST /bin/kill -9 $proc
+                        fi
+                        ${RSH_COMM} $RHOST "rm -f $STTMPDIR/$CLIENT_FILE*"
+                else
+                        proc=$(ps -ef|grep $CLIENT_FILE | grep -v grep|awk '{print $2}')
+                        if [ "$proc" != "" ];then
+                                /bin/kill -9 $proc
+                        fi
+                        rm -f $STTMPDIR/$CLIENT_FILE*
+                fi
+        done
+}
+
+start_per_clients ()
+{
+        PIDS=""
+	for RHOST in ${HOSTLIST}; do
+	    tet_setblock
+            (   tet_setcontext
+                tet_infoline "Starting $CLIENT_FILE on $RHOST"
+                if [ `hostname` = ${RHOST} ];then
+                        cp ./$CLIENT_FILE /tmp
+                else
+			tet_infoline "Copy $CLIENT_FILE frm $TET_ROOT/systest/rpc/ts/dcerpper"
+                        $RSH_COMM ${RHOST} cp $TET_ROOT/systest/rpc/ts/dcerpper/${CLIENT_FILE} /tmp
+                fi
+
+		for TNUM in 0 1 2 3 4 5 6 7 8 9 10
+		do
+		  case $TNUM in
+		    0) tet_infoline "Starting test $TNUM - Null call"
+		       rshsp $RHOST "$STTMPDIR/$CLIENT_FILE $TNUM $CLIENT_PARMS 3 400 y n > $STTMPDIR/$CLIENT_FILE.$RHOST 2>&1" &
+		       sleep $SLEEP_TIME
+		       tet_infoline "Starting test $TNUM - Null idempotent call"
+		       rshsp $RHOST "$STTMPDIR/$CLIENT_FILE $TNUM $CLIENT_PARMS 3 400 y y >> $STTMPDIR/$CLIENT_FILE.$RHOST 2>&1" &
+		       sleep $SLEEP_TIME;;
+
+		    1) tet_infoline "Starting test $TNUM - Ins"
+		       rshsp $RHOST "$STTMPDIR/$CLIENT_FILE $TNUM $CLIENT_PARMS 3 50 y n 3000 >> $STTMPDIR/$CLIENT_FILE.$RHOST 2>&1" &
+		       sleep $SLEEP_TIME
+		       tet_infoline "Starting test $TNUM - Ins, idempotent"
+		       rshsp $RHOST "$STTMPDIR/$CLIENT_FILE $TNUM $CLIENT_PARMS 3 50 y y 3000 >> $STTMPDIR/$CLIENT_FILE.$RHOST 2>&1" &
+		       sleep $SLEEP_TIME;;
+
+		    2) tet_infoline "Starting test $TNUM - Outs"
+		       rshsp $RHOST "$STTMPDIR/$CLIENT_FILE $TNUM $CLIENT_PARMS 3 50 y n 3000 >> $STTMPDIR/$CLIENT_FILE.$RHOST 2>&1" &
+		       sleep $SLEEP_TIME
+		       tet_infoline "Starting test $TNUM - Outs, idempotent"
+		       rshsp $RHOST "$STTMPDIR/$CLIENT_FILE $TNUM $CLIENT_PARMS 3 50 y y 3000 >> $STTMPDIR/$CLIENT_FILE.$RHOST 2>&1" &
+		       sleep $SLEEP_TIME;;
+
+		    # Note: Test 3 only works with udp
+		    3) tet_infoline "Starting test $TNUM - Broadcast"
+		       rshsp $RHOST "$STTMPDIR/$CLIENT_FILE $TNUM ncadg_ip_udp >> $STTMPDIR/$CLIENT_FILE.$RHOST 2>&1" &
+		       sleep $SLEEP_TIME;;
+
+		    4) tet_infoline "Starting test $TNUM - Maybe"
+		       rshsp $RHOST "$STTMPDIR/$CLIENT_FILE $TNUM $CLIENT_PARMS 3 50 >> $STTMPDIR/$CLIENT_FILE.$RHOST 2>&1" &
+		       sleep $SLEEP_TIME;;
+
+		    # Note: Test 5 only works with udp
+		    5) tet_infoline "Starting test $TNUM - Broadcast/maybe"
+		       rshsp $RHOST "$STTMPDIR/$CLIENT_FILE $TNUM ncadg_ip_udp >> $STTMPDIR/$CLIENT_FILE.$RHOST 2>&1" &
+		       sleep $SLEEP_TIME;;
+
+		    6) tet_infoline "Starting test $TNUM - Floating point"
+		       rshsp $RHOST "$STTMPDIR/$CLIENT_FILE $TNUM $CLIENT_PARMS 3 100 y n >> $STTMPDIR/$CLIENT_FILE.$RHOST 2>&1" &
+		       sleep $SLEEP_TIME
+		       sleep $SLEEP_TIME;;
+
+		    7) tet_infoline "Starting test $TNUM - Unregistered interface"
+		       rshsp $RHOST "$STTMPDIR/$CLIENT_FILE $TNUM $CLIENT_PARMS >> $STTMPDIR/$CLIENT_FILE.$RHOST 2>&1" &
+		       sleep $SLEEP_TIME;;
+
+		    8) tet_infoline "Starting test $TNUM - Forwarding"
+		       rshsp $RHOST "$STTMPDIR/$CLIENT_FILE $TNUM $CLIENT_PARMS n >> $STTMPDIR/$CLIENT_FILE.$RHOST 2>&1" &
+		       sleep $SLEEP_TIME;;
+
+		    # Note: Test 9 dumps core ... bug submitted to OSF
+		    9) tet_infoline "Starting test $TNUM - Exception"
+		       rshsp $RHOST "$STTMPDIR/$CLIENT_FILE $TNUM $CLIENT_PARMS >> $STTMPDIR/$CLIENT_FILE.$RHOST 2>&1" &
+		       sleep $SLEEP_TIME;;
+
+		    10) tet_infoline "Starting test $TNUM - Slow call"
+		        rshsp $RHOST "$STTMPDIR/$CLIENT_FILE $TNUM $CLIENT_PARMS 2 2 y n 60 >> $STTMPDIR/$CLIENT_FILE.$RHOST 2>&1" &
+		        sleep $SLEEP_TIME
+		        sleep $SLEEP_TIME
+		        sleep $SLEEP_TIME
+		        sleep $SLEEP_TIME
+		        sleep $SLEEP_TIME
+		        sleep $SLEEP_TIME
+		        sleep $SLEEP_TIME
+		        sleep $SLEEP_TIME
+		        sleep $SLEEP_TIME
+			tet_infoline "Starting test $TNUM - Slow idempotent call"
+		        rshsp $RHOST "$STTMPDIR/$CLIENT_FILE $TNUM $CLIENT_PARMS 2 2 y y 60 >> $STTMPDIR/$CLIENT_FILE.$RHOST 2>&1" &
+		        sleep $SLEEP_TIME
+		        sleep $SLEEP_TIME;;
+	          esac
+	        done ) &
+		PIDS="$PIDS$! "
+		tet_setblock
+        done
+        sleep $SLEEP_TIME
+}
+
+# tcc will fail if these files don't exist and get sourced
+# so there is no need to check that this happens
+
+. $TET_ROOT/profile.dcest
+. $TET_ROOT/rpc/ts/common_functions
+. $TCM

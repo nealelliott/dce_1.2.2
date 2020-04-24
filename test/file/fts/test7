@@ -1,0 +1,280 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+# Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS exporting Episode.
+# The script tests the fts dump and restore subcommands.
+
+###############################################################################
+
+# Usage:                test7
+
+# Typically run via:    test7 >& test7.out
+# or via the fts/runtests script.
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode.
+# DFS server $SERVER_1 must export Episode aggregate $EPI_AGGRNAME_1.
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1, in order to
+# run the fts commands contained in this script.
+
+# Highest error number is: 32.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname|cut -f1 -d"." 2>/dev/null`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${EPI_AGGRNAME_1=epi1}
+: ${SERVER_1=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name=/.../$CELL_NAME}
+: ${dns_server_prefix=/.:/hosts/}
+: ${export_root=/.../$CELL_NAME/fs}
+
+av_arg="$AUTH_ARG $VERB_ARG"
+ca_arg="$CELL_ARG $AUTH_ARG"
+
+base_name=Dino.$$
+
+#
+#  ftsCheckDiskSpace()
+#	Dumps data about available disk space.
+#
+#  Arguments:  NONE
+#
+ftsCheckDiskSpace()
+{
+    echo ""
+    echo "Checking disk space"
+    echo ""
+    pwd
+    ls -l
+    df .
+}
+
+#
+# Source in code to analyze command results.  It handles verifying if
+# the tests are to work on LFS and UFS.
+#
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+###############################################################################
+
+echo ""
+date
+echo "RUNNING fts DUMP/RESTORE COMMANDS on SERVER $SERVER_1 in CELL $CELL_NAME."
+echo "========================================================================"
+echo ""
+
+cd /tmp
+rm -f core dump.[1-9] dump.[1-9][0-9]
+
+###############################################################################
+
+echo ""; echo "Running fts create"
+n=10
+while [ $n -le 16 ]
+do
+    fts create $base_name.$n $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E1 rc
+    n=`expr $n + 1`
+done
+
+ftsCheckDiskSpace
+
+echo ""
+echo "Running fts dump"
+    fts dump $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E8 rc
+
+    fts dump fubar_argument $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E9 rc
+
+    fts dump $base_name.11 $av_arg > /dev/null
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E10 rc
+
+    fts dump $base_name.11 0 $av_arg > /dev/null
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E11 rc
+
+    ftsCheckDiskSpace
+
+    fts dump -fileset $base_name.11 -time 0 -file dump.11 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E12 rc
+
+    ftsCheckDiskSpace
+
+    id=`fts lsfldb $base_name.12 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts dump -fileset $id -time 0 -file dump.12 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E13 rc
+
+    ftsCheckDiskSpace
+
+    fts dump -fileset $base_name.13 -time 0 -file dump.13 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E14 rc
+
+    ftsCheckDiskSpace
+
+    id=`fts lsfldb $base_name.14 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts dump -fileset $id -time 0 -file dump.14 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E15 rc
+
+    ftsCheckDiskSpace
+
+    fts dump -file dump.15 -cell $dns_cell_name -fileset $base_name.15 \
+       -time 0 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E16 rc
+
+    ftsCheckDiskSpace
+
+    fts dump -file dump.16 -cell fubar_cell -fileset $base_name.16 \
+       -time 0 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E17 rc
+
+    fts dump -file dump.16 -cell $dns_cell_name -fileset fubar_name -time 0 \
+       $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E18 rc
+
+    fts dump -file dump.16 -cell $dns_cell_name -fileset $base_name.16 \
+       -time fubar_time $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E19 rc
+
+    ftsCheckDiskSpace
+
+
+echo ""
+echo "Running fts restore"
+    echo '' | fts restore $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E20 rc
+
+    echo '' | fts restore fubar_argument $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E21 rc
+
+    echo '' | fts restore $base_name.11 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E22 rc
+
+    echo '' | fts restore $base_name.11 $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E23 rc
+
+    echo '' | fts restore $base_name.11 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+       $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E24 rc
+
+    echo '' | fts restore $base_name.12 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+       -overwrite $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E25 rc
+
+    echo '' | fts restore $base_name.13 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+       dump.14 -overwrite $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E26 rc
+
+    echo '' | fts restore $base_name.1.14 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+       dump.14 1,,14 $dns_cell_name $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E27 rc
+
+    echo '' | fts restore -cell $dns_cell_name -ftid 2,,14 -file dump.14 -overwrite \
+       -server $dns_server_prefix$SERVER_1 -ftname $base_name.2.14 \
+       -aggregate $EPI_AGGRNAME_1 \
+       $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E28 rc
+
+    echo '' | fts restore -cell fubar_cell -file dump.15 -overwrite \
+       -server $dns_server_prefix$SERVER_1  -ftname $base_name.15 \
+       -aggregate $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E29 rc
+
+    echo '' | fts restore -cell $dns_cell_name -file fubar_file \
+       -server $dns_server_prefix$SERVER_1 -ftname $base_name.15 \
+       -aggregate $EPI_AGGRNAME_1 -overwrite $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E30 rc
+
+    echo '' | fts restore -cell $dns_cell_name -file dump.15 -server fubar_server \
+       -ftname $base_name.15 -aggregate $EPI_AGGRNAME_1 -overwrite $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E31 rc
+
+    echo '' | fts restore -cell $dns_cell_name -file dump.15 -overwrite \
+       -server $dns_server_prefix$SERVER_1 -ftname $base_name.15 \
+       -aggregate fubar_aggr $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E32 rc
+    echo ""
+
+echo ""
+echo "Cleaning up"
+rm -f dump.[1-9] dump.[1-9][0-9]
+
+n=10
+while [ $n -le 16 ]
+do
+    if [ "$base_name.$n" != "$base_name.12" ]
+    then
+        fts delete $base_name.$n $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+            $av_arg
+        dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E33 rc
+    fi
+    n=`expr $n + 1`
+done
+
+    id=`fts lsfldb $base_name.12 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts zap $id $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E34 rc
+    fts delfldbentry $base_name.12 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E35 rc
+
+    fts delete $base_name.1.14 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E36 rc
+
+    fts delete $base_name.2.14 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+        $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E37 rc
+
+
+
+ftsCheckDiskSpace
+
+###############################################################################
+
+sync
+sync
+sleep 2
+
+echo ""
+echo "Done at `date`."
+echo ""
+if [ $rc -eq 0 ]
+then 
+    echo "$p PASSED"
+else 
+    echo "$p FAILED ($rc errors)"
+fi
+
+exit $rc
+
+###############################################################################

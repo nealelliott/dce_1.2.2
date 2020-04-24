@@ -1,0 +1,821 @@
+#   
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#  
+# All Rights Reserved
+#    
+# HISTORY
+# $Log: pks.sams,v $
+# Revision 1.1.2.1  1996/10/03  20:30:30  arvind
+# 	OSF DCE 1.2.2 Drop 4
+# 	[1996/10/03  19:26:32  arvind]
+#
+# Revision /main/DCE_1.2.2/1  1996/09/09  21:28 UTC  arvind
+# 	PKSS drop from DEC (DCE1.2.2)
+# 	[1996/08/30  15:47 UTC  arvind  /main/arvind_pkss/1]
+# 
+# $EndLog$
+#
+# (c) Copyright 1996,
+# Digital Equipment Corporation, Maynard, Massachusetts, USA
+# All Rights Reserved
+#
+# FACILITY:    Public Key Storage Server (PKSS)
+#
+
+# Part I
+
+component      pks
+table          pks__table
+technology     dce
+default	     incatalog intable
+
+# Part II
+
+serviceability table pks_svc_table handle pks_svc_handle
+start
+    sub-component pks_s_server          "pks_server"             pks_i_svc_server
+    sub-component pks_s_general         "pks_general"            pks_i_svc_general
+    sub-component pks_s_acl             "pks_acls"               pks_i_svc_acl
+    sub-component pks_s_pipe            "pks_pipe"               pks_i_svc_pipe
+end
+
+# Part III
+
+start
+code		pks_s_no_memory
+text		"Cannot allocate memory"
+explanation	"Memory allocation operation failed"
+action		"Check memory limits on your machine, and increase
+		available memory, if possible."
+attributes	svc_c_sev_error
+sub-component	pks_s_general
+end
+
+start
+code		pks_s_no_gen_reply
+text		"Cannot generate a reply message, %x"
+explanation	"Could not generate ASN.1-encoded reply message"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_general
+end
+
+start
+code		pks_s_invalid_arg
+text		"Bad or wrong arguments"
+explanation	"Bad or wrong arguments were supplied."
+action		"Reinvoke the command with the correct arguments."
+attributes	svc_c_sev_error
+sub-component	pks_s_general
+end
+
+start
+code		pks_s_invalid_arg_1_parm
+text		"Bad or wrong argument: %d"
+explanation	"Bad or wrong argument were supplied."
+action		"Reinvoke the command with the correct arguments."
+attributes	svc_c_sev_error
+sub-component	pks_s_general
+end
+
+
+start
+code		pks_s_cant_open_storage_file
+text		"Failed to open file associated with pks object"
+explanation	"When attempting to open a file associated with the pks
+		object, a failure occurred."
+action		"Ensure that the \*Lstorage_tag\*O field of the \*Lid\*O
+		paramater refers to an existing file, and that the
+		file is accessible to the pks process."
+end
+
+start
+code 		pks_s_no_config_file
+text 		"Inaccessible or absent configuration file."
+explanation 	"The PKSS configuration file could not be opened."
+action		"Check that a valid configuration exists and can be read."
+attributes	svc_c_sev_error
+sub-component	pks_s_server
+end
+
+start
+code 		pks_s_no_group_name
+text 		"Cannot read server group name from config info"
+explanation 	"Cannot read server group name from config info"
+action		"Check that a valid configuration exists and can be read."
+attributes	svc_c_sev_error
+sub-component	pks_s_server
+end
+
+start
+code 		pks_s_already_initialized
+text 		"The PKSS has already initialized."
+explanation 	"An initialization routine was called more than once."
+action		"None - this is an informational status."
+attributes	svc_c_sev_notice
+sub-component	pks_s_server
+end
+
+start
+code		pks_s_cant_remove_storage_file
+text		"Failed to remove file belonging to pks object"
+explanation	"When attempting to remove a file
+		referred to by the pks object, a failure occurred."
+action		"Ensure that the \*Lstorage_tag\*O field of the \*Lid\*O
+		paramater refers to an existing file, and that the file and
+		directory in which it resides is accessible to the pks process."
+end
+
+start
+code            pks_s_no_acl
+text            "The ACL was not found."
+explanation     "The ACL did not exist within the database."
+action          "Application-specific"
+end
+
+start
+code            pks_s_bad_acl
+text            "An error was detected in a retrieved ACL."
+explanation     "An ACL did not pass consistency checks."
+action          "Check the integrity of the database."
+end
+
+start
+code            pks_s_bad_acl_type
+text            "The specified ACL type was not recognized."
+explanation     "The specified ACL type was not recognized."
+action          "Specify a recognized ACL type."
+end
+
+start
+code            pks_s_invalid_op
+text            "The specified authorization operation was unrecognized."
+explanation     "Internal error - the specified authorization operation was unre
+cognized."
+action          "Submit a problem report."
+end
+
+
+start		undocumented intable incatalog
+code            pks_s_insufficient_space
+sub-component	pks_s_pipe
+text            "There is not enough room in the buffer."
+explanation     "The data would have overflowed the buffer"
+action          "Use a larger buffer"
+attributes	svc_c_sev_error
+end
+
+start
+code            pks_s_pipe_error
+sub-component	pks_s_pipe
+text            "Can't create pipe."
+explanation     "The PKSS split-client can't create a pipe"
+action          "Check process resources"
+attributes	svc_c_sev_error
+end
+
+start
+code          sec_pkss_pipe_encrypt_fail
+sub-component pks_s_pipe
+text          "Error encrypting for pipe (%x)"
+explanation   "Error returned from crypto routine"
+action                "Submit a problem report"
+attributes    svc_c_sev_error
+end
+
+start
+code          sec_pkss_pipe_decrypt_fail
+sub-component pks_s_pipe
+text          "Error decrypting data from pipe (%x)."
+explanation   "Error returned from crypto routine"
+action                "Submit a problem report"
+attributes    svc_c_sev_error
+end
+
+start
+code          pks_s_pipe_svr_encrypt_fail
+sub-component pks_s_pipe
+text          "Error encrypting data in server for pipe (%x)."
+explanation   "Error returned from crypto routine"
+action                "Submit a problem report"
+attributes    svc_c_sev_error
+end
+
+start
+code          pks_s_pipe_svr_decrypt_fail
+sub-component pks_s_pipe
+text          "Error decrypting data in server from pipe (%x)."
+explanation   "Error returned from crypto routine"
+action                "submit a problem report"
+attributes    svc_c_sev_error
+end
+
+start
+code            pks_s_fork_error
+sub-component	pks_s_pipe
+text            "Can't create child process."
+explanation     "The PKSS split-client can't fork a child"
+action          "Check process resources"
+attributes	svc_c_sev_error
+end
+
+start
+code            pks_s_pipe_data_error
+sub-component	pks_s_pipe
+text            "Pipe data error."
+explanation     "Error communicating with child process."
+action          "Check process resources"
+attributes	svc_c_sev_error
+end
+
+start
+code            pks_s_int_length_error
+text            "Pipe length error."
+explanation     "Error calculating pipe data length."
+action          "Submit a problem report"
+end
+
+start
+code            pks_s_int_length_errorp
+sub-component	pks_s_pipe
+text            "Pipe length error (%d)."
+explanation     "Error calculating pipe data length."
+action          "Submit a problem report"
+attributes	svc_c_sev_error
+end
+
+start
+code            pks_s_exec_e2big
+sub-component	pks_s_pipe
+text            "Exec failed (E2BIG)."
+explanation     "Exec failed, errno = E2BIG."
+action          "Submit a problem report"
+attributes	svc_c_sev_error
+end
+
+start
+code            pks_s_exec_eacces
+sub-component	pks_s_pipe
+text            "Exec failed (EACCES)."
+explanation     "Exec failed, errno = EACCES."
+action          "Submit a problem report"
+attributes	svc_c_sev_error
+end
+
+start
+code            pks_s_exec_eloop
+sub-component	pks_s_pipe
+text            "Exec failed (ELOOP)."
+explanation     "Exec failed, errno = ELOOP."
+action          "Submit a problem report"
+attributes	svc_c_sev_error
+end
+
+start
+code            pks_s_exec_enametoolong
+sub-component	pks_s_pipe
+text            "Exec failed (ENAMETOOLONG)."
+explanation     "Exec failed, errno = ENAMETOOLONG."
+action          "Submit a problem report"
+attributes	svc_c_sev_error
+end
+
+start
+code            pks_s_exec_enoent
+sub-component	pks_s_pipe
+text            "Exec failed (ENOENT)."
+explanation     "Exec failed, errno = ENOENT."
+action          "Submit a problem report"
+attributes	svc_c_sev_error
+end
+
+start
+code            pks_s_exec_enomem
+sub-component	pks_s_pipe
+text            "Exec failed (ENOMEM)."
+explanation     "Exec failed, errno = ENOMEM."
+action          "Submit a problem report"
+attributes	svc_c_sev_error
+end
+
+start
+code            pks_s_exec_enotdir
+sub-component	pks_s_pipe
+text            "Exec failed (ENOTDIR)."
+explanation     "Exec failed, errno = ENOTDIR."
+action          "Submit a problem report"
+attributes	svc_c_sev_error
+end
+
+start
+code            pks_s_exec_enoexec
+sub-component	pks_s_pipe
+text            "Exec failed (ENOEXEC)."
+explanation     "Exec failed, errno = ENOEXEC."
+action          "Submit a problem report"
+attributes	svc_c_sev_error
+end
+
+start
+code            pks_s_exec_fail
+sub-component	pks_s_pipe
+text            "Exec failed (%d)."
+explanation     "Exec failed."
+action          "Submit a problem report"
+attributes	svc_c_sev_error
+end
+
+start
+code            pks_s_pipsvr_nomem
+sub-component	pks_s_pipe
+text            "Pipe server can't allocate memory (%d)."
+explanation     "The client-side helper can't allocate memory."
+action          "Check process resources"
+attributes	svc_c_sev_fatal
+end
+
+start
+code            pks_s_pipclt_nomem
+sub-component	pks_s_pipe
+text            "Pipe client can't allocate memory (%d)."
+explanation     "The client can't allocate memory."
+action          "Check process resources"
+attributes	svc_c_sev_fatal
+end
+
+start
+code            pks_s_pipclt_bad_msg
+sub-component	pks_s_pipe
+text            "Unexpected message type returned from pipe helper (%d)."
+explanation     "A protocol violation occured."
+action          "Internal error"
+attributes	svc_c_sev_error
+end
+
+start
+code            pks_s_bad_msg_type
+text            "Unexpected message type returned from pipe helper."
+explanation     "A protocol violation occured."
+action          "Internal error"
+end
+
+start
+code            pks_s_pipsvr_decode_error
+sub-component	pks_s_pipe
+text            "Error decoding pipe data."
+explanation     "Error decoding pipe data."
+action          "Submit a problem report"
+attributes	svc_c_sev_error
+end
+
+start
+code            pks_s_pipsvr_decode_errorp
+sub-component	pks_s_pipe
+text            "Error decoding pipe data (%d)."
+explanation     "Error decoding pipe data."
+action          "Submit a problem report"
+attributes	svc_c_sev_error
+end
+
+
+
+
+start
+code            pks_s_unexpected_termination
+sub-component	pks_s_pipe
+text		"Unexpected child termination, status=<0x%8.8lx|code>."
+explanation	"The child process unexpectedly terminated.
+		The status code \*Lcode\*O specifies additional information."
+action		"Correct the indicated error and retry the operation."
+attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_caught_signal
+text		"Caught signal %d. Exiting."
+attributes	svc_c_sev_notice
+sub-component	pks_s_general
+end
+
+start		undocumented intable incatalog
+code		pks_s_start
+text		"Server starting.."
+attributes	svc_c_sev_notice
+sub-component	pks_s_server
+end
+start
+
+code		pks_s_ready_to_listen
+sub-component 	pks_s_server
+attributes 	"svc_c_sev_notice"
+text		"Ready to listen on interfaces..."
+explanation	"The daemon has started."
+action		"None required."
+end
+
+start		undocumented intable incatalog
+code		pks_s_cant_open_database
+text		"Cannot open pks database '%s', errno = %d"
+attributes	svc_c_sev_fatal
+sub-component	pks_s_server
+end
+
+start		undocumented intable incatalog
+code		pks_s_storage_close
+text		"Storage close, status = %d"
+attributes	svc_c_sev_error
+sub-component	pks_s_server
+end
+
+start		undocumented intable incatalog
+code		pks_s_filename
+text		"GdbC filename not valid"
+attributes	svc_c_sev_fatal
+sub-component	pks_s_general
+end
+
+start		undocumented intable incatalog
+code		pks_s_is_listening
+text		"pks is listening..."
+attributes	svc_c_sev_notice
+sub-component	pks_s_general
+end
+
+start		undocumented intable incatalog
+code		pks_s_cant_init_something
+text		"Initialization (<%s|part>) failed, status=<0x%8.8lx|code>."
+explanation	"The specified \*Lpart\*O of server initialization failed.
+		The status code \*Lcode\*O specifies additional information."
+action		"Correct the indicated error and restart the server."
+attributes	"svc_c_sev_fatal | svc_c_action_exit_bad"
+sub-component	pks_s_general
+end
+
+start		undocumented intable incatalog
+code		pks_s_cant_export_yet
+text		"Cannot export to namespace -- sleeping, status=<0x%8.8lx|code>."
+explanation	"Unable to export a service to the namespace.
+		The status code \*Lcode\*O specifies additional information.
+		The server will keep retrying until it succeeds."
+action		"If the failiure is not transient, stop the server,
+		correct the indicated error, and restart the server."
+attributes	svc_c_sev_notice_verbose
+sub-component	pks_s_general
+end
+
+start		undocumented intable incatalog
+code		pks_s_sec_bsafe
+text		"Error on sec_bsafe routine, status=<0x%8.8lx|code>."
+explanation	"An unexpected error occured during encryption or deencryption"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_general
+end
+
+start		undocumented intable incatalog
+code		pks_s_dbwrite_fail
+text		"Error writing ACL to database, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while writing an ACL to the database"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+start		undocumented intable incatalog
+code		pks_s_acl_encode_fail1
+text		"Error 1 encoding an ACL, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while encoding an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_encode_fail2
+text		"Error 2 encoding an ACL, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while encoding an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_encode_fail3
+text		"Error 3 encoding an ACL, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while encoding an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_encode_fail4
+text		"Error 4 encoding an ACL, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while encoding an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_encode_fail5
+text		"Error 5 encoding an ACL, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while encoding an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_encode_fail6
+text		"Error 6 encoding an ACL, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while encoding an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_decode_fail1
+text		"Error 1 decoding an ACL, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while decoding an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_decode_fail2
+text		"Error 2 decoding an ACL, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while decoding an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_decode_fail3
+text		"Error 3 decoding an ACL, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while decoding an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_decode_fail4
+text		"Error 4 decoding an ACL, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while decoding an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_decode_fail5
+text		"Error 5 decoding an ACL, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while decoding an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_defcon_retrieve_fail1
+text		"Error 1 retrieving default container ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_defcon_retrieve_fail2
+text		"Error 2 retrieving default container ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_defcon_retrieve_fail3
+text		"Error 3 retrieving default container ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_defcon_retrieve_fail4
+text		"Error 4 retrieving default container ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_defcon_retrieve_fail5
+text		"Error 5 retrieving default object ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_defcon_retrieve_fail6
+text		"Error 6 retrieving default object ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_defcon_retrieve_fail7
+text		"Error 7 retrieving default object ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+start		undocumented intable incatalog
+code		pks_s_acl_defobj_retrieve_fail1
+text		"Error 1 retrieving default object ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_defobj_retrieve_fail2
+text		"Error 2 retrieving default object ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_defobj_retrieve_fail3
+text		"Error 3 retrieving default object ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_defobj_retrieve_fail4
+text		"Error 4 retrieving default object ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_defobj_retrieve_fail5
+text		"Error 5 retrieving default object ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_defobj_retrieve_fail6
+text		"Error 6 retrieving default object ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_defobj_retrieve_fail7
+text		"Error 7 retrieving default object ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_obj_retrieve_fail1
+text		"Error 1 retrieving object ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_obj_retrieve_fail2
+text		"Error 2 retrieving object ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_obj_retrieve_fail3
+text		"Error 3 retrieving object ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_con_retrieve_fail1
+text		"Error 1 retrieving container ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start		undocumented intable incatalog
+code		pks_s_acl_con_retrieve_fail2
+text		"Error 2 retrieving container ACL, node <%s>, status=<0x%8.8lx|code>."
+explanation	"Unexpected error occured while retrieving an ACL"
+action		"none"
+attributes	svc_c_sev_error
+sub-component	pks_s_acl
+end
+
+
+start         intable incatalog
+code          pks_s_acl_not_authorized
+text          "Unauthorized add or modify attempt on user '%s'."
+explanation   "Caller attempted add or modify operation without required privileges."
+action        "none"
+attributes    svc_c_sev_error
+sub-component pks_s_acl
+end
+
+#
+## Messages for serviceability table
+#
+# Part IIIa
+
+start           !intable undocumented
+code            pks_i_svc_general
+text            "General PKS facility"
+end
+
+start           !intable undocumented
+code            pks_i_svc_server
+text            "The PKS server"
+end
+
+start		!intable undocumented
+code		pks_i_svc_acl
+text		"PKS ACL manager"
+end
+
+start		!intable undocumented
+code		pks_i_svc_pipe
+text		"Split-client pipe manipulation"
+end
+

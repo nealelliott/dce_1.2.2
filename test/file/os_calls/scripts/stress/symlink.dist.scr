@@ -1,0 +1,679 @@
+
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* Check basic race conditions for new entries.  Have both test and
+* stress processes referencing new name, then issue symlink call.  Ensure
+* name present in cache and dir listing.
+*
+* Same as above, only with test and stress processes changing the symlink,
+* *creating and deleting* other names in the same directory.
+*
+* Test concurrent cache loading.  Have one test process create the
+* symlink and flush it from the cache.  Then have several test processes
+* concurrently reference the symlink, some via readlink calls, and some
+* via referencing the symlink itself via open calls (where the kernel's
+* name evaluation code will interpret the link).
+*
+*
+
+*
+* Note: Try this test on both single machin cell and multi-machine cell.
+*       Try this from both DFS and local path so that it will also test 
+*       xvnode layer. This test realy needs to be run from the combination
+*       of DFS and local path (unlink a file via CM or unlink a file
+*       form local path.
+*       loopTime should not exceed 64.
+*
+
+* 
+* USAGE: ./file_test -l {HUBNAME} -I {this_script} ; For HUB
+*        ./file_test -c {HUBNAME} : For other spokes
+*
+
+* Include config file.
+include config
+set linkFile linkfile
+
+* This var will strength the test as it has a larger value.
+set loopTimes 10
+
+*
+* This procedure makes symlinks.
+*
+set test_Proc proc END_PROC
+  echo
+  echo symlink call test1.
+
+  getwd workDir
+  chdir $testDir
+
+  sync_join "create_symlink" $timeout
+
+* Create those symlinks (the targets are not there.
+
+  loop x 1 1 $loopTimes
+    set linkName ( $linkFile + @x )
+    set fileName ($testFile + @x )
+    symlink @fileName @linkName
+  endloop
+  
+  sync_join "create_symlink_done" $timeout
+  sync_join "referencing_newnames" $timeout
+
+* This guy is creating the files while the other process reference the files
+* by symlink.
+
+  set syncName "stat_files"
+  loop x 1 1 $loopTimes
+    set fileName ($testFile + @x )
+
+    set syncVar ( @syncName + @x )
+    sync_join @syncVar $timeout
+
+    open @fileName (@O_CREAT|@O_RDWR) 0777 fileId[@x]
+    write @fileId[@x] @fileName
+    close @fileId[@x]
+
+    set syncVar ( @syncVar + "done" )
+    sync_join @syncVar $timeout
+
+  endloop
+
+  sync_join "referencing_newnames_done" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ($testFile + @x )
+    set linkName ( $linkFile + @x )
+    stat @fileName varSrc	
+    lstat @linkName varLink
+  endloop
+
+
+  sync_join "make_symlink" $timeout
+ 
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName ($testFile + @x )
+    set linkName ( $linkFile + @x )
+    symlink @fileName @linkName
+    if ( @ITL_Status != 0 ) {
+      if ( @ITL_Status != @EEXIST ) {
+        echo FAILED: Symlink return wrong errno (not EEXIST but @ITL_Status ).
+      }
+    }
+  endloop
+  verifyStatus true
+
+  sync_join "make_symlink_done" $timeout
+
+* Create files to test symlinks.
+  set syncName "mkfile_stat"
+  loop x 1 1 $loopTimes
+    set syncVar ( @syncName + @x )
+    sync_join @syncVar $timeout
+
+    set fileName ( $testFile + @x )
+    open @fileName (@O_CREAT|@O_RDWR) 0777 fileId[@x]
+    write @fileId[@x] @fileName
+    close @fileId[@x]
+
+    set syncVar ( @syncVar + "done" )
+    sync_join @syncVar $timeout
+  endloop
+
+  loop x 1 1 $loopTimes
+    set linkName ( $linkFile + @x )
+    stat @linkName var[@x]
+  endloop
+
+  sync_join "remove_symlink" $timeout
+
+  loop x 1 1 $loopTimes
+    set linkName ( $linkFile + @x )
+    remove @linkName
+  endloop
+ 
+  sync_join "modify_and_symlink" $timeout
+  
+  verifyStatus false
+  set syncName "check_file_while_open"
+  loop x 1 1 $loopTimes
+    set fileName ($testFile + @x )
+    set linkName ( $linkFile + @x )
+
+    set syncVar ( @syncName + @x )
+    sync_join @syncVar $timeout
+
+    symlink @fileName @linkName
+    if ( @ITL_Status != 0 ) {
+      if ( @ITL_Status != @EEXIST ) {
+        echo FAILED: return wrong errno (not EEXIST but @ITL_Status ).
+      }
+    }
+
+    set syncVar ( @syncVar + "done" )
+    sync_join @syncVar $timeout
+
+  endloop
+  verifyStatus true
+
+  sync_join "modify_and_symlink_done" $timeout
+
+  loop x 1 1 $loopTimes
+    set linkName ( $linkFile + @x )
+    stat @linkName var[@x]
+  endloop
+
+  sync_join "remove_concurrent_symlink" $timeout
+
+  loop x 1 1 $loopTimes
+    set linkName ( $linkFile + @x )
+    remove @linkName
+  endloop
+
+
+* We are creating those symlinks in the current dir.
+
+  sync_join "concurrent_cache_loading" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    set linkName ( $linkFile + @x )
+    symlink @fileName @linkName
+  endloop 
+
+  sync_join "concurrent_cache_loading_done" $timeout
+  sync_join "concurrent_reference" $timeout
+
+* This guy references the symlink by readlink.
+  loop x 1 1 $loopTimes
+    set linkName ( $linkFile + @x )
+    readlink @linkName buffer[@x]
+  endloop
+
+  sync_join "finish_sync" $timeout
+
+  loop x 1 1 $loopTimes
+    set linkName ( $linkFile + @x )
+    set fileName ($testFile + @x )
+    remove @linkName
+    remove @fileName
+  endloop
+  
+  chdir @workDir
+  echo Test process done.
+  echo 
+END_PROC
+
+
+*
+* This procedure makes symlinks.
+*
+
+set stress_Proc proc END_PROC
+
+  echo
+  echo symlink call test2.
+
+  getwd workDir
+  chdir $testDir
+
+  verifyStatus false
+
+  loop x 1 1 $loopTimes
+    set linkName ( $linkFile + @x )
+    lstat @linkName var
+    if ( @ITL_Status == 0 ) {
+      echo FAILED: The file should not be there.
+    }
+  endloop
+
+  verifyStatus true
+
+  sync_join "create_symlink" $timeout
+  sync_join "create_symlink_done" $timeout
+
+  sync_join "referencing_newnames" $timeout
+
+  verifyStatus false
+  set syncName "stat_files"
+  loop x 1 1 $loopTimes
+
+* The link name has been created
+    set linkName ( $linkFile + @x )
+    set fileName ( $testFile + @x )
+    lstat @linkName var[@x]
+    if ( @ITL_Status != 0 ) {
+      echo FAILED: the link name should be there.
+    }
+
+* The file name has not been created
+    stat @linkName var[@x]
+    if ( @ITL_Status == 0 ) {
+      echo FAILED: the file name is not created yet
+    }
+
+    set syncVar ( @syncName + @x )
+    sync_join @syncVar $timeout
+
+    set syncVar ( @syncVar + "done" )
+    sync_join @syncVar $timeout
+
+    stat @linkName var[@x]
+    if ( @ITL_Status != 0 ) {
+      echo FAILED: the link name and the source file should be there.
+    }
+
+  endloop
+  verifyStatus true
+
+  sync_join "referencing_newnames_done" $timeout
+
+  sync_join "make_symlink" $timeout
+ 
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName ($testFile + @x )
+    set linkName ( $linkFile + @x )
+    symlink @fileName @linkName
+    if ( @ITL_Status != 0 ) {
+      if ( @ITL_Status != @EEXIST ) {
+        echo FAILED: Symlink return wrong errno (not EEXIST but @ITL_Status ).
+      }
+    }
+  endloop
+  verifyStatus true
+
+  sync_join "make_symlink_done" $timeout
+
+  verifyStatus false
+  set syncName "mkfile_stat"
+  loop x 1 1 $loopTimes
+
+    set linkName ( $linkFile + @x )
+    lstat @linkName var[@x]
+    if ( @ITL_Status != 0 ) {
+      echo FAILED: the link name should be there.
+    }
+
+    set syncVar ( @syncName + @x )
+    sync_join @syncVar $timeout
+
+    set syncVar ( @syncVar + "done" )
+    sync_join @syncVar $timeout
+
+    stat @linkName var[@x]
+    if ( @ITL_Status != 0 ) {
+      echo FAILED: the link name should be there.
+    }
+
+  endloop
+  verifyStatus true
+
+  sync_join "remove_symlink" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( "others" + @x )
+    open @fileName ( @O_CREAT|@O_RDWR ) 0777 fileId[@x]
+    write @fileId[@x] @fileName
+    close @fileId[@x]
+  endloop
+ 
+  sync_join "modify_and_symlink" $timeout
+
+  set syncName "check_file_while_open"
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName ($testFile + @x )
+    set linkName ( $linkFile + @x )
+
+    set syncVar ( @syncName + @x )
+    sync_join @syncVar $timeout
+
+    symlink @fileName @linkName
+    if ( @ITL_Status != 0 ) {
+      if ( @ITL_Status != @EEXIST ) {
+        echo FAILED: return wrong errno (not EEXIST but @ITL_Status ).
+      }
+    }
+
+    set syncVar ( @syncVar + "done" )
+    sync_join @syncVar $timeout
+
+  endloop
+  verifyStatus true
+
+  sync_join "modify_and_symlink_done" $timeout
+
+  loop x 1 1 $loopTimes
+    set linkName ( $linkFile + @x )
+    stat @linkName var[@x]
+  endloop
+
+  sync_join "remove_concurrent_symlink" $timeout
+
+  sync_join "concurrent_cache_loading" $timeout
+  sync_join "concurrent_cache_loading_done" $timeout
+  sync_join "concurrent_reference" $timeout
+
+* This references the symlink by open it and write.
+
+  loop x 1 1 $loopTimes
+    set linkName ( $linkFile + @x )
+    open @linkName ( @O_RDWR|@O_APPEND ) 0777 fileId[@x]
+    write @fileId[@x] @linkName
+    close @fileId[@x]
+  endloop
+
+  sync_join "finish_sync" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( "others" + @x )
+    remove @fileName
+  endloop
+ 
+  chdir @workDir
+
+  echo Stress process done.
+  echo
+END_PROC
+
+*
+* This procedure stats or modifies files.
+*
+
+set stat_Proc proc END_PROC
+
+  echo
+  echo stat symlink files.
+
+  getwd workDir
+  chdir $testDir
+
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set linkName ( $linkFile + @x )
+    lstat @linkName var
+    if ( @ITL_Status == 0 ) {
+      echo FAILED: The file should not be there.
+    }
+  endloop
+  verifyStatus true
+
+  sync_join "create_symlink" $timeout
+  sync_join "create_symlink_done" $timeout
+  sync_join "referencing_newnames" $timeout
+
+  verifyStatus false
+  set syncName "stat_files"
+  loop x 1 1 $loopTimes
+
+    set linkName ( $linkFile + @x )
+    lstat @linkName var[@x]
+    if ( @ITL_Status != 0 ) {
+      echo FAILED: the link name should be there.
+    }
+
+    set fileName ( $testFile + @x )
+    stat @fileName var[@x]
+    if ( @ITL_Status == 0 ) {
+      echo FAILED: the file has not been created yet 
+    }
+
+    set syncVar ( @syncName + @x )
+    sync_join @syncVar $timeout
+
+    set syncVar ( @syncVar + "done" )
+    sync_join @syncVar $timeout
+
+    stat @linkName var[@x]
+    if ( @ITL_Status != 0 ) {
+      echo FAILED: the link name and source file should be there.
+    }
+
+  endloop
+  verifyStatus true
+
+  sync_join "referencing_newnames_done" $timeout
+   
+  sync_join "make_symlink" $timeout
+ 
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName ($testFile + @x )
+    set linkName ( $linkFile + @x )
+    symlink @fileName @linkName
+    if ( @ITL_Status != 0 ) {
+      if ( @ITL_Status != @EEXIST ) {
+        echo FAILED: Symlink return wrong errno (not EEXIST).
+      }
+    }
+  endloop
+  verifyStatus true
+
+  sync_join "make_symlink_done" $timeout
+
+  verifyStatus false
+  set syncName "mkfile_stat"
+  loop x 1 1 $loopTimes
+
+    set linkName ( $linkFile + @x )
+    lstat @linkName var[@x]
+    if ( @ITL_Status != 0 ) {
+      echo FAILED: the link name should be there.
+    }
+
+    set syncVar ( @syncName + @x )
+    sync_join @syncVar $timeout
+
+    set syncVar ( @syncVar + "done" )
+    sync_join @syncVar $timeout
+
+    stat @linkName var[@x]
+    if ( @ITL_Status != 0 ) {
+      echo FAILED: the link name should be there.
+    }
+
+  endloop
+  verifyStatus true
+
+  sync_join "remove_symlink" $timeout
+  sync_join "modify_and_symlink" $timeout
+
+* stat the files which are the sources of symlinks
+  set syncName "check_file_while_open"
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+
+    set syncVar ( @syncName + @x )
+    sync_join @syncVar $timeout
+
+    stat @fileName statVar
+    lstat @fileName statVar
+
+    set syncVar ( @syncVar + "done" )
+    sync_join @syncVar $timeout
+  endloop
+
+  sync_join "modify_and_symlink_done" $timeout
+
+  loop x 1 1 $loopTimes
+    set linkName ( $linkFile + @x )
+    stat @linkName var[@x]
+  endloop
+
+  sync_join "remove_concurrent_symlink" $timeout
+
+  sync_join "concurrent_cache_loading" $timeout
+
+  sync_join "concurrent_cache_loading_done" $timeout
+  sync_join "concurrent_reference" $timeout
+
+* This guy refers to the symlink by stat it.
+
+  loop x 1 1 $loopTimes
+    set linkName ( $linkFile + @x )
+    stat @linkName statVar[@x]
+    lstat @linkName statVar[@x]
+  endloop
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo Stat process done.
+  echo
+END_PROC
+
+****************************************************************************
+* Check spokes.
+if ( $ITL_nspokes < 3 ) {
+  echo FAILED: You need at least two spokes to run the test.
+  quit
+}
+
+chdir $testDir
+
+loop loopVar 1 1 $loopTimes
+
+* Dispatch procedures among spokes.
+!* Stress procedure to the test file.
+rexec_async $ITL_spoke[0] test_Proc result[0] asyncVar[0]
+rexec_async $ITL_spoke[1] stress_Proc result[1] asyncVar[1]
+
+!* Stat a symblink file by N-2 test hosts.
+loop x 2 1 ($ITL_nspokes-1)
+  rexec_async $ITL_spoke[$x] stat_Proc result[$x] asyncVar[$x]
+endLoop
+
+sync_create "create_symlink" $ITL_nspokes $timeout
+sync_release "create_symlink"
+
+sync_create "create_symlink_done" $ITL_nspokes $timeout
+sync_release "create_symlink_done"
+
+sync_create "referencing_newnames" $ITL_nspokes $timeout
+sync_release "referencing_newnames"
+
+set syncName "stat_files"
+loop x 1 1 $loopTimes
+  set syncVar ( $syncName + $x )
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar
+
+  set syncVar ( $syncVar + "done" )
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar
+endloop
+
+sync_create "referencing_newnames_done" $ITL_nspokes $timeout
+sync_release "referencing_newnames_done"
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + $x )
+    set linkName ( $linkFile + $x )
+    flush_file $fileName
+    flush_file $linkName
+  endloop
+
+sync_create "make_symlink" $ITL_nspokes $timeout
+sync_release "make_symlink"
+
+sync_create "make_symlink_done" $ITL_nspokes $timeout
+sync_release "make_symlink_done"
+
+set syncName "mkfile_stat"
+loop x 1 1 $loopTimes
+  set syncVar ( $syncName + $x )
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar
+
+  set syncVar ( $syncVar + "done" )
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar
+endloop
+
+sync_create "remove_symlink" $ITL_nspokes $timeout
+sync_release "remove_symlink"
+
+sync_create "modify_and_symlink" $ITL_nspokes $timeout
+sync_release "modify_and_symlink"
+
+* Stress the files which are being symlinked.
+
+  set syncName "check_file_while_open"
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + $x )
+    open $fileName ( $O_RDWR|$O_APPEND ) 0777 fileId[$x]
+    write $fileId[$x] $fileName
+
+    set syncVar ( $syncName + $x )
+    sync_create $syncVar $ITL_nspokes $timeout
+    sync_release $syncVar
+
+    set syncVar ( $syncVar + "done" )
+    sync_create $syncVar $ITL_nspokes $timeout
+    sync_release $syncVar
+
+    close $fileId[$x]
+  endloop
+
+sync_create "modify_and_symlink_done" $ITL_nspokes $timeout
+sync_release "modify_and_symlink_done"
+
+sync_create "remove_concurrent_symlink" $ITL_nspokes $timeout
+sync_release "remove_concurrent_symlink"
+
+sync_create "concurrent_cache_loading" $ITL_nspokes $timeout
+sync_release "concurrent_cache_loading"
+
+sync_create "concurrent_cache_loading_done" $ITL_nspokes $timeout
+sync_release "concurrent_cache_loading_done"
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + $x )
+    flush_file $fileName
+    flush_file $linkName
+  endloop
+
+sync_create "concurrent_reference" $ITL_nspokes $timeout
+sync_release "concurrent_reference"
+
+sync_create "finish_sync" $ITL_nspokes $timeout
+sync_release "finish_sync"
+
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+endloop
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+quit
+

@@ -1,0 +1,157 @@
+#!/bin/sh
+
+#
+# @OSF_COPYRIGHT@
+#
+
+#
+# HISTORY
+# $Log: runpctstest,v $
+# Revision 1.1.2.2  1993/01/28  21:35:21  shl
+# 	Transarc delta: rajesh-ot6686-pcts-recovery-test-driver 1.1
+# 	  Selected comments:
+# 	    Code and debug scripts to drive PCTS tests and checkaggr tool.
+# 	    The script executed by pctsdriver to run the PCTS tests. A bourne shell script.
+# 	[1993/01/27  23:17:36  shl]
+#
+# $EndLog$
+#
+
+#
+# Setup PCTS env vars
+#
+
+setup_envvar() {
+	LIB=/cts1/LIB
+	PATH="${PATH}:${LIB}/bin"
+	CTSROOT="/afs/transarc.com/project/fs/dev/test/cts"
+	CTSDIR=${CTSROOT}/ctsdir
+	CRASHSKIP=${LIB}/RScrashskip
+	EXEC_RESTRICT=${LIB}/RSrestrict
+
+	num=$1;
+	echo " num is $1"
+	CTSTESTDIR="/pcts/pcts${num}"
+	CTSLOGDIR="$PCTSLOGDIR/pcts${num}"
+	DEVICE1="/dev/scratch${num}a"
+	DEVICE2="/dev/scratch${num}b"
+	export LIB PATH CTSROOT CTSDIR CRASHSKIP EXEC_RESTRICT CTSTESTDIR CTSLOGDIR DEVICE1 DEVICE2
+}
+
+# Start a set of PCTS tests
+# $1 == iteration number 
+runsets()
+{
+	iterationnum=$1;
+	setnum=1;
+	while [ $setnum -le $NUMSETS ]
+	do
+		logfile="${PCTSLOGDIR}/pcts-output.iteration${iterationnum}.set${setnum}"
+		echo "%%% Starting PCTS test iteration $iterationnum, set $setnum, output log file is $logfile \n"
+		( 
+			cd "pcts${setnum}" ; 
+			setup_envvar ${setnum}
+			env
+			echo "!!!Process # $$ executing PCTS test set $setnum";
+			runtest $setnum $iterationnum 
+			sleep 5
+		)  >$logfile 2>&1 &
+		echo "%%% Started PCTS test iteration $iterationnum, set $setnum, output log file is $logfile \n"
+		setnum=`expr $setnum + 1`
+		sleep 20
+	done
+	wait
+}	
+
+# Start iteration of ACL tests
+# $1 = set number
+# $2 iteration number
+runtest ()
+{
+	echo; echo; echo;
+	echo "### $0: Begin iteration $2, set $1 of pcts tests"
+
+	#
+	# Perform any cleanup necessary before starting.
+	# To fill in
+	#
+	
+	# Run PCTS test
+#	if [ "$PDEBUG" -eq 1 ] 
+#	then	
+ #		echo DEBUG mode for PCTS test not yet supported.
+#	else 
+		echo; echo;
+		echo Starting "GO pcts/1003.1/05";
+		echo;
+		GO pcts/1003.1/05;
+		if [ $? -ne 0 ] 
+		then
+			echo "### $0: FAILED PCTS test pcts/1003.1/05 iteration $2, set $1, exiting"
+			exit 1	
+		fi
+
+		echo;
+		echo Starting "GO pcts/1003.1/06";
+		echo;
+		GO pcts/1003.1/06;
+		if [ $? -ne 0 ] 
+		then
+			echo "### $0: FAILED PCTS test pcts/1003.1/06 iteration $2, set $1, exiting"	
+			exit 1	
+		fi
+
+		echo;
+		echo Starting "GO pcts/1003.1/08";
+		echo;
+		GO pcts/1003.1/08;
+		echo;
+		if [ $? -ne 0 ] 
+		then
+			echo "### $0: FAILED PCTS test pcts/1003.1/08 iteration $2, set $1, exiting"	
+			exit 1	
+		fi
+#	fi 	
+	echo "### $0: End iteration $2, set $1 of pcts tests"
+}
+
+echo; echo
+echo "### $0: starting"
+
+[ $PDEBUG ] && set -x;
+
+if [ "${PDEBUG}" ] 
+then
+	echo "### $0: Local identity `whoami`"
+	echo
+fi
+
+cd $PCTSTESTDIR
+echo  "### $0: PCTS TESTS ###"
+echo; echo; echo;
+
+
+i=1;
+# Run test infinitely if NUMTIMES = -1 else specified number of times
+if [ $NUMTIMES -eq -1 ]
+then
+	while [ 1 ] 		
+	do
+		echo; echo "### $0: Starting PCTS test iteration $i."; echo
+		runsets $i;
+		echo; echo "### $0: Completed PCTS test iteration $i."; echo
+		i=`expr $i + 1`;			
+	done
+else 
+	while [ $i -le $NUMTIMES ] 
+	do
+		echo; echo "### $0: Starting PCTS test iteration $i."; echo
+		runsets $i;
+		echo; echo "### $0: Completed PCTS test iteration $i."; echo
+		i=`expr $i + 1`;				
+	done
+fi
+
+i=`expr $i - 1`
+wait
+echo "### $0: pcts tests - $i iterations completed"

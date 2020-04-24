@@ -1,0 +1,94 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: buffer-deadlock.test,v $
+# Revision 1.1.44.1  1996/10/02  17:16:50  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:26:47  damon]
+#
+# $EndLog$
+#
+# /* Copyright (C) 1993, 1992 Transarc Corporation - All rights reserved */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/buffer-deadlock.test,v 1.1.44.1 1996/10/02 17:16:50 damon Exp $
+
+# buffer-deadlock -- exhibits a problem caused by the buffer system running
+#     out of space.  Since reclone of a file with double indirect blocks
+#     requires up to 6 buffers simultaneously, and since with 64K
+#     buffers the 1M pool provided by test_anode only results in 16
+#     buffers, this is easy to demonstrate.  Because 6 goes into 16
+#     three times but not four the following script will succeed with 3
+#     fork and fail with 4.
+#
+# Enhanced to run five threads in four different aggregates.  This tests the
+# global reservation system quite heavily.
+#
+# The aggregate sizes were tuned carefully to fit into 13M total and
+# still run with all 5 threads.  They (at least the 64K and 32K
+# aggregates) probably can not be reduced much further without getting
+# aggregate full conditions. -ota 920901
+#
+# However, the 64K aggregate can still run out of space.  The big
+# culprit is that the bigger the log the more stuff can linger on the
+# freed block list.  Since mt.test needs 16.5M we can safely grow these
+# aggregates a bit.  We now use about 14.5M. -ota 931118
+#
+# Ran out of space on 16K aggregate this time.  Grow all by 10 blks.
+# We now use 15.7M. -ota 931216
+#
+# Ran out of space on 16K aggregate again.  Grow it by 10 more blks.
+# We now use 15.8M. -ota 931216
+
+buffer-deadlock 1
+modify_afsdb anode on 31		# turn on code block counting
+modify_afsdb anode on 29		# turn on preempts
+
+open_device 0 65536 1024 130		# 64K/1K
+create_aggregate 40
+create_vol foo.0 0,,0 4000
+
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+
+open_device 1 32768 1024 130		# 32K/1K
+create_aggregate 40
+create_vol foo.1 0,,0 4000
+
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+
+open_device 2 16384 1024 150		# 16K/1K
+create_aggregate 50
+create_vol foo.2 0,,0 4000
+
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+
+open_device 3 8192 1024 160		# 8K/1K
+create_aggregate 60
+create_vol foo.3 0,,0 4000
+
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+fork buffer-deadlock.int.test
+
+wait
+check_device 
+open_device -1
+
+coverage
+end

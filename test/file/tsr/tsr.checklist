@@ -1,0 +1,230 @@
+Some test cases for TSR
+
+[fileset move cases are listed with the fts test checklist.
+This list deals only with machine failure and network partition cases]
+
+Client failure
+--------------
+1)
+- should be ale to re-establish contact with servers. No "state" recovery 
+necessary. The following scenarios may be done with 1 server and 1 client or
+with 1 server and 2 clients. The latter configuration provides better control
+over timing.
+Scenario:
+	- create small file, fill with data
+	- close
+	- ensure file present on server (fsync file or wait)
+	- client opens file, exclusive write (gets open token)
+	- write to file
+	- crash the client
+
+	- client reboots
+	- client re-opens same file, for exclusive write
+
+	(The server still has an open token for the file, but the host
+	uuid will be different for the new open request. Server will attempt
+	to revoke the open token. The revoke will timeout after 2 minutes,
+	since the endpoint will be different after the client reboots. 
+	After the revoke times out, the token will be granted to the 
+	client.)
+
+i) Client reboots in less than 2 minutes. The token revoke will return with
+a "try again" (** define error code) error, and the server will retry
+eventually failing in the revoke, and granting the write token to the 
+client.
+
+ii) Client reboot takes longer than 2 minutes. No token revocation attempted
+since the token will have timed out. The client will get a token immediately.
+
+iii) Network partition of < 2 minutes rather than client reboot. 
+Second client opens the file. What happens? Open fails?
+
+iv) Network partition of > 2 minutes. Second client opens the file. The
+open should succeed, since the partitioned client's token will have expired
+in the 2 minutes.
+
+	- after opening the file, writes to the file should succeed.
+
+
+Notes/Questions:
+
+i) Since the PX is keeping endpoint information independently of the
+RPC, what is to prevent the endpoint for the revoke actually being in
+use by another (different) service (after a reboot)?  I assume the RPC
+runtime will detect the fact that the incoming interface UUID and the
+registered interface's UUID are different, and gracefully reject the
+call. Does the CM need to be prepared for such a scenario?
+
+Server failure 1
+----------------
+	- no contention for file
+	- token state re-established successfully
+
+Scenarios:
+2) 	- Client opens file for exclusive write
+	- writing to the file. 
+	- Server crashes.
+
+a) server comes back up (single restart). No other operations on file
+descriptor. Contact and tokens re-established.  Should be able to do
+further (remote) read/writes and close the file successfully. 
+
+	- writes fail with ETIMEDOUT while the server is down
+	- application periodically re-tries the failed writes
+	- server resumes service
+	- application writes should now succeed. Other pending dirty data
+	will be transmitted to the server by the CM.
+	- close file successfully
+
+
+b) close the file descriptor. Should get ETIMEDOUT from close. Dirty
+data associated with the file will be discarded, i.e.
+
+	- close the file while the server is down. Close should return an
+	ETIMEDOUT error value.
+
+
+c) Read data blocks that are in the cache. Should succeed for
+hostLifeGuarantee seconds, after which reads will be refused with
+ETIMEDOUT. Server returns, reads on the local blocks should once again
+suceed.
+
+	- before the server crash, ensure that the application has
+	cached the file,  by having the application read the contents of
+	the file
+	- server crashes
+	- read file data. Should succeed for cached blocks for a period of
+	hostLifeGuarantee seconds. After this time, reads will fail with
+	ETIMEDOUT.
+	- server resumes service
+	- reads should now succeed.
+
+d) Read data blocks that are not in the cache.	A variant of the case above.
+	- server crashes
+	during the hostLifeGuarantee period:
+	- read blocks in the cache. Should succeed.
+	- read blocks not in the cache. Should fail with ETIMEDOUT.
+
+e) Write to file. 
+	- open file
+	- do writes - succeed.
+	- server crashes
+	- all writes should fail with ETIMEDOUT, i.e. cached blocks and
+	non-cached blocks behave identically.
+	- server resumes service
+	- writes now succeed.
+
+3) Client executing a program
+
+a) Execution through a crash - client quiescent
+	- start program execution
+	- quiesce client program (e.g. sleep)
+	- server crashes
+	- server returns
+	- client execution resumes - should continue without problems
+
+
+b) Execution through a crash - client active
+	- start program execution
+	- quiesce client program (e.g. sleep)
+	- server crashes
+	- client program resumes - generates a page fault that has to be
+	serviced by a fetch from the server. System is expected to terminate
+	client application with an error.
+
+Notes:
+	- are there scenarios where a page fault will be serviced from the
+	cache? (when the server is down)
+
+Server failure 2
+----------------
+4)	- server reboots more than once. Clients can't distinguish this case.
+	If the server never resumes service, prior to the failing again,
+	then the client is unable to see any distinction between a single 
+	reboot and multiple reboots.
+
+Note: what is interesting about cascaded reboots, from the code internals
+viewpoint?
+
+Server failure 3
+----------------
+5) Server restart with contention for tokens
+
+i)
+	- client_1 opens file for writing (exclusive write)
+	- writes (successfully)
+	- server crashes
+	- client_1 writes fail with ETIMEDOUT. Client_1 re-tries periodically
+	- induce a network partition
+	_ server restarts
+	- client_2 opens the same file for writing. Expecting this to 
+	succeed. May have to wait for the server's "token re-establishment" 
+	grace period before the open returns.
+	- repair network partition
+	- client_1 tries to write again. Should continue to fail with 
+	ESTALE.
+	- should be able to access other files from client_1.
+
+ii) Variant. 
+	- The initial (client_1) file opens for shared write.
+	....
+	- client_2 opens the file (shared), reads, but doesn't actually write.
+	- client_1 will be able to re-establish tokens, and continue operation,
+	writing successfully etc.
+
+iii) Variant
+	- The initial (client_1) file opens for shared write.
+	....
+	- client_2 opens the file (shared), reads, and writes.
+	- client_1 will be note able to re-establish tokens, 
+	since the version number of the file will have changed. Client_1
+	writes will continue to fail (ESTALE).
+
+iv) Variant
+	Exercise variant iii), but ...
+	- client_2 opens file and reads/writes (as before)
+	- client_1 can't re-establish tokens (as before)
+	- have a second process on client_1, open the same file, for shared
+	write. Even though the original process has a file descriptor marked
+	as STALE, the new open should succeed, returning a valid file
+	descriptor for this file. Operations should be possible on it.
+
+
+Notes:
+i) Need to define error code returned on writes and close.
+ii) Is this scenario any different from the one where client_2 does not exist,
+i.e. client_1 is prevented from token re-establishment by a secondary
+failure, but no conflicting tokens are issued?
+
+Server failure 4
+----------------
+6) client unable to re-establish state
+
+	- same as scenario 5) except that client_2 doesn't exist.
+
+
+Client/Server Network partition
+-------------------------------
+
+7) Network partitions should be testable using scenarios 1-6, except that
+the server crash is replaced by a network partition.
+
+
+General data transfer recovery test
+-----------------------------------
+This test is to ensure that the pipe code provides proper recovery if a
+data transfer in progress is aborted.
+
+	- flush the cache
+	- open and read a very large file. The CM will open a connection
+	to the file server, and start reading data.
+	- kill the client, while the file is being read.
+	- ensure the file server can continue to provide data transfers.
+
+Misc. notes:
+------------
+a) Open and lock tokens can't be revoked. Write tokens can always be revoked.
+
+b) Slice_and_dice tokens are only issued when there is contention, e.g.
+if there is no contention, a write token for the whole file will be issued.
+

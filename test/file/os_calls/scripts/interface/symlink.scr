@@ -1,0 +1,493 @@
+*
+* ID: $Id:
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* symlink.scr -- This script basically implements the check points for 
+* 	 	 symlink, and readlink syscalls.
+*
+
+*
+* Privilege: login as root.
+*
+* Requirements: 
+*  1. Better run it with an exported aggregate.
+*  2. Try both as root or non root.
+*
+
+*
+* Usage: file_test -I symlink.scr 
+*        file_test -I symlink.scr -D 
+*        or 
+*        file_test <symlink.scr
+*        or
+*     	 See file_test -help 
+*
+
+*  Terminology:
+*  PASSED -- no problem for the testings.
+*  FAILED -- failed when doing basic checks.
+*  XXXXXX -- means will be enhanced later.
+
+*  Errors: 29 
+
+*
+* Common settings.
+*
+include common1.env
+
+echo
+echo Running symlink.scr
+echo
+
+*************************************************************************
+!*                         BASIC CASES                                   *
+*************************************************************************
+*  Clear test fileset and their mount points if they exist
+
+set ITL_IgnoreShellError 1
+set commd ( "fts aggrinfo " + $ITL_HostName + " " + $aggrName )
+shellexe commd
+if ( $CommandResult == 0 && $numFilesets != 0 ) {
+  * Delete filesets and mount them
+  loop x 0 1 ($numFilesets-1)
+    set fileSetName ( $baseFtName + "." + $x )
+    set commd ("fts delmount " + $fileSetName+" "+$fileSetName)
+    shellexe commd
+    set commd ("fts delete " + $fileSetName + " " + $ITL_HostName + " " + $aggrName)
+    shellexe commd
+  endloop
+}
+set ITL_IgnoreShellError 0
+
+
+umask 0
+
+* By 0755 we want the other users could not remove the file created by the user.
+chmod $testDir 0755
+chdir $testDir
+
+*
+!* symlink syscall checks.
+*
+
+!* Ensure that we get EEXIST when name already exists.
+
+* have files ready to be tested.
+
+set funnyName1 string "#link"
+set funnyName2 string "!link"
+set funnyName3 string "%link"
+
+set testFile1 ($testFile+1)
+set testFile2 ($testFile+2)
+
+open $testFile1 ($O_CREAT|$O_RDWR) 0777 fid
+write $fid "This is a test file."
+close $fid
+
+open $testFile2 ($O_CREAT|$O_RDWR) 0777 fid
+write $fid "This is another test file."
+close $fid
+
+* Make a symlink call.
+verifyStatus false
+symlink $testFile1 $testFile2
+assert ( $ITL_Status==$EEXIST )
+verifyStatus true
+
+symlink $testFile1 junklink1
+symlink $testFile2 junklink2
+
+*
+!* Check basic readlink and lstat the links when they are in CM.
+*
+
+!* Check contents of the links.
+
+set buff string ""
+readlink  junklink1 buff
+if ( $buff != $testFile1 ) {
+  set errorMessage ("FAILED: The content of the link is wrong. --E1")
+  exec err_Process
+}
+
+readlink  junklink2 buff
+if ( $buff != $testFile2 ) {
+  set errorMessage ("FAILED: The content of the link is wrong. --E2")
+  exec err_Process
+}
+
+lstat junklink1 var
+if ( ! ( $var.st_mode & 0777 ) ) {
+  set errorMessage "FAILED: The symlink should has mode bit 0600 for owner. --E3"
+  exec err_Process
+}
+
+lstat junklink2 var
+if ( ! ( $var.st_mode & 0777 ) ) {
+  set errorMessage "FAILED: The symlink should has mode bit 0600 for owner. --E4"
+  exec err_Process
+}
+
+* We should call pioctl flush them from CM here (in fact, it is same).
+
+set commd "cm flush junklink1"
+shellexec commd
+set commd "cm flush junklink2"
+shellexec commd
+
+!* Ensure the funny symlink semantics provided for symlinks 
+*  whose first characters is '#', '!', or '%' (these are mount points, and
+*  the mode bits should be 644 for symlinks starting with those characters).
+
+*
+* Here are some faked funny symlink names, in fact, there are no
+* such devices related to them, therefore it is impossible to use
+* any of system calls (lstat, readlink, etc) to check their status
+* under DFS (DFS will interpret those name in some other ways), but
+* we can check them from the local path from which syscalls such as
+* readlink, lstat will work for us concerning about their status.
+* 
+
+
+symlink $funnyName1 linkName1
+symlink $funnyName2 linkName2
+symlink $funnyName3 linkName3
+
+verifyStatus false
+lstat linkName1 var
+if ( $ITL_Status == 0 ) {
+  set errorMessage "FAILED: This symlink should not be accesible by lstat."
+  exec err_Process
+}
+
+* Remember the working dir.
+getwd wdir
+
+
+*
+!* Check mount points here if they are defined.
+*  What else that I can do here under DFS. In fact, here is not 
+*  the right place to check the mount point. Test then here just
+*  because mount points related to those funynames.
+*
+
+* Check the existency of the exported aggregate
+set ITL_IgnoreShellError 1
+set commd ( "fts aggrinfo " + $ITL_HostName + " " + $aggrName )
+shellexe commd
+if ( $CommandResult != 0 || $numFilesets == 0 ) {
+  set ITL_IgnoreShellError 0
+  echo WARNING: You have to have an exported aggregate to have all tests done.
+  set numFilesets 0
+}
+else {
+  set ITL_IgnoreShellError 0
+  * Create filesets and mount them
+  loop x 0 1 ($numFilesets-1)
+    set fileSetName ( $baseFtName + "." + $x )
+    set commd ("fts create " + $fileSetName + " " + $ITL_HostName + " " + $aggrName)
+    shellexe commd
+    set commd ("fts crmount " + $fileSetName+" "+$fileSetName)
+    shellexe commd
+    set mountPoint[$x] $fileSetName
+    chmod $fileSetName 0777
+  endloop
+}
+set ITL_IgnoreShellError 0
+
+if ( $numFilesets != 0 ) {
+  loop i 0 1 ($numFilesets-1)
+    if ( $mountPoint[$i] != "" ) {
+      echo Check mount point $mountPoint[$i]
+      chdir ($dfsConjunc+"/"+$mountPoint[$i])
+      opendir . dirPtr
+      readdir $dirPtr dirInfo
+      if ( $dirInfo.d_name != "." ) {
+        set errorMessage "FAILED: The mount point should be accessible as a dir.
+ --E5"
+        exec err_Process
+      }
+      readdir $dirPtr dirInfo
+      if ( $dirInfo.d_name != ".." ) {
+        set errorMessage "FAILED: The mount point should behaves as a dir under
+DFS. --E6"
+        exec err_Process
+      }
+      readdir $dirPtr dirInfo
+      closedir $dirPtr
+      echo Make a dir here and remove it.
+      mkdir junk 0777
+      rmdir junk
+    }
+    endloop
+}
+else {
+  echo WARNING; There is no mountPoint to check with.
+}
+
+
+* Go back to the working dir.
+chdir $wdir
+
+*
+!* Check funny symlink names from local path.
+*
+if ( $localPath != "" ) {
+  echo The localpath then was set, let check the funny names.
+  chdir $localPath
+  chdir $testDir
+
+  readlink linkName1 buf
+  if ( $buf != "#link" ) {
+    set errorMessage "FAILED: Can not read the symlink name. --E7"
+    err_Process
+  }
+  lstat linkName1 var
+  if ( ( $var.st_mode & 0777 ) != 0644 ) {
+    set errorMessage "FAILED: The symlink should has mode bit 0644. --E8"
+    exec err_Process
+  }
+
+  readlink linkName2 buf
+  if ( $buf != "!link" ) {
+    set errorMessage "FAILED: Can not read the symlink name. --E10"
+    err_Process
+  }
+  lstat linkName2 var
+  if ( ( $var.st_mode & 0777 ) != 0644 ) {
+    set errorMessage "FAILED: The symlink should has mode bit 0644. --E11"
+    exec err_Process
+  }
+
+  readlink linkName3 buf
+  if ( $buf != "%link" ) {
+    set errorMessage "FAILED: Can not read the symlink name. --E13"
+    err_Process
+  }
+  lstat linkName3 var
+  if ( ( $var.st_mode & 0777 ) != 0644 ) {
+    set errorMessage "FAILED: The symlink should has mode bit 0644. --E14"
+    exec err_Process
+  }
+  verifyStatus false
+  chmod linkName1 0777
+  if ( $ITL_Status == 0 ) {
+    set errorMessage "FAILED: chmod of a non-existent symlink succeeds. -- E14"
+    exec err_Process
+  }
+  verifyStatus true
+  chdir $wdir
+}
+else {
+  echo WARNING: There is no local path set to test from (set localPath var).
+}
+  
+
+*
+!* Test basic readlink again here, with data in the cache.
+*  The files have been flushed before this code.
+*
+
+readlink  junklink1 buff
+if ( $buff != $testFile1 ) {
+  set errorMessage "FAILED: The content of the link is wrong. --E16"
+  exec err_Process
+}
+readlink  junklink2 buff
+if ( $buff != $testFile2 ) {
+  set errorMessage "FAILED: The content of the link is wrong. --E17"
+  exec err_Process
+}
+
+lstat junklink1 var
+if ( !( $var.st_mode & 0777 ) ) {
+  set errorMessage "FAILED: The symlink should has mode bit 0600 for owner. --E18"
+  exec err_Process
+}
+
+lstat junklink2 var
+if ( !( $var.st_mode & 0777 ) ) {
+  set errorMessage "FAILED: The symlink should has mode bit 0600 for owner. --E19"
+  exec err_Process
+}
+
+!* Test protection semantics: under what circumstances can one do a readlink
+* (I think under any circumstances where the source name can be evaluated), 
+* but need to check what bits actually apply to symlinks.
+
+*
+!* Test when the source could not be evaluated.
+*
+
+!* Make a symlink for a non-existent source and readlink of it.
+symlink noSuchThing noSuchLink
+readlink noSuchLink buff
+
+* Check what bits actualy apply to this symlink.
+
+verifyStatus false
+lstat noSuchThing var
+if ( $ITL_Status == 0 ) {
+  set errorMessage "FAILED: The non-existent symlink should be lstated but it isnot. --E20"
+  exec err_Process
+}
+
+chmod noSuchThing 0777
+if ( $ITL_Status == 0 ) {
+  set errorMessage "FAILED: The non-existent symlink should not be chmoded. --E21"
+  exec err_Process
+}
+verifyStatus true
+
+
+*
+!* Test when the source can be evaluated (a link to real file).
+*
+chmod $testFile1 0777
+symlink $testFile1  fileLink
+readlink fileLink buff
+if ( $buff != $testFile1 ) {
+  set errorMessage "FAILED: The symlink to a file has wrong content. --E22"
+  exec err_Process
+}
+
+!* Check what bits actualy apply to this symlink.
+lstat fileLink var1
+chmod fileLink 0222
+lstat fileLink var2
+stat fileLink var3
+
+* DFS deals with a chmod of a symlink with no change.
+* But the chmod will follow the link and change the modbit of the target.
+assert (( $var1.st_mode & 0777 ) == 0777)
+assert (( $var2.st_mode & 0777 ) == 0777 )
+assert (( $var3.st_mode & 0777 ) == 0222 )
+
+if ( $var1.st_mode != $var2.st_mode ) {
+  set errorMessage "FAILED: Can not chmod a symlink to a file. --E23"
+  exec err_Process
+}
+
+* Can I write it?
+open fileLink $O_WRONLY 0 fid
+if ( $ITL_Status != 0 ) {
+  set errorMessage "FAILED; You failed to open a symlink for write. --E24"
+  exec err_Process
+}
+
+* Can I read it? No.
+verifyStatus false
+open fileLink $O_RDONLY 0 fid
+if ( $ITL_Status == 0 ) {
+  set errorMessage "FAILED; You open a symlink for read when there is no such permission. --E25"
+  exec err_Process
+}
+verifyStatus true
+chmod $testFile1 0777
+  
+
+
+*
+!* Test when the source can be evaluated (a link to real directory).
+*
+mkdir realDir 0777
+symlink realDir dirLink
+readlink dirLink buff
+if ( $buff != "realDir" ) {
+  set errorMessage "FAILED: The symlink to a dir has wrong content. --E26"
+  exec err_Process
+}
+
+!* Check what bits actualy apply to this symlink.
+
+lstat dirLink var1
+chmod dirLink 0444
+lstat dirLink var2
+stat dirLink var3
+
+* DFS deals with a chmod of a symlink with no change.
+* But the chmod will follow the link and change the modbit of the target.
+assert (( $var1.st_mode & 0777 ) == 0777 )
+assert (( $var2.st_mode & 0777 ) == 0777 )
+assert (( $var3.st_mode & 0777 ) == 0444 )
+
+if ( $var1.st_mode != $var2.st_mode ) {
+  set errorMessage "FAILED: Can not chmod a symlink to a dir. --E27"
+  exec err_Process
+}  
+* Can I read it? (sure you do this time).
+opendir dirLink dirPtr
+if ( $ITL_Status != 0 ) {
+  set errorMessage "FAILED; You failed to read a symlink to a dir. --E28"
+  exec err_Process
+}
+
+* You can search but read.
+verifyStatus false
+opendir dirLink dirPtr
+if ( ITL_Status == 0 ) {
+  set errorMessage "FAILED; You are not allowed to read a symlink to a dir. --E29"
+  exec err_Process
+}
+verifyStatus true
+
+chmod realDir 0777
+
+
+*************************************************************************
+*                         CLEANING UP AND REPORT                        *
+*************************************************************************
+
+!* Clearing
+* Clear filesets and mountpoints.
+if ( $numFilesets != 0 ) {
+!* Delete filesets and mount them
+  loop x 0 1 ($numFilesets-1)
+    set fileSetName ( $baseFtName + "." + $x )
+    set commd ("fts delmount " + $fileSetName)
+    shellexe commd
+    set commd ("fts delete " + $fileSetName + " " + $ITL_HostName + " " + $aggrName)
+    shellexe commd
+  endloop
+}
+
+unlink fileLink
+unlink dirLink
+rmdir realDir
+
+unlink $testFile1
+unlink $testFile2
+remove junklink1
+remove junklink2
+
+remove noSuchLink
+set commd "fts delmount linkName1 linkName2 linkName3"
+shellexec commd
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+*rmdir $testDir
+exec report_Proc symlink.scr $errorCounter
+echo
+quit
+

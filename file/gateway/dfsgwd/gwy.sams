@@ -1,0 +1,541 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: gwy.sams,v $
+# Revision 1.1.6.1  1996/10/02  17:50:17  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:39:28  damon]
+#
+# Revision /main/HPDCE02/3  1995/06/22  20:14 UTC  maunsell_c
+# 	mothra C&S fixes
+# 
+# Revision /main/HPDCE02/brezak_dfsgw/4  1995/06/14  21:11 UTC  brezak
+# 	Add system errmsg to gwy_s_syscallerr_msg
+# 
+# Revision /main/HPDCE02/brezak_dfsgw/3  1995/06/09  03:08 UTC  brezak
+# 	Fixes from Transarc
+# 
+# Revision /main/HPDCE02/brezak_dfsgw/2  1995/05/31  16:18 UTC  brezak
+# 	Remove pioctl message
+# 
+# Revision /main/HPDCE02/brezak_dfsgw/1  1995/05/26  17:26 UTC  brezak
+# 	Add @host and @sys values to gwy_s_mapis_userid_msg.
+# 
+# Revision /main/HPDCE02/2  1995/03/30  20:04 UTC  maunsell_c
+# 	CHFts14091 - dfsgwd forks itself when new -background switch used
+# 
+# Revision /main/HPDCE02/2  1995/03/17  21:33 UTC  maunsell_c
+# 	add fork messages for CHFts14091 fix
+# 	remove version 2 message
+# 
+# Revision /main/HPDCE02/1  1995/02/14  22:42 UTC  maunsell_c
+# 	@sys @host changes for nfs/dfs gateway
+# 
+# Revision /main/maunsell_mothra1.45/2  1995/02/02  19:57 UTC  maunsell_c
+# 	change version 1 packet handling notice
+# 
+# Revision /main/maunsell_mothra1.45/1  1995/01/31  19:21 UTC  maunsell_c
+# 	add @sys @host support for dfs_login/dfsgwd/dfsgw
+# 
+# Revision 1.1.2.3  1994/10/06  20:26:49  agd
+# 	expand copyright
+# 	[1994/10/06  14:27:00  agd]
+# 
+# 	expand copyright
+# 
+# Revision 1.1.2.2  1994/08/22  16:16:21  maunsell_c
+# 	add new  gwy_s_syscalldelerr to fix dfsgw del displaying add error msg
+# 	change gwy_s_mapis to display string username for dfsgw list
+# 	add new gwy_s_mapis_userid to display userid on getpwuid fail of dfsgw list
+# 	[1994/08/10  16:42:27  maunsell_c]
+# 
+# Revision 1.1.2.1  1994/08/08  18:54:40  mckeen
+# 	Initial version
+# 	[1994/08/08  17:47:12  mckeen]
+# 
+# $EndLog$
+
+
+# Copyright (c) 1995, Transarc Corporation, All rights reserved.
+
+component	gwy
+table		gwy__table
+technology	dfs
+
+serviceability  table gwy_svc_table handle gwy_svc_handle
+start
+    sub-component gwy_s_general "general"       gwy_i_svc_general
+    sub-component gwy_s_server  "server"        gwy_i_svc_server
+    sub-component gwy_s_cmd     "cmd"           gwy_i_svc_cmd
+end
+
+start
+code           gwy_s_gwy_newline
+attributes     "svc_c_sev_error | svc_c_action_brief"
+sub-component  gwy_s_general
+text           ""
+explanation    "?"
+action         " "
+end
+
+start
+code		gwy_s_message_version
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_server
+text		"1001"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_dispatcherr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_server
+text		"%s: Failed to parse command line: %s"
+explanation	"?"
+action		" "
+end
+
+start
+code           gwy_s_forkingdaemon
+attributes     "svc_c_sev_error | svc_c_action_brief"
+sub-component  gwy_s_general
+text           "dfsgwd: forking dfsgwd daemon .."
+explanation    "?"
+action         " "
+end
+
+start
+code           gwy_s_fork_failed
+attributes     "svc_c_sev_error | svc_c_action_brief"
+sub-component  gwy_s_general
+text           "Could not fork: result %d, error %d"
+explanation    "?"
+action         " "
+end
+
+start
+code           gwy_s_bad_setsid
+attributes     "svc_c_sev_error | svc_c_action_brief"
+sub-component  gwy_s_general
+text           "setsid: %s"
+explanation    "?"
+action         " "
+end
+
+start
+code		gwy_s_loginiterr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_server
+text		"%s: Logfile initialization failed, no logging available"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_netiniterr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_server
+text		"%s: Could not initialize networking - make sure no other servers are running"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_opensockerr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_server
+text		"%s: Can't open socket"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_serviceunknown
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_server
+text		"%s: Service %s/udp unknown"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_bindsockerr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_server
+text		"%s: Can't bind socket, port %d"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_hostnameerr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_server
+text		"%s: Can't determine host name"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_hostaddrerr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_server
+text		"%s: Can't determine host address"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_genportaddrerr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_server
+text		"%s: Error while generating port address"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_defaultrealmerr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_server
+text		"%s: Error while determining default realm"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_parsenameerr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_server
+text		"%s: Error while parsing server principal name: %s"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_dceregbinderr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_server
+text		"Foo%s: DCE error while binding to registry: %s"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_addrfamilyerr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Unsupported address_family: %s"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_idpairerr	
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: -id requires a NetworkID:UserID pair"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_uiderr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: UserIDs must be an integer value reflecting a remote user login ID: %s"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_assignnetiderr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Unrecognized NetworkID: %s"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_dcepasswderr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Error while validating password"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_convertnetiderr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Could not convert NetworkID - Probably unknown"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_dcecrederr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Could not obtain DCE credentials"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_dcecredtimeerr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Could not obtain expiration time for DCE credentials"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_syscalladderr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: DFS syscall failed - could not add mapping, errno %s"
+explanation	"?"
+action		" "
+end
+
+start
+code            gwy_s_syscalldelerr
+attributes      "svc_c_sev_error | svc_c_action_brief"
+sub-component   gwy_s_cmd
+text            "%s: DFS syscall failed - could not delete mapping"
+explanation     "?"
+action          " "
+end
+
+start
+code		gwy_s_syscallsizeerr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Could not obtain size of mapping table"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_mallocerr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Memory allocation failure"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_syscallobtaintblerr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Could not obtain mapping table"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_syscallnomaperr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: No mapping found"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_unknownaddrfamily
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Unknown mapping to address family: %d"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_setupidentityerr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Setup identity error: %s"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_dcepasswdreaderr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Error while reading password"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_validateidentityerr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Validation error: %s"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_changedcepasswd
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Password must be changed!"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_credlocalreg
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Credentials obtained from local registry."
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_nocred
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Validated from local override entry, no network credentials obtained."
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_setcontexterr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Unable to set context: %s"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_passwdvalerr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Password validation failure: %s"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_getpagerr
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Unable to get PAG: %s"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_mapdeleted
+attributes	"svc_c_sev_notice | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: Mapping deleted successfully"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_enterprinc
+attributes	"svc_c_sev_notice | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"Enter principal name: "
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_mapadded
+attributes	"svc_c_sev_notice | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"Mapping added successfully, PAG is %x"
+explanation	"?"
+action		" "
+end
+
+start           
+code            gwy_s_mapis_userid
+attributes      "svc_c_sev_notice | svc_c_action_brief"
+sub-component   gwy_s_cmd
+text            "Mapping: %s:%d => %x expires at %s (@host=\"%s\", @sys=\"%s\")"
+explanation     "?"
+action          " "
+end
+
+start
+code		gwy_s_mapis
+attributes	"svc_c_sev_notice | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"Mapping: %s:%s => %x expires at %s (@host=\"%s\", @sys=\"%s\")"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_nomappings
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"No mappings exist"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_mappingfound
+attributes	"svc_c_sev_notice | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"Mapping found, PAG is %x expires at %s"
+explanation	"?"
+action		" "
+end
+
+start           !intable undocumented
+code            gwy_i_svc_general
+text            "General gwy utility"
+end
+
+start           !intable undocumented
+code            gwy_i_svc_server
+text            "Server gwy utility"
+end
+
+start           !intable undocumented
+code            gwy_i_svc_cmd
+text            "Command gwy utility"
+end
+
+start
+code		gwy_s_syscalladderr_update
+attributes	"svc_c_sev_error | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"%s: DFS syscall failed - could not update mapping expiration time, errno %s"
+explanation	"?"
+action		" "
+end
+
+start
+code		gwy_s_mapexists
+attributes	"svc_c_sev_notice | svc_c_action_brief"
+sub-component	gwy_s_cmd
+text		"Mapping already existed. Refreshed mapping ticket. PAG remains %x"
+explanation	"?"
+action		" "
+end
+

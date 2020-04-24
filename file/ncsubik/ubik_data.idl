@@ -1,0 +1,137 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: ubik_data.idl,v $
+ * Revision 1.1.54.1  1996/10/02  17:56:03  damon
+ * 	Newest DFS from Transarc
+ * 	[1996/10/01  18:42:54  damon]
+ *
+ * $EndLog$
+ */
+/*
+ * Copyright (C) 1996,1991 Transarc Corporation
+ * All rights reserved.
+ */
+
+/* $Header: /u0/rcs_trees/dce/rcs/file/ncsubik/ubik_data.idl,v 1.1.54.1 1996/10/02 17:56:03 damon Exp $ */
+
+interface ubik_data
+{
+
+import "dcedfs/common_data.idl";
+
+typedef struct BDesc {
+    unsigned32 host;
+    signed16 portal;
+    signed32 session;
+} BDesc;
+
+typedef struct net_version {
+    signed32 epoch;
+    signed32 counter;
+} net_version;
+
+typedef struct net_tid {
+    signed32 epoch;
+    signed32 counter;
+} net_tid;
+
+typedef struct ubik_debug {
+    /* variables from basic voting module */
+    signed32 now;			/* time of day now */
+    signed32 lastYesTime;		/* last time we sent last yes vote */
+    unsigned32 lastYesHost;		/* host to which we sent last yes vote */
+    signed32 lastYesState;		/* did last yes host claim to be sync site */
+    signed32 lastYesClaim;		/* time last vote started; claim sync site until .+SMALLTIME */
+    unsigned32 lowestHost;		/* host we'd prefer to vote for */
+    signed32 lowestTime;		/* time we last chose lowestHost */
+    unsigned32 syncHost;		/* sync site we've heard from last (even if we didn't vote) */
+    signed32 syncTime;			/* time of above */
+    struct net_version syncVersion;	/* sync site's claimed db version */
+    struct net_tid syncTid;		/* sync site's claimed tid */
+    
+    /* variables from beacon module */
+    signed32 amSyncSite;		/* do I think I'm the sync site */
+    signed32 syncSiteUntil;		/* when does my sync site mandate expire? */
+    signed32 nServers;			/* number of servers participating in vote */
+    
+    /* variables from disk module */
+    signed32 lockedPages;		/* count of read-locked pages */
+    signed32 writeLockedPages;		/* count of write-locked pages */
+    struct net_version localVersion;
+    signed32 activeWrite;		/* is there an active write transaction with this as sync site */
+    signed32 tidCounter;			/* tid counter field from dbase, or 0 if no write trans. */
+    
+    /* variables from the lock module */
+    signed32 anyReadLocks;		/* are any read locks held on the current trans, if any */
+    signed32 anyWriteLocks;		/* are any write locks held on the current trans, if any */
+
+    /* variables from the recovery module */
+    signed32 recoveryState;		/* recovery state flags */
+
+    /* variables from the remote module */
+    signed32 currentTrans;		/* is there a current transaction on this server */
+    signed32 writeTrans;		/* is it a write transaction */
+
+    /* variables from the ubik module */
+    signed32 epochTime;		/* time this server started */
+} ubik_debug;
+typedef struct ubik_debug_v2 {
+    signed32 providerVers;		/* server's provider version level */
+    unsigned32 myAddr;			/* server's IP address */
+    uuid_t myRealm;			/* servers realm UUID */
+    uuid_t myPrinc;			/* servers principal UUID */
+    uuid_t lastYesRealm;		/* last yes realm UUID */
+    uuid_t lastYesPrinc;		/* last yes principal UUID */
+} ubik_debug_v2;
+
+/* data from the per-server structure */
+typedef struct ubik_sdebug {
+    unsigned32 addr;			/* address in *host* order */
+    signed32 lastVoteTime;		/* time last vote received */
+    signed32 lastBeaconSent;		/* time last beacon sent */
+    signed32 lastVote;			/* was last vote yes? */
+    struct net_version remoteVersion;
+    signed32 currentDB;			/* is current DB up to date? */
+    signed32 beaconSinceDown;		/* beacon sent since last noticed up? */
+    signed32 up;			/* is site up */
+} ubik_sdebug;
+typedef struct ubik_sdebug_v2 {
+    signed32 providerVers;		/* server's provider version */
+    uuid_t realm;			/* server's realm UUID */
+    uuid_t principal;			/* server's principal UUID */
+} ubik_sdebug_v2;
+
+const long	BULK_ERROR	= 1;
+
+typedef	byte bulkdata[1024];
+
+/*
+ * Update vector for bulk database updates
+ */
+
+const long	UBULK_MAXLENGTH	= 1024;	/* max size of data parameter */
+
+/* op codes */
+const long	UBULK_BEGIN	= 0;	/* begin transaction */
+const long	UBULK_LOCK	= 1;	/* lock file */
+const long	UBULK_TRUNC	= 2;	/* truncate file */
+const long	UBULK_WRITE	= 3;	/* write file */
+
+typedef struct ubik_bulk_update {
+    signed32 op;			/* operation to be performed */
+    signed32 arg1;			/* function parameter */
+    signed32 arg2;			/* function parameter */
+    signed32 arg3;			/* function parameter */
+    signed32 arg4;			/* function parameter */
+    signed32 length;			/* number bytes in data buffer */
+    [length_is(length)] byte data[UBULK_MAXLENGTH];/* RPC data buffer */
+} ubik_bulk_update;
+
+}

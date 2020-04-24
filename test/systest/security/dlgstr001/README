@@ -1,0 +1,80 @@
+This is a README, I created to explain the multi-delegate test.
+
+The code would not compile right "out of the box".
+I had to work around some issues in the code.
+I have a detailed list (which I sent to HP) if you're interested.
+
+The multi-delegate test has 6 servers and 1 client.
+The client contacts the 1st server and starts a 
+delegation chain through the other 6 servers.
+
+The format of the client call is
+
+conv_client string number
+
+The client takes a string and then each of the servers
+passes the string on to the other servers.
+Finally the last server takes the string and converts
+it to uppercase and then send the results back down the
+delegation chain.
+
+To run the test:
+
+1) dce_login as cell_admin and run "rgy_acct.ksh create"
+   to setup up the registry 
+
+2) dce_login as cell_admin and run "cds_entry.ksh create" to setup up the cds
+
+3) In a separate window for each server, dce_login as cell_admin
+   and start each of the servers.
+
+4) In the last window enter:
+
+
+conv_client "foobar test" 6
+
+The test should return:
+
+string_convert_uppercase returned "FOOBAR TEST"
+String Conversion Passed: conversion returned "FOOBAR TEST"
+
+
+If you want to run one of the servers on 
+another node, you add a keytable entry
+for it on the other node.
+For example, if you want to start conv_server2
+on another node you need to do the following:
+
+kta -p string-conv2 -pw pignoses
+
+Then you can start the conv_server2 on the node
+which you added the keytab.
+
+
+NOTE: The rgy_acct.ksh delete option will not work on OSF/1.
+      There is a bug against OSF/1 (OSF/1 bug 11107)
+      Therefore you need to delete any registry items created by hand
+      or you can use the script acct_delete_osf.ksh
+
+      Another problem which needed a workaround was DCE bug 11665.
+      On OSF1, the servers were going into an infinite loop
+      when then hit the pthread_yield call.
+     
+      By commenting out the following lines in sigcatch.c
+      the servers were able to start.
+
+	#if 0
+  		sigaddset(&mask, SIGUSR1);
+  		sigaddset(&mask, SIGUSR2);
+  		sigaddset(&mask, SIGLOST);
+	#endif
+
+ 
+
+What the test lacks:
+
+Should have some negative testcases
+Need to run the client as cell_admin, shouldn't have to.
+Have to run the test by hand, would be nice if test was under TET.
+Need to run the delegates as cell_admin, would be nice
+if you could start the delegates as separate machine principals.

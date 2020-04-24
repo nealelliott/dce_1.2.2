@@ -1,0 +1,39 @@
+Here are some tips for porting this driver into a UNIX or UNIX-like
+system:
+
+The /dev/random driver has two distinctly different "facets" which
+will likely need changes to port into a different OS:
+	a) the device driver interface.
+	b) interrupt hooking and data collection.
+
+a) is straightforward, but highly system-dependant.  it will help if
+you have acccess to source for a known working character special
+device.  At a minimum, you typically need to implement read and write
+operations; open, select, and ioctl are also useful.  vendor
+documentation on device driver interfaces and sample device driver
+code are likely to be quite useful here.
+
+b) is harder to deal with.  There are two parts to this:
+
+	1) interrupt hooking
+
+First, you need a minimal understanding of your system's interrupt
+software architecture.  Either you need to insert a call into common
+device driver interrupt routines (this is the approach taken by the
+linux driver), or you need to insert some code into the common
+interrupt dispatch path for one or more interrupts (this is the
+approach taken by the HPUX driver).
+
+	2) timer sampling.
+
+You need to locate a high-resolution counter; the higher-resolution,
+the better... ideally something running at 1MHz or better.
+
+In essence, this counter functions as a continuously spinning
+"roulette wheel".  When your interrupt hook is called, you must read
+the counter in question and call the pool routines to fold its value
+into the pool.  Again, the linux and HP-UX drivers do this somewhat
+differently; linux adds the values to the pool immediately, while the
+HP-UX driver puts the samples into a buffer which is processed en mass
+once per second.  The latter approach implies significantly less
+impact on interrupt handling.

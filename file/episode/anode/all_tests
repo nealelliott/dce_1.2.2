@@ -1,0 +1,247 @@
+#! /bin/csh -f
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: all_tests,v $
+# Revision 1.1.79.1  1996/10/02  17:16:01  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:07:05  damon]
+#
+# $EndLog$
+# /* Copyright (C) 1994, 1991 Transarc Corporation - All rights reserved. */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/all_tests,v 1.1.79.1 1996/10/02 17:16:01 damon Exp $
+
+alias clean 'sh -c "rm -f ${TEST_ANODE_TMPDEV}* /tmp/*.fn"'
+
+if ($#argv == 0) then
+
+  # Load of the perl scripts we need.
+  perl -e 'while(<>){if(/^#sizeof#(.*)/){print "$1\n";}}'<$0>/tmp/sizeof.perl
+  perl -e 'while(<>){if(/^#tmpfre#(.*)/){print "$1\n";}}'<$0>/tmp/tempfree.perl
+  perl -e 'while(<>){if(/^#gettmp#(.*)/){print "$1\n";}}'<$0>/tmp/gettmp.perl
+
+#sizeof# $files = "$ENV{'TEST_ANODE_TMPDEV'}*";
+#sizeof# foreach (@xxx = <${files}>) {
+#sizeof#   local ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,
+#sizeof#          $atime,$mtime,$ctime,$blksize,$blocks) = stat($_);
+#sizeof#   $sum += $blocks/2;		# convert from 512->1024
+#sizeof# }
+#sizeof# if (! -s "/tmp/largest") { $largest = 0; }
+#sizeof# else {$largest = `cat /tmp/largest`;}
+#sizeof# if ($sum > $largest) {
+#sizeof#   open (NEW,">/tmp/largest");
+#sizeof#   print NEW $sum;
+#sizeof#   close NEW;
+#sizeof#   $largest = $sum;
+#sizeof# }
+#sizeof# print $largest;
+
+#tmpfre# $dir = ($ENV{TEST_ANODE_TMPDEV} || "/tmp");
+#tmpfre# $dir =~ s=(.*)/[^/]+=\1= if (! -d $dir);
+#tmpfre# @df = `df $dir 2>/dev/null `;
+#tmpfre# if ((0+@df == 0) || ($? != 0)) {
+#tmpfre#   @df = `df / `;
+#tmpfre# }
+#tmpfre# $divide = (($df[0] =~  m/512/) ? 2 : 1);
+#tmpfre# foreach (@df) {
+#tmpfre#   if (m|/dev/[a-z0-9]+ +[0-9 ]+ +([0-9]+) +[0-9]+%|) { $free = $1; }
+#tmpfre#   elsif (m|\(/dev/[a-z0-9/ ]+\): +([0-9]+)|) { $free = $1; }
+#tmpfre#   elsif (m|/dev/[a-z0-9/]+ +[0-9 ]+ +[0-9 ]+ +([0-9]+) +[0-9]+%|)
+#tmpfre#     { $free = $1; }
+#tmpfre#   elsif (m|swap[ 	]+[0-9]+[ 	]+[0-9]+[ 	]+([0-9]+)|)
+#tmpfre#     { $free = $1; }
+#tmpfre# }
+#tmpfre# print ($free / $divide) . "\n";
+
+#gettmp# $sfx = "/dev-all_tests";
+#gettmp# @dirs = ($ENV{TEST_ANODE_TMPDEV}||(), "/tmp$sfx", "/usr/tmp$sfx");
+#gettmp# foreach $fn (@dirs) {
+#gettmp#     (open(F,">$fn") && unlink ($fn) && seek(F,999999,0) &&
+#gettmp#      syswrite(F,"a",1) && (@S = stat(F))) || die("trouble: $\!");
+#gettmp#     if ($S[12]*512 < 0.10*$S[7]) {
+#gettmp#         print "$fn\n";
+#gettmp#         exit (0);
+#gettmp#     }
+#gettmp# }
+#gettmp# print "No file systems support sparse files!\n";
+#gettmp# exit(1);
+
+  setenv TEST_ANODE_TMPDEV `perl /tmp/gettmp.perl`
+  if ($status) exit (1)
+
+# All the scripts in all_tests should be written to fit in 13M.
+# Currently there are two exceptions to this mt.test needs 16.5M and
+# buffer-deadlock.test uses 14.5M.  Here we insist that there is 17M
+# giving 0.5M of cushion.
+
+  # Clean up miscellaneous state from other runs.  Use sh to avoid "No match".
+  sh -c "rm -f /tmp/largest"
+  clean
+
+  set size = `perl /tmp/tempfree.perl`
+  set maxsize = 17408			# 17 * 1024
+  if ($size < $maxsize) then
+    echo Not enough space in /tmp.  $size Kb available, $maxsize needed.
+    exit (1)
+  endif
+
+  # the nbs-crash tests need the scp command available in $epiobj/ravage.
+  set scppath = (`which scp`)
+  if ($#scppath != 1) then
+      echo $scppath
+      exit 1
+  endif
+
+  # run the tests
+  /bin/csh -fe $0 body
+  set rc = $status
+  date
+  if ($rc) then
+    echo all_tests FAILED
+  else
+    echo "All Clear\!"
+  endif
+
+  # clean up our messes
+  sh -c "rm -f /tmp/largest"
+  clean
+  exit $rc
+
+else if ($#argv != 1 || $argv[1] != body) then
+  echo Usage is \"$0\"
+  exit 1
+endif
+
+alias cleanit 'echo Max space used is `perl /tmp/sizeof.perl`; clean'
+alias timeit 'time \!:*'
+alias timeabort "time sh -c '\!:* || [ "'$'"? -eq 129 ] || exit 1'"
+
+# Expected, but anomolous, output is noted below as lines prefixed by "#o#".
+
+# body of script
+
+echo '*****' `date` '*****'
+
+echo Skipping VM tests
+
+timeit ./test_anode basic.test
+timeit ./test_anode basic.rcvr.test
+echo '10048?W 1' | adb -w ${TEST_ANODE_TMPDEV}-two
+sh -c './test_anode basic.rcvr.test ; [ $? -ne 0 ] || exit 1; exit 0'
+#novm# timeit ./test_anode vm.test
+#novm# timeit ./test_anode vm1.test
+timeit ./test_anode fts_move.test
+timeit ./test_anode fragfull.test
+timeit ./test_anode full.test
+#novm# timeit ./test_anode block-contiguity.test	# uses vm
+timeit ./test_anode notempty.test
+timeit ./test_anode auxquota.test -setlogbuf 0x1000	# worst-case log full
+  #o# elbl_CompleteTran: increasing (create_file) transaction reservation from 71Kb to 77Kb
+  #o# elbl_CompleteTran: increasing (create_file) transaction reservation from 77Kb to 78Kb
+  #o# (file/episode/anode/block_alloc.c rev. 4.84 #788) AddFreedBlock: Too many blocks freed (tran:30, nBlocks:26, bsize:1K)
+timeit ./test_anode auxquota.test
+  #o# elbl_CompleteTran: increasing (create_file) transaction reservation from 71Kb to 77Kb
+  #o# (file/episode/anode/block_alloc.c rev. 4.84 #788) AddFreedBlock: Too many blocks freed (tran:30, nBlocks:26, bsize:1K)
+echo ""
+timeit ./test_anode two-part.1.test
+timeit ./test_anode two-part.2.test
+timeabort ./test_anode recovery.1.test
+timeit ./test_anode recovery.2.test
+timeabort ./test_anode passno.test
+timeit ./test_anode passno.rcvr.test
+echo ""
+cleanit
+timeit ./test_anode bad_aggr.test
+timeabort ./test_anode logfull-empty-trans.test
+timeit ./test_anode big_bitmap.test
+echo ""
+timeit ./test_anode cthon_rw.test
+timeit ./test_anode cthon_rw.rcvr.test
+#novm# timeit ./test_anode cthon_rw.test -usevm
+#novm# timeit ./test_anode big-vm.test
+#novm# timeit ./test_anode big-vm.test -setlogbuf 0x1000
+timeit ./test_anode truncate.test
+#novm# timeit ./test_anode truncate.test -usevm -settrace unusual
+  # This test presently generates considerable output reporting quota
+  # under-reservation.  Some of these problems are due to OT6500.
+#novm# timeit ./test_anode tranloop.test -settrace unusual	# uses vm
+echo ""
+cleanit
+timeit ./test_anode mp.test
+timeit ./test_anode mp.rcvr.test
+#novm# timeit ./test_anode mp.test -usevm
+#novm# timeit ./test_anode mp.test -usesavm	# without async daemon
+timeit ./test_anode mp.rcvr.test
+timeit ./test_anode mp_repeat.test
+timeit ./test_anode mp.rcvr.test
+timeit ./test_anode mp_repeat.test -maxhandles 20
+  #o# (file/episode/anode/fixed_anode.c rev. 4.81 #761) Allocating handles to save 5 which have incomplete tlock trans
+timeit ./test_anode mp.rcvr.test
+timeit ./test_anode mp_repeat.test -var 2	# insert quiesce calls
+timeit ./test_anode mp_repeat.test -var 3	# ditto
+echo ""
+cleanit
+timeit ./test_anode many_files.test
+timeit ./test_anode many_files_simultaneously.test
+timeit ./test_anode buffer-starve.test
+cleanit
+timeit ./test_anode buffer-slosh.test
+echo ""
+cleanit
+timeit ./test_anode zerolink.test
+timeabort ./test_anode big_vt.test
+timeit ./test_anode big_vt.rcvr.test
+timeit ./test_anode big_file.test
+cleanit
+timeit ./test_anode freed_blocks.test
+timeit ./test_anode mkdir.test
+timeit ./test_anode many_trans.test -maxhandle 20
+  #o# (file/episode/anode/fixed_anode.c rev. 4.81 #761) Allocating handles to save 66 which have incomplete tlock trans
+timeit ./test_anode many_trans.test
+cleanit					# mt.test uses 15+Meg!
+timeit ./test_anode mt.test
+  #o# elbl_CompleteTran: increasing (epia_Write) transaction reservation from 72Kb to 73Kb
+cleanit
+timeit ./test_anode multi-block-frag.test
+timeit ./test_anode buffer-deadlock.test
+cleanit
+timeit ./test_anode growaggr.test
+timeit ./test_anode shutdown.test
+cleanit
+echo ""
+set var = 1
+while ($var <= 13)
+  setenv VAR $var			# pass to /bin/sh
+  timeabort ./test_anode new-block-security.test -var $VAR
+  timeit ./test_anode new-block-security.rcvr.test -var $var
+  @ var ++
+end
+  # for variations 2,8,9,10:
+    #o# (file/episode/anode/block_alloc.c rev. 4.84 #1168) epib_EndTran: Starting defer trans
+timeit sh nbs-crash.sh large 10
+timeit sh nbs-crash.sh small 10
+cleanit
+echo ""
+set var = 0
+set copious = "Allocating another handle"
+while ($var <= 4)
+  setenv VAR $var			# pass to /bin/sh
+  timeabort ./test_anode recycle.test -var $VAR -maxhandles 20 | \
+    tee $TEST_ANODE_TMPDEV.junk | egrep -v "$copious"
+  sh -c "egrep '$copious' $TEST_ANODE_TMPDEV.junk | tail -1; exit 0"
+  ./test_anode dev-two.rcvr.test
+  @ var ++
+end
+  #o# elbl_CompleteTran: increasing (create_file) transaction reservation from 72Kb to 109Kb
+  #o# (file/episode/anode/fixed_anode.c rev. 4.80 #761) Allocating handles to save 501 which have incomplete tlock trans
+cleanit
+timeabort ./test_anode deflate.test
+timeit ./test_anode dev-two.rcvr.test
+  #o# (file/episode/anode/block_alloc.c rev. 4.91 #1375) epib_EndTran: Starting defer trans
+  #o# (file/episode/anode/block_alloc.c rev. 4.91 #1382) epib_EndTran: Defer trans is 566
+  #o# (file/episode/anode/block_alloc.c rev. 4.91 #1393) epib_EndTran: Ending deferred trans 566
+cleanit

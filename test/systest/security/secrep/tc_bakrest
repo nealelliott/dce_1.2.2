@@ -1,0 +1,159 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: tc_bakrest,v $
+# Revision 1.1.2.2  1996/03/09  20:52:12  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:48  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:32  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:11 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  20:03 UTC  bissen
+# 	 merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:54 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  19:37 UTC  gordon_l
+# 	Fixes for change_master/becom
+# 	e_master
+# 	[1995/12/11  22:22:32  root]
+# 
+# Revision 1.1.2.3  1993/08/17  15:05:35  sekhar
+# 	Log the test result at the end of the restore test.
+# 	[1993/08/17  15:05:14  sekhar]
+# 
+# Revision 1.1.2.2  1993/08/02  17:41:11  sekhar
+# 	Replication system test. Initial version
+# 	[1993/08/02  17:31:24  sekhar]
+# 
+# $EndLog$
+#
+
+if [ -z "${TC_BAKREST_DEFINED}" ] ;then
+
+TC_BAKREST_DEFINED=1
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  DESCRIPTION:
+#      This test case is part of the security replication system test
+#      and tests the backup and restore of master registry .
+#
+#      The backup is performed as follows
+#
+#      1.  The master security server is put into maintenance mode
+#      2.  The master registry is backed up.
+#      3.  The master security server is put into service mode.
+#
+#      The restore is performed as follows:
+#
+#      1.  The update functional test is run to add principals
+#      2.  The consistency of master and slave registries is verified.
+#      3.  The registry which was backed up is restored.
+#      4.  The consistency of master and slave registries is verified.
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+tet_startup="tc_bakrest_init"
+tet_cleanup="tc_bakrest_cleanup"
+tet_testlist="tc_backup tc_restore"
+
+iclist="ic1 ic2"
+ic1="tc_backup"
+ic2="tc_restore"
+
+tc_bakrest_init()
+{
+    typeset st
+    tet_infoline "............... Test: tc_bakrest"
+    tc_common_init ; st=$?
+    if [ $st -ne 0 ] ; then
+        tet_delete $ic1 "tc_slv_chgkey_init(): Initialization failed"
+        tet_delete $ic2 "tc_slv_chgkey_init(): Initialization failed"
+        return 
+    fi
+}
+
+tc_bakrest_cleanup()
+{
+    sft_cleanup
+    tc_common_cleanup
+}
+
+tc_backup()
+{
+    typeset st
+
+    testdesc="Backup master registry"
+    replog_testhdr "$testdesc"
+
+    slv_backup ; st=$?
+    if [ $st -ne 0 ] ; then
+        tet_delete "tc_restore" "tc_backup() : Registry backup failed."
+    fi
+
+    replog_testresult "$testdesc" $st
+    return
+}
+
+tc_restore()
+{
+    typeset st 
+
+    testdesc="Restore of Master Registry"
+    replog_testhdr "$testdesc"
+
+    #   Run the update test to add princ, groups etc
+    #   to the registry.
+
+    tc_common_upd "${REP_HOSTNAMES[*]}" $UPDATE_NPRINC ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult  "$testdesc" $st
+        return
+    fi
+
+#   Restore the original registry database
+
+    slv_restore ; st=$?
+    if [ $st -ne 0 ] ; then
+         replog_testresult "$testdesc" $st
+         return
+    fi
+
+#   sft module maintains state information about update test.
+#   Since the registry has been restored, the cached state 
+#   information is longer valid and must be discarded by 
+#   calling the function sft_reset_upd_state .
+
+    sft_reset_upd_state
+    
+    if [ $SLV_CNT -ne 0 ] ; then
+        rgy_cmp_db  "${SLV_HOSTNAMES[*]}" "${SLV_NAMES[*]}" ; st=$?
+    fi
+    replog_testresult "$testdesc" $st
+}
+
+. $TET_ROOT/profile.dcest
+. ./profile
+. $PHOME/replog
+. $PHOME/tc_common
+. $PHOME/rgy
+. $PHOME/slv
+. $PHOME/sft
+. $TCM
+#. $TET_ROOT/lib/xpg3sh/tcm.sh
+			      
+fi
+

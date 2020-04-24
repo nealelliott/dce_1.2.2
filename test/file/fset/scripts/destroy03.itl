@@ -1,0 +1,86 @@
+*
+* @OSF_COPYRIGHT@
+* COPYRIGHT NOTICE
+* Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+* ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+* src directory for the full copyright text.
+*
+* HISTORY
+* $Log: destroy03.itl,v $
+* Revision 1.1.423.1  1996/10/17  18:21:14  damon
+* 	Submitting on behalf of Transarc
+* 	[1996/10/17  16:51:12  damon]
+*
+* Revision 1.1.418.1  1994/02/04  20:41:28  devsrc
+* 	Merged from 1.0.3a to 1.1
+* 	[1994/02/04  15:22:50  devsrc]
+* 
+* Revision 1.1.416.1  1993/12/07  17:42:28  jaffe
+* 	1.0.3a update from Transarc
+* 	[1993/12/03  18:58:47  jaffe]
+* 
+* Revision 1.1.2.3  1993/01/11  18:27:43  htf
+* 	Embedded copyright notice
+* 	[1993/01/11  17:02:44  htf]
+* 
+* Revision 1.1.2.2  1992/10/28  16:33:21  jaffe
+* 	Transarc delta: jdp-itl-add-fset-driver 1.2
+* 	  Selected comments:
+* 	    Add the code for fset_test, the fileset (ftutil) test driver.
+* 	    This delta adds "fset" to the list of build directories in the test tree
+* 	    and adds all of the test scripts.
+* 	    Destroy test.
+* 	[1992/10/27  19:02:13  jaffe]
+* 
+* $EndLog$
+*
+
+!**********************************************************
+!*** Destroy backing filesets and making sure that the
+!*** chains stay consistent
+!**********************************************************
+
+include "setup.itl"
+
+unmountFset $mount_point[0]
+destroyFset $aggr_id $fset_id
+
+loop i 0 1 4
+	loop j 0 1 $i
+		loop k 0 1 $i
+			if ($k == 0) {
+*				createFset $aggr_id $fset_id $fset_name
+				echo Created $fset_id
+			} else {
+				set name ($fset_name + $k)
+				set id ($fset_id + $k)
+*				cloneFset $aggr_id $fset_id $id $name
+				echo Cloned $fset_id into $id
+			}
+		endLoop
+
+		set id ($fset_id + $j)
+*		destroyFset $aggr_id $id
+		echo Destroyed $id
+		!*** Check consistency of low-level chains
+		if ($i != 0) {
+			if ($j == 0) {
+				set x 1
+			} else {
+				set x 0
+			}
+			if ($j == $i) {
+				set y ($i - 1)
+			} else {
+				set y $i
+			}
+			set start_id ($fset_id + $x)
+			set end_id ($fset_id + $y)
+			echo Check chain between $start_id and $end_id
+		} else {
+			echo No chain to check
+		}
+	endLoop
+endLoop
+
+include "shutdown.itl"

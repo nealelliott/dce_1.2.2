@@ -1,0 +1,274 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# @HP_COPYRIGHT@
+#
+# HISTORY
+# $Log: dfs.unconfig,v $
+# Revision 1.1.14.2  1996/03/09  23:10:14  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:28:12  marty]
+#
+# Revision 1.1.14.1  1995/12/07  21:41:32  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/07  20:57:35  root]
+# 
+# Revision 1.1.12.3  1994/08/10  20:46:55  mckeen
+# 	Added support for NFS gateway
+# 	[1994/08/10  20:07:11  mckeen]
+# 
+# Revision 1.1.12.2  1994/07/13  22:30:59  devsrc
+# 	merged with bl-10
+# 	[1994/06/29  12:14:19  devsrc]
+# 
+# 	Added code to cleanup filesets and server entry from fldb
+# 	if host is a ftserver
+# 	[1994/04/25  12:52:20  mckeen]
+# 
+# Revision 1.1.12.1  1994/06/09  16:05:29  devsrc
+# 	cr10892 - fix copyright
+# 	[1994/06/09  15:50:10  devsrc]
+# 
+# Revision 1.1.8.1  1993/10/26  16:16:19  rsarbo
+# 	If the host being unconfigged is an FLDB or bakserver
+# 	machine, remove it from the appropriate server groups
+# 	(/.:/fs and /.:/subsys/dce/dfs/bak).
+# 	[1993/10/26  16:13:16  rsarbo]
+# 
+# Revision 1.1.6.6  1993/08/12  20:46:34  rsarbo
+# 	use exit, not return
+# 	[1993/08/12  20:41:00  rsarbo]
+# 
+# Revision 1.1.6.5  1993/08/02  15:47:43  rsarbo
+# 	Don't attempt to remove dfs-server principal unless
+# 	it already exists.  If it doesn't, return immediately
+# 	(assume DFS server not configured for this machine).
+# 	Otherwise, remove CDS entries for DFS servers.
+# 	[1993/08/02  15:38:13  rsarbo]
+# 
+# Revision 1.1.6.4  1993/07/28  21:41:00  tom
+# 	Bug 8382 - more problems with arguments, save the hostname early.
+# 	Also, always bind to the master sec server with rgy_edit -update.
+# 	[1993/07/28  21:39:28  tom]
+# 
+# Revision 1.1.6.3  1993/07/20  22:46:42  tom
+# 	Fix usage error.
+# 	[1993/07/20  22:32:10  tom]
+# 
+# Revision 1.1.6.2  1993/07/19  19:27:13  zeliff
+# 	HP port of DFS
+# 	[1993/07/19  18:20:51  zeliff]
+# 
+# Revision 1.1.4.4  1993/07/16  18:58:58  kissel
+# 	Reference Port Madness
+# 	[1993/07/09  19:58:02  jake]
+# 
+# 	Initial GAMERA branch
+# 	[1993/04/23  11:23:14  mgm]
+# 
+# Revision 1.1.2.2  1993/06/04  01:11:59  kissel
+# 	Initial HPUX RP version.
+# 	[1993/06/03  20:24:24  kissel]
+# 
+# Revision 1.1.2.2  1993/02/05  20:48:22  kissel
+# 	Created to unconfigure DFS from the registry, etc. (similar to dce.rm).
+# 	This script, if it exists. is called by dce.unconfig.
+# 	[1993/02/05  19:45:40  kissel]
+# 
+# $EndLog$
+#
+# (C) COPYRIGHT Hewlett Packard Company 1992
+# All Rights Reserved
+#
+
+#------------------------------------------------------
+# Source the common utility functions
+#------------------------------------------------------
+: ${ETC:="/etc"}
+
+args=$#
+host=$1
+
+if [ -z "$SOURCE_COM_UTILS" ]
+then
+	. ${ETC}/dce_com_utils
+fi
+
+err_found=0
+
+if [ "$args" != "1" ]
+then
+    err_exit "dfs.unconfig: Usage Error:  dfs.unconfig <hostname>"
+    exit 1
+fi
+
+HOSTNAME=$host
+# Remove any internet domain suffix from hostname
+HOSTNAME=`echo $HOSTNAME | cut -f1 -d. 2>/dev/null`
+
+# If host was a ftserver remove all filesets from the fldb
+#
+# Since delfldb deletes all versions of a fileset from the fldb we
+# need to resync the fldb with servers that had other versions (RW) of
+# filesets.  To find out what servers are involved use lsfldb -server
+#
+
+log_msg SUMMARY "dfs.unconfig: Checking for fldb entries"
+echo "show object /.:/hosts/$HOSTNAME/ftserver" | cdscp > /dev/null 2>&1
+if [ $? = 0 ]; then
+  log_msg DETAIL "dfs.unconfig: Cleaning up fldb entries referring to $HOSTNAME"
+
+  # Get other servers that will need to be re-synced.
+  servers_to_sync=`fts lsfldb -server $HOSTNAME -localauth 2>/dev/null | \
+  	grep hosts/ | awk '{print $1}' | \
+	sort | uniq | grep -v $HOSTNAME`     
+
+  if [ "$servers_to_sync" != "" ]; then
+    log_msg WARNING "Unconfiguring filesets from fldb.  Some filesets will lose replication data if you proceed."    
+    log_msg VERBOSE "User query: Do you wish to continue (y/n)? (n) "
+    echon "\tDo you wish to remove filesets anyway (y/n)? (n) "
+    read unconfig_response 
+    unconfig_response=${unconfig_response:-"n"}
+    log_msg VERBOSE "User entry: $unconfig_response"
+  else
+    # do it automaticaly since no data will be lost
+    unconfig_response=y
+  fi
+
+  if [ "$unconfig_response" = "y" ]; then
+    log_msg DETAIL "dfs.unconfig: Removing filesets from fldb for /.:/hosts/$HOSTNAME"
+    log_msg DETAIL "dfs.unconfig: fts delfldbentry -prefix '' -server /.:/hosts/$HOSTNAME -localauth"
+    fts delfldbentry -prefix "" -server /.:/hosts/$HOSTNAME -localauth > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+      log_msg ERROR "dfs.unconfig: Error deleting fileset entries for $HOSTNAME from fldb"
+      err_found=1
+    fi
+
+    # Since delfldbentry deletes all entries for a fileset regaurdless of 
+    # location, we need to resync some hosts because they may have contained
+    # the RW version of a RO fileset on $HOSTNAME
+
+    if [ "$servers_to_sync" != "" ]; then
+      for i in $servers_to_sync; do
+        log_msg DETAIL "dfs.unconfig: fts syncfldb $i -localauth"
+        fts syncfldb -server $i -localauth > /dev/null 2>&1
+        if [ $? -ne 0 ]; then
+          log_msg ERROR "dfs.unconfig: Error re-syncing ftserver $i with fldb"
+          err_found=1
+        fi
+      done
+    fi
+
+    # If host was a ftserver remove server entry from fldb
+
+    log_msg DETAIL "dfs.unconfig: fts delserverentry -server $HOSTNAME -localauth"
+    fts delserverentry -server $HOSTNAME -localauth > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+      log_msg ERROR "dfs.unconfig: Error removing server $HOSTNAME from fldb"
+      err_found=1
+    fi
+  else
+    log_msg WARNING "fldb left unchanged."
+    log_msg WARNING "You will need to cleanup the fldb by hand."
+    log_msg WARNING "Use fts rmsite to remove all of ${HOSTNAME}'s read-only replicas from fldb"
+    log_msg WARNING "Use fts delfldbentry to remove all of ${HOSTNAME}'s read-write filesets from fldb"
+    log_msg WARNING "Use fts delserverentry to remove ${HOSTNAME}'s server entry from fldb"
+    log_msg WARNING "You will not be able to configure another DFS server named $HOSTNAME until these steps are done"
+  fi
+fi
+
+# The principal is for this host but the dfs-admin, dfs-fs-servers, etc groups
+# are not, so don't delete them here.
+log_msg SUMMARY "dfs.unconfig: Checking and deleting client registry entries."
+
+log_msg DETAIL "dfs.unconfig: checking for existence of dfs-server principal"
+rgy_edit -p -v hosts/$HOSTNAME/dfs-server | grep "^hosts/$HOSTNAME/dfs-server" > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+	log_msg DETAIL "dfs.unconfig: executing: rgy_edit> domain principal"
+	log_msg DETAIL "dfs.unconfig: executing: rgy_edit> del hosts/$HOSTNAME/dfs-server"
+	log_msg DETAIL "dfs.unconfig: executing: rgy_edit> quit"
+	rm -f /tmp/rgy_edit_out$$
+	rgy_edit -update >/tmp/rgy_edit_out$$ <<EOF
+	domain principal
+	del hosts/$HOSTNAME/dfs-server
+	quit
+EOF
+	rgy_edit_status=$?
+	chk_rgy_edit "dfs.unconfig: rgy_edit error while deleting client registry entries."
+	if [ $? -ne 0 ]; then
+    		err_found=1
+	fi
+else
+	exit $err_found
+fi
+
+log_msg DETAIL "dfs.unconfig: checking for existence of dfs-server principal"
+rgy_edit -p -v hosts/$HOSTNAME/dfsgw-server | grep "^hosts/$HOSTNAME/dfsgw-server" > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+	log_msg DETAIL "dfs.unconfig: executing: rgy_edit> domain principal"
+	log_msg DETAIL "dfs.unconfig: executing: rgy_edit> del hosts/$HOSTNAME/dfsgw-server"
+	log_msg DETAIL "dfs.unconfig: executing: rgy_edit> quit"
+	rm -f /tmp/rgy_edit_out$$
+	rgy_edit -update >/tmp/rgy_edit_out$$ <<EOF
+	domain principal
+	del hosts/$HOSTNAME/dfsgw-server
+	quit
+EOF
+	rgy_edit_status=$?
+	chk_rgy_edit "dfs.unconfig: rgy_edit error while deleting client registry entries."
+	if [ $? -ne 0 ]; then
+    		err_found=1
+	fi
+else
+	exit $err_found
+fi
+
+
+CDSTMPFILE=/tmp/config_cdstmpfile$$
+rm -f $CDSTMPFILE
+
+for i in ftserver repserver flserver bosserver
+do
+	log_msg DETAIL "dfs.unconfig: Check if $i CDS entry exists"
+	echo "show object /.:/hosts/$HOSTNAME/$i" | cdscp > /dev/null 2>&1
+	if [ $? = 0 ]; then
+		log_msg DETAIL "dfs.unconfig: Executing: cdscp delete object /.:/hosts/$HOSTNAME/$i"
+		echo "delete object /.:/hosts/$HOSTNAME/$i" >>$CDSTMPFILE
+	fi
+done
+
+rm -f /tmp/cdscp_out$$
+if [ -f $CDSTMPFILE ]; then
+	cat $CDSTMPFILE | cdscp >/tmp/cdscp_out$$ 2>&1
+	cdscp_status=$?
+	chk_cdscp "dce.unconfig: cdscp error while deleting client CDS entries."
+	if [ $? -ne 0 ]; then
+        	err_found=1
+	fi
+	rm -f $CDSTMPFILE
+fi
+
+#  If this was an FLDB or bakserver machine, clean the entry from the 
+#  appropriate server group.
+log_msg DETAIL "Executing: rpccp show entry /.:/fs | grep hosts/$HOSTNAME/self >/dev/null"
+for i in /.:/fs /.:/subsys/dce/dfs/bak
+do
+     rpccp show entry $i | grep hosts/$HOSTNAME/self >/dev/null
+     if [ $? -eq 0 ]
+     then
+          log_msg DETAIL "Executing: rpccp remove member -m /.:/hosts/$HOSTNAME/self $i"
+          rpccp remove member -m /.:/hosts/$HOSTNAME/self $i
+     fi
+done
+
+if [ $err_found = 0 ]; then
+    log_msg VERBOSE "dfs.unconfig: Successfully unconfigured DFS machine on $HOSTNAME."
+else
+    log_msg VERBOSE "dfs.unconfig: Failed to unconfigure DFS machine on $HOSTNAME."
+fi
+
+exit $err_found

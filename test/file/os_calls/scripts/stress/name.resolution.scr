@@ -1,0 +1,610 @@
+
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+* Test resolution when N different stress processes on N/2 different
+* machines are concurrently updating many entries in the same directory,
+* all with different names.  During this stress test, ask certain test
+* processes to check that some names are in the proper state, i.e. open
+* then and read some data from them, or verify that the name doesn't
+* exist if the file's been deleted.  This is one test that should be
+* more interesting if more than one machine is involved.
+
+* Test lookups within vdirs (successful as well as failing).
+
+
+*
+* Note: Try this test on both single machin cell and multi-machine cell.
+*
+* 
+* USAGE: ./file_test -l {HUBNAME} -I {this_script} ; For HUB
+*        ./file_test -c {HUBNAME} : For other spokes
+*
+
+* Include config file.
+include config
+
+set numOfFiles 100
+set dirLayers 2
+set loopTimes 10
+
+*
+* This procedure stats a file.
+*
+set test_Proc proc END_PROC
+  echo
+  echo Test file from spoke.
+
+  sync_join "begin_sync" $timeout
+
+  getwd currDir
+
+  * ********** without flushing. *************
+  sync_join "create_dir" $timeout
+  sync_join "create_dir_done" $timeout
+
+  set childDir $testDir
+  loop x 1 1 $dirLayers
+    set childDir ( @childDir + "/" + $testDir ) 
+    stat @childDir statVar
+  endloop
+  chdir @childDir
+
+  sync_join "create_file" $timeout
+  sync_join "create_file_done" $timeout
+
+  loop x 1 1 $numOfFiles
+    set fileName ( $testFile + @x )
+    stat @fileName statVar
+  endloop
+
+  time currTime
+* sleep 1 second so that it can make the difference.
+  sleep 1000
+
+  sync_join "delete_file" $timeout
+  sync_join "delete_file_done" $timeout
+
+* Now we have new files created. Check the status of new files.
+  loop x 1 1 $numOfFiles
+    set fileName ( $testFile + @x )
+    stat @fileName statVar
+    if ( @statVar.st_mtime <= @currTime ) {
+      echo FAILED:(1) The mtime is not right as the file has been recreated.
+    }
+    open @fileName @O_RDONLY 0777 fileId
+    set len #@fileName
+    read @fileId @len junk
+    if ( @junk != @fileName ) {
+      echo FAILED: The file data is wrong.
+    }
+    close @fileId
+  endloop
+
+  * ********** with flushing. *************
+
+  chdir @currDir
+
+  set syncName flush_dir
+  set childDir $testDir
+
+  loop x 1 1 $dirLayers
+    time currTime
+*sleep 3 second
+    sleep 3000
+    set syncVar ( @syncName + @x )
+    sync_join @syncVar $timeout
+    set syncVar ( @syncName + "done" + @x )
+    sync_join @syncVar $timeout
+    set syncVar ( @syncName + "flush_done" + @x )
+    sync_join @syncVar $timeout
+
+    set childDir ( @childDir + "/" + $testDir ) 
+    stat @childDir statVar
+    if ( @statVar.st_mtime <= @currTime ) {
+      echo FAILED:(2) The mtime is not updated as the file has been recreated.
+    }
+  endloop
+
+
+  chdir @childDir
+
+  set syncName flush_file
+  loop x 1 1 $numOfFiles
+    time currTime
+
+*sleep 3 second
+    sleep 3000
+
+    set syncVar ( @syncName + @x )
+    sync_join @syncVar $timeout
+    set syncVar ( @syncName + "done" + @x )
+    sync_join @syncVar $timeout
+    set syncVar ( @syncName + "flush_done" + @x )
+    sync_join @syncVar $timeout
+
+    set fileName ( $testFile + @x )
+    stat @fileName statVar
+    if ( @statVar.st_mtime <= @currTime ) {
+      echo FAILED:(3) The mtime is not disgarded as the file has been recreated.
+    }
+    open @fileName @O_RDONLY 0777 fileId
+    set len #@fileName
+    read @fileId @len junk
+    if ( @junk != @fileName ) {
+      echo FAILED:(3) The file data is wrong.
+    }
+    close @fileId
+  endloop
+
+  chdir @currDir
+  sync_join "finish_sync" $timeout
+
+  echo Done.
+  echo 
+END_PROC
+
+
+*
+* This procedure update dirs and files
+*
+
+set stress_Proc proc END_PROC
+
+  echo
+  echo Stress procedure for name resolution.
+
+  sync_join "begin_sync" $timeout
+
+  getwd currDir
+
+  * ********** without flushing. *************
+
+  sync_join "create_dir" $timeout
+
+  set childDir $testDir
+  loop x 1 1 $dirLayers
+    set childDir ( @childDir + "/" + $testDir ) 
+    mkdir @childDir 0777
+  endloop
+
+  sync_join "create_dir_done" $timeout
+
+  chdir @childDir
+
+  sync_join "create_file" $timeout
+
+  loop x 1 1 $numOfFiles
+    set fileName ( $testFile + @x )
+    open @fileName (@O_CREAT|@O_RDWR) 0777 fileId
+    write @fileId @fileName
+    close @fileId
+    
+  endloop
+
+  sync_join "create_file_done" $timeout
+
+  sync_join "delete_file" $timeout
+
+* The test process should resolved name infor about the new files.
+
+  loop x 1 1 $numOfFiles
+* Remove those old files
+    set fileName ( $testFile + @x )
+    remove @fileName
+
+* Create new files
+    open @fileName (@O_CREAT|@O_RDWR) 0777 fileId
+    write @fileId @fileName
+    close @fileId
+  endloop
+
+  sync_join "delete_file_done" $timeout
+
+
+  * ********** with flushing. *************
+
+  chdir @currDir
+
+* Utimes dirs here and then flush them by HUB
+  set syncName flush_dir
+  set childDir $testDir
+  loop x 1 1 $dirLayers
+    set syncVar (@syncName + @x )
+    sync_join @syncVar $timeout
+
+    set childDir ( @childDir + "/" + $testDir ) 
+    utimes @childDir "" "" 0 "" "" 0
+
+    set syncVar ( @syncName + "done" + @x )
+    sync_join @syncVar $timeout
+    set syncVar ( @syncName + "flush_done" + @x )
+    sync_join @syncVar $timeout
+
+  endloop
+
+
+  chdir @childDir
+
+* Utimes files here and then flush them by HUB
+
+  set syncName flush_file
+  loop x 1 1 $numOfFiles
+
+    set syncVar (@syncName + @x )
+    sync_join @syncVar $timeout
+
+    set fileName ( $testFile + @x )
+    remove @fileName 
+    open @fileName (@O_CREAT|@O_RDWR) 0777 fileId[@x]
+    write @fileId[@x] @fileName
+    close @fileId[@x]
+
+    set syncVar ( @syncName + "done" + @x )
+    sync_join @syncVar $timeout
+    set syncVar ( @syncName + "flush_done" + @x )
+    sync_join @syncVar $timeout
+
+  endloop
+
+
+  sync_join "finish_sync" $timeout
+
+  chdir @currDir
+
+  echo Name resolution done
+  echo
+END_PROC
+
+
+*
+* This procedure stats a file.
+*
+set test1_Proc proc END_PROC
+  echo
+  echo Test file from spoke.
+
+  sync_join "begin_sync" $timeout
+
+  getwd currDir
+  set childDir $testDir
+  loop x 1 1 $dirLayers
+    set childDir ( @childDir + "/" + $testDir ) 
+    stat @childDir statVar
+  endloop
+
+  chdir @childDir
+
+  set junk string ""
+  set syncName update
+  loop x 1 1 $numOfFiles
+    set fileName ( $testFile + @x )
+echo @fileName
+    stat @fileName statVarOld
+    set syncVar (@syncName + @x )
+    sync_join @syncVar $timeout
+    set syncVar ( @syncName + "done" + @x )
+    sync_join @syncVar $timeout
+
+    if ( @x <= (($numOfFiles/3) -1 ) ) {
+      stat @fileName statVar
+      if ( @statVar.st_mode & 0777 & ~(0744) ) {
+        echo FAILED: The mode bit is not right.
+      }
+    }
+    if ( @x >= ($numOfFiles/3 ) && @x <= (2*($numOfFiles/3)-1) ) {
+      open @fileName @O_RDONLY 0777 fileId
+      stat @fileName statVar1
+      if ( @statVar1.st_size == @statVarOld.st_size ) {
+        echo FAILED: The file has not neen modified.
+      }
+      lseek @fileId @SEEK_SET @statVarOld.st_size
+      read @fileId 30 junk
+      if ( @junk != "Append this to the end of file" ) {
+        echo FAILED: The data read is not right.
+      }
+      close @fileId
+    }
+    if ( @x >= (2*($numOfFiles/3)) ) {
+      verifyStatus false
+      access @fileName $accessFlagE
+      if ( @ITL_Status == 0 ) {
+        echo FAILED: The file @fileName is here.
+      }
+      verifyStatus true
+    }
+  endloop
+
+  chdir @currDir
+  sync_join "finish_sync" $timeout
+
+  echo Done.
+  echo 
+END_PROC
+
+
+*
+* The following procedures update different files in the same directory.
+* The ops are write, delete, chmod.
+
+set stress_Proc[0] proc END_PROC
+
+  echo
+  echo Chmod proc.
+
+  sync_join "begin_sync" $timeout
+
+  getwd currDir
+  set childDir $testDir
+  loop x 1 1 $dirLayers
+    set childDir ( @childDir + "/" + $testDir ) 
+    stat @childDir statVar
+  endloop
+
+  chdir @childDir
+
+  set syncName update
+  loop x 1 1 $numOfFiles
+    set syncVar (@syncName + @x )
+echo @fileName
+    sync_join @syncVar $timeout
+    if ( @x <= (($numOfFiles/3)-1) ) {
+      set fileName ( $testFile + @x )
+      chmod @fileName 0744
+    }
+    set syncVar ( @syncName + "done" + @x )
+    sync_join @syncVar $timeout
+  endloop
+ 
+  chdir @currDir
+  sync_join "finish_sync" $timeout
+
+  echo Chmod proc done.
+  echo
+END_PROC
+
+set stress_Proc[1] proc END_PROC
+  echo
+  echo Write proc.
+
+  getwd currDir
+  sync_join "begin_sync" $timeout
+
+  set childDir $testDir
+  loop x 1 1 $dirLayers
+    set childDir ( @childDir + "/" + $testDir ) 
+    stat @childDir statVar
+  endloop
+
+  chdir @childDir
+
+  set junk string "Append this to the end of file"
+  set syncName update
+  loop x 1 1 $numOfFiles
+    set syncVar (@syncName + @x )
+echo @fileName
+    sync_join @syncVar $timeout
+
+    if ( @x >= ($numOfFiles/3) && @x <= (2*($numOfFiles/3)-1 )) {	
+      set fileName ( $testFile + @x )
+      open @fileName (@O_WRONLY|@O_APPEND) 0777 fileId  
+* 29 chars
+      write @fileId @junk
+      close @fileId
+    }
+    set syncVar ( @syncName + "done" + @x )
+    sync_join @syncVar $timeout
+  endloop
+
+  chdir @currDir
+  sync_join "finish_sync" $timeout
+
+  echo Write proc done.
+  echo
+END_PROC
+
+set stress_Proc[2] proc END_PROC
+  echo
+  echo Delete proc.
+
+  sync_join "begin_sync" $timeout
+  
+  getwd currDir
+  set childDir $testDir
+  loop x 1 1 $dirLayers
+    set childDir ( @childDir + "/" + $testDir ) 
+    stat @childDir statVar
+  endloop
+
+  chdir @childDir
+
+  set syncName update
+  loop x 1 1 $numOfFiles
+    set syncVar (@syncName + @x )
+    sync_join @syncVar $timeout
+    if ( @x >= (2*($numOfFiles/3)) && @x <= $numOfFiles ) {
+echo @fileName
+      set fileName ( $testFile + @x )
+      unlink @fileName
+    }
+    set syncVar ( @syncName + "done" + @x )
+    sync_join @syncVar $timeout
+  endloop
+
+  chdir @currDir
+  sync_join "finish_sync" $timeout
+
+  echo Delete proc done.
+  echo
+END_PROC
+
+
+****************************************************************************
+* Check spokes.
+if ( $ITL_nspokes < 4 ) {
+  echo FAILED: You need at least four spokes to run the test.
+  quit
+}
+
+
+loop loopVar 1 1 $loopTimes
+
+* Dispatch procedures among spokes.
+!* Update files by a stress process and check file status from N test processes.
+rexec_async $ITL_spoke[0] stress_Proc result[0] asyncVar[0]
+
+loop x 1 1 ($ITL_nspokes-1)
+  rexec_async $ITL_spoke[$x] test_Proc result[$x] asyncVar[$x]
+endLoop
+
+sync_create "begin_sync" $ITL_nspokes $timeout
+sync_release "begin_sync"
+
+sync_create "create_dir" $ITL_nspokes $timeout
+sync_release "create_dir"
+
+sync_create "create_dir_done" $ITL_nspokes $timeout
+sync_release "create_dir_done"
+
+sync_create "create_file" $ITL_nspokes $timeout
+sync_release "create_file"
+
+sync_create "create_file_done" $ITL_nspokes $timeout
+sync_release "create_file_done"
+
+sync_create "delete_file" $ITL_nspokes $timeout
+sync_release "delete_file"
+
+sync_create "delete_file_done" $ITL_nspokes $timeout
+sync_release "delete_file_done"
+
+set syncName flush_dir
+
+set childDir $testDir
+loop x 1 1 $dirLayers
+  set syncVar ($syncName + $x )
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar
+  set childDir ( $childDir + "/" + $testDir ) 
+
+  set syncVar ($syncName + "done" + $x )
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar
+
+  flush_file $childDir
+
+  set syncVar ($syncName + "flush_done" + $x )
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar
+
+endloop
+ 
+chdir $childDir
+
+set syncName flush_file
+loop x 1 1 $numOfFiles
+  set syncVar ($syncName + $x )
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar
+  set fileName ( $testFile + $x )
+
+  set syncVar ($syncName + "done" + $x )
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar
+
+  flush_file $fileName
+
+  set syncVar ($syncName + "flush_done" + $x )
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar
+endloop
+
+sync_create "finish_sync" $ITL_nspokes $timeout
+sync_release "finish_sync"
+
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+
+if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+
+*************************************************************************
+*
+!* Three stress processes on N/2 machines updating same names in the same dir.
+*  and some test processes checks that some names are in the proper stat.
+
+!* Dispath different stress tests.
+loop x 0 1 2
+  rexec_async $ITL_spoke[$x] stress_Proc[$x] result[$x] asyncVar[$x]
+endLoop
+
+loop x 3 1 ($ITL_nspokes-1)
+  rexec_async $ITL_spoke[$x] test1_Proc result[$x] asyncVar[$x]
+endLoop
+
+sync_create "begin_sync" $ITL_nspokes $timeout
+sync_release "begin_sync"
+
+set syncName update
+loop x 1 1 $numOfFiles
+  set syncVar ($syncName + $x )
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar
+
+  set syncVar ($syncName + "done" + $x )
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar
+endloop
+ 
+sync_create "finish_sync" $ITL_nspokes $timeout
+sync_release "finish_sync"
+
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+chdir $currentDir
+chdir $testDir
+chdir $testDir
+exec clearDir_Proc $testDir
+chdir ..
+exec clearDir_Proc $testDir
+chdir ..
+
+* End loopVar
+endloop
+
+*exec clearDir_Proc $testDir
+echo Done
+quit

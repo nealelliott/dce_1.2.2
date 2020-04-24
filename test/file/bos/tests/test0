@@ -1,0 +1,732 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+#
+# HISTORY
+# $Log: test0,v $
+# Revision 1.1.638.1  1996/10/17  18:16:51  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:49:27  damon]
+#
+# Revision 1.1.633.1  1994/02/04  20:39:27  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:22:05  devsrc]
+# 
+# Revision 1.1.631.1  1993/12/07  17:40:57  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  18:35:49  jaffe]
+# 
+# Revision 1.1.4.6  1993/01/11  17:38:08  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  16:54:55  htf]
+# 
+# Revision 1.1.4.5  1992/12/09  21:02:17  jaffe
+# 	Transarc delta: comer-ot6087-make-tests-stop-AND-wait 1.1
+# 	  Selected comments:
+# 	    The bos stop command does not wait for the bosserver-controlled
+# 	    process to die before it returns unless the -wait option is specified.
+# 	    The change is to add -wait to all the stops.
+# 	    See above.
+# 	[1992/12/04  20:23:11  jaffe]
+# 
+# Revision 1.1.4.4  1992/10/28  15:46:37  jaffe
+# 	Transarc delta: comer-ot4849-misc-bos-command-test-cleanup 1.3
+# 	  Selected comments:
+# 	    Miscellaneous clean-up of the bos command test suite.
+# 	    o Make sure there is at least one key version in the local key table.
+# 	    If there isn't, create one.
+# 	    o Use an admin list different from admin.bos
+# 	    o Create (and delete) admin.test admin list
+# 	    More cleanup of the bos test suite
+# 	    Change Makefiles to install files into the export tree.  This should
+# 	    later be changed to install into the install tree as soon as we decide
+# 	    on the correct tree layout.  In the meantime, put the files under
+# 	    export/<machine>/test/bos.
+# 	Transarc delta: rajesh-ot5113-fix-bos-test0-key-commands-usage 1.4
+# 	  Selected comments:
+# 	    Fix bos tests to use addkey and rmkey correctly and also to
+# 	    use a principal other than the default principal (which
+# 	    is the dfs-server principal on the server machine).
+# 	    This is only a checkpoint.
+# 	    See above.
+# 	    The main changes introduced by this delta is now tested.
+# 	    However, since this delta was opened in the same sandbox as
+# 	    the delta for OT 5060, and this delta does affect some of
+# 	    portion changed by the OT5060 delta, this delta should
+# 	    not be exported until OT50560 delta is exported.
+# 	    Adding the user to each of the key commands was not enough. The -principal
+# 	    switch needs to be supplied also. Not specifying the -principal switch
+# 	    caused problems for bos rmkey which treated the username as another
+# 	    key version number (for the default principal dfs-server) to be deleted.
+# 	    Add -principal switch before specifying principal name to relevant
+# 	    bos key commands.
+# 	    Also a bos lskey was being issued with the short name of the server
+# 	    machine instead of the fully qualified CDS name which failed with an
+# 	    authentication error. I understand that this failure is reasonable
+# 	    behaviour for bos command as it is not able to form a authenticated
+# 	    binding without the CDS name for the server machine. The test expects this
+# 	    to succeed which is incorrect. Fixed this.
+# 	    Mike C. pointed out that the bos addkey command does not
+# 	    work for a principal that has no key yet in the security
+# 	    database. So instead of using dce_AddUserPrincipal, used
+# 	    an rgy_edit script to create the DCE principal and keys
+# 	    for the principal.
+# 	    See above.
+# 	[1992/10/27  16:45:41  jaffe]
+# 
+# Revision 1.1.4.3  1992/09/25  16:55:01  jaffe
+# 	Transarc delta: rajesh-ot5015-bos-test-fixes 1.7
+# 	  Selected comments:
+# 	    Various changes to fix problems in Ot 5015. This version of the delta
+# 	    is only a checkpoint and is not yet ready.
+# 	    Remove bos exec test cases.
+# 	    Add in a utility functions that is used to check if a server has
+# 	    a dfs-server DCE principal.
+# 	    Accidentally deleted all functions except DetermineLocalAuth() in
+# 	    util/gen_FunctionsScript. So modified to include all functions previously
+# 	    existing in the util/gen_FunctionsScript.
+# 	    Some more fixes.
+# 	    Miscellaneous fixes.
+# 	    Fix problem in DetermineLocalAuth function in gen_FunctionsScript.
+# 	    Just another checkpoint.
+# 	    Changes to fix problems found during execution of test11. The delta is now
+# 	    ready for export.
+# 	Transarc delta: rajesh-ot5187-non-existent-log 1.1
+# 	  Selected comments:
+# 	    Test 0 generated an error when bos getlog failed to fetch a non
+# 	    existent log file. Fixed this.
+# 	    See above.
+# 	[1992/09/23  20:37:57  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/28  19:03:57  jaffe
+# 	Transarc delta: rajesh-ot4395-bos-test-correct-value-in-user 1.2
+# 	  Selected comments:
+# 	    Change value of user to that of the DCE principal running the test.
+# 	    DCE principal extracted from output of klist.
+# 	    Changed the test0 so that it creates a DCE user principal.
+# 	    Changed the test so that it creates a DCE user principal. It no longer
+# 	    uses klist.
+# 	[1992/08/28  12:04:13  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/21  12:34:15  jaffe
+# 	Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	should be looking at the same test code.
+# 	Changes to facilitate merge of local DFS test code with the OSF's.
+# 
+# 	$TALog: test0,v $
+# 	Revision 4.22  1994/11/01  22:21:04  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r4.21 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	Revision 4.21  1993/11/11  15:06:35  comer
+# 	Clean up a couple of small problems with the bos tests.
+# 
+# 	Runs some tests in -noadmin mode that are not appropriate for
+# 	this mode.
+# 	[from r4.18 by delta comer-db4664-fix-minor-bos-test-problems, r1.1]
+# 
+# Revision 4.18  1993/03/31  18:55:03  comer
+# 	Due to the name->uuid cache, the bosserver may remember translations
+# 	beyond the lifetime of the principal.  If the principal is recreated,
+# 	the tests may fail.  If test10 or test0 is run multiple times, this
+# 	problem rears its ugly head.
+# 
+# 	Make the test principal names unique across runs.
+# 	[from r4.17 by delta comer-ot4511-bulletproof-bos-test10, r1.1]
+# 
+# Revision 4.17  1993/02/26  21:43:02  comer
+# 	Set org on create principal to none.  Also, delete principal at end.
+# 
+# 	See above.
+# 	[from r4.16 by delta comer-ot7237-define-org-in-test0, r1.1]
+# 
+# Revision 4.16  1993/01/14  17:32:52  jaffe
+# 	revdrop of latest OSF copyright changes to these files
+# 	[from r4.15 by delta osf-revdrop-01-12-92, r1.1]
+# 
+# 	[1992/05/20  17:11:58  jaffe]
+# 
+# $EndLog$
+#
+
+###############################################################################
+#    Copyright (C) 1991, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This test is applicable to a DFS server running bosserver. This is the
+# basic bos correctness test.
+
+###############################################################################
+
+# Usage:                test0 [-admin] [-noadmin]
+
+# The -admin and -noadmin flags can be used to set $admin_flag to TRUE or FALSE,
+# indicating that the user who invokes this script has cell_admin rights in DCE
+# or not.
+
+
+# Typically run via:    test0 -admin >& test0.out
+
+###############################################################################
+
+# Test environment:
+# DFS and bosserver must be up and running on server $SERVER_1.
+
+# Privilege required:
+#
+# The -admin or -noadmin argument must correctly reflect whether or not you 
+# have cell_admin rights in DCE or not. 
+#
+# Alternatively, you could just be logged in as local Unix root, and set
+# $AUTH_ARG to "-localauth" in order to get the privilege required for -admin.
+
+# Highest error number is: 56.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+rc=0
+ty=bos
+
+TESTTOP=${TESTTOP:=`pwd`}
+if [ "$TESTTOP" = "`pwd`" ]
+then
+    UTIL_DIR="../../util"
+else
+    UTIL_DIR="$TESTTOP/util"
+fi
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${SERVER_1=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name="/.../$CELL_NAME"}
+: ${dns_server_prefix="/.:/hosts/"}
+: ${adminlist:=admin.test}
+
+PATH=":"$bin_dir":"$PATH
+
+av_arg="$AUTH_ARG $VERB_ARG"
+
+admin_flag=FALSE
+
+outfile=/opt/dcelocal/var/dfs/adm/BosExecOut
+
+group=system
+user=usera$$
+
+###############################################################################
+
+for a in $*
+    do
+    if test $a = -admin; then admin_flag=TRUE
+    elif test $a = -noadmin; then admin_flag=FALSE
+    fi
+    done
+
+###############################################################################
+
+echo ""
+echo "$ty/$p (quickie) starting on $hn at `date`"
+echo "   in cell $CELL_NAME."
+echo "Server is $SERVER_1, auth-arg is '$AUTH_ARG', admin flag is $admin_flag."
+echo "PID is $$, DCE test user is $user and group is $group."
+
+if test "$CELL_NAME" = ""
+   then echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting."
+        exit 2
+   fi
+
+rm -f $outfile
+
+###############################################################################
+
+if test $admin_flag = TRUE
+   then
+
+   #
+   # Create DCE user principal user
+   #
+   # $UTIL_DIR/dce_AddUserPrincipal -user $user -group $group
+   # --> Need to call rgy_edit in order to create a key for this principal.
+   #     creating an account alone is insufficient.
+   rgy_edit <<EOF
+domain p
+add $user
+domain a
+add $user -g $group -o none -pw $user -mp -dce-
+ktadd -p $user -pw $user
+ktadd -p $user -a -r
+quit
+EOF
+   if [ $? -ne 0 ] 
+   then
+       echo "$p: Unable to create DCE user principal"
+       echo "You must be cell_admin in order to run this test with -admin"
+       exit 1;
+   fi
+
+   # make sure there is AT LEAST one key version in the key table
+   bos lskeys -server $dns_server_prefix$SERVER_1 -principal $user | grep -s '^key [0-9]'
+   if [ $? -ne 0 ] 
+   then
+	   bos addkey -server $dns_server_prefix$SERVER_1 -kvno 1 -password $user -principal $user -localonly
+	   if [ $? -ne 0 ] 
+	   then
+	       echo "$p: Unable to sync keytab"
+	       echo "You must be cell_admin in order to run this test with -admin"
+	       exit 1;
+	   fi
+   fi
+
+   echo ""
+   echo "Testing bos addadmin $dns_server_prefix$SERVER_1 $adminlist $user -create"
+   bos addadmin $dns_server_prefix$SERVER_1 $adminlist $user $av_arg -create; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E1)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""
+   echo "Testing bos adda $dns_server_prefix$SERVER_1 $adminlist -group $group"
+   bos adda $dns_server_prefix$SERVER_1 $adminlist -group $group $av_arg
+       rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E2)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Testing bos lsadmin $dns_server_prefix$SERVER_1 $adminlist"
+   bos lsadmin $dns_server_prefix$SERVER_1 $adminlist $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E3)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""
+   echo "Testing bos rmadmin $dns_server_prefix$SERVER_1 $adminlist $user"
+   bos rmadmin $dns_server_prefix$SERVER_1 $adminlist $user $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E4)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""
+   echo "Testing bos rma $dns_server_prefix$SERVER_1 $adminlist -group $group"
+   bos rma $dns_server_prefix$SERVER_1 $adminlist -group $group $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E5)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Testing bos lsa $dns_server_prefix$SERVER_1 $adminlist"
+   bos lsa $dns_server_prefix$SERVER_1 $adminlist $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E6)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Testing bos lsadmin $SERVER_1 $adminlist"
+   bos lsadmin $SERVER_1 $adminlist $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E52)"; rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "Testing bos rma $dns_server_prefix$SERVER_1 $adminlist -removelist"
+   bos rma $dns_server_prefix$SERVER_1 $adminlist $av_arg -removelist; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E599)"; rc=`expr $rc + 1`
+      fi
+
+   else # $admin_flag != TRUE
+
+   echo ""
+   # record whether the list already exists
+   bos lsadmin $dns_server_prefix$SERVER_1 $adminlist $av_arg > /dev/null 2>&1; save_rf=$?
+
+   echo "Testing bos addadmin $dns_server_prefix$SERVER_1 $adminlist -group $group -create"
+   bos addadmin $dns_server_prefix$SERVER_1 $adminlist -group $group $av_arg -create
+       rf=$?
+   if test $rf -eq 0; then echo "- worked ($p: E7)"; rc=`expr $rc + 1`; fi
+
+   echo ""; echo "Testing bos lsadmin $dns_server_prefix$SERVER_1 $adminlist"
+   bos lsadmin $dns_server_prefix$SERVER_1 $adminlist $av_arg; rf=$?
+   if test $rf -ne $save_rf
+      then echo "- passed (errno $rf) ($p: E8)"; rc=`expr $rc + 1`
+      fi
+
+   bos lsadmin $dns_server_prefix$SERVER_1 $adminlist $av_arg |
+       grep -s "user: $user"
+   if test $? -eq 0
+      then echo "- $user was added ($p: E49)"; rc=`expr $rc + 1`
+      fi
+
+   fi  # $admin_flag = TRUE
+
+########################################
+
+# do the key commands iff we're doing this on one machine
+if [ $SERVER_1 = $hn ]
+  then
+   keyno=`expr $$ % 256`
+   #keyno=71
+   
+   #
+   # Modified the following commands to use the $user principal.
+   #
+   
+   if test $admin_flag = TRUE
+      then
+   
+      echo ""
+      echo "Testing bos addkey $dns_server_prefix$SERVER_1 $keyno password -principal $user"
+      bos addkey $dns_server_prefix$SERVER_1 $keyno password -principal $user $av_arg; rf=$?
+      if test $rf -ne 0
+         then echo "- failed (errno $rf) ($p: E9)"; rc=`expr $rc + 1`
+         fi
+   
+      echo ""; echo "Testing bos lskeys $dns_server_prefix$SERVER_1 -principal $user"
+      bos lskeys $dns_server_prefix$SERVER_1 -principal $user $av_arg; rf=$?
+      if test $rf -ne 0
+         then echo "- failed (errno $rf) ($p: E10)"; rc=`expr $rc + 1`
+         fi
+   
+      echo ""; echo "Testing bos rmkey $dns_server_prefix$SERVER_1 $keyno -principal $user"
+      bos rmkey $dns_server_prefix$SERVER_1 $keyno -principal $user $av_arg; rf=$?
+      if test $rf -ne 0
+         then echo "- failed (errno $rf) ($p: E11)"; rc=`expr $rc + 1`
+         fi
+   
+      echo ""; echo "Testing bos lskeys $SERVER_1"
+      bos lskeys $dns_server_prefix$SERVER_1 $av_arg; rf=$?
+      if test $rf -ne 0
+         then echo "- failed (errno $rf) ($p: E53)"; rc=`expr $rc + 1`
+         fi
+
+      else # $admin_flag != TRUE
+   
+      echo ""
+      echo "Testing bos addkey $dns_server_prefix$SERVER_1 $keyno password -principal $user"
+      bos addkey $dns_server_prefix$SERVER_1 $keyno password -principal $user $av_arg; rf=$?
+      if test $rf -eq 0; then echo "- worked ($p: E12)"; rc=`expr $rc + 1`; fi
+   
+      echo ""; echo "Testing bos lskeys $dns_server_prefix$SERVER_1 -principal $user"
+      bos lskeys $dns_server_prefix$SERVER_1 -principal $user $av_arg; rf=$?
+      if test $rf -eq 0
+         then echo "- worked (errno $rf) ($p: E13)"; rc=`expr $rc + 1`
+         fi
+   
+      echo ""; echo "Testing bos rmkey $dns_server_prefix$SERVER_1 $keyno -principal $user"
+      bos rmkey $dns_server_prefix$SERVER_1 $keyno -principal $user $av_arg; rf=$?
+      if test $rf -eq 0; then echo "- worked ($p: E50)"; rc=`expr $rc + 1`; fi
+   
+      fi
+   
+  else
+   echo "key commands tested only on single machine test"
+fi
+########################################
+
+echo ""; echo "Testing bos apropos process"
+bos apropos cell ; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E14)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Testing bos help"
+bos help ; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E15)"; rc=`expr $rc + 1`
+   fi
+
+########################################
+
+pname=doze.$$
+
+if test $admin_flag = TRUE
+   then
+
+   echo ""
+   echo "Testing bos create $dns_server_prefix$SERVER_1 $pname simple /bin/sleep 3600"
+   bos create $dns_server_prefix$SERVER_1 $pname simple "/bin/sleep 3600" $av_arg
+       rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E16)"; rc=`expr $rc + 1`
+      fi
+   date
+
+   echo ""; echo "Testing bos status $dns_server_prefix$SERVER_1 -long"
+   bos status $dns_server_prefix$SERVER_1 -long $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E17)"; rc=`expr $rc + 1`
+      fi
+
+   sleep 5
+
+   echo ""; echo "Testing bos restart $dns_server_prefix$SERVER_1 $pname"
+   bos restart $dns_server_prefix$SERVER_1 $pname $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E18)"; rc=`expr $rc + 1`
+      fi
+   date
+
+   echo ""; echo "Testing bos statu $dns_server_prefix$SERVER_1 -long"
+   bos statu $dns_server_prefix$SERVER_1 -long $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E19)"; rc=`expr $rc + 1`
+      fi
+
+   sleep 5
+
+   echo ""; echo "Testing bos shutdown $dns_server_prefix$SERVER_1 $pname"
+   bos shutdown $dns_server_prefix$SERVER_1 $pname $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E20)"; rc=`expr $rc + 1`
+      fi
+   date
+
+   echo ""; echo "Testing bos stat $dns_server_prefix$SERVER_1 -long"
+   bos stat $dns_server_prefix$SERVER_1 -long $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E21)"; rc=`expr $rc + 1`
+      fi
+
+   sleep 5
+
+   echo ""; echo "Testing bos startup $dns_server_prefix$SERVER_1 $pname"
+   bos startup $dns_server_prefix$SERVER_1 $pname $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E22)"; rc=`expr $rc + 1`
+      fi
+   date
+
+   echo ""; echo "Testing bos stat $dns_server_prefix$SERVER_1 -long"
+   bos stat $dns_server_prefix$SERVER_1 -long $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E23)"; rc=`expr $rc + 1`
+      fi
+
+   sleep 5
+
+   echo ""; echo "Testing bos stop $dns_server_prefix$SERVER_1 $pname -wait"
+   bos stop $dns_server_prefix$SERVER_1 $pname $av_arg -wait; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E24)"; rc=`expr $rc + 1`
+      fi
+   date
+
+   echo ""; echo "Testing bos stat $dns_server_prefix$SERVER_1 -long"
+   bos stat $dns_server_prefix$SERVER_1 -long $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E25)"; rc=`expr $rc + 1`
+      fi
+
+   sleep 5
+
+   echo ""; echo "Testing bos start $dns_server_prefix$SERVER_1 $pname"
+   bos start $dns_server_prefix$SERVER_1 $pname $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E26)"; rc=`expr $rc + 1`
+      fi
+   date
+
+   echo ""; echo "Testing bos stat $dns_server_prefix$SERVER_1 -long"
+   bos stat $dns_server_prefix$SERVER_1 -long $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E27)"; rc=`expr $rc + 1`
+      fi
+
+   sleep 5
+
+   echo ""; echo "Testing bos stop $dns_server_prefix$SERVER_1 $pname -wait"
+   bos stop $dns_server_prefix$SERVER_1 $pname $av_arg -wait; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E28)"; rc=`expr $rc + 1`
+      fi
+   date
+
+   echo ""; echo "Testing bos stat $dns_server_prefix$SERVER_1 -long"
+   bos stat $dns_server_prefix$SERVER_1 -long $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E29)"; rc=`expr $rc + 1`
+      fi
+
+   sleep 5
+
+   echo ""; echo "Testing bos delete $dns_server_prefix$SERVER_1 $pname"
+   bos delete $dns_server_prefix$SERVER_1 $pname $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E30)"; rc=`expr $rc + 1`
+      fi
+   date
+
+   echo ""; echo "Testing bos stat $dns_server_prefix$SERVER_1 -long"
+   bos stat $dns_server_prefix$SERVER_1 -long $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E31)"; rc=`expr $rc + 1`
+      fi
+
+   else # $admin_flag != TRUE
+
+   echo ""
+   echo "Testing bos create $dns_server_prefix$SERVER_1 $pname simple /bin/sleep 3600"
+   bos create $dns_server_prefix$SERVER_1 $pname simple "/bin/sleep 3600" $av_arg
+       rf=$?
+   if test $rf -eq 0; then echo "- worked ($p: E32)"; rc=`expr $rc + 1`; fi
+   date
+
+   fi
+
+echo ""; echo "Testing bos status $dns_server_prefix$SERVER_1 -long"
+bos status $dns_server_prefix$SERVER_1 -long $av_arg; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E33)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Testing bos status $SERVER_1"
+bos status $SERVER_1 $av_arg; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E54)"; rc=`expr $rc + 1`
+   fi
+
+###############################################################################
+
+echo ""; echo "Testing bos getdates $dns_server_prefix$SERVER_1 $bin_dir/bos"
+bos getdates $dns_server_prefix$SERVER_1 $bin_dir/bos $av_arg; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E36)"; rc=`expr $rc + 1`
+   fi
+
+if test $admin_flag = TRUE
+   then
+
+   echo ""; echo "Testing bos getlog $dns_server_prefix$SERVER_1 $outfile"
+   bos getlog $dns_server_prefix$SERVER_1 $outfile $av_arg; rf=$?
+   if test $rf -eq 0
+      then echo "- worked (errno $rf) ($p: E37)"; rc=`expr $rc + 1`
+      fi
+
+   fi
+
+echo ""; echo "Testing bos getlog $dns_server_prefix$SERVER_1 BosLog"
+bos getlog $dns_server_prefix$SERVER_1 BosLog $av_arg; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E41)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Testing bos getlog $SERVER_1 BosLog"
+bos getlog $SERVER_1 BosLog $av_arg; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E51)"; rc=`expr $rc + 1`
+   fi
+
+###############################################################################
+
+echo ""; echo "Testing bos lscell $dns_server_prefix$SERVER_1"
+bos lscell $dns_server_prefix$SERVER_1 $av_arg; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E38)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Testing bos lscell $SERVER_1"
+bos lscell $SERVER_1 $av_arg; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E55)"; rc=`expr $rc + 1`
+   fi
+
+###############################################################################
+
+if test $admin_flag = TRUE
+   then
+
+   echo ""; echo "Testing bos setauth $dns_server_prefix$SERVER_1 on"
+   bos setauth $dns_server_prefix$SERVER_1 on $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E39)"; rc=`expr $rc + 1`
+      fi
+
+   else # $admin_flag != TRUE
+
+   echo ""; echo "Testing bos setauth $dns_server_prefix$SERVER_1 on"
+   bos setauth $dns_server_prefix$SERVER_1 on $av_arg; rf=$?
+   if test $rf -eq 0; then echo "- worked ($p: E40)"; rc=`expr $rc + 1`; fi
+
+   fi
+
+###############################################################################
+
+if test $admin_flag = TRUE
+   then
+
+   echo ""; echo "Testing bos setrestart $dns_server_prefix$SERVER_1 'sat 2:15'"
+   bos setrestart $dns_server_prefix$SERVER_1 'sat 2:15' $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E45)"; rc=`expr $rc + 1`
+      fi
+
+   echo ""; echo "Testing bos setrestart $dns_server_prefix$SERVER_1 'sun 4:00'"
+   bos setrestart $dns_server_prefix$SERVER_1 'sun 4:00' $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- failed (errno $rf) ($p: E46)"; rc=`expr $rc + 1`
+      fi
+
+   else # $admin_flag != TRUE
+
+   echo ""; echo "Testing bos setrestart $dns_server_prefix$SERVER_1 'sat 2:15'"
+   bos setrestart $dns_server_prefix$SERVER_1 'sat 2:15' $av_arg; rf=$?
+   if test $rf -eq 0; then echo "- worked ($p: E47)"; rc=`expr $rc + 1`; fi
+
+   fi
+
+echo ""; echo "Testing bos getrestart $dns_server_prefix$SERVER_1 "
+bos getrestart $dns_server_prefix$SERVER_1 $av_arg; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E48)"; rc=`expr $rc + 1`
+   fi
+
+echo ""; echo "Testing bos getrestart $SERVER_1 "
+bos getrestart $SERVER_1 $av_arg; rf=$?
+if test $rf -ne 0
+   then echo "- failed (errno $rf) ($p: E56)"; rc=`expr $rc + 1`
+   fi
+
+###############################################################################
+
+rm -f $outfile
+
+if test $admin_flag = TRUE
+   then
+
+   # delete all keys first
+   versions=`echo ktlist | rgy_edit | grep /$user | awk '{print $2}'`
+   for vers in $versions
+     do
+	echo "ktdel -p $user -v $vers" | rgy_edit
+   done
+
+   #
+   # Delete DCE user principal user
+   #
+   rgy_edit <<EOF
+domain p
+delete $user
+quit
+EOF
+fi
+
+echo ""
+if test $rc -eq 0
+   then echo "$ty/$p PASSED."
+   else echo "$ty/$p FAILED."
+   fi
+
+echo "$ty/$p returning $rc at `date`."
+exit $rc
+
+###############################################################################

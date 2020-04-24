@@ -1,0 +1,2 @@
+'''	SCCS: @(#) DTET SPECIFICATION		Rel 1.2 (9/15/92)
+.TC 2 1 7 0

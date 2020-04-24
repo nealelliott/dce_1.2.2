@@ -1,0 +1,137 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: growaggr.test,v $
+# Revision 1.1.12.1  1996/10/02  17:17:52  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:27:35  damon]
+#
+# Revision 1.1.6.1  1994/06/09  13:58:01  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:33:16  annie]
+# 
+# Revision 1.1.4.2  1993/01/18  22:05:15  cjd
+# 	embedded copyright notice
+# 	[1993/01/18  21:44:50  cjd]
+# 
+# Revision 1.1.2.2  1992/05/13  21:56:14  jdp
+# 	Transarc delta: comer-grow-aggregate-2570 1.7
+# 	  Files modified:
+# 	    anode: Makefile, aggregate.c, all_tests, block_alloc.c
+# 	    anode: growaggr.c, growaggr.test, test_anode.c
+# 	    vnops: efs_vfsops.c
+# 	  Selected comments:
+# 	    Synopsis: Provide the ability to grow an aggregate on the fly.
+# 	    OT Defect: 2560
+# 	    This delta includes the code to grow a bitmap on a live system.  Its
+# 	    typical use will be is conjunction with a logical volume manager.
+# 	    When more blocks are assigned to a logical volume, the aggregate can
+# 	    be grown to reflect it.
+# 	    The minimum number of blocks by which the aggregate can be grown is
+# 	    3 blocks to take care where both a new bitmap page and an indirect
+# 	    block must be allocation.  Aggregate growths will typically be much
+# 	    larger than 3 blocks so this is probably not a problem.
+# 	    While the growing code is not #ifdef'd, the interface to this code
+# 	    included in this delta is AIX specific.
+# 	    Finished check-pointed code.
+# 	    A test_anodesque test script.
+# 	    The code was trying to do all the allocations under a single
+# 	    transaction.  This is a problem if there are a large number of
+# 	    blocks since the max transaction size can be exceeded.  To get
+# 	    around this, epig_GrowAggregate now checks to see if the size
+# 	    of the bitmap is correct after calling epib_GrowAllocationPool
+# 	    and if the size is not right, it makes the call again with a new
+# 	    transaction.  This allows epib_GrowAllocationPool to grow the
+# 	    bitmap incrementally.
+# 	    Added a test that hung in log full handling before the
+# 	    multitransactional code was added.
+# 	    Changed the code so that only the first and last pages of
+# 	    the bitmap are updated.  This is to take care of the
+# 	    case when a large bitmap is extended.  If all the intermediate
+# 	    pages have to be updated, the transaction size limit may be
+# 	    exceeded.
+# 	    Added OT defect number: 2560
+# 	    Made some fixes when merging into the episode-weekly configuration.  Problems
+# 	    were caused by the new compiler(ANSI) and build environment.
+# 	    Fix some more problems related to a new compiler/build environment.
+# 	[1992/05/13  19:55:38  jdp]
+# 
+# $EndLog$
+# /* Copyright (C) 1992, 1990 Transarc Corporation - All rights reserved */
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/anode/growaggr.test,v 1.1.12.1 1996/10/02 17:17:52 damon Exp $
+
+growaggr 1
+
+# test case where fragsize == blocksize
+open_device 1 1024 1024 4000
+create_aggregate
+grow_device 1 18000				# grow physical disk
+
+create_vol bar 0,,23 18000
+create_file foo
+
+# fill up the aggregate then grow it by one
+(code = AGGREGATEFULL) write_file 0 5000000
+aggr_info f=0					# no blocks left
+grow_aggregate 4003				# add 3 blocks
+aggr_info f=3					# 3 blocks (frags) left
+create_file fillup				# fill up aggregate again
+write_file 0 2000
+aggr_info f=0
+
+grow_aggregate 8000				# allocate second page of bitmap
+
+fork freed_blocks.int.test
+wait
+
+create_file bar
+grow_aggregate 15876				# grow to use all of BM page
+write_file 0 5000
+grow_aggregate 16000
+grow_aggregate 17000
+
+fork freed_blocks.int.test
+wait
+
+check_device
+
+open_device -1
+
+# blocksize != fragsize
+open_device 1 2048 1024 4000
+
+create_aggregate
+grow_device 1 50000
+grow_aggregate 10755				# one block left on 2nd page
+
+create_vol bar 0,,23 5000
+create_file new.foo
+write_file 0 500
+
+grow_aggregate 10758				# spill over into next page
+
+fork freed_blocks.int.test
+wait
+
+grow_aggregate 43011				# 8 pages
+
+fork freed_blocks.int.test
+wait
+
+grow_aggregate 43014				# allocate 9th and indirect block
+check_device
+
+open_device -1
+open_device 1 2048 1024 4000
+create_aggregate
+grow_device 1 50000
+grow_aggregate 43014				# grow a big aggregate
+check_device
+end
+
+
+end

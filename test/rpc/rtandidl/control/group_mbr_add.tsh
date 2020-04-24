@@ -1,0 +1,180 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+#
+# Copyright (c) 1991 by
+#    Hewlett-Packard Company, Palo Alto, Ca.
+#
+# Permission to use, copy, modify, and distribute this
+# software and its documentation for any purpose and without
+# fee is hereby granted, provided that the above copyright
+# notice appear in all copies and that both that copyright
+# notice and this permission notice appear in supporting
+# documentation, and that the name of Hewlett-Packard Company not
+# be used in advertising or publicity pertaining to distribution
+# of the software without specific, written prior permission.
+# Hewlett-Packard Company makes no representations about the
+# suitability of this software for any purpose.  It is provided
+# "as is" without express or implied warranty.
+#
+#
+# DCE API Test
+#
+# HISTORY
+# $Log: group_mbr_add.tsh,v $
+# Revision 1.1.4.2  1996/03/11  02:22:14  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  19:57:18  marty]
+#
+# Revision 1.1.4.1  1995/12/11  19:37:35  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  19:19:50  root]
+# 
+# Revision 1.1.2.3  1993/01/29  00:05:24  weisman
+# 	The tests for rpc_c_ns_syntax_default were erroneously using NULL
+# 	as the key, changed to rpc_c_ns_syntax_default.
+# 	[1993/01/28  18:31:30  weisman]
+# 
+# Revision 1.1.2.2  1993/01/11  21:39:15  bbelch
+# 	Embedding copyright notice
+# 	[1993/01/06  14:58:11  bbelch]
+# 
+# Revision 1.1  1992/01/19  20:05:59  devrcs
+# 	Initial revision
+# 
+# Revision 1.1  91/09/12  11:56:27  marco
+# 	Initial revision
+# 
+# $EndLog$
+#
+#
+#
+echo
+echo Begin rpc group member add tests.
+echo
+
+#
+# Import the environment and literal definition files
+#
+
+include tshrc
+include ns.tshrc
+include group.tshrc
+
+set TEST=group_mbr_add_remove
+#
+# Test with valid data.
+#
+
+test $TEST \
+"1 Input valid data; receive rpc_s_ok status - dns syntax" \
+$group_add_with_cleanup \
+$rpc_s_ok \
+$DNS_syntax $DNS_group $DNS_syntax $DNS_member
+
+#
+# Add same name twice.
+#
+
+test $TEST \
+"2 Input the same otherwise valid data twice" \
+$group_repeat_add \
+$rpc_s_ok \
+$DNS_syntax $DNS_group $DNS_syntax $DNS_member
+
+#
+# Use unknown syntax.
+#
+
+test $TEST \
+"3 Input unknown syntax; receive rpc_s_invalid_name_syntax status" \
+$group_add \
+$rpc_s_invalid_name_syntax \
+$unknown_syntax $DNS_group $unknown_syntax $DNS_member
+
+#
+# Use unsupported, but otherwise valid, syntaxes. 
+#
+
+test $TEST \
+"4 Input X.500 syntax; receive rpc_s_unsupported_name_syntax status" \
+$group_add \
+$rpc_s_unsupported_name_syntax \
+$X500_syntax $X500_group $X500_syntax $X500_member
+
+test $TEST \
+"5 Input Inet domain syntax; receive rpc_s_unsupported_name_syntax status" \
+$group_add \
+$rpc_s_unsupported_name_syntax \
+$INTERNET_syntax $INTERNET_group $INTERNET_syntax $INTERNET_member
+
+test $TEST \
+"6 Input uuid syntax; receive rpc_s_unsupported_name_syntax status" \
+$group_add \
+$rpc_s_unsupported_name_syntax \
+$UUID_syntax $UUID_group $UUID_syntax $UUID_member
+
+#
+# Use mixed valid/invalid/unsupported syntaxes.
+#
+
+test $TEST \
+"7 DNS group syntax and group with X.500 member syntax and member" \
+$group_add \
+$rpc_s_unsupported_name_syntax \
+$DNS_syntax $DNS_group $X500_syntax $X500_member
+
+test $TEST \
+"8 Valid data except for group name syntax" \
+$group_add \
+$rpc_s_invalid_name_syntax \
+$invalid_syntax $DNS_group $DNS_syntax $DNS_member
+
+test $TEST \
+"9 Valid data except for member name syntax" \
+$group_add \
+$rpc_s_invalid_name_syntax \
+$DNS_syntax $DNS_group $invalid_syntax $DNS_member
+
+#
+# Use valid data, except now use rpc_c_ns_syntax_default values for various arguments. These 
+# fields should get filled in by the environmental variable
+# RPC_DEFAULT_ENTRY_SYNTAX.
+#
+
+test $TEST \
+"10 All valid data but use rpc_c_ns_syntax_default for group syntax" \
+$group_add_with_cleanup \
+$rpc_s_ok \
+$rpc_c_ns_syntax_default $DNS_group $DNS_syntax $DNS_member
+
+test $TEST \
+"11 All valid data but use rpc_c_ns_syntax_default for member syntax" \
+$group_add_with_cleanup \
+$rpc_s_ok \
+$DNS_syntax $DNS_group $rpc_c_ns_syntax_default $DNS_member
+
+test $TEST \
+"12 All valid data but use rpc_c_ns_syntax_default for both syntaxes" \
+$group_add_with_cleanup \
+$rpc_s_ok \
+$rpc_c_ns_syntax_default $DNS_group $rpc_c_ns_syntax_default $DNS_member
+
+test $TEST \
+"13 All valid data but use invalid name syntax" \
+$group_add \
+$rpc_s_invalid_name_syntax \
+$invalid_syntax $DNS_group $DNS_syntax $DNS_member
+
+echo
+subtotal clear
+summary
+
+echo
+echo End rpc group member add tests.
+echo
+
+# End of group_mbr_add.tsh

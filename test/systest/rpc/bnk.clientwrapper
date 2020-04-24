@@ -1,0 +1,42 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: bnk.clientwrapper,v $
+# Revision 1.1.2.2  1996/03/09  20:50:55  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:28:54  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:00:38  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:59:47  root]
+# 
+# $EndLog$
+#
+# shell wrapper for dcerpbnk clients
+#
+if [ ! -d /tmp/rpc/dcerpbnk ];then mkdir -p /tmp/rpc/dcerpbnk ;fi
+cd /tmp/rpc/dcerpbnk
+if [ -z "$PRIN_NAME" ]
+then
+    export KRB5CCNAME=$(dce_login_noexec $CELL_ADMIN $ADMIN_PASSWD)
+    $TCDIR/transactions $TCDIR/bank $TCDIR/bank\
+        $BANK $TRANS_TIME $ENTRY_SYNTAX \
+        $ADMIN_ENTRY $TRANS_ENTRY $TRANS_RES_FILE
+else
+    $TCDIR/transactions $STDEXC/su.dce $TCDIR/bank \
+        $BANK $TRANS_TIME $ENTRY_SYNTAX \
+        $ADMIN_ENTRY $TRANS_ENTRY $TRANS_RES_FILE \
+        $PRIN_NAME $AUTH_SVC $AUTH_LVL $AUTHZ_SVC
+fi
+#if [ -f core ];then
+#    echo "core file being moved to /tmp/rpc/dcerpbnk/core$$"
+#    mv core core$$
+#fi
+rcp $TRANS_RES_FILE $LOCAL_HOST:$STTMPDIR/trans_res.$(hostname)
+if [ ! -z "$KRB5CCNAME" ];then /opt/dcelocal/bin/kdestroy; fi

@@ -1,0 +1,741 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+# Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS exporting Episode and UFS.
+# The script tests the fts edserverentry, delserverentry, and lsserverentry
+# subcommands.
+
+###############################################################################
+
+# Usage:                test13
+
+# Typically run via:    test13 >& test13.out
+# or via the fts/runtests script.
+
+###############################################################################
+
+# Test environment:
+# This test requires DFS to be running, and DFS server $SERVER_1
+# to be up (not necessarily even exporting any aggregates, tho).
+# If the server entry and any filesets referencing this server entry are
+# present, this could cause a conflict with the server entries being created.
+# This would result in two errors being reported if the server entry of this
+# machine is either created or deleted. A mechanism to overcome this problem
+# is yet to be designed.
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1, in order to
+# run the fts commands contained in this script.
+# You must be able to add and delete principals from the registry
+
+# Highest error number is: 178.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname|cut -f1 -d"." 2>/dev/null`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${SERVER_1=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name=/.../$CELL_NAME}
+: ${dns_server_prefix=/.:/hosts/}
+: ${cell_admin_pw='-dce-'}
+
+av_arg="$AUTH_ARG $VERB_ARG"
+
+hostid=`grep $SERVER_1 /etc/hosts | awk '{print $1}'`
+
+# The base_addr is important. It has to be a valid IP address (with the last
+# byte attached, of course), but should not potentially collide with any server
+# entries that may already be defined, including one for this machine that is
+# running the test. So we selected 255.255.255. If your machine has the first
+# 3 bytes of the IP address matching this, then you may have to change the 
+# base_addr to something else, say 1.1.1
+base_addr="255.255.255" 
+
+other_addr=`echo $base_addr | sed 's/\.[0-9][0-9]*$/.123/'`
+group=subsys/dce/dfs-admin
+principal=trouble
+
+INITIAL_PRINCIPALS="2 3 4 5 6 7 8 9 161 171 181 191 123 124 125 126  127 128  129 133 134  135  136 137 138 139 150 151 238 239 "
+
+CreateBatchPrincipals()
+{
+ if [ -f /tmp/$principals$$ ]
+ then
+    rm /tmp/$principals$$
+ fi
+  touch /tmp/principals$$
+  while [ "$1" -ne "" ]
+  do
+     echo "domain p" >> /tmp/principals$$
+     echo "add $principal.$1/dfs-server" >> /tmp/principals$$
+     echo "domain a" >> /tmp/principals$$
+     echo "add $principal.$1/dfs-server -g none -o none -pw none1 -mp $cell_admin_pw" >> \
+              /tmp/principals$$
+     shift;        
+  done
+     echo "quit" >> /tmp/principals$$
+  rgy_edit < /tmp/principals$$
+  rm /tmp/principals$$
+
+}
+
+DeleteBatchPrincipals()
+{
+ if [ -f /tmp/$principals$$ ]
+ then
+    rm /tmp/$principals$$
+ fi
+ echo "domain p" > /tmp/principals$$
+ while [ "$1" -ne "" ]
+ do
+     echo "delete $principal.$1/dfs-server" >> /tmp/principals$$
+     shift; 
+ done
+ echo "quit" >> /tmp/principals$$
+ rgy_edit < /tmp/principals$$
+ rm /tmp/principals$$
+}
+
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+###############################################################################
+
+echo ""
+date
+echo "RUNNING fts SERVER COMMANDS on SERVER $SERVER_1 in CELL $CELL_NAME."
+echo "========================================================================"
+echo ""
+
+###############################################################################
+echo "creating dfs-server principals...."
+   CreateBatchPrincipals $INITIAL_PRINCIPALS
+echo ""; echo "Running fts crserverentry"
+   fts crserverentry $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E1 rc
+   
+   fts crserverentry fubar_argument $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E2 rc
+   
+   fts crserverentry $base_addr.1 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E3 rc
+ 
+   fts crserverentry $base_addr.2 $principal.2 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E4 rc
+   
+   fts crserverentry $base_addr.3 $principal.3 33 $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E5 rc
+   
+   fts crserverentry $base_addr.4 $principal.4 44 $group $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E6 rc
+   
+   fts crserverentry $base_addr.5 $principal.5 55 $group $dns_cell_name \
+       $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E7 rc
+   
+   fts crserverentry -cell $dns_cell_name -server $base_addr.6 -quota 66 \
+       -principal $principal.6 -owner $group $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E8 rc
+   
+   fts crserverentry -server fubar_address -principal $principal.7 \
+       -quota 77 -owner $group -cell $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E9 rc
+   
+   fts crserverentry -server $base_addr.8 -principal $principal.8 \
+       -quota fubar_quota -owner $group -cell $dns_cell_name $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E10 rc
+     
+   fts crserverentry -server $base_addr.9 -principal $principal.9 \
+       -quota 9 -owner $group -cell fubar_cell $av_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E11 rc
+      
+GROUP1_PRINCIPALS="10 11 12 13 14 15 16 17 18 19"
+   CreateBatchPrincipals $GROUP1_PRINCIPALS
+   for n in $GROUP1_PRINCIPALS 
+       do
+       fts crserverentry -server $base_addr.$n -principal $principal.$n \
+           -quota $n -owner $group $av_arg
+        dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E12 rc
+
+       fts edserverentry -server $base_addr.$n -addaddr $other_addr.$n \
+           $av_arg
+        dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E13 rc
+       done
+
+# echo ""; echo "Running fts lsserverentry"
+#    fts lsserverentry -all $av_arg
+#     if test $? -ne 0; then echo "- failed ($p: E15)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running fts edserverentry"
+   fts edserverentry $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E16 rc
+      
+   fts edserverentry fubar_argument $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E17 rc
+      
+   fts edserverentry $base_addr.10 fubar_argument $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E18 rc
+      
+   fts edserverentry $base_addr.10 -fubar_argument $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E19 rc
+      
+
+# echo ""; echo "Running fts lsserverentry"
+#    fts lsserverentry -all $av_arg
+#       if test $? -ne 0; then echo "- failed ($p: E20)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running fts edserverentry -rmaddr"
+   fts edserverentry -rmaddr $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E21 rc
+      
+   fts edserverentry $base_addr.11 -rmaddr $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E22 rc
+     
+   fts edserverentry $base_addr.12 -rmaddr $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E23 rc
+     
+   fts edserverentry $base_addr.13 -rmaddr -quota 131 $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E24 rc
+      
+   fts edserverentry $base_addr.14 -rmaddr -quota 141 -owner $group \
+       $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E25 rc
+      
+   fts edserverentry $base_addr.15 -rmaddr -quota 151 $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E26 rc
+      
+   fts edserverentry -principal $principal.161 -rmaddr -quota 161 -server \
+       $base_addr.16 -cell $dns_cell_name -owner $group $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E27 rc
+      
+   fts edserverentry -server $base_addr.17 -rmaddr -principal \
+       $principal.171 -quota fubar_quota -owner $group \
+       -cell $dns_cell_name $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E28 rc
+     
+   fts edserverentry -server fubar_server -rmaddr -principal $principal.181 \
+       -quota 181 -owner $group -cell $dns_cell_name $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E29 rc
+      
+   fts edserverentry -server $base_addr.19 -rmaddr -principal \
+       $principal.191 -quota 191 -owner $group -cell fubar_cell \
+       $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E30 rc
+    
+
+# echo ""; echo "Running fts lsserverentry"
+#    fts lsserverentry -all $av_arg
+#       if test $? -ne 0; then echo "- failed ($p: E31)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running fts crserverentry"
+GROUP2_PRINCIPALS="20 21 22 23 24 25 26 27 28 29"
+   CreateBatchPrincipals $GROUP2_PRINCIPALS
+   for n in $GROUP2_PRINCIPALS 
+       do
+       fts crserverentry -server $base_addr.$n -principal $principal.$n \
+           -quota $n -owner $group $av_arg
+        dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E32 rc
+       done
+
+# echo ""; echo "Running fts lsserverentry"
+#    fts lsserverentry -all $av_arg
+#       if test $? -ne 0; then echo "- failed ($p: E33)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running fts edserverentry -addaddr"
+   fts edserverentry -addaddr $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E34 rc
+      
+   fts edserverentry $base_addr.21 -addaddr $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E35 rc
+      
+   fts edserverentry $base_addr.22 -addaddr $base_addr.122 $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E36 rc
+     
+   fts edserverentry $base_addr.23 -addaddr $base_addr.123 -principal \
+       $principal.123  $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E37 rc
+     
+   fts edserverentry $base_addr.24 -addaddr $base_addr.124 -principal \
+       $principal.124 -quota 124 $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E38 rc
+      
+   fts edserverentry $base_addr.25 -addaddr $base_addr.125 -principal \
+       $principal.125 -quota 125 -owner $group $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E39 rc
+      
+   fts edserverentry -cell $dns_cell_name -principal $principal.126 \
+       -addaddr $base_addr.126 -quota 126 -server $base_addr.26 \
+       -owner $group $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E40 rc
+      
+   fts edserverentry -server fubar_server -addaddr $base_addr.127 \
+       -principal $principal.127 -quota 127 -owner $group \
+       -cell $dns_cell_name $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E41 rc
+      
+   fts edserverentry -server $base_addr.28 -addaddr $base_addr.128 \
+       -principal $principal.128 -quota fubar_quota -owner $group \
+       -cell $dns_cell_name $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E42 rc
+      
+   fts edserverentry -server $base_addr.29 -addaddr $base_addr.129 \
+       -principal $principal.129 -quota 129 -owner $group -cell \
+       fubar_cell $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E43 rc
+      
+   fts edserverentry -server $base_addr.20 -addaddr $base_addr.120 \
+       $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E44 rc
+      
+   fts edserverentry -server $base_addr.20 -addaddr $base_addr.220 \
+       $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E45 rc
+      
+   fts edserverentry -server $base_addr.120 -addaddr $base_addr.221 \
+       $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E46 rc
+      
+   fts edserverentry -server $base_addr.20 -addaddr $base_addr.222 \
+       $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E47 rc
+     
+
+# echo ""; echo "Running fts lsserverentry"
+#    fts lsserverentry -all $av_arg
+#       if test $? -ne 0; then echo "- failed ($p: E48)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running fts crserverentry"
+GROUP3_PRINCIPALS=" 31 32 33 34 35 36 37 38 39"
+   CreateBatchPrincipals $GROUP3_PRINCIPALS
+   for n in $GROUP3_PRINCIPALS
+       do
+       fts crserverentry -server $base_addr.$n -principal $principal.$n \
+           -quota $n -owner $group $av_arg
+         dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E49 rc
+       done
+
+# echo ""; echo "Running fts lsserverentry"
+#    fts lsserverentry -all $av_arg
+#       if test $? -ne 0; then echo "- failed ($p: E51)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running fts edserverentry -changeaddr"
+   fts edserverentry -changeaddr $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E52 rc
+     
+   fts edserverentry $base_addr.31 -changeaddr $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E53 rc
+      
+   fts edserverentry $base_addr.32 -changeaddr $base_addr.132 \
+       $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E54 rc
+   
+   fts edserverentry $base_addr.33 -changeaddr $base_addr.133 \
+       -principal $principal.133 $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E55 rc
+      
+   fts edserverentry $base_addr.34 -changeaddr $base_addr.134 \
+       -principal  $principal.134 -quota 134 $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E56 rc
+      
+   fts edserverentry $base_addr.35 -changeaddr $base_addr.135 \
+       -principal $principal.135 -quota 135 -owner $group $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E57 rc
+      
+   fts edserverentry -cell $dns_cell_name -principal $principal.136 \
+       -changeaddr $base_addr.136 -quota 136 -server $base_addr.36 \
+       -owner $group $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E58 rc
+      
+   fts edserverentry -server fubar_server -changeaddr $base_addr.137 \
+       -principal $principal.137 -quota 137 -owner $group \
+       -cell $dns_cell_name $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E59 rc
+      
+   fts edserverentry -server $base_addr.38 -changeaddr $base_addr.138 \
+       -principal $principal.138 -quota fubar_quota -owner $group \
+       -cell $dns_cell_name $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E60 rc
+      
+   fts edserverentry -server $base_addr.39 -changeaddr $base_addr.139 \
+       -principal $principal.139 -quota 139 -owner $group -cell \
+       fubar_cell $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E60 rc
+     
+
+# delete some of the server entries
+echo ""; echo "Running fts delserverentry"
+   fts delserverentry -server $base_addr.23 $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E61 rc
+      
+   fts delserverentry -server $base_addr.24 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E62 rc
+     
+   fts delserverentry -server $base_addr.25 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E63 rc
+     
+   fts delserverentry -server $base_addr.26  $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E64 rc
+  
+
+echo ""; echo "Running fts edserverentry"
+   fts edserverentry $base_addr.23 -changeaddr $base_addr.123 \
+       -principal $principal.123 -quota 110 -owner $group $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E66 rc
+     
+   fts edserverentry $base_addr.24 -changeaddr $base_addr.124 \
+       -principal $principal.124 -quota 124 -owner $group $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E67 rc
+     
+   fts edserverentry $base_addr.25 -changeaddr $base_addr.125 \
+       -principal $principal.125 -quota 125 -owner $group $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E68 rc
+     
+   fts edserverentry $base_addr.26 -changeaddr $base_addr.126 \
+       -principal $principal.126 -quota 126 -owner $group $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E69 rc
+   
+
+echo ""; echo "Running fts crserverentry"
+# These principals already created in GROUP2_PRINCIPALS
+
+   for n in 23 24 25 26
+       do
+       fts crserverentry -server $base_addr.$n -principal $principal.$n \
+           -quota $n -owner $group $av_arg
+         dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E70 rc
+       done
+
+# echo ""; echo "Running fts lsserverentry"
+#    fts lsserverentry -all $av_arg
+#       if test $? -ne 0; then echo "- failed ($p: E71)"; rc=`expr $rc + 1`; fi
+
+echo ""; echo "Running fts lsserverentry"
+   fts lsserverentry
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E72 rc
+      
+   fts lsserverentry fubar_argument
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E73 rc
+      
+   fts lsserverentry $base_addr.10
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E74 rc
+      
+   fts lsserverentry $base_addr.30
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E75 rc
+      
+   fts lsserverentry -all
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E76 rc
+      
+   fts lsserverentry -server fubar_server
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E77 rc
+      
+
+# entries for $base_addr.220 and 221 are already created.
+echo ""; echo "Running fts crserverentry"
+   GROUP4_PRINCIPALS="" 
+   ntmp=141
+   while [ $ntmp -le 219 ]
+   do
+     GROUP4_PRINCIPALS="$ntmp $GROUP4_PRINCIPALS"
+     ntmp=`expr $ntmp + 1 `
+   done 
+   ntmp=222
+#
+# principals for $principal.238 and $principal.239 are already created
+#
+   while [ $ntmp -le 237 ]
+   do
+     GROUP4_PRINCIPALS="$ntmp $GROUP4_PRINCIPALS"
+     ntmp=`expr $ntmp + 1 `
+   done
+   GROUP4_PRINCIPALS="240 $GROUP4_PRINCIPALS"
+   CreateBatchPrincipals $GROUP4_PRINCIPALS 
+   n=141
+   while [ $n -le 219 ]
+       do
+       fts crserverentry -server $base_addr.$n -principal $principal.$n $av_arg
+           if test $? -ne 0
+              then echo "- [$base_addr.$n] failed ($p: E78)"; rc=`expr $rc + 1`
+              fi
+       n=`expr $n + 1`
+       done
+
+   n=222
+   while [ $n -le 240 ]
+       do
+       fts crserverentry -server $base_addr.$n -principal $principal.$n $av_arg
+           if test $? -ne 0
+              then echo "- [$base_addr.$n] failed ($p: E78)"; rc=`expr $rc + 1`
+              fi
+       n=`expr $n + 1`
+       done
+
+# now we delete some entries in the different siteblocks
+echo ""; echo "Running fts delserverentry"
+   fts delserverentry -server $base_addr.150 $av_arg
+      dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E79 rc
+      
+   fts delserverentry -server $base_addr.151 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E81 rc
+    
+   fts delserverentry -server $base_addr.238 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E82 rc
+     
+   fts delserverentry -server $base_addr.239 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E83 rc
+  
+
+# try edserverentry on the deleted blocks
+echo ""; echo "Running fts edserverentry"
+   fts edserverentry $base_addr.150 -changeaddr $base_addr.150 \
+       -principal $principal.150 -quota 150 -owner $group $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E84 rc
+     
+   fts edserverentry $base_addr.151 -changeaddr $base_addr.151 \
+       -principal $principal.151 -quota 151 -owner $group $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E85 rc
+     
+   fts edserverentry $base_addr.238 -changeaddr $base_addr.238 \
+       -principal $principal.238 -quota 238 -owner $group $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E86 rc
+     
+   fts edserverentry $base_addr.239 -changeaddr $base_addr.239 \
+       -principal $principal.239 -quota 239 -owner $group $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E87 rc
+    
+
+# lsserverentry to verify the order of server entries
+echo ""; echo "Running fts lsserverentry"
+   fts lsserverentry $base_addr.150 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E88 rc
+    
+   fts lsserverentry $base_addr.151 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E89 rc
+     
+   fts lsserverentry $base_addr.238 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E90 rc
+     
+   fts lsserverentry $base_addr.239 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E91 rc
+     
+   fts lsserverentry $base_addr.240 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E93 rc
+     
+   fts lsserverentry -all $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E94 rc
+   
+
+###############################################################################
+# The following matrix represents the state of the server entries
+# Abbreviations used are 
+# b - server address represented by $base_addr.$n
+# o - server address represented by $other_addr.$n
+# p - server principal represented by $principal.$n
+# ea - server address added by fts edserventry
+# er - Column contains removed server addresses by fts edserventry -rmaddr
+# ec - Column contains changed server address renamed by fts edserventry -changeaddr
+# da - Column contains server addresses deleted by fts delserverentry
+# recreate -  represents recreation of serverentries [by fts crserverentry ] that 
+#             were deleted earlier by fts delserverentry.
+#################################################################################
+#b    p   ea  		  er	ec 	cp	da	recreate
+#################################################################################
+#b2   2						
+#b3   3						
+#b4   4
+#b5   5
+#b6   6 
+#b10  10  o10  
+#b11  11  o11		  b11
+#b12  12  o12		  b12
+#b13  13  o13		  b13
+#b14  14  o14		  b14 
+#b15  15  o15		  b15
+#b16  16  o16		  b16
+#b17  17  o17 
+#b18  18  o18  
+#b19  19  o19
+#b20  20  b120,b220,b221
+#b21  21
+#b22  22  b122
+#b23  23  b123					b23	b23, p23
+#b24  24  b124					b24	b24, p24
+#b25  25  b125					b25	b25, p25
+#b26  26  b126					b26	b26, p26
+#b27  27  
+#b28  28
+#b29  29
+#b31  31				
+#b32  32				b132
+#b33  33    			b133	p133 
+#b34  34  			b134	p134
+#b35  35				b135	p135
+#b36  36				b136	p136
+#b37  37				
+#b38  38
+#b39  39
+#
+#b141-b240, p141-p240: 
+#   da b150, da b151, da b238, da b239
+############################################################################
+
+#
+# To delete serverentries so that fldb is left in state it was when this test
+# started
+#
+# TODO: Test this and add finishing touches.
+#
+
+#At line 70
+   fts delserverentry $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E101 rc
+     
+   fts delserverentry fubar_argument $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E102 rc
+     
+   fts delserverentry $base_addr.1 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E103 rc
+     
+   fts delserverentry -server $base_addr.2 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E104 rc
+     
+   fts delserverentry -server $base_addr.3 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E105 rc
+     
+   fts delserverentry -server $base_addr.4 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E106 rc
+     
+   fts delserverentry -server $base_addr.5 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E107 rc
+     
+   fts delserverentry   -server $base_addr.6 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E108 rc
+     
+   fts delserverentry -server fubar_address $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E109 rc
+       
+   fts delserverentry -server $base_addr.8  $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E110 rc
+   
+   fts delserverentry -server $base_addr.9 $av_arg
+     dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E111 rc
+ 
+
+#At line 98
+  for n in 10 17 18 19
+       do
+
+       fts delserverentry -server $base_addr.$n  $av_arg
+           if test $? -ne 0
+              then echo "- failed [ $base_addr.$n ]($p: E113)"; rc=`expr $rc + 1`
+              fi
+       done
+ # change_addr ones  -JESS should be deleted already ****
+  for n in 11 12 13 14 15 16 
+       do
+       fts delserverentry -server $other_addr.$n  $av_arg
+        dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E112 rc
+       done
+
+# At line 165
+   echo ""; echo "Running fts delserverentry"
+   for n in 20 21 22 23 24 25 26 27 28 29
+       do
+       fts delserverentry -server $base_addr.$n $av_arg
+        dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E132 rc
+       done
+
+#At line 228
+echo ""; echo "Running fts delserverentry"
+   for n in 31 37 38 39
+       do
+       fts delserverentry -server $base_addr.$n  $av_arg
+        dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E149 rc
+       done
+ # change_addr ones
+   for n in 132 133 134 135 136 
+       do
+       fts delserverentry -server $base_addr.$n  $av_arg
+           if test $? -ne 0
+              then echo "- failed  [ $base_addr.$n ] ($p: E149)"; rc=`expr $rc + 1`
+              fi
+       done
+
+#At line 329
+# base_addrs 150, 151, 220, 221, 238, 239 already deleted
+echo ""; echo "Running fts delserverentry"
+   n=141
+   while [ $n -le 149 ]
+       do
+       fts delserverentry -server $base_addr.$n   $av_arg
+           if test $? -ne 0
+              then echo "- [$base_addr.$n] failed ($p: E178)"; rc=`expr $rc + 1`
+              fi
+       n=`expr $n + 1`
+       done
+
+   n=152
+   while [ $n -le 219 ]
+       do
+       fts delserverentry -server $base_addr.$n   $av_arg
+           if test $? -ne 0
+              then echo "- [$base_addr.$n] failed ($p: E178)"; rc=`expr $rc + 1`
+              fi
+       n=`expr $n + 1`
+       done
+   
+   n=222
+   while [ $n -le 237 ]
+       do
+       fts delserverentry -server $base_addr.$n   $av_arg
+           if test $? -ne 0
+              then echo "- [$base_addr.$n] failed ($p: E178)"; rc=`expr $rc + 1`
+              fi
+       n=`expr $n + 1`
+       done
+
+    fts delserverentry -server $base_addr.240   $av_arg
+        if test $? -ne 0
+           then echo "- [$base_addr.240] failed ($p: E178)"; rc=`expr $rc + 1`
+           fi
+
+    echo "Deleteing dummy Principals from registry..."
+    DeleteBatchPrincipals $INITIAL_PRINCIPALS $GROUP1_PRINCIPALS $GROUP2_PRINCIPALS
+    DeleteBatchPrincipals $GROUP3_PRINCIPALS  $GROUP4_PRINCIPALS
+
+###############################################################################
+
+sync; sync; sleep 2
+
+echo ""; echo "Done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################
+

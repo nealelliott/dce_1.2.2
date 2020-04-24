@@ -1,0 +1,183 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+#
+# Copyright (c) 1991 by
+#    Hewlett-Packard Company, Palo Alto, Ca.
+#
+# Permission to use, copy, modify, and distribute this
+# software and its documentation for any purpose and without
+# fee is hereby granted, provided that the above copyright
+# notice appear in all copies and that both that copyright
+# notice and this permission notice appear in supporting
+# documentation, and that the name of Hewlett-Packard Company not
+# be used in advertising or publicity pertaining to distribution
+# of the software without specific, written prior permission.
+# Hewlett-Packard Company makes no representations about the
+# suitability of this software for any purpose.  It is provided
+# "as is" without express or implied warranty.
+#
+#
+# DCE API Test
+#
+# HISTORY
+# $Log: server.tsh,v $
+# Revision 1.1.4.2  1996/03/11  02:25:40  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  19:58:52  marty]
+#
+# Revision 1.1.4.1  1995/12/11  20:00:57  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  19:42:00  root]
+# 
+# Revision 1.1.2.3  1993/02/24  22:54:20  weisman
+# 	Escaped "=" charactes.
+# 	[1993/02/24  22:54:03  weisman]
+# 
+# Revision 1.1.2.2  1993/01/11  22:08:08  bbelch
+# 	Embedding copyright notice
+# 	[1993/01/06  18:01:27  bbelch]
+# 
+# Revision 1.1  1992/01/19  20:06:21  devrcs
+# 	Initial revision
+# 
+# Revision 1.1  91/09/12  11:59:29  marco
+# 	Initial revision
+# 
+# $EndLog$
+#
+#Import the literal definition files
+#
+include server.tshrc
+include client.tshrc
+#
+# stop on error if the server cannot start
+#
+onerror stop 
+echo
+echo Beginning of server test
+echo
+#
+# Start the server up
+#
+#
+# use default handling in the event of an error from the tests
+#
+onerror default
+#
+#
+test tstsrvr \
+-i -c $rpc_s_no_bindings $SERVER_INQ_BINDINGS
+#
+#
+test tstsrvr \
+-c $rpc_s_no_mepv $SERVER_REGISTER_IF $REGISTER_DEFAULT_EPV
+#
+test tstsrvr \
+$SERVER_REGISTER_IF $REGISTER_GENERATED_EPV
+#
+test tstsrvr \
+$SERVER_USE_ALL_PROT
+#
+test tstsrvr \
+$SERVER_USE_ALL_PROT_IF $PROTSEQ_TCP_IP $TST_SRVR_EP1 $PROTSEQ_UDP_IP $TST_SRVR_EP2
+#
+test tstsrvr \
+$SERVER_USE_PROT $PROTSEQ_TCP_IP
+#
+test tstsrvr \
+$SERVER_USE_PROT_IF $PROTSEQ_TCP_IP
+#
+test tstsrvr \
+$SERVER_USE_PROT_EP $PROTSEQ_UDP_IP $TST_SRVR_EP1
+#=========================================
+#
+# Remove the test until we can get the asynchronous output and orphans 
+# sorted out. But don't make the echo a test too.
+##test echo "skipping comtest_client_xfr -w 4 test"
+#test tstdriver \
+#$CLIENT_XFR -w 4
+#
+#
+#test tstsrvr \
+#$SERVER_USE_ALL_PROT $SERVER_RPC_WAIT
+#
+#test tstsrvr \
+#$SERVER_USE_ALL_PROT_IF $SERVER_RPC_WAIT $PROTSEQ_TCP_IP $TST_SRVR_EP1 $PROTSEQ_UDP_IP $TST_SRVR_EP2
+#
+#test tstsrvr \
+#$SERVER_USE_PROT $SERVER_RPC_WAIT $PROTSEQ_TCP_IP
+#
+#test tstsrvr \
+#$SERVER_USE_PROT_IF $SERVER_RPC_WAIT $PROTSEQ_TCP_IP
+#
+#test tstsrvr \
+#$SERVER_USE_PROT_EP $SERVER_RPC_WAIT $PROTSEQ_UDP_IP $TST_SRVR_EP1
+#
+test tstdriver \
+comtest_bind_str_binding_parse NIL ncacn_ip_tcp rpcix endpoint\=2001 foo\=xyz
+#
+test tstdriver \
+comtest_bind_str_binding_parse NIL ncacn_ip_tcp rpcix endpoint\=2001 a\=b,foo\=xyz,bye\=jkl,home\=there
+#
+test tstdriver \
+comtest_bind_str_binding_parse ncacn_ip_tcp:rpcix[endpoint\=2001,foo\=xyz] NIL NIL NIL NIL
+#
+test tstdriver \
+comtest_bind_str_binding_parse ncacn_ip_tcp:rpcix[foo\=xyz,endpoint\=2001] NIL NIL NIL NIL
+#
+test tstdriver -c $rpc_s_invalid_string_binding comtest_bind_str_binding_parse \
+ncacn_ip_tcp:rpcix[endpoint\=2001,foo\=xyz NIL NIL NIL NIL
+#
+test tstdriver -c $rpc_s_invalid_string_binding comtest_bind_str_binding_parse \
+ncacn_ip_tcp:rpcix[foo\=xyz,endpoint\=2001,happy\=always NIL NIL NIL NIL
+#
+test tstdriver -c $rpc_s_invalid_string_binding comtest_bind_str_binding_parse \
+ncacn_ip_tcp:rpcix[foo\=xyz,endpoint\=2001 NIL NIL NIL NIL
+#
+test tstdriver comtest_bind_str_binding_parse \
+ncacn_ip_tcp:rpcix[a\=b,endpoint\=2001,foo\=xyz,bye\=jkl,home\=there] NIL NIL NIL NIL
+# 
+# Comment out dnet protocol to use outside of DEC
+##test echo DECnet tests for endpoints
+#test tstsrvr comtest_server_use_protseq_ep ncacn_dnet_nsp  0
+#test tstsrvr comtest_server_use_protseq_ep ncacn_dnet_nsp  1
+#test tstsrvr comtest_server_use_protseq_ep ncacn_dnet_nsp  255
+#test tstsrvr comtest_server_use_protseq_ep ncacn_dnet_nsp  256
+#test tstsrvr comtest_server_use_protseq_ep ncacn_dnet_nsp  16384
+#test tstsrvr comtest_server_use_protseq_ep ncacn_dnet_nsp  127
+#test tstsrvr comtest_server_use_protseq_ep ncacn_dnet_nsp  128
+#test tstsrvr \
+#-c $rpc_s_cant_bind_socket comtest_server_use_protseq_ep ncacn_dnet_nsp  #0
+##
+#test tstsrvr \
+#-c $rpc_s_cant_bind_socket comtest_server_use_protseq_ep ncacn_dnet_nsp  #1
+##
+#test tstsrvr comtest_server_use_protseq_ep ncacn_dnet_nsp  #255
+#test tstsrvr \
+#-c $rpc_s_cant_bind_socket comtest_server_use_protseq_ep ncacn_dnet_nsp  #256
+##
+#test tstsrvr \
+#-c $rpc_s_cant_bind_socket comtest_server_use_protseq_ep ncacn_dnet_nsp  #127
+##
+#test tstsrvr comtest_server_use_protseq_ep ncacn_dnet_nsp  #128
+##
+##this next test may be irrelevant unless we want to have 
+##a test for a space char as a valid DECnet object name.
+##test tstsrvr comtest_server_use_protseq_ep ncacn_dnet_nsp rpc__\ \]
+#test tstsrvr comtest_server_use_protseq_ep ncacn_dnet_nsp rpc__\]
+#test tstsrvr -c $rpc_s_string_too_long comtest_server_use_protseq_ep \
+#ncacn_dnet_nsp rpc_root\:\[servers\]broughaha
+##
+#test tstsrvr comtest_server_use_protseq_ep ncacn_dnet_nsp rpc\:\[\]x.com
+#test tstsrvr comtest_server_use_protseq_ep ncacn_dnet_nsp rpc:\[\]x.com
+
+echo 
+subtotal clear
+summary 
+echo
+echo End of server test
+echo

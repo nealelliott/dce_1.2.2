@@ -1,0 +1,477 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: butc.idl,v $
+ * Revision 1.1.41.1  1996/10/02  17:05:24  damon
+ * 	Newest DFS from Transarc
+ * 	[1996/10/01  18:05:16  damon]
+ *
+ * Revision 1.1.35.2  1994/06/09  13:52:46  annie
+ * 	fixed copyright in src/file
+ * 	[1994/06/08  21:26:40  annie]
+ * 
+ * Revision 1.1.35.1  1994/02/04  20:06:46  devsrc
+ * 	Merged from 1.0.3a to 1.1
+ * 	[1994/02/04  15:06:52  devsrc]
+ * 
+ * Revision 1.1.33.1  1993/12/07  17:13:22  jaffe
+ * 	1.0.3a update from Transarc
+ * 	[1993/12/03  12:59:50  jaffe]
+ * 
+ * Revision 1.1.2.5  1993/01/18  20:47:57  cjd
+ * 	embedded copyright notice
+ * 	[1993/01/18  17:33:13  cjd]
+ * 
+ * Revision 1.1.2.4  1993/01/13  15:53:56  shl
+ * 	Transarc delta: cfe-ot6054-genl-and-i18n-spares 1.1
+ * 	  Selected comments:
+ * 	    Add spares to several RPC structures, with two goals:
+ * 	    - general future usage
+ * 	    - allow for at least some internationalization designs
+ * 	    The only tricky part of this work is that the on-the-wire representation for
+ * 	    directory contents is expanded.
+ * 	Transarc delta: vijay-ot6381-correct-handling-of-device-queue-lock 1.4
+ * 	  Selected comments:
+ * 
+ * 	    The aim of this delta is to get bak restore to succeed. The problems in restore
+ * 	    were some spurious thread exceptions and assertions that made bak dump core.
+ * 	    Upon investigation it turned out that there were some locking problems in
+ * 	    backup and butc. The delta cleans up locking in backup and butc.
+ * 	    The delta is not ready for export. Much more needs to be done to get all the
+ * 	    locking issues right. This is just a checkpoint.
+ * 	    Second set of changes to get locking issues in order. This time the changes
+ * 	    are mostly in bakserver. The changes introduced are
+ * 	    1. Establish a global lock so that two RPCs do not interfere with each other.
+ * 	    This was introduced because there are some global data structures in
+ * 	    backup that might get affected. These global structures now have
+ * 	    individual locks to serialize changes. The global lock in temporary, and
+ * 	    will go away once we have serialized all accesses to all global data
+ * 	    structures.
+ * 	    2. Disable cancels in bakserver RPCs. Care is taken to not disable cancels in
+ * 	    operations that can be cancelled. There is some more work that needs to be
+ * 	    done in this area.
+ * 	    3. Accesses to the database are controlled by memoryDB.lock. The accesses are
+ * 	    by means of dbread and dbwrite. The hash tables too are protected by this
+ * 	    mechanism.
+ * 	    4. Changes to the backup database dump code to simplify the dump operation. In
+ * 	    particular, the Unix pipe mechanism is used to synchronize reader and
+ * 	    writer without need for condition variables.
+ * 	    5. Get rid of any pthread_mutex and pthread_cond operations. Use afslk and
+ * 	    afsos routines instead.
+ * 	    6. Continue the work described by the previous revision of the delta in bak
+ * 	    and butc. This should be it for changes in bak and butc.
+ * 	    Fix compilation problems on the RIOS.
+ * 	    This is hopefully the final revision of this delta. The fixes here are
+ * 	    1. Changes to the bakserver and butc RPC interfaces.
+ * 	    The RPCs that handle variable size arrays now use conformant arrays.
+ * 	    This avoids allocating lots of memory on the client thread stack which
+ * 	    was the cause of the exceptions in restoreft. The server allocates
+ * 	    memory which is freed by the server stub on the way out. The client thread
+ * 	    frees the memory allocated by the client stub.
+ * 	    2. get database dump and restore to handle status correctly.
+ * 	    3. Get the locking hierarchy right in bakserver, bak and butc.
+ * 	    4. Other minor nits.
+ * 	    There is still a problem with scantape -dbadd that has to be addressed. With
+ * 	    this delta, all backup commands should work when used in a straightforward
+ * 	    manner. Some error cases are still not handled properly though. Subsequent
+ * 	    deltas would fix those.
+ * 	Transarc delta: vijay-ot6604-butc-add-spares 1.1
+ * 	  Selected comments:
+ * 
+ * 	    Add spares to butc structures wherever necessary.
+ * 	[1993/01/12  18:39:46  shl]
+ * 
+ * Revision 1.1.2.3  1992/11/24  15:42:03  bolinger
+ * 	Change include file install directory from .../afs to .../dcedfs.
+ * 	[1992/11/22  16:10:10  bolinger]
+ * 
+ * Revision 1.1.2.2  1992/08/31  18:37:26  jaffe
+ * 	Transarc delta: cfe-ot4029-portable-rpc-data-types 1.2
+ * 	  Selected comments:
+ * 	    If ``long'' could possibly mean ``64 bits'' any time soon, we need to keep
+ * 	    our RPC interfaces from breaking.
+ * 	    More of the same.  Forgot a couple of .idl files, and needed to change
+ * 	    a couple of procedure signatures to match.
+ * 	    forgot this one too
+ * 	[1992/08/28  20:59:01  jaffe]
+ * 
+ * Revision 1.1  1992/01/19  02:57:17  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+
+[
+uuid(1d193c08-000b-11ca-ba1d-02608c2ea96e),
+version(4.0),
+/*provider_version(1)*/
+pointer_default(ptr)	/* All pointers are by default Full pointers */
+] interface BUTC
+{
+
+import "dcedfs/common_data.idl";
+
+/* 
+ * Constant Definitions for BUTC
+ */
+
+const long TC_DEFAULT_STACK_SIZE = (150*1024); /* stack size for tc threads */
+const long TC_MAXGENNAMELEN = 512;	/* length of generic name */
+const long TC_MAXDUMPPATH   = 256;     	/* dump path names*/
+const long TC_MAXNAMELEN    = 128;	/* name length */
+const long TC_MAXFORMATLEN  = 100;	/*size of the format statement */
+const long TC_MAXHOSTLEN    = 128;	/*for server/machine names */
+const long TC_MAXTAPELEN    = 256;	/*max tape name allowed */
+const long TC_STAT_DONE     = 1;	/* all done */
+const long TC_STAT_OPRWAIT  = 2;	/* waiting for user interaction */
+const long TC_STAT_DUMP     = 4;	/* true if dump, false if restore */
+const long TC_STAT_ABORTED  = 8;	/* the operation was aborted */
+const long TC_STAT_ERROR    = 16;	/* error ocuured in the operation */
+const long TSK_STAT_FIRST   = 0x1;	/* get id of first task */
+const long TSK_STAT_END     = 0x2;	/* no more tasks */
+const long TSK_STAT_NOTFOUND= 0x4;	/* couldn't find task id requested */
+
+/*
+ * Values for different butc operations
+ */
+const long TCOP_NONE		= 0;
+const long TCOP_READLABEL	= 1;
+const long TCOP_LABELTAPE	= 2;
+const long TCOP_DUMP		= 3;
+const long TCOP_RESTORE		= 4;
+const long TCOP_SCANTAPE	= 5;
+const long TCOP_SAVEDB		= 6;
+const long TCOP_RESTOREDB	= 7;
+const long TCOP_STATUS		= 8;
+const long TCOP_SPARE		= 9;
+
+/* 
+ * Backup Tape Controller Interface Data Structures
+ */
+
+typedef unsigned32 ButcDate;
+
+/*
+ * A generic string type for butc
+ */
+typedef [string] byte butcNameString_t[TC_MAXGENNAMELEN];
+
+/* This specifies the interface to the tape coordinator. It describes the 
+ * information that should be dumped to dump a single volume.
+ */
+typedef struct tc_dumpDesc 
+{
+    afsHyper vid;		/* volume to dump */
+    [string] byte name[TC_MAXNAMELEN];/* name of volume whose clone is to 
+					   be dumped*/
+    signed32 partition;		/* partition at which to find the volume */
+    ButcDate date;		/* date from which to do the dump */
+    ButcDate cloneDate;		/* clone date of the volume */
+    afsNetAddr hostAddr;	/* file server for this volume */
+    unsigned32 spare1;
+    unsigned32 spare2;
+    unsigned32 spare3;
+    unsigned32 spare4;
+} tc_dumpDesc;
+
+/*define how to restore a volume */
+typedef struct tc_restoreDesc {
+	signed32 frag;			/* fragment number, 1..n */
+	[string] byte tapeName[TC_MAXTAPELEN];/*name of tape frag is on*/
+	signed32 position;  		/*start position of frag on tape */
+	afsHyper origVid;		/* original volume id */
+	afsHyper vid;			/* 0 means allocate new volid */
+	signed32 partition;		/* where to restore the volume */
+	signed32 flags;			/* flags */
+	afsNetAddr hostAddr;		/* file server to restore volume to */
+	unsigned32 realDumpId;		/* dump id associated with this tape */
+	unsigned32 spare2;
+	unsigned32 spare3;
+	unsigned32 spare4;
+	[string] byte oldName[TC_MAXNAMELEN];/* volume whose clone is to 
+						  be dumped */
+	[string] byte newName[TC_MAXNAMELEN];	/* new name suffix */
+} tc_restoreDesc;
+
+/*describes the current status of a dump */
+typedef struct tc_dumpStat {
+	signed32 dumpID;		/* dump id we're returning */
+	signed32 bytesDumped;		/* bytes dumped so far */
+	afsHyper volumeBeingDumped;	/* guess ?*/
+	signed32 numVolErrs;		/* # of volumes that had errors */
+	signed32 flags;			/* true if the dump is done */
+	unsigned32 spare1;
+	unsigned32 spare2;
+	unsigned32 spare3;
+	unsigned32 spare4;
+} tc_dumpStat;
+
+/*identifier for a tape */
+typedef struct tc_tapeLabel {
+	unsigned32 size;			/* size of tape in bytes */
+	unsigned32 size_ext;
+	unsigned32 spare1;
+	unsigned32 spare2;
+	unsigned32 spare3;
+	unsigned32 spare4;	
+	unsigned32 nameLen;			/* length of tape name */
+	[length_is(nameLen)] byte name[TC_MAXTAPELEN];
+} tc_tapeLabel;
+
+/* restore flags */
+const long TC_RESTORE_CREATE = 1;	/* create new volume; fail if there */
+const long TC_RESTORE_INCR = 2;		/* incremental, must already exist */
+
+typedef struct tc_tapeSet { 		/* describes a tape sequence */
+    signed32  id;			/* unique id of tapeSet, 
+					   assigned by budb */
+    [string] byte  tapeServer[TC_MAXHOSTLEN];	/* name of server where 
+						   this tape is */
+    [string] byte  format[TC_MAXFORMATLEN]; 	/* using printf to make 
+						   tape name */
+    signed32   maxTapes;		/* maximum number of tapes in seq. */
+    signed32  a; signed32 b;		/* linear transforms for tape */
+    signed32  expDate;			/* expiration date */
+    signed32  expType;			/* absolute or relative expiration */
+    unsigned32 spare1;
+    unsigned32 spare2;
+    unsigned32 spare3;
+    unsigned32 spare4;
+} tc_tapeSet;
+
+/* identifies the tape coordinator interface */
+typedef struct tc_tcInfo
+{
+    signed32	tcVersion;		/* for the interface & this struct */
+    unsigned32 spare1;
+    unsigned32 spare2;
+    unsigned32 spare3;
+    unsigned32 spare4;
+} tc_tcInfo;
+
+typedef struct tc_restoreArray
+{
+    unsigned32 tc_restoreArray_len; 	/* count of restore descriptors */
+    [size_is(tc_restoreArray_len)] tc_restoreDesc tc_restoreArray_val[*];
+} tc_restoreArray;
+
+typedef struct tc_dumpArray
+{
+    unsigned32 tc_dumpArray_len;	/* count of dump descriptors */
+    [size_is(tc_dumpArray_len)] tc_dumpDesc tc_dumpArray_val[*];
+} tc_dumpArray;
+
+/* interface structure */
+typedef struct tc_dumpInterface
+{
+    [string] byte dumpPath[TC_MAXDUMPPATH];		/* full dump path */
+    [string] byte volumeSetName[TC_MAXNAMELEN];	/* volume set name */
+    [string] byte dumpName[TC_MAXNAMELEN];		/* volset.dump */
+    tc_tapeSet tapeSet;
+    signed32 parentDumpId;
+    signed32 dumpLevel;
+    unsigned32 spare1;
+    unsigned32 spare2;
+    unsigned32 spare3;
+    unsigned32 spare4;
+} tc_dumpInterface;
+
+/* The status structure returns information about the task running in butc.
+   It contains a union that returns the info about the particular operation
+   currently running in butc.
+*/  
+typedef union switch(unsigned32 opType) u {
+  case TCOP_NONE: unsigned32 none;
+  case TCOP_DUMP:
+  case TCOP_RESTORE: 
+    struct {
+      unsigned32    nKBytes;                 	/* bytes xferred */
+      [string] byte volumeName[TC_MAXNAMELEN];	/* current volume (if any) */
+      signed32	  volsFailed;			/* # operation failures */
+      unsigned32    spare1;
+    } vol;
+  case TCOP_LABELTAPE:
+  case TCOP_READLABEL:
+    struct {
+      tc_tapeLabel  tapeLabel;
+      unsigned32    spare1;
+    } label;
+  case TCOP_SCANTAPE:
+    unsigned32    spare1;
+  case TCOP_STATUS:
+    unsigned32    spare2;
+  case TCOP_SAVEDB:
+    unsigned32    spare3;
+  case TCOP_RESTOREDB:
+    unsigned32    spare4;
+  case TCOP_SPARE:
+    unsigned32    spare5;  
+} tc_statusInfoSwitch;
+
+typedef struct tciStatusS
+{
+    /* general info */
+    [string] byte taskName[TC_MAXNAMELEN];	/* task name */
+    unsigned32    flags;                   	/* as above */
+    signed32      lastPolled;                  	/* last successful poll */
+
+    /* op specific info */
+    tc_statusInfoSwitch info;
+    unsigned32 taskId;
+
+
+    /* nominal spares */
+    unsigned32 spare2;
+    unsigned32 spare3;
+    unsigned32 spare4;
+} tciStatusS;
+
+/*
+ * Procedure Definitions
+ */
+
+/* Start a dump, given a dump set name, a tape set name and the volumes to
+ * dump.
+ */
+/*
+ * provider_version(1)
+ */
+error_status_t BUTC_PerformDump
+(     [in] 	handle_t      		h,      
+      [ref, in] tc_dumpInterface 	*tcdiPtr,
+      [ref, in]      tc_dumpArray 	*dumps, 
+      [ref, out]     signed32 		*dumpID
+);
+
+/* Start a restore, given a dump set name, a tape set name and the volumes to
+ * dump. 
+ */
+/*
+ * provider_version(1)
+ */
+error_status_t BUTC_PerformRestore
+(     [in]   	handle_t        	h,    	
+      [in]   	butcNameString_t 	*dumpSetName, 	
+      [ref, in] tc_restoreArray 	*restores, 
+      [ref, out] signed32 		*dumpID
+);
+
+/* abort a dump */
+
+/*
+ * provider_version(1)
+ */
+error_status_t BUTC_AbortDump
+(     [in]  	 handle_t       	h,
+      [in]       signed32 		dumpID
+);
+
+/*
+ * provider_version(1)
+ */
+error_status_t BUTC_LabelTape
+(     [in] 	handle_t        	h,
+      [ref, in]      tc_tapeLabel 	*label,
+      [ref, out]     unsigned32       	*taskId
+);
+
+/*
+ * provider_version(1)
+ */
+error_status_t BUTC_ReadLabel
+(     [in]  	handle_t        	h,
+      [ref, out]     unsigned32 	*taskId /* unused */
+);
+
+/*
+ * provider_version(1)
+ */
+error_status_t BUTC_ScanDumps
+(     [in]    	handle_t        	h,
+      [in]      signed32 		addDbFlag,
+      [ref, out]     unsigned32 	*taskId
+);
+
+/* For returning information about the butc interface.
+ * Currently this is just the version number
+ */
+
+/*
+ * provider_version(1)
+ */
+error_status_t BUTC_TCInfo  
+(     [in]    	handle_t        	h,
+      [ref, out]     tc_tcInfo 		*tciptr
+);
+
+/* for database dump/restores */
+
+/*
+ * provider_version(1)
+ */
+error_status_t BUTC_SaveDb
+(     [in]    	handle_t        	h,
+      [ref, out]     unsigned32 	*taskId 
+);
+
+/*
+ * provider_version(1)
+ */
+error_status_t BUTC_RestoreDb
+(     [in]    	handle_t        	h,
+      [ref, out]     unsigned32 	*taskId 
+);
+
+/* new status management */
+/*
+ * provider_version(1)
+ */
+error_status_t BUTC_EndStatus
+(     [in]    	handle_t        	h,
+      [in]      unsigned32 		taskId 
+);
+
+/*
+ * provider_version(1)
+ */
+error_status_t BUTC_GetStatus
+(     [in]    	handle_t        	h,
+      [in]      unsigned32 		taskId,
+      [ref, out]     tciStatusS 	*statusPtr
+);
+
+/*
+ * provider_version(1)
+ */
+error_status_t BUTC_RequestAbort
+(     [in]    	handle_t        	h,
+      [in]      unsigned32 		taskId 
+);
+
+/*
+ * provider_version(1)
+ */
+error_status_t BUTC_ScanStatus
+(     [in]    	handle_t        	h,
+      [ref, in, out] unsigned32 	*taskId,
+      [ref, out]     tciStatusS 	*statusPtr,
+      [ref, in, out] unsigned32 	*flags
+);
+
+/*
+ * provider_version(1)
+ */
+error_status_t BUTC_GetServerInterfaces
+( [in] handle_t h,
+  [ref, in, out] dfs_interfaceList *serverInterfacesP
+);
+
+}

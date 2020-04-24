@@ -1,0 +1,113 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+# Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS.
+# The script runs some fts listing commands, and is really only used for
+# informational output in the fts/runtests script.
+
+###############################################################################
+
+# Usage:                test2
+
+# Typically run via:    test2 >& test2.out
+# or via the fts/runtests script.
+
+###############################################################################
+
+# Test environment:
+# This test requires DFS to be running, and DFS server $SERVER_1 and $SERVER_2
+# to be up (not necessarily even exporting any aggregates, tho).
+# $SERVER_1 and $SERVER_2 can be the same machine.
+
+# Privilege required:
+# FIX - pdh.
+
+# Highest error number is: 9.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname | cut -f1 -d"." 2>/dev/null`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${SERVER_1=$hn}
+: ${SERVER_2=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name=/.../$CELL_NAME}
+: ${dns_server_prefix=/.:/hosts/}
+
+cav_arg="$CELL_ARG $AUTH_ARG $VERB_ARG"
+
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+###############################################################################
+
+fts statftserver $dns_server_prefix$SERVER_1 $cav_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E1 rc
+    
+fts lsaggr $dns_server_prefix$SERVER_1 $cav_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E2 rc
+    
+fts aggrinfo $dns_server_prefix$SERVER_1 $cav_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E3 rc
+    
+fts lsheader $dns_server_prefix$SERVER_1 -long $cav_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E4 rc
+    
+
+fts lsfldb $cav_arg
+   dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E5 rc
+    
+
+if test $SERVER_1 != $SERVER_2
+   then
+
+   fts statftserver $dns_server_prefix$SERVER_2 $cav_arg
+       dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E6 rc
+       
+   fts lsaggr $dns_server_prefix$SERVER_2 $cav_arg
+       dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E7 rc
+       
+   fts aggrinfo $dns_server_prefix$SERVER_2 $cav_arg
+       dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E8 rc
+       
+   fts lsheader $dns_server_prefix$SERVER_2 -long $cav_arg
+       dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E9 rc
+      
+
+   fi
+
+###############################################################################
+
+sync; sync; sleep 2
+
+echo ""; echo "Done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################

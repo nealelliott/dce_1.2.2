@@ -1,0 +1,188 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rs_replist.idl,v $
+ * Revision 1.1.6.3  1996/03/09  23:28:45  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:44:10  marty]
+ *
+ * Revision 1.1.6.2  1995/12/08  17:35:50  root
+ * 	Submit OSF/DCE 1.2.1
+ * 
+ * 	HP revision /main/HPDCE02/1  1995/05/15  21:03 UTC  greg
+ * 	Create SEC_migrate_merge mainline from SEC_migrate and HPDCE02.
+ * 	[1995/04/22  13:35 UTC  greg  /main/SEC_migrate_merge/1]
+ * 
+ * 	Bump major version number because we
+ * 	changed the semantics of rs_replist_read_full().
+ * 	[1995/01/30  01:54 UTC  greg  /main/SEC_migrate/1]
+ * 
+ * Revision 1.1.2.4  1993/01/29  19:46:07  burati
+ * 	change st to status
+ * 	[1993/01/14  23:17:40  burati]
+ * 
+ * Revision 1.1.2.3  1992/12/29  13:52:59  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:49:13  zeliff]
+ * 
+ * Revision 1.1.2.2  1992/08/31  18:21:44  sekhar
+ * 	First replication code drop.
+ * 	[1992/08/31  17:49:35  sekhar]
+ * 
+ * $EndLog$
+ */
+
+/*
+ * Copyright (c) Hewlett-Packard Company 1992, 1993
+ * Unpublished work. All Rights Reserved.
+ *
+ *  NAME:
+ *
+ *      rs_replist.idl
+ *
+ *  FACILITY:
+ *
+ *      Security 
+ *
+ *  ABSTRACT:
+ *
+ *      Registry server replica list management interface
+ */
+
+/*
+ * Bump major version number to 2 so that we
+ * can support old clients of rs_read_replist_full().
+ * Unfortunately, existing clients (sec_admin, dcecp)
+ * used the value of the returned prop_info->prop_type
+ * as an index into a static array of printstrings 
+ * without bothering to check if the prop_type is
+ * within bounds of the array.  Which means we would
+ * cause them to crash if we returned the new
+ * rs_c_replica_prop_bad_sw_rev prop type.
+ *
+ * The *right* thing to do is to define a new operation
+ * that returns an array of printstrings for the supported
+ * prop_types to the client, freeing the client from the need to
+ * make any assumptions about the prop_type at all.
+ */
+[
+ uuid(850446B0-E95B-11CA-AD90-08001E0145B1),
+ version(2.0),
+ pointer_default(ptr)
+]
+
+interface rs_replist
+{
+    import "dce/rgynbase.idl";
+    import "dce/rplbase.idl";
+    
+    /*
+     *  rs_replist_add_replica
+     *
+     *  add a replica to the replica list.
+     *
+     *  master-only operation.
+     */
+    void rs_replist_add_replica(
+        [in]    handle_t                h,
+        [in]    uuid_p_t                rep_id,
+        [in]    rs_replica_name_p_t     rep_name,
+        [in]    rs_replica_twr_vec_p_t  rep_twrs,
+        [out]   error_status_t          *status
+    );
+
+    /*
+     *  rs_replist_replace_replica
+     *
+     *  replace information about replica "rep_id" on the 
+     *  replica list.  
+     *
+     *  master-only operation.
+     */
+    void rs_replist_replace_replica(
+        [in]    handle_t                h,
+        [in]    uuid_p_t                rep_id,
+        [in]    rs_replica_name_p_t     rep_name,
+        [in]    rs_replica_twr_vec_p_t  rep_twrs,
+        [out]   error_status_t          *status
+    );
+
+    /*
+     *  rs_replist_delete_replica
+     *
+     *  delete the replica identified by "rep_id".
+     *  If "force_delete" is false, send the delete
+     *  to the replica identified by "rep_id" as
+     *  well as the other replicas.
+     *  If "force_delete" is true, do not send the
+     *  delete to the replica identified by "rep_id";
+     *  it has been killed off some other way.
+     *
+     *  the master may NOT be deleted with this operation
+     *
+     *  master-only operation.
+     */
+    void rs_replist_delete_replica(
+        [in]    handle_t                h,
+        [in]    uuid_p_t                rep_id,
+        [in]    boolean32               force_delete,
+        [out]   error_status_t          *status
+    );
+
+    /*
+     *  rs_replist_read 
+     *
+     *  read the replica list
+     *
+     *  To start reading at the beginning of the replica
+     *  list, set marker to uuid_nil.
+     *  To read information about a specific replica, set
+     *  marker to its uuid and max_ents to 1.
+     *
+     *  The returned marker contains the uuid of the next
+     *  replica on the list.  Marker contains uuid_nil
+     *  when there are no more replicas on the list.
+     */
+    void rs_replist_read(
+        [in]        handle_t            h,
+        [in, out]   uuid_t              *marker,
+        [in]        unsigned32          max_ents,
+        [out]       unsigned32          *n_ents,
+        [out, length_is(*n_ents), size_is(max_ents)]
+                    rs_replica_item_t   replist[],
+        [out]       error_status_t      *status
+    );
+
+    /*
+     *  rs_replist_read_full
+     *
+     *  read the replica list getting additional
+     *  propagation information about each replica.
+     *
+     *  To start reading at the beginning of the replica
+     *  list, set marker to uuid_nil.
+     *  To read information about a specific replica, set
+     *  marker to its uuid and max_ents to 1.
+     *
+     *  The returned marker contains the uuid of the next
+     *  replica on the list.  Marker contains uuid_nil
+     *  when there are no more replicas on the list.
+     */
+    void rs_replist_read_full(
+        [in]        handle_t            h,
+        [in, out]   uuid_t              *marker,
+        [in]        unsigned32          max_ents,
+        [out]       unsigned32          *n_ents,
+        [out, length_is(*n_ents), size_is(max_ents)]
+                    rs_replica_item_full_t   
+                                        replist[],
+        [out]       error_status_t      *status
+    );
+
+}

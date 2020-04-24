@@ -1,0 +1,246 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: sec_pk_base.idl,v $
+ * Revision 1.1.2.2  1996/10/03  14:54:14  arvind
+ * 	CHFts19896: public key version support
+ * 	[1996/09/13  23:45 UTC  aha  /main/DCE_1.2.2/aha_pk9_3/1]
+ *
+ * 	Test uuid
+ * 	[1996/09/10  21:09 UTC  aha  /main/DCE_1.2.2/aha_pk9_2/1]
+ *
+ * Revision 1.1.2.1  1996/07/08  20:20:08  arvind
+ * 	OSF DCE1.2.2 Drop3
+ * 	sec_pk_base.idl,v
+ * 	Revision /main/DCE_1.2.2/3  1996/06/30  21:59 UTC  cuti
+ * 	Merge from cuti_pk_export to DCE_1.2.2
+ * 	[1996/07/08  19:54:56  arvind]
+ * 
+ * Revision /main/DCE_1.2.2/cuti_pk_export/1  1996/06/27  19:42 UTC  cuti
+ * 	Change ref to ptr in sec_pk_data_t
+ * 
+ * Revision /main/DCE_1.2.2/2  1996/06/13  21:30 UTC  sommerfeld
+ * 	make pk_gen_data_t be an alias for pk_data_t
+ * 	[1996/06/11  18:59 UTC  sommerfeld  /main/DCE122_PK/sommerfeld_pk_indir/1]
+ * 
+ * Revision /main/DCE_1.2.2/1  1996/06/11  17:59 UTC  aha
+ * 	Merge PSM, sec_pvtkey, sec_pubkey, dced, base defs for Public Key Login
+ * 
+ * Revision /main/DCE122_PK/1  1996/06/04  18:53 UTC  psn
+ * 	Merge PK work from DCE12_PK off of DCE_1.2 to DCE122_PK off of DCE_1.2.2.
+ * 
+ * Revision /main/DCE12_PK/5  1996/05/28  17:59 UTC  cuti
+ * 	Merge psm, pvtkey work
+ * 
+ * 	Update after review
+ * 	[1996/05/24  20:37 UTC  cuti  /main/DCE12_PK/cuti_pk_new/1]
+ * 	Revision /main/DCE12_PK/4  1996/05/21  18:34 UTC  aha
+ * 	Merge bugfixes for dced and sec_pubkey based on code review
+ * 
+ * Revision /main/DCE12_PK/aha_pk3/1  1996/05/21  13:05 UTC  aha
+ * 	Remove sec_pk_BindKeyInfo_t and sec_pk_ObjectIdentifier_t
+ * 
+ * Revision /main/DCE12_PK/3  1996/05/08  14:34 UTC  cuti
+ * 	Add sec_pk_gen_data_t
+ * 
+ * Revision /main/DCE12_PK/cuti_pk_work/1  1996/05/08  14:27 UTC  cuti
+ * 	Add sec_pk_gen_data_t.
+ * 
+ * Revision /main/DCE12_PK/2  1996/04/17  16:44 UTC  aha
+ * 	Shorten field names in sec_pk_data_t structure.
+ * 
+ * Revision /main/DCE12_PK/1  1996/04/12  19:34 UTC  aha
+ * 	sec_pk_base interface
+ * 
+ * Revision /main/DCE_1.2/1  1996/04/11  13:40 UTC  aha
+ * 	Additions for public key login
+ * 
+ * $EndLog$
+ */
+/*
+** Copyright (c) Hewlett-Packard Company 1996
+** Unpublished work.  All Rights Reserved.
+**
+**       Public Key Base Definitions
+**
+*/
+
+interface sec_pk_base {
+
+    /* s e c _ p k _ d o m a i n _ t
+     *
+     * A UUID associated with the application domain
+     * in which a public or private key is used.
+     *
+     * In the reference implementation, only the
+     * "sec_pk_domain_dce_pk_login" domain is supported.
+     */
+    typedef uuid_t sec_pk_domain_t;
+
+    /* s e c _ p k _ u s a g e _ f l a g s _ t
+     *
+     * A set of key usage flags indicating the uses for
+     * a key or key-pair.
+     *
+     * These correspond to KeyUsage types defined in
+     * DAM 1 (Dec 1995) to X.509 (1993)
+     */
+    typedef unsigned32 sec_pk_usage_flags_t;
+
+    const unsigned32 sec_pk_usage_digitalSignature  = 0x1;
+    const unsigned32 sec_pk_usage_nonRepudiation    = 0x2;
+    const unsigned32 sec_pk_usage_keyEncipherment   = 0x4;
+    const unsigned32 sec_pk_usage_dataEncipherment  = 0x8;
+    const unsigned32 sec_pk_usage_keyAgreement      = 0x10;
+    const unsigned32 sec_pk_usage_keyCertSign       = 0x20;
+    const unsigned32 sec_pk_usage_offLineCRLSign    = 0x40;
+
+    const unsigned32 MAX_USAGES                     = 7;
+
+    /* s e c _ p k _ d a t a _ t
+     *
+     * A structure pointing to an X.509 or X.511
+     * ASN.1 DER-encoded value.
+     *
+     * Rather than using this structure directly, users
+     * should use one of the types that follow, which
+     * indicate the type of information contained in the
+     * particular structure instance.
+     */
+    typedef struct{
+        unsigned32       len;
+        [ptr, size_is(len)]
+            byte         *data;
+    } sec_pk_data_t;
+
+
+
+    /* s e c _ p k _ d a t a _ p _ t
+     *
+     * A pointer to a sec_pk_data_t
+     * structure
+     */
+    typedef [ptr] sec_pk_data_t   *sec_pk_data_p_t;
+
+    /* s e c _ p k _ g e n _ d a t a _ t
+     *
+     * A sec_pk_data_t structure containing len and data which are
+     * parallel to sec_pk_data_t structure to hold
+     * non-ASN.1 DER-encoded data, such as plaintext or ciphertext.
+     */
+    typedef sec_pk_data_t sec_pk_gen_data_t;
+
+    /* s e c _ p k _ p u b k e y _ t
+     *
+     * A sec_pk_data_t structure containing an X.509
+     * ASN.1 DER-encoded value of type
+     * SubjectPublicKeyInfo
+     *
+     * The vendor's public key infrastructure is assumed
+     * to provide functions for generating a public key
+     * in this format.
+     *
+     * In the reference implementation, the BSAFE library
+     * provides such a function.
+     */
+    typedef sec_pk_data_t sec_pk_pubkey_t;
+
+    /* s e c _ p k _ p u b k e y _ p _ t
+     *
+     * A pointer to a sec_pk_pubkey_t structure
+     */
+    typedef [ptr] sec_pk_pubkey_t *sec_pk_pubkey_p_t;
+
+
+    /* s e c _ p k _ p v t k e y _ t
+     *
+     * A sec_pk_data_t structure containing an ASN.1
+     * DER-encoded private key value.  The
+     * format will depend on the public key infrastructure.
+     *
+     * In the reference implementation, the structure will
+     * contain a PKCS#8 private key of type PrivateKeyInfo.
+     *
+     * The vendor's public key infrastructure is assumed
+     * to provide functions for generating a private key
+     * in this format.
+     */
+    typedef sec_pk_data_t sec_pk_pvtkey_t;
+
+    /* s e c _ p k _ p v t k e y _ p _ t
+     *
+     * A pointer to a sec_pk_pvtkey_t structure
+     */
+    typedef [ptr] sec_pk_pvtkey_t *sec_pk_pvtkey_p_t;
+
+
+    /* s e c _ p k _ s i g n e d _ t
+     *
+     * A sec_pk_data_t structure containing an X.509
+     * ASN.1 DER-encoded value of type
+     * SIGNED.
+     *
+     * The vendor's public key infrastructure is assumed
+     * to provide functions for generating signed data
+     * in this format.
+     *
+     * In the reference implementation, the BSAFE library
+     * provides such a function.
+     */
+    typedef sec_pk_data_t sec_pk_signed_t;
+
+    /* s e c _ p k _ s i g n e d _ p _ t
+     *
+     * A pointer to a sec_pk_signed_t structure
+     */
+    typedef [ptr] sec_pk_signed_t *sec_pk_signed_p_t;
+
+
+    /* s e c _ p k _ e n c r y p t e d _ t
+     *
+     * A sec_pk_data_t structure containing an X.509
+     * ASN.1 DER-encoded value of type
+     * ENCRYPTED.
+     *
+     * The vendor's public key infrastructure is assumed
+     * to provide functions for generating encrypted data
+     * in this format.
+     *
+     * In the reference implementation, the BSAFE library
+     * provides such a function.
+     */
+    typedef sec_pk_data_t sec_pk_encrypted_t;
+
+    /* s e c _ p k _ e n c r y p t e d _ p _ t
+     *
+     * A pointer to a sec_pk_encrypted_t structure
+     */
+    typedef [ptr] sec_pk_encrypted_t *sec_pk_encrypted_p_t;
+
+    /* s e c _ p k _ a l g o r i t h m _ i d _ t
+     *
+     * A sec_pk_data_t structure containing an X.509
+     * ASN.1 DER-encoded value of type
+     * AlgorithmIdentifier.
+     *
+     * The vendor's public key infrastructure is assumed
+     * to provide functions for providing
+     * this format.
+     *
+     * In the reference implementation, the BSAFE library
+     * provides such a function.
+     */
+    typedef sec_pk_data_t sec_pk_algorithm_id_t;
+
+    /* s e c _ p k _ a l g o r i t h m _ i d _ p _ t
+     *
+     * A pointer to a sec_pk_algorithm_id_t structure
+     */
+    typedef [ptr] sec_pk_algorithm_id_t *sec_pk_algorithm_id_p_t;
+}

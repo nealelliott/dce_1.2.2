@@ -1,0 +1,935 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: intercell_gda_checklist,v $
+# Revision 1.1.7.2  1996/03/11  02:37:02  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:04:43  marty]
+#
+# Revision 1.1.7.1  1995/12/11  21:53:46  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:54:38  root]
+# 
+# Revision 1.1.5.1  1993/11/02  20:28:57  dassarma
+# 	This checklist was out of date. It had to be edited to
+# 	reflect the current way of setting up intercell.
+# 	[1993/11/02  20:28:28  dassarma]
+# 
+# Revision 1.1.2.3  1993/02/05  15:16:43  cjd
+# 	Embedded copyright notice
+# 	[1993/02/05  14:35:33  cjd]
+# 
+# Revision 1.1.3.2  1993/02/04  21:44:02  cjd
+# 	Embedded copyright notice
+# 
+# Revision 1.1.2.2  1992/12/26  21:38:34  pellis
+# 	Initial version of test.
+# 	[1992/12/26  21:33:52  pellis]
+# 
+# $EndLog$
+#
+#   FILE_NAME: intercell_gda.ksh
+#
+#   COMPONENT_NAME: dce.admin_test
+#
+#   FUNCTIONS:
+#
+#   USAGE:
+#
+#	intercell_gda.ksh <secondary_CDS_server>
+#
+#   DESCRIPTION:
+#
+#	This test requires two cells which will be configured to do intercell
+#	testing.  Intercell testing is done first to generate a baseline of
+#	results which will be used later on in the test when negative testing
+#	of the GDA is done.  The purpose of the test is to validate the resp-
+#	once of servers and clients when the GDA exits unexpectedly.
+#
+#   DCE 1.0.2 TEST PLAN COVERAGE ( ++ = covered ):
+#
+#	II)	CDS
+#
+# ++		A) Install
+# ++			1) Server
+# ++			2) Client
+#		B) Configure
+# ++			1) Initial CDS Server
+# ++			2) Additional CDS Server(s)
+# ++			3) CDS Client
+# ++			4) Intercell
+# ++				a) DNS
+# ++					 i) show cell <cellname> as dns
+# ++					ii) Update DNS Data File
+# ++				b) GDS
+# ++					 i) show cell <cellname> as gds
+#					ii) Update DNS Data File
+#		C) Create
+# 			1) Clearinghouse
+#			2) Replica Read/Write
+# 			3) Replica Read Only
+#		D) Disable/Enable
+# 			1) Master Replica
+# 				a) How Does the Client React When the Master
+# 				   Replica is Disabled?
+# 				b) How Does the Client React When the Master
+# 				   Replica is Reenabled?
+# 			2) Secondary Replica
+# 				a) How Does the Client React When the Secondary
+# 				   Replica is Disabled?
+# 				b) How Does the Client React When the Secondary
+# 				   Replica is Reenabled?
+#			3) Modifying a Directory's Replica Set
+#				a) How Does the Client React When a Replica is
+#				   Excluded From the Replica Set?
+#				b) How Does the Client React When a Replica is
+#				   Reincluded in the Replica Set?
+# 		E) Update/Modify
+# 			1) Skulking a Directory
+# 				a) Modifying a Directory's Convergence
+# 			2) Modifying a Directory's Replica Set
+# 				a) Designating a New Master Replica
+# 					i) How Does the Client React When a New
+# 					   Master Replica is Designated?
+# ++		F) Start/Stop
+# ++			1) GDA
+# ++				a) kill (Stop)
+# ++					i) How Does the Client React When GDA is
+# ++					   Stopped?
+# ++				b) gdad (Start)
+# ++					i) How Does the Client React When GDA is
+# ++					   Restarted?
+# 		G) Backup
+# 			1) Clearinghouse
+# 			2) Namespace
+# 				a) Remote
+# 				b) By Replication
+#		H) Cleanup
+#		I) Monitoring
+#		J) Reconfigure
+#			1) Clearinghouse
+#			2) Namespace
+#				a) From Remote Backup
+#				b) From Replica
+#			3) Relocating a Clearinghouse
+#				a) Disassociating a Clearinghouse from its Host
+#				   Server
+#				b) Copying the Clearinghouse Files to the Target
+#				   Server
+#				c) Starting the Clearinghouse on the Target
+#				   Server
+#		K) Unconfigure/Delete
+# 			1) Replica
+#			2) Clearinghouse
+#			3) Client
+#				a) Remove All Namespace References to Client and
+#				   Attempt to Reconfigure it
+#		L) Crash Response
+#			1) How Does the Client React When the Master Replica
+#			   Goes Away During a Request?
+#				a) Does the Client Switch to a Replica?
+#			2) How Does the Server React When the Client Goes Away
+#			   During a Request?
+# 			3) What Happens When a Skulk Update is Attempted When
+# 			   One Replica is Down?
+#		M) Crash Recovery
+#			1) From Remote Backup
+#			2) From Replica
+#		N) Compatibility
+#			1) Use PMAX Namespace on RIOS
+#			2) Use RIOS Namespace on PMAX
+#			3) Use PMAX Clearinghouse on RIOS
+#			4) Use RIOS Clearinghouse on PMAX
+#			5) Use DCE 1.0.1 Namespace With DCE 1.0.2
+#			6) Use DCE 1.0.1 Clearinghouse With DCE 1.0.2
+#
+################################################################################
+
+- Two cells are required, one cell will have two machines and one will have
+  one machine.  The two machine cell will use the cellname admin_cell.osf.org
+  and the second cell with one machine will use the cellname inter_cell.osf.org.
+  The two machines in the admin_cell.osf.org will be called admintest1 and admintest2 
+  and the one machine in the inter_cell.osf.org will be called intertest1.
+
+- Install SEC and CDS on admintest1.
+  Install CDS and DCE Client on admintest2.
+  Install SEC and CDS on intertest1.
+
+- Configure SEC and CDS on admintest1 naming the cell admin_cell.osf.org.
+  Configure SEC and CDS on intertest1 naming the cell inter_cell.osf.org.
+  Machine admintest2 will be configured later.
+
+- On admintest1 get the DNS and GDS cell data for admin_cell by using the show
+  cell command, this information will be used to enable your cell to be seen by
+  other cells.  Only one clearinghouse should appear in each show cell command.
+
+  cdscp show cell /.: as dns
+
+  >                     SHOW
+  >                     CELL   /.../admin_cell.osf.org
+  >                       AT   1992-11-11-16:31:58
+  >                      TXT = 1 0028655F-76A6-1B01-84DB-08002B12C6F5   Master  /.../admin_cell.osf.org/admintest1_ch 004D588C-7696-1B01-84DB-08002B12C6F5
+
+  cdscp show cell /.: as gds
+
+  >                     SHOW
+  >                     CELL   /.../admin_cell.osf.org
+  >                       AT   1992-11-11-16:32:55
+  >           Namespace Uuid = 0028655F-76A6-1B01-84DB-08002B12C6F5
+  >       Clearinghouse Uuid = 004D588C-7696-1B01-84DB-08002B12C6F5
+  >       Clearinghouse Name = /.../admin_cell.osf.org/admintest1_ch
+  >             Replica Type =   Master
+  >                    Tower = ncacn_ip_tcp:130.105.202.29[]
+  >                    Tower = ncadg_ip_udp:130.105.202.29[]
+
+- On intertest1 get the DNS and GDS cell data for inter_cell.osf.org
+  by using the show dir command, this information will be used to enable 
+  your cell to be seen by other cells.
+
+  cdscp show cell /.: as dns
+
+  >                     SHOW
+  >                     CELL   /.../inter_cell.osf.org
+  >                       AT   1992-11-11-16:34:13
+  >                      TXT = 1 0095CB45-7655-1B01-A799-00082B159E6E   Master  /.../inter_cell.osf.org/intertest1 0045EB56-764F-1B01-A799-00082B159E6E
+
+  cdscp show cell /.: as gds
+
+  >                     SHOW
+  >                     CELL   /.../inter_cell.osf.org
+  >                       AT   1992-11-11-16:34:46
+  >           Namespace Uuid = 0095CB45-7655-1B01-A799-00082B159E6E
+  >       Clearinghouse Uuid = 0045EB56-764F-1B01-A799-00082B159E6E
+  >       Clearinghouse Name = /.../inter_cell.osf.org/intertest1
+  >             Replica Type =   Master
+  >                    Tower = ncacn_ip_tcp:130.105.5.224[]
+  >                    Tower = ncadg_ip_udp:130.105.5.224[]
+
+- Configure admintest2 as a DCE Client in admin_cell.osf.org and as an 
+  Additional CDS Server using admintest2_ch as the clearinghouse name.
+
+- On admintest2 get the DNS and GDS cell data for admin_cell.osf.org by 
+using the show cell command, this information will be used to enable 
+your cell to be seen by other cells.  The show cell /.: as dns command 
+should show two clearinghouses, admintest1_ch and admintest2_ch.  
+The admintest1_ch should be the Master an admintest2_ch should be 
+Readonly.
+
+cdscp show cell /.: as dns
+
+>                     SHOW
+>                     CELL   /.../admin_cell.osf.org
+>                       AT   1992-11-11-16:44:50
+>                      TXT = 1 0028655F-76A6-1B01-84DB-08002B12C6F5   Master  /.../admin_cell.osf.org/admintest1_ch 004D588C-7696-1B01-84DB-08002B12C6F5
+>
+>                      TXT = 1 0028655F-76A6-1B01-84DB-08002B12C6F5  Readonly /.../admin_cell.osf.org/admintest2_ch 0061047C-7E58-1B01-967F-08002B12C6F5
+
+cdscp show cell /.: as gds
+
+>                     SHOW
+>                     CELL   /.../admin_cell.osf.org
+>                       AT   1992-11-11-16:45:34
+>           Namespace Uuid = 0028655F-76A6-1B01-84DB-08002B12C6F5
+>       Clearinghouse Uuid = 004D588C-7696-1B01-84DB-08002B12C6F5
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest1_ch
+>             Replica Type =   Master
+>                    Tower = ncacn_ip_tcp:130.105.202.29[]
+>                    Tower = ncadg_ip_udp:130.105.202.29[]
+>
+>           Namespace Uuid = 0028655F-76A6-1B01-84DB-08002B12C6F5
+>       Clearinghouse Uuid = 0061047C-7E58-1B01-967F-08002B12C6F5
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest2_ch
+>             Replica Type =  Readonly
+>                    Tower = ncacn_ip_tcp:130.105.202.27[]
+>                    Tower = ncadg_ip_udp:130.105.202.27[]
+
+- On admintest1 get the DNS and GDS cell data for admin_cell.osf.org
+by using the show cell command, this information will be used to enable 
+your cell to be seen by other cells.  The show cell /.: as dns command 
+should show two clearinghouses, admintest1_ch and admintest2_ch.  
+The admintest1_ch should be the Master an admintest2_ch should be Readonly.
+
+cdscp show cell /.: as dns
+
+>                     SHOW
+>                     CELL   /.../admin_cell.osf.org
+>                       AT   1992-11-11-16:46:59
+>                      TXT = 1 0028655F-76A6-1B01-84DB-08002B12C6F5   Master  /.../admin_cell.osf.org/admintest1_ch 004D588C-7696-1B01-84DB-08002B12C6F5
+>
+>                      TXT = 1 0028655F-76A6-1B01-84DB-08002B12C6F5  Readonly /.../admin_cell.osf.org/admintest2_ch 0061047C-7E58-1B01-967F-08002B12C6F5
+
+cdscp show cell /.: as gds
+
+>                     SHOW
+>                     CELL   /.../admin_cell.osf.org
+>                       AT   1992-11-11-16:47:40
+>           Namespace Uuid = 0028655F-76A6-1B01-84DB-08002B12C6F5
+>       Clearinghouse Uuid = 004D588C-7696-1B01-84DB-08002B12C6F5
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest1_ch
+>             Replica Type =   Master
+>                    Tower = ncacn_ip_tcp:130.105.202.29[]
+>                    Tower = ncadg_ip_udp:130.105.202.29[]
+>
+>           Namespace Uuid = 0028655F-76A6-1B01-84DB-08002B12C6F5
+>       Clearinghouse Uuid = 0061047C-7E58-1B01-967F-08002B12C6F5
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest2_ch
+>             Replica Type =  Readonly
+>                    Tower = ncacn_ip_tcp:130.105.202.27[]
+>                    Tower = ncadg_ip_udp:130.105.202.27[]
+
+- Update the DNS database on your DNS or GDS server using the information you
+gathered using the show cell /.: as dns/gds commands above.
+
+- On admintest1 use rgy_edit to create a cross-cell authentication account in
+the local and foreign cells.
+
+dce_login cell_admin <password>
+
+>  Password must be changed!
+
+- Prepare you cell for cross-cell authentication
+
+>rgy_edit
+Current site is: registry server at /.../admin_cell.osf.org/subsys/dce/sec/master 
+>  rgy_edit=> cell /.../inter_cell.osf.org
+> Enter group name of the local account for the foreign cell: none
+> Enter group name of the foreign account for the local cell: none 
+> Enter org name of the local account for the foreign cell: none
+> Enter org name of the foreign account for the local cell: none
+> Enter your password:   
+> Enter account id to log into foreign cell with: cell_admin
+> Enter password for foreign account: 
+> Enter expiration date [yy/mm/dd or 'none']: (none) 
+Principals and Accounts have been created
+> rgy_edit=> quit
+bye.
+
+- On admintest2 use rgy_edit to verify that the cross-cell authentication
+account "krbtgt/inter_cell.osf.org [none none]:*:108:12::::" exists in the local
+registry.
+
+rgy_edit
+
+>  Current site is: registry server at /.../admin_cell.osf.org/subsys/dce/sec/master
+>  rgy_edit=> v
+>  nobody [nogroup none]:*:-2:-2::/::
+>  root [system none]:*:0:0::/::
+>  daemon [daemon none]:*:1:1::/::
+>  uucp [uucp none]:*:4:2::/usr/spool/uucppublic:/usr/lib/uucp/uucico:
+>  bin [bin none]:*:3:3::/bin::
+>  dce-ptgt [none none]:*:20:12::/::
+>  dce-rgy [none none]:*:21:12::/::
+>  krbtgt/admin_cell.osf.org [none none]:*:101:12::/::
+>  cell_admin [none none]:*:100:12::/::
+>  hosts/admintest1/self [none none]:*:102:12::/::
+>  hosts/admintest1/cds-server [subsys/dce/cds-server none]:*:103:106::/::
+>  hosts/admintest1/gda [subsys/dce/cds-server none]:*:104:106::/::
+>  hosts/admintest2/self [none none]:*:105:12::/::
+>  hosts/admintest2/cds-server [subsys/dce/cds-server none]:*:106:106::/::
+>  hosts/admintest2/gda [subsys/dce/cds-server none]:*:107:106::/::
+>  krbtgt/inter_cell.osf.org [none none]:*:108:12::::
+>  rgy_edit=> quit
+
+- On intertest1 use rgy_edit to verify that the cross-cell authentication
+account "krbtgt/admin_cell.osf.org [none none]:*:105:12::::" exists in the local
+registry.
+
+rgy_edit
+
+>  Current site is: registry server at /.../inter_cell/subsys/dce/sec/master
+>  rgy_edit=> v
+>  nobody [nogroup none]:*:-2:-2::/::
+>  root [system none]:*:0:0::/::
+>  daemon [daemon none]:*:1:1::/::
+>  uucp [uucp none]:*:4:2::/usr/spool/uucppublic:/usr/lib/uucp/uucico:
+>  bin [bin none]:*:3:3::/bin::
+>  dce-ptgt [none none]:*:20:12::/::
+>  dce-rgy [none none]:*:21:12::/::
+>  krbtgt/inter_cell.osf.org [none none]:*:101:12::/::
+>  cell_admin [none none]:*:100:12::/::
+>  hosts/intertest1/self [none none]:*:102:12::/::
+>  hosts/intertest1/cds-server [subsys/dce/cds-server none]:*:103:106::/::
+>  hosts/intertest1/gda [subsys/dce/cds-server none]:*:104:106::/::
+>  krbtgt/admin_cell.osf.org [none none]:*:105:12::::
+
+- On admintest1 use show dir to list the root directory in inter_cell.osf.org
+and admin_cell.osf.org.
+
+cdscp show dir /.../inter_cell.osf.org
+
+>                     SHOW
+>                DIRECTORY   /.../inter_cell.osf.org
+>                       AT   1992-11-12-14:17:19
+>         RPC_ClassVersion = 0100
+>                  CDS_CTS = 1992-11-11-21:08:37.981690100/00-08-2b-15-9e-6e
+>                  CDS_UTS = 1992-11-11-22:09:26.930061100/00-08-2b-15-9e-6e
+>           CDS_ObjectUUID = 0095CB45-7655-1B01-A799-00082B159E6E
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 0045EB56-764F-1B01-A799-00082B159E6E
+>                    Tower = ncacn_ip_tcp:130.105.5.224[]
+>                    Tower = ncadg_ip_udp:130.105.5.224[]
+>             Replica type = master
+>       Clearinghouse Name = /.../inter_cell.osf.org/intertest1
+>              CDS_AllUpTo = 1992-11-12-15:43:56.783666100/00-08-2b-15-9e-6e
+>          CDS_Convergence = medium
+>             CDS_InCHName = allowed
+>     CDS_DirectoryVersion = 3.0
+>         CDS_ReplicaState = on
+>          CDS_ReplicaType = master
+>            CDS_LastSkulk = 1992-11-12-15:43:56.783666100/00-08-2b-15-9e-6e
+>           CDS_LastUpdate = 1992-11-12-19:05:54.769395100/00-08-2b-15-9e-6e
+>          CDS_RingPointer = 0045EB56-764F-1B01-A799-00082B159E6E
+>                CDS_Epoch = 0095CB44-7655-1B01-A799-00082B159E6E
+>       CDS_ReplicaVersion = 3.0
+>          CDS_GDAPointers = :
+>                  Timeout = :
+>               Expiration = 1992-11-12-22:09:18.778
+>                Extension = +1-00:00:00.000
+>       Clearinghouse UUID = 0092377C-7679-1B01-A096-00082B159E6E
+>                    Tower = ncacn_ip_tcp:130.105.5.224[]
+>                    Tower = ncadg_ip_udp:130.105.5.224[]
+>             Replica type = gda
+>       Clearinghouse Name = /.../inter_cell.osf.org/intertest1_gda
+
+cdscp show dir /.../admin_cell.osf.org
+
+>                     SHOW
+>                DIRECTORY   /.../admin_cell.osf.org
+>                       AT   1992-11-11-16:30:00
+>         RPC_ClassVersion = 0100
+>                  CDS_CTS = 1992-11-11-21:09:58.167089100/08-00-2b-12-c6-f5
+>                  CDS_UTS = 1992-11-11-21:12:19.796164100/08-00-2b-12-c6-f5
+>           CDS_ObjectUUID = 0028655F-76A6-1B01-84DB-08002B12C6F5
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 004D588C-7696-1B01-84DB-08002B12C6F5
+>                    Tower = ncacn_ip_tcp:130.105.202.29[]
+>                    Tower = ncadg_ip_udp:130.105.202.29[]
+>             Replica type = master
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest1_ch
+>              CDS_AllUpTo = 0
+>          CDS_Convergence = medium
+>             CDS_InCHName = allowed
+>     CDS_DirectoryVersion = 3.0
+>         CDS_ReplicaState = on
+>          CDS_ReplicaType = master
+>            CDS_LastSkulk = 1992-11-11-21:09:58.167089100/08-00-2b-12-c6-f5
+>           CDS_LastUpdate = 1992-11-11-21:18:40.334824100/08-00-2b-12-c6-f5
+>          CDS_RingPointer = 004D588C-7696-1B01-84DB-08002B12C6F5
+>                CDS_Epoch = 0028655E-76A6-1B01-84DB-08002B12C6F5
+>       CDS_ReplicaVersion = 3.0
+>          CDS_GDAPointers = :
+>                  Timeout = :
+>               Expiration = 1992-11-11-21:11:15.593
+>                Extension = +1-00:00:00.000
+>       Clearinghouse UUID = 00171E0C-76CC-1B01-BEFF-08002B12C6F5
+>                    Tower = ncacn_ip_tcp:130.105.202.29[]
+>                    Tower = ncadg_ip_udp:130.105.202.29[]
+>             Replica type = gda
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest1_gda
+
+- On admintest2 use show dir to list the root directory in inter_cell.osf.org
+and admin_cell.osf.org.
+
+cdscp show dir /.../inter_cell.osf.org
+
+>                     SHOW
+>                DIRECTORY   /.../inter_cell.osf.org
+>                       AT   1992-11-12-14:28:06
+>         RPC_ClassVersion = 0100
+>                  CDS_CTS = 1992-11-11-21:08:37.981690100/00-08-2b-15-9e-6e
+>                  CDS_UTS = 1992-11-11-22:09:26.930061100/00-08-2b-15-9e-6e
+>           CDS_ObjectUUID = 0095CB45-7655-1B01-A799-00082B159E6E
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 0045EB56-764F-1B01-A799-00082B159E6E
+>                    Tower = ncacn_ip_tcp:130.105.5.224[]
+>                    Tower = ncadg_ip_udp:130.105.5.224[]
+>             Replica type = master
+>       Clearinghouse Name = /.../inter_cell.osf.org/intertest1
+>              CDS_AllUpTo = 1992-11-12-15:43:56.783666100/00-08-2b-15-9e-6e
+>          CDS_Convergence = medium
+>             CDS_InCHName = allowed
+>     CDS_DirectoryVersion = 3.0
+>         CDS_ReplicaState = on
+>          CDS_ReplicaType = master
+>            CDS_LastSkulk = 1992-11-12-15:43:56.783666100/00-08-2b-15-9e-6e
+>           CDS_LastUpdate = 1992-11-12-19:05:54.769395100/00-08-2b-15-9e-6e
+>          CDS_RingPointer = 0045EB56-764F-1B01-A799-00082B159E6E
+>                CDS_Epoch = 0095CB44-7655-1B01-A799-00082B159E6E
+>       CDS_ReplicaVersion = 3.0
+>          CDS_GDAPointers = :
+>                  Timeout = :
+>               Expiration = 1992-11-12-22:09:18.778
+>                Extension = +1-00:00:00.000
+>       Clearinghouse UUID = 0092377C-7679-1B01-A096-00082B159E6E
+>                    Tower = ncacn_ip_tcp:130.105.5.224[]
+>                    Tower = ncadg_ip_udp:130.105.5.224[]
+>             Replica type = gda
+>       Clearinghouse Name = /.../inter_cell.osf.org/intertest1_gda
+
+cdscp show dir /.../admin_cell.osf.org
+
+>                     SHOW
+>                DIRECTORY   /.../admin_cell.osf.org
+>                       AT   1992-11-12-14:31:17
+>         RPC_ClassVersion = 0100
+>                  CDS_CTS = 1992-11-11-21:09:58.167089100/08-00-2b-12-c6-f5
+>                  CDS_UTS = 1992-11-11-22:11:03.661219100/08-00-2b-12-c6-f5
+>           CDS_ObjectUUID = 0028655F-76A6-1B01-84DB-08002B12C6F5
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 004D588C-7696-1B01-84DB-08002B12C6F5
+>                    Tower = ncacn_ip_tcp:130.105.202.29[]
+>                    Tower = ncadg_ip_udp:130.105.202.29[]
+>             Replica type = master
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest1_ch
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 0061047C-7E58-1B01-967F-08002B12C6F5
+>                    Tower = ncacn_ip_tcp:130.105.202.27[]
+>                    Tower = ncadg_ip_udp:130.105.202.27[]
+>             Replica type = readonly
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest2_ch
+>              CDS_AllUpTo = 1992-11-12-09:16:50.382315100/08-00-2b-12-c6-f5
+>          CDS_Convergence = medium
+>             CDS_InCHName = allowed
+>     CDS_DirectoryVersion = 3.0
+>         CDS_ReplicaState = on
+>          CDS_ReplicaType = readonly
+>            CDS_LastSkulk = 0
+>           CDS_LastUpdate = 0
+>                CDS_Epoch = 0028655E-76A6-1B01-84DB-08002B12C6F5
+>       CDS_ReplicaVersion = 3.0
+>          CDS_GDAPointers = :
+>                  Timeout = :
+>               Expiration = 1992-11-12-22:10:46.806
+>                Extension = +1-00:00:00.000
+>       Clearinghouse UUID = 00171E0C-76CC-1B01-BEFF-08002B12C6F5
+>                    Tower = ncacn_ip_tcp:130.105.202.29[]
+>                    Tower = ncadg_ip_udp:130.105.202.29[]
+>             Replica type = gda
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest1_gda
+
+- On intertest1 use show dir to list the root directory in inter_cell.osf.org
+and admin_cell.osf.org.
+
+cdscp show dir /.../inter_cell.osf.org
+
+>                     SHOW
+>                DIRECTORY   /.../inter_cell.osf.org
+>                       AT   1992-11-11-16:19:33
+>         RPC_ClassVersion = 0100
+>                  CDS_CTS = 1992-11-11-21:08:37.981690100/00-08-2b-15-9e-6e
+>                  CDS_UTS = 1992-11-11-21:10:31.020717100/00-08-2b-15-9e-6e
+>           CDS_ObjectUUID = 0095CB45-7655-1B01-A799-00082B159E6E
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 0045EB56-764F-1B01-A799-00082B159E6E
+>                    Tower = ncacn_ip_tcp:130.105.5.224[]
+>                    Tower = ncadg_ip_udp:130.105.5.224[]
+>             Replica type = master
+>       Clearinghouse Name = /.../inter_cell.osf.org/intertest1
+>              CDS_AllUpTo = 0
+>          CDS_Convergence = medium
+>             CDS_InCHName = allowed
+>     CDS_DirectoryVersion = 3.0
+>         CDS_ReplicaState = on
+>          CDS_ReplicaType = master
+>            CDS_LastSkulk = 1992-11-11-21:08:37.981690100/00-08-2b-15-9e-6e
+>           CDS_LastUpdate = 1992-11-11-21:13:31.829027100/00-08-2b-15-9e-6e
+>          CDS_RingPointer = 0045EB56-764F-1B01-A799-00082B159E6E
+>                CDS_Epoch = 0095CB44-7655-1B01-A799-00082B159E6E
+>       CDS_ReplicaVersion = 3.0
+>          CDS_GDAPointers = :
+>                  Timeout = :
+>               Expiration = 1992-11-11-21:09:44.755
+>                Extension = +1-00:00:00.000
+>       Clearinghouse UUID = 0092377C-7679-1B01-A096-00082B159E6E
+>                    Tower = ncacn_ip_tcp:130.105.5.224[]
+>                    Tower = ncadg_ip_udp:130.105.5.224[]
+>             Replica type = gda
+>       Clearinghouse Name = /.../inter_cell.osf.org/intertest1_gda
+
+cdscp show dir /.../admin_cell.osf.org
+
+>                    SHOW
+>                DIRECTORY   /.../admin_cell.osf.org
+>                       AT   1992-11-12-14:18:38
+>         RPC_ClassVersion = 0100
+>                  CDS_CTS = 1992-11-11-21:09:58.167089100/08-00-2b-12-c6-f5
+>                  CDS_UTS = 1992-11-11-22:11:03.661219100/08-00-2b-12-c6-f5
+>           CDS_ObjectUUID = 0028655F-76A6-1B01-84DB-08002B12C6F5
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 004D588C-7696-1B01-84DB-08002B12C6F5
+>                    Tower = ncacn_ip_tcp:130.105.202.29[]
+>                    Tower = ncadg_ip_udp:130.105.202.29[]
+>             Replica type = master
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest1_ch
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 0061047C-7E58-1B01-967F-08002B12C6F5
+>                    Tower = ncacn_ip_tcp:130.105.202.27[]
+>                    Tower = ncadg_ip_udp:130.105.202.27[]
+>             Replica type = readonly
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest2_ch
+>              CDS_AllUpTo = 1992-11-12-09:16:50.382315100/08-00-2b-12-c6-f5
+>          CDS_Convergence = medium
+>             CDS_InCHName = allowed
+>     CDS_DirectoryVersion = 3.0
+>         CDS_ReplicaState = on
+>          CDS_ReplicaType = readonly
+>            CDS_LastSkulk = 0
+>           CDS_LastUpdate = 0
+>                CDS_Epoch = 0028655E-76A6-1B01-84DB-08002B12C6F5
+>       CDS_ReplicaVersion = 3.0
+>          CDS_GDAPointers = :
+>                  Timeout = :
+>               Expiration = 1992-11-12-22:10:46.806
+>                Extension = +1-00:00:00.000
+>       Clearinghouse UUID = 00171E0C-76CC-1B01-BEFF-08002B12C6F5
+>                    Tower = ncacn_ip_tcp:130.105.202.29[]
+>                    Tower = ncadg_ip_udp:130.105.202.29[]
+>             Replica type = gda
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest1_gda
+
+- On admintest1 kill the Global Directory Agent (GDA) which enables inter-
+cell communication.
+
+ps -ef | grep gdad | grep -v grep | awk '{ print $2 }'
+
+>  15344
+
+kill 15344
+
+>  No Output Expected
+
+- On admintest2 use show dir to list the root directory in inter_cell.osf.org
+and admin_cell.osf.org.  Even though the GDA has been killed the required 
+information should be stored in the cache and both show dir commands should 
+succeed.
+
+cdscp show dir /.../admin_cell.osf.org
+
+>                     SHOW
+>                DIRECTORY   /.../admin_cell.osf.org
+>                       AT   1992-11-12-15:22:33
+>         RPC_ClassVersion = 0100
+>                  CDS_CTS = 1992-11-11-21:09:58.167089100/08-00-2b-12-c6-f5
+>                  CDS_UTS = 1992-11-11-22:11:03.661219100/08-00-2b-12-c6-f5
+>           CDS_ObjectUUID = 0028655F-76A6-1B01-84DB-08002B12C6F5
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 004D588C-7696-1B01-84DB-08002B12C6F5
+>                    Tower = ncacn_ip_tcp:130.105.202.29[]
+>                    Tower = ncadg_ip_udp:130.105.202.29[]
+>             Replica type = master
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest1_ch
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 0061047C-7E58-1B01-967F-08002B12C6F5
+>                    Tower = ncacn_ip_tcp:130.105.202.27[]
+>                    Tower = ncadg_ip_udp:130.105.202.27[]
+>             Replica type = readonly
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest2_ch
+>              CDS_AllUpTo = 1992-11-12-19:36:57.159381100/08-00-2b-12-c6-f5
+>          CDS_Convergence = medium
+>             CDS_InCHName = allowed
+>     CDS_DirectoryVersion = 3.0
+>         CDS_ReplicaState = on
+>          CDS_ReplicaType = readonly
+>            CDS_LastSkulk = 0
+>           CDS_LastUpdate = 0
+>                CDS_Epoch = 0028655E-76A6-1B01-84DB-08002B12C6F5
+>       CDS_ReplicaVersion = 3.0
+>         CDS_GDAPointers = :
+>                  Timeout = :
+>               Expiration = 1992-11-12-22:10:46.806
+>                Extension = +1-00:00:00.000
+>       Clearinghouse UUID = 00171E0C-76CC-1B01-BEFF-08002B12C6F5
+>                    Tower = ncacn_ip_tcp:130.105.202.29[]
+>                    Tower = ncadg_ip_udp:130.105.202.29[]
+>             Replica type = gda
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest1_gda
+
+cdscp show dir /.../inter_cell.osf.org
+
+>                     SHOW
+>                DIRECTORY   /.../inter_cell.osf.org
+>                       AT   1992-11-12-16:55:47
+>         RPC_ClassVersion = 0100
+>                  CDS_CTS = 1992-11-11-21:08:37.981690100/00-08-2b-15-9e-6e
+>                  CDS_UTS = 1992-11-11-22:09:26.930061100/00-08-2b-15-9e-6e
+>           CDS_ObjectUUID = 0095CB45-7655-1B01-A799-00082B159E6E
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 0045EB56-764F-1B01-A799-00082B159E6E
+>                    Tower = ncacn_ip_tcp:130.105.5.224[]
+>                    Tower = ncadg_ip_udp:130.105.5.224[]
+>             Replica type = master
+>       Clearinghouse Name = /.../inter_cell.osf.org/intertest1
+>              CDS_AllUpTo = 1992-11-12-15:43:56.783666100/00-08-2b-15-9e-6e
+>          CDS_Convergence = medium
+>             CDS_InCHName = allowed
+>     CDS_DirectoryVersion = 3.0
+>         CDS_ReplicaState = on
+>          CDS_ReplicaType = master
+>            CDS_LastSkulk = 1992-11-12-15:43:56.783666100/00-08-2b-15-9e-6e
+>           CDS_LastUpdate = 1992-11-12-21:36:31.177902100/00-08-2b-15-9e-6e
+>          CDS_RingPointer = 0045EB56-764F-1B01-A799-00082B159E6E
+>                CDS_Epoch = 0095CB44-7655-1B01-A799-00082B159E6E
+>       CDS_ReplicaVersion = 3.0
+>          CDS_GDAPointers = :
+>                  Timeout = :
+>               Expiration = 1992-11-12-22:09:18.778
+>                Extension = +1-00:00:00.000
+>       Clearinghouse UUID = 0092377C-7679-1B01-A096-00082B159E6E
+>                    Tower = ncacn_ip_tcp:130.105.5.224[]
+>                    Tower = ncadg_ip_udp:130.105.5.224[]
+>             Replica type = gda
+>       Clearinghouse Name = /.../inter_cell.osf.org/intertest1_gda
+
+- On intertest1 use show dir to list the root directory in inter_cell.osf.org
+and admin_cell.osf.org.  Even though the GDA has been killed the required 
+information should be stored in the cache and both show dir commands should 
+succeed.
+
+cdscp show dir /.../inter_cell.osf.org
+
+>                     SHOW
+>                DIRECTORY   /.../inter_cell.osf.org
+>                       AT   1992-11-12-17:01:32
+>         RPC_ClassVersion = 0100
+>                  CDS_CTS = 1992-11-11-21:08:37.981690100/00-08-2b-15-9e-6e
+>                  CDS_UTS = 1992-11-11-22:09:26.930061100/00-08-2b-15-9e-6e
+>           CDS_ObjectUUID = 0095CB45-7655-1B01-A799-00082B159E6E
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 0045EB56-764F-1B01-A799-00082B159E6E
+>                    Tower = ncacn_ip_tcp:130.105.5.224[]
+>                    Tower = ncadg_ip_udp:130.105.5.224[]
+>             Replica type = master
+>       Clearinghouse Name = /.../inter_cell.osf.org/intertest1
+>              CDS_AllUpTo = 1992-11-12-15:43:56.783666100/00-08-2b-15-9e-6e
+>          CDS_Convergence = medium
+>             CDS_InCHName = allowed
+>     CDS_DirectoryVersion = 3.0
+>         CDS_ReplicaState = on
+>          CDS_ReplicaType = master
+>            CDS_LastSkulk = 1992-11-12-15:43:56.783666100/00-08-2b-15-9e-6e
+>           CDS_LastUpdate = 1992-11-12-21:36:31.177902100/00-08-2b-15-9e-6e
+>          CDS_RingPointer = 0045EB56-764F-1B01-A799-00082B159E6E
+>                CDS_Epoch = 0095CB44-7655-1B01-A799-00082B159E6E
+>       CDS_ReplicaVersion = 3.0
+>          CDS_GDAPointers = :
+>                  Timeout = :
+>               Expiration = 1992-11-12-22:09:18.778
+>                Extension = +1-00:00:00.000
+>       Clearinghouse UUID = 0092377C-7679-1B01-A096-00082B159E6E
+>                    Tower = ncacn_ip_tcp:130.105.5.224[]
+>                    Tower = ncadg_ip_udp:130.105.5.224[]
+>             Replica type = gda
+>       Clearinghouse Name = /.../inter_cell.osf.org/intertest1_gda
+
+cdscp show dir /.../admin_cell.osf.org
+
+>                     SHOW
+>                DIRECTORY   /.../admin_cell.osf.org
+>                       AT   1992-11-12-17:04:30
+>         RPC_ClassVersion = 0100
+>                  CDS_CTS = 1992-11-11-21:09:58.167089100/08-00-2b-12-c6-f5
+>                  CDS_UTS = 1992-11-11-22:11:03.661219100/08-00-2b-12-c6-f5
+>           CDS_ObjectUUID = 0028655F-76A6-1B01-84DB-08002B12C6F5
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 004D588C-7696-1B01-84DB-08002B12C6F5
+>                    Tower = ncacn_ip_tcp:130.105.202.29[]
+>                    Tower = ncadg_ip_udp:130.105.202.29[]
+>             Replica type = master
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest1_ch
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 0061047C-7E58-1B01-967F-08002B12C6F5
+>                    Tower = ncacn_ip_tcp:130.105.202.27[]
+>                    Tower = ncadg_ip_udp:130.105.202.27[]
+>             Replica type = readonly
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest2_ch
+>              CDS_AllUpTo = 1992-11-12-19:36:57.159381100/08-00-2b-12-c6-f5
+>          CDS_Convergence = medium
+>             CDS_InCHName = allowed
+>     CDS_DirectoryVersion = 3.0
+>         CDS_ReplicaState = on
+>          CDS_ReplicaType = master
+>            CDS_LastSkulk = 1992-11-12-19:36:57.159381100/08-00-2b-12-c6-f5
+>           CDS_LastUpdate = 1992-11-12-21:34:12.806997100/08-00-2b-12-c6-f5
+>          CDS_RingPointer = 004D588C-7696-1B01-84DB-08002B12C6F5
+>                CDS_Epoch = 0028655E-76A6-1B01-84DB-08002B12C6F5
+>       CDS_ReplicaVersion = 3.0
+>          CDS_GDAPointers = :
+>                  Timeout = :
+>               Expiration = 1992-11-12-22:10:46.806
+>                Extension = +1-00:00:00.000
+
+- On admintest1 restart the Global Directory Agent (GDA) which enables inter-
+cell communication.
+
+/opt/dcelocal/bin/gdad
+
+>  No Output Expected
+
+- On admintest2 use show dir to list the root directory in inter_cell.osf.org
+and admin_cell.
+
+cdscp show dir /.../admin_cell.osf.org
+
+>                     SHOW
+>                DIRECTORY   /.../admin_cell.osf.org
+>                       AT   1992-11-12-17:09:27
+>         RPC_ClassVersion = 0100
+>                  CDS_CTS = 1992-11-11-21:09:58.167089100/08-00-2b-12-c6-f5
+>                  CDS_UTS = 1992-11-11-22:11:03.661219100/08-00-2b-12-c6-f5
+>           CDS_ObjectUUID = 0028655F-76A6-1B01-84DB-08002B12C6F5
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 004D588C-7696-1B01-84DB-08002B12C6F5
+>                    Tower = ncacn_ip_tcp:130.105.202.29[]
+>                    Tower = ncadg_ip_udp:130.105.202.29[]
+>             Replica type = master
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest1_ch
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 0061047C-7E58-1B01-967F-08002B12C6F5
+>                    Tower = ncacn_ip_tcp:130.105.202.27[]
+>                    Tower = ncadg_ip_udp:130.105.202.27[]
+>             Replica type = readonly
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest2_ch
+>              CDS_AllUpTo = 1992-11-12-19:36:57.159381100/08-00-2b-12-c6-f5
+>          CDS_Convergence = medium
+>             CDS_InCHName = allowed
+>     CDS_DirectoryVersion = 3.0
+>         CDS_ReplicaState = on
+>          CDS_ReplicaType = readonly
+>            CDS_LastSkulk = 0
+>           CDS_LastUpdate = 0
+>                CDS_Epoch = 0028655E-76A6-1B01-84DB-08002B12C6F5
+>       CDS_ReplicaVersion = 3.0
+>          CDS_GDAPointers = :
+>                  Timeout = :
+>               Expiration = 1992-11-12-22:10:46.806
+>                Extension = +1-00:00:00.000
+>       Clearinghouse UUID = 00171E0C-76CC-1B01-BEFF-08002B12C6F5
+>                    Tower = ncacn_ip_tcp:130.105.202.29[]
+>                    Tower = ncadg_ip_udp:130.105.202.29[]
+>             Replica type = gda
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest1_gda
+
+cdscp show dir /.../inter_cell.osf.org
+
+>                     SHOW
+>                DIRECTORY   /.../inter_cell.osf.org
+>                       AT   1992-11-12-17:10:39
+>         RPC_ClassVersion = 0100
+>                  CDS_CTS = 1992-11-11-21:08:37.981690100/00-08-2b-15-9e-6e
+>                  CDS_UTS = 1992-11-11-22:09:26.930061100/00-08-2b-15-9e-6e
+>           CDS_ObjectUUID = 0095CB45-7655-1B01-A799-00082B159E6E
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 0045EB56-764F-1B01-A799-00082B159E6E
+>                    Tower = ncacn_ip_tcp:130.105.5.224[]
+>                    Tower = ncadg_ip_udp:130.105.5.224[]
+>             Replica type = master
+>       Clearinghouse Name = /.../inter_cell.osf.org/intertest1
+>              CDS_AllUpTo = 1992-11-12-15:43:56.783666100/00-08-2b-15-9e-6e
+>          CDS_Convergence = medium
+>             CDS_InCHName = allowed
+>     CDS_DirectoryVersion = 3.0
+>         CDS_ReplicaState = on
+>          CDS_ReplicaType = master
+>            CDS_LastSkulk = 1992-11-12-15:43:56.783666100/00-08-2b-15-9e-6e
+>           CDS_LastUpdate = 1992-11-12-21:36:31.177902100/00-08-2b-15-9e-6e
+>          CDS_RingPointer = 0045EB56-764F-1B01-A799-00082B159E6E
+>                CDS_Epoch = 0095CB44-7655-1B01-A799-00082B159E6E
+>       CDS_ReplicaVersion = 3.0
+>          CDS_GDAPointers = :
+>                  Timeout = :
+>               Expiration = 1992-11-12-22:09:18.778
+>                Extension = +1-00:00:00.000
+>       Clearinghouse UUID = 0092377C-7679-1B01-A096-00082B159E6E
+>                    Tower = ncacn_ip_tcp:130.105.5.224[]
+>                    Tower = ncadg_ip_udp:130.105.5.224[]
+>             Replica type = gda
+>       Clearinghouse Name = /.../inter_cell.osf.org/intertest1_gda
+
+- On intertest1 use show dir to list the root directory in inter_cell.osf.org
+and admin_cell.osf.org.
+
+cdscp show dir /.../inter_cell.osf.org
+
+>                     SHOW
+>                DIRECTORY   /.../inter_cell.osf.org
+>                       AT   1992-11-12-17:12:25
+>         RPC_ClassVersion = 0100
+>                  CDS_CTS = 1992-11-11-21:08:37.981690100/00-08-2b-15-9e-6e
+>                  CDS_UTS = 1992-11-11-22:09:26.930061100/00-08-2b-15-9e-6e
+>           CDS_ObjectUUID = 0095CB45-7655-1B01-A799-00082B159E6E
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 0045EB56-764F-1B01-A799-00082B159E6E
+>                    Tower = ncacn_ip_tcp:130.105.5.224[]
+>                    Tower = ncadg_ip_udp:130.105.5.224[]
+>             Replica type = master
+>       Clearinghouse Name = /.../inter_cell.osf.org/intertest1
+>              CDS_AllUpTo = 1992-11-12-15:43:56.783666100/00-08-2b-15-9e-6e
+>          CDS_Convergence = medium
+>             CDS_InCHName = allowed
+>     CDS_DirectoryVersion = 3.0
+>         CDS_ReplicaState = on
+>          CDS_ReplicaType = master
+>            CDS_LastSkulk = 1992-11-12-15:43:56.783666100/00-08-2b-15-9e-6e
+>           CDS_LastUpdate = 1992-11-12-21:36:31.177902100/00-08-2b-15-9e-6e
+>          CDS_RingPointer = 0045EB56-764F-1B01-A799-00082B159E6E
+>                CDS_Epoch = 0095CB44-7655-1B01-A799-00082B159E6E
+>       CDS_ReplicaVersion = 3.0
+>          CDS_GDAPointers = :
+>                  Timeout = :
+>               Expiration = 1992-11-12-22:09:18.778
+>                Extension = +1-00:00:00.000
+>       Clearinghouse UUID = 0092377C-7679-1B01-A096-00082B159E6E
+>                    Tower = ncacn_ip_tcp:130.105.5.224[]
+>                    Tower = ncadg_ip_udp:130.105.5.224[]
+>             Replica type = gda
+>       Clearinghouse Name = /.../inter_cell.osf.org/intertest1_gda
+
+cdscp show dir /.../admin_cell.osf.org
+
+>                     SHOW
+>                DIRECTORY   /.../admin_cell.osf.org
+>                       AT   1992-11-12-17:13:16
+>         RPC_ClassVersion = 0100
+>                  CDS_CTS = 1992-11-11-21:09:58.167089100/08-00-2b-12-c6-f5
+>                  CDS_UTS = 1992-11-11-22:11:03.661219100/08-00-2b-12-c6-f5
+>           CDS_ObjectUUID = 0028655F-76A6-1B01-84DB-08002B12C6F5
+>             CDS_Replicas = :
+>       Clearinghouse UUID = 004D588C-7696-1B01-84DB-08002B12C6F5
+>                    Tower = ncacn_ip_tcp:130.105.202.29[]
+>                    Tower = ncadg_ip_udp:130.105.202.29[]
+>             Replica type = master
+>       Clearinghouse Name = /.../admin_cell.osf.org/admintest1_ch
+>             CDS_Replicas = :
+  >       Clearinghouse UUID = 0061047C-7E58-1B01-967F-08002B12C6F5
+  >                    Tower = ncacn_ip_tcp:130.105.202.27[]
+  >                    Tower = ncadg_ip_udp:130.105.202.27[]
+  >             Replica type = readonly
+  >       Clearinghouse Name = /.../admin_cell.osf.org/admintest2_ch
+  >              CDS_AllUpTo = 1992-11-12-19:36:57.159381100/08-00-2b-12-c6-f5
+  >          CDS_Convergence = medium
+  >             CDS_InCHName = allowed
+  >     CDS_DirectoryVersion = 3.0
+  >         CDS_ReplicaState = on
+  >          CDS_ReplicaType = master
+  >            CDS_LastSkulk = 1992-11-12-19:36:57.159381100/08-00-2b-12-c6-f5
+  >           CDS_LastUpdate = 1992-11-12-21:34:12.806997100/08-00-2b-12-c6-f5
+  >          CDS_RingPointer = 004D588C-7696-1B01-84DB-08002B12C6F5
+  >                CDS_Epoch = 0028655E-76A6-1B01-84DB-08002B12C6F5
+  >       CDS_ReplicaVersion = 3.0
+  >          CDS_GDAPointers = :
+  >                  Timeout = :
+  >               Expiration = 1992-11-12-22:10:46.806
+  >                Extension = +1-00:00:00.000
+  >       Clearinghouse UUID = 00171E0C-76CC-1B01-BEFF-08002B12C6F5
+  >                    Tower = ncacn_ip_tcp:130.105.202.29[]
+  >                    Tower = ncadg_ip_udp:130.105.202.29[]
+  >             Replica type = gda
+  >       Clearinghouse Name = /.../admin_cell.osf.org/admintest1_gda
+
+- End of Test

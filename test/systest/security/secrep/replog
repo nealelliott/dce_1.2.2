@@ -1,0 +1,297 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+#
+# HISTORY
+# $Log: replog,v $
+# Revision 1.1.2.2  1996/03/09  20:52:03  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:42  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:18  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:01 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  19:55 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:54 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  19:35 UTC  gordon_l
+# 	Fixes for change_master/becom
+# 	e_master
+# 	[1995/12/11  22:22:25  root]
+# 
+# Revision 1.1.2.3  1993/08/11  13:24:31  sekhar
+# 	Removed incorrect break out of case stmnt.
+# 	[1993/08/11  13:14:38  sekhar]
+# 
+# Revision 1.1.2.2  1993/08/02  17:40:21  sekhar
+# 	Replication system test. Initial version
+# 	[1993/08/02  17:29:55  sekhar]
+# 
+# $EndLog$
+#
+
+if [ -z "${REPLOG_DEFINED}" ] ; then
+
+REPLOG_DEFINED=1
+
+. $PHOME/profile
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  OBJECT : 
+#      This is the logging facility with provides operations for
+#      logging messages. Also exported outside of this module is
+#      is the indentation level variable IL. The value of IL 
+#      determines the format of the messages logged. The macros
+#      to increment ( let IL=IL+1 ) and decrement ( let IL=IL-1 ) are defined
+#      in $PHOME/profile . 
+#
+#      If the variable TET_LOG is set then the script is being run 
+#      under TET and so tet_infoline is used to log messages to the
+#      journal file.
+#
+#      If the variable TET_LOG is NOT set then the messages are written
+#      to the standard output.
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+#-----------------------------------------------------------------------
+# replog_blank : Logs a blank line
+#-----------------------------------------------------------------------
+
+replog_blank()
+{
+    if [ $TET_LOG ] ; then
+        tet_infoline " "
+    else
+        echo
+    fi
+}
+
+#-----------------------------------------------------------------------
+#  replog_msg : Logs an informational message
+#-----------------------------------------------------------------------
+
+replog_msg()
+{
+    if [ $TET_LOG ] ; then
+        case $IL in
+            0) tet_infoline "$1" ;; 
+            1) tet_infoline ".... $1" ;;
+            2) tet_infoline "........ $1" ;;
+            3) tet_infoline "............ $1" ;;
+            4) tet_infoline "................ $1" ;;
+            *) tet_infoline ".................... $1" ;;
+        esac
+    else
+        case $IL in
+            0) echo "$1" ;;
+            1) echo ".... $1" ;;
+            2) echo "........ $1" ;;
+            3) echo "............ $1" ;;
+            4) echo "................ $1" ;;
+            *) echo ".................... $1" ;;
+        esac
+    fi
+}
+
+#-----------------------------------------------------------------------
+# replog_debug : Logs a debug message (if REP_DEBUG is set)
+#-----------------------------------------------------------------------
+replog_debug()
+{
+    if [ $REP_DEBUG ] ; then
+        replog_msg "$1"
+    fi
+}
+
+#-----------------------------------------------------------------------
+# replog_error : Logs an error message. 
+#-----------------------------------------------------------------------
+replog_error()
+{
+    if [ $TET_LOG ] ; then
+        tet_infoline "**** ERROR **** : $1"
+    else
+        echo "**** ERROR **** : $1"
+    fi
+}
+
+#-----------------------------------------------------------------------
+# replog_abort : Logs an abort message.
+#
+# IN  arg1 ..... Function where this is called from
+#     arg2 ..... Function which returned an error to function in arg1. 
+#-----------------------------------------------------------------------
+
+replog_abort()
+{
+    if [ $TET_LOG ] ; then
+        tet_infoline "*** ABORTING $1 : $2 returned error"
+    else
+        echo "*** ABORTING $1 : $2 returned error"
+    fi
+}
+
+#-----------------------------------------------------------------------
+# replog_interr : Logs an internal error. This indicates an implementaion 
+#                 error. 
+#-----------------------------------------------------------------------
+
+replog_interr()
+{
+    if [ $TET_LOG ] ; then
+        tet_infoline "** INTERNAL ERROR **** $1"
+    else
+        echo "** INTERNAL ERROR **** $1"
+    fi
+}
+
+#-----------------------------------------------------------------------
+# replog_dumpfile : Dumps the specified file.
+#
+# IN arg1 ......... File to be written
+#-----------------------------------------------------------------------
+
+replog_dumpfile()
+{
+    typeset x
+
+    if [ $TET_LOG ] ; then
+        while read x
+        do
+            tet_infoline "$x"
+        done < $1
+    else
+        cat $1
+    fi
+}
+
+#-----------------------------------------------------------------------
+# replog_dumpfile_fmt : Dumps the specified file but unlike replog_dumpfile
+#                       the output is formatted according to the indentation
+#                       level in effect at the time of the call.
+#
+# IN arg1 ......... File to be written
+#-----------------------------------------------------------------------
+
+replog_dumpfile_fmt()
+{
+    typeset str x
+
+    let IL=IL+1
+    if [ $TET_LOG ] ; then
+        case $IL in
+          0) str="" ;;
+          1) str=".... " ;;
+          2) str="........ " ;;
+          3) str="............ " ;;
+          4) str="................ " ;;
+          *) str=".................... " ;;
+        esac
+
+        while read x
+        do
+            tet_infoline "$str $x"
+        done < $1
+    else
+        case $IL in
+          0) cat $1 ;;
+          1) awk '{print ".... " $0}' $1 ;;
+          2) awk '{print "........ " $0}' $1 ;;
+          3) awk '{print "............ " $0}' $1 ;;
+          4) awk '{print "................ " $0}' $1 ;;
+          *) awk '{print ".................... " $0}' $1 ;;
+        esac
+    fi
+    let IL=IL-1
+}
+
+#-----------------------------------------------------------------------
+#  replog_testresult - prints the result of a test 
+#   
+#  in : arg1 .... usually the same as arg1 passed to replog_testhdr
+#       arg2 .... usually failed or passed
+#-----------------------------------------------------------------------
+
+replog_testresult()
+{
+    typeset cur_time
+
+    cur_time=`date` ; st=$2
+    replog_blank
+
+    if [ $TET_LOG ] ; then
+
+        case $st in 
+
+            0)   tet_infoline "TEST ** PASSED *** : $1" ;
+                     tet_result PASS
+                     ;;
+            1)   tet_infoline "TEST ** FAILED *** : $1" ;
+                     tet_result FAIL
+                     ;;
+            *)   tet_infoline "TEST ** FAILED *** : $1 (STATUS=$st)" ;
+                     tet_result NORESULT
+                     ;;
+        esac
+        tet_infoline "TEST ** ENDED  *** : $cur_time" ;
+    else
+        case $st in 
+
+            0)   echo "TEST ** PASSED *** : $1" ;;
+            1)   echo "TEST ** FAILED *** : $1" ;;
+            *)   echo "TEST ** FAILED *** : $1" ;;
+        esac
+        echo "TEST ** ENDED  *** : $cur_time" ;
+    fi
+    replog_blank
+}
+
+#-----------------------------------------------------------------------
+#  replog_testhdr - prints the header message for a test
+#   
+#  in : arg1 .......... header message to print
+#-----------------------------------------------------------------------
+
+replog_testhdr()
+{
+    typeset cur_time
+
+    cur_time=`date`
+    replog_blank
+    if [ $TET_LOG ] ; then
+        tet_infoline "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ "
+        replog_blank
+        tet_infoline "TEST ** BEGIN **** : $1"
+        tet_infoline "TEST ** BEGAN **** : $cur_time" ;
+    else
+        echo "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ "
+        replog_blank
+        echo "TEST ** BEGIN **** : $1"
+        echo "TEST ** BEGAN **** : $cur_time" ;
+    fi
+    replog_blank
+}
+
+replog_init()
+{
+#   Set the indentation level to 0
+#
+IL=0
+}
+
+fi
+

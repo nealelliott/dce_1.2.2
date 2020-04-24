@@ -1,0 +1,1259 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: replica_checklist,v $
+# Revision 1.1.13.2  1996/03/11  02:37:29  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:04:56  marty]
+#
+# Revision 1.1.13.1  1995/12/11  21:54:20  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:54:52  root]
+# 
+# Revision 1.1.10.1  1994/06/20  19:59:49  petero
+# 	Corrected/updated updated output.  Changed structure of the test so backup of
+# 	the master security database is done after create replica security server.
+# 	[1994/06/20  19:59:28  petero]
+# 
+# Revision 1.1.8.1  1993/11/01  20:49:54  dassarma
+# 	This script was updated to correctly represent the new
+# 	dce_config menus. It also starts secd with the
+# 	-master_restore flag after the registry restore has
+# 	been done.
+# 	[1993/11/01  20:49:09  dassarma]
+# 
+# Revision 1.1.6.2  1993/04/15  20:34:03  pellis
+# 	Deleted test blocked message.
+# 	[1993/04/15  20:33:25  pellis]
+# 
+# Revision 1.1.2.4  1993/03/30  22:52:18  pellis
+# 	Updated with latest and greatest versions of messages until I hit the
+# 	latest blockage (marked by banner).
+# 	[1993/03/30  22:51:50  pellis]
+# 
+# Revision 1.1.2.3  1993/02/05  15:17:12  cjd
+# 	Embedded copyright notice
+# 	[1993/02/05  14:36:18  cjd]
+# 
+# Revision 1.1.4.2  1993/02/04  21:44:50  cjd
+# 	Embedded copyright notice
+# 
+# Revision 1.1.2.2  1992/12/26  21:39:26  pellis
+# 	Initial version of test.
+# 	[1992/12/26  21:35:17  pellis]
+# 
+# $EndLog$
+#
+#   FILE_NAME: replica.ksh
+#
+#   COMPONENT_NAME: dce.admin_test
+#
+#   FUNCTIONS:
+#
+#   USAGE:
+#
+#   DESCRIPTION:
+#
+#	This test will validate all the administration functions associated
+#	with replicating registries.
+#
+#   DCE 1.0.2 TEST PLAN COVERAGE ( ++ = covered ):
+#
+#	I)	Security
+#
+# ++		A) Install
+# ++			1) Security Server
+# ++		B) Configure
+# ++			1) Security Server
+#		C) Create
+# ++		D) Disable/Enable
+# ++			1) How Does Client React When Master Site is Disabled,
+# ++			   Does it Switch to Replica?
+# ++			2) How Does Client React When Master Site is Reenabled?
+# ++		E) Update/Modify
+# ++			1) Change Master Site
+# ++				a) Move Security Tree to New Server
+# ++				b) Change_master -to <new master>
+# ++				c) How Does Client React When the Master Site is
+# ++				   Changed?
+# ++			2) Change Master Site Using Remote Backup
+# ++				a) Restore Security Tree From Backup to New
+# ++				   Server
+# ++				b) secd -restore_master &
+# ++				c) How Does Client React When the Master Site is
+# ++				   Changed?
+# ++		F) Start/Stop
+# ++			1) How Does Client React When Master Site is Stopped,
+# ++			   Does it Switch to Replica?
+# ++			2) How Does Client React When Master Site is Restarted?
+#		G) Backup
+# ++			1) Using Replication
+# ++			2) Remote
+# ++				a) sec_admin: state -maintenance
+# ++				b) Save /opt/dcelocal/var/security/rgy_data
+# ++				   Remotely
+# ++				c) sec_admin: state -service
+# ++				d) How Do Clients React When Server is in
+# ++				   Maintenance Mode?
+#		H) Cleanup
+#		I) Monitoring
+#		J) Reconfigure
+#		K) Unconfigure/Delete
+#			1) Client
+#				a) Remove All Registry References to Client and
+#				   Attempt to Reconfigure it
+#		L) Crash Response
+# ++			1) How Does Client React When Master Site Goes Away
+# ++			   During a Request?
+#			2) How Does Server React When Client Goes Away During a
+#			   Request?
+#		M) Crash Recovery
+# ++			1) From Replica
+# ++			2) From Remote Backup Created With sec_admin
+#		N) Compatibility
+#			1) Use PMAX Registry Database on RIOS
+#			2) Use RIOS Registry Database on PMAX
+#			3) Use DCE 1.0.1 Registry Database With DCE 1.0.2
+#
+################################################################################
+
+- SEC Commands: kdestroy, kinit, klist, passwd_export, passwd_import, rgy_edit,
+                sec_admin, sec_clientd, sec_create_db and secd
+
+- The execution of this test requires at least a three machine cell.  The three
+  machines will be referred to as admintest1, admintest2 and admintest3 through-
+  out this test and the cell will be called admin_cell.
+
+- Install Security Server and CDS Server on admintest1.
+  Install Replica Security Server and DCE Client on admintest2.
+  Install DCE Client on admintest3.
+
+- Configure Security Server and Initial CDS Server on admintest1 calling the
+  cell admin_cell.
+  Configure DCE Client on admintest2.
+  Configure DCE Client on admintest3.
+
+- On admintest2 verify that the master registry on admintest1 is accessible by
+  doing a "dce_login cell_admin -dce-".
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  exit
+
+  >  No Output Expected
+
+
+- On admintest1 change the state of the master registry to "service" to make
+  the registry read/write.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  sec_admin
+
+  >  Default replica:  /.../admin_cell/subsys/dce/sec/master
+  >  Default cell:     /.../admin_cell
+  >> sec_admin: state -service
+  >> sec_admin> info
+  >
+  >  Default replica:  /.../admin_cell/subsys/dce/sec/master
+  >  Default cell:     /.../admin_cell
+  >            State:                   in service - master
+  >            Last update received at: Tue Mar 30 10:06:32 1993
+  >            Last update's seqno:     0.2081
+  >> sec_admin> quit
+  >  bye.
+
+  exit
+
+  >  No Output Expected
+
+- On admintest3 verify access to the master registry by attempting a dce_login
+  cell_admin -dce-.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  exit
+
+  >  No Output Expected
+
+- On admintest2 setup a slave/replica registry using dce_config.
+
+  ksh /etc/dce_config
+
+  <<CLEAR>>
+
+  >          DCE Main Menu  ( on hostname )
+  > 
+  >          1. INSTALL     -install dce software
+  >          2. CONFIGURE   -configure and start DCE daemons
+  >          3. START       -re-start DCE daemons
+  >          4. STOP        -stop DCE daemons
+  >          5. UNCONFIGURE -remove a host from CDS and SEC databases
+  >          6. REMOVE      -stop DCE daemons and remove data files
+  >                          created by DCE daemons
+  >
+  > 
+  >         99. EXIT
+  > 
+  >>        selection:  2
+
+  <<CLEAR>>
+
+  >          DCE Configuration Menu
+  > 
+  >          1. Initial Cell Configuration
+  >          2. Additional Server Configuration
+  >          3. DCE Client
+  >          4. DFS Client
+  > 
+  >         98. Return to previous menu
+  >         99. Exit
+  > 
+  >>        selection:  2
+
+  <<CLEAR>>
+
+  >  Password must be changed!
+
+  <<CLEAR>>
+
+  >          Additional Server Configuration
+  > 
+  >          1. Additional CDS Server(s)
+  >          2. DTS
+  >          3. DFS System Control Machine
+  >          4. DFS Private File Server
+  >          5. DFS File Server
+  >          6. DFS Fileset Location Database Server
+  >	     7. GDA Server
+  >          8. Replica Security Server
+  >          9. Auditing
+  > 
+  >         98. Return to previous menu
+  >         99. Exit
+  > 
+  >>        selection:  8
+  > 
+  >>        Enter the security replica name (without subsys/dce/sec): rep2
+  > 
+  >         Modifying acls on /.:/sec/replist ...
+  >         Modifying acls on /.:/subsys/dce/sec ...
+  >         Modifying acls on /.:/sec ...
+  >         Modifying acls on /.: ...
+  >         Modifying acls on /.:/cell-profile ...
+  >> Enter keyseed for initial database master key: 
+  >                start slave security server (secd) ...
+
+  <<CLEAR>>
+
+  >          Additional Server Configuration
+  > 
+  >          1. Additional CDS Server(s)
+  >          2. DTS
+  >          3. DFS System Control Machine
+  >          4. DFS Private File Server
+  >          5. DFS File Server
+  >          6. DFS Fileset Location Database Server
+  >	     7. GDA Server
+  >          8. Replica Security Server
+  >          9. Auditing
+  > 
+  >         98. Return to previous menu
+  >         99. Exit
+  > 
+  >>        selection:  99
+  >         It is recommended that the password for the cell_admin user
+  >         be changed after all configuration for this machine is complete.
+
+- On admintest1 and admintest2 use the rgy_edit command to get a listing of the
+  master and replica registries and compare these together.
+
+  On admintest1:
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  rgy_edit -update
+
+  >  Current site is: registry server at /.../admin_cell/subsys/dce/sec/master 
+  >> rgy_edit=> do o
+  >  Domain changed to: org
+  >> rgy_edit=> v
+  >  none                                          12
+  >> rgy_edit=> do g
+  >  Domain changed to: group
+  >> rgy_edit=> v
+  >  nogroup                                       -2
+  >  system                                         0
+  >  daemon                                         1
+  >  uucp                                           2
+  >  bin                                            3
+  >  kmem                                           4
+  >  mail                                           6
+  >  tty                                            7
+  >  none                                          12
+  >  tcb                                           18
+  >  acct-admin                                   100
+  >  subsys/dce/sec-admin                         101
+  >  subsys/dce/cds-admin                         102
+  >  subsys/dce/dfs-admin                         103
+  >  subsys/dce/dts-admin                         104
+  >  subsys/dce/dskl-admin                        105
+  >  subsys/dce/cds-server                        106
+  >  subsys/dce/dts-servers                       107
+  >  subsys/dce/dfs-fs-servers                    108
+  >  subsys/dce/dfs-bak-servers                   109
+  >> rgy_edit=> do p
+  >  Domain changed to: principal
+  >> rgy_edit=> v
+  >  nobody                                        -2
+  >  root                                           0
+  >  daemon                                         1
+  >  sys                                            2
+  >  bin                                            3
+  >  uucp                                           4
+  >  who                                            5
+  >  mail                                           6
+  >  tcb                                            9
+  >  dce-ptgt                                      20
+  >  dce-rgy                                       21
+  >  cell_admin                                   100
+  >  krbtgt/admin_cell                            101
+  >  hosts/admintest1/self                        102
+  >  hosts/admintest1/cds-server                  103
+  >  hosts/admintest1/gda                         104
+  >  hosts/admintest2/self                        105
+  >  hosts/admintest3/self                        106
+  >> rgy_edit=> do a
+  >  Domain changed to: account
+  >> rgy_edit=> v
+  >  nobody [nogroup none]:*:-2:-2::/::
+  >  root [system none]:*:0:0::/::
+  >  daemon [daemon none]:*:1:1::/::
+  >  uucp [uucp none]:*:4:2::/usr/spool/uucppublic:/usr/lib/uucp/uucico:
+  >  bin [bin none]:*:3:3::/bin::
+  >  dce-ptgt [none none]:*:20:12::/::
+  >  dce-rgy [none none]:*:21:12::/::
+  >  krbtgt/admin_cell [none none]:*:101:12::/::
+  >  cell_admin [none none]:*:100:12::/::
+  >  hosts/admintest1/self [none none]:*:102:12::/::
+  >  hosts/admintest1/cds-server [subsys/dce/cds-server none]:*:103:106::/::
+  >  hosts/admintest1/gda [subsys/dce/cds-server none]:*:104:106::/::
+  >  hosts/admintest2/self [none none]:*:105:12::/::
+  >  hosts/admintest3/self [none none]:*:106:12::/::
+  >> rgy_edit=> quit
+  >  bye.
+
+  exit
+
+  >  No Output Expected
+
+  On admintest2:
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+- It may be necessary to invoke rgy_edit a number of times before getting the
+  Replica Security Server.
+
+  rgy_edit
+
+  >  Current site is: registry server at /.../admin_cell/subsys/dce/sec/rep2   (read-only)
+  >> rgy_edit=> do o
+  >  Domain changed to: org
+  >> rgy_edit=> v
+  >  none                                          12
+  >> rgy_edit=> do g
+  >  Domain changed to: group
+  >> rgy_edit=> v
+  >  nogroup                                       -2
+  >  system                                         0
+  >  daemon                                         1
+  >  uucp                                           2
+  >  bin                                            3
+  >  kmem                                           4
+  >  mail                                           6
+  >  tty                                            7
+  >  none                                          12
+  >  tcb                                           18
+  >  acct-admin                                   100
+  >  subsys/dce/sec-admin                         101
+  >  subsys/dce/cds-admin                         102
+  >  subsys/dce/dfs-admin                         103
+  >  subsys/dce/dts-admin                         104
+  >  subsys/dce/dskl-admin                        105
+  >  subsys/dce/cds-server                        106
+  >  subsys/dce/dts-servers                       107
+  >  subsys/dce/dfs-fs-servers                    108
+  >  subsys/dce/dfs-bak-servers                   109
+  >> rgy_edit=> do p
+  >  Domain changed to: principal
+  >> rgy_edit=> v
+  >  nobody                                        -2
+  >  root                                           0
+  >  daemon                                         1
+  >  sys                                            2
+  >  bin                                            3
+  >  uucp                                           4
+  >  who                                            5
+  >  mail                                           6
+  >  tcb                                            9
+  >  dce-ptgt                                      20
+  >  dce-rgy                                       21
+  >  cell_admin                                   100
+  >  krbtgt/admin_cell                            101
+  >  hosts/admintest1/self                        102
+  >  hosts/admintest1/cds-server                  103
+  >  hosts/admintest1/gda                         104
+  >  hosts/admintest2/self                        105
+  >  hosts/admintest3/self                        106
+  >> rgy_edit=> do a
+  >  Domain changed to: account
+  >> rgy_edit=> v
+  >  nobody [nogroup none]:*:-2:-2::/::
+  >  root [system none]:*:0:0::/::
+  >  daemon [daemon none]:*:1:1::/::
+  >  uucp [uucp none]:*:4:2::/usr/spool/uucppublic:/usr/lib/uucp/uucico:
+  >  bin [bin none]:*:3:3::/bin::
+  >  dce-ptgt [none none]:*:20:12::/::
+  >  dce-rgy [none none]:*:21:12::/::
+  >  krbtgt/admin_cell [none none]:*:101:12::/::
+  >  cell_admin [none none]:*:100:12::/::
+  >  hosts/admintest1/self [none none]:*:102:12::/::
+  >  hosts/admintest1/cds-server [subsys/dce/cds-server none]:*:103:106::/::
+  >  hosts/admintest1/gda [subsys/dce/cds-server none]:*:104:106::/::
+  >  hosts/admintest2/self [none none]:*:105:12::/::
+  >  hosts/admintest3/self [none none]:*:106:12::/::
+  >> rgy_edit=> quit
+  >  bye.
+
+  exit
+
+  >  No Output Expected
+
+- On admintest1 change the state of the master registry to "maintenance" to
+  prepare for doing a backup of the original master registry.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  sec_admin
+
+  >  Default replica:  /.../admin_cell/subsys/dce/sec/master
+  >  Default cell:     /.../admin_cell
+  >> sec_admin: state -maintenance
+  >> sec_admin> info
+
+  >  Default replica:  /.../admin_cell/subsys/dce/sec/master
+  >  Default cell:     /.../admin_cell
+  >            State:                   in maintenance - master
+  >            Last update received at: Tue Mar 30 10:06:32 1993
+  >            Last update's seqno:     0.2081
+  >> sec_admin> quit
+  >  bye.
+
+  exit
+
+  >  No Output Expected
+
+- On admintest1 backup the original master registry by saving the following
+  files to disk or tape:
+
+  mkdir ./backup ./backup/original
+
+  >  No Output Expected
+
+  cp -pr /opt/dcelocal/var/security/rgy_data ./backup/original/rgy_data
+
+  >  No Output Expected
+
+  cp -p /opt/dcelocal/var/security/.mkey ./backup/original/.mkey
+
+  >  No Output Expected
+
+  cp -pr /opt/dcelocal/var/security/lrgy_data ./backup/original/lrgy_data
+
+  >  No Output Expected (Note that the files lrgy_data and lrgy_tgts may not
+                         exist all machines)
+
+  cp -pr /opt/dcelocal/var/security/lrgy_tgts ./backup/original/lrgy_tgts
+
+  >  No Output Expected (Note that the files lrgy_data and lrgy_tgts may not
+                         exist all machines)
+
+  cp -p /opt/dcelocal/etc/security/pe_site ./backup/original/pe_site
+
+  >  No Output Expected
+
+  cp -p /krb5/v5srvtab ./backup/original/v5srvtab
+
+  >  No Output Expected
+
+  cp -p /krb5/krb.conf ./backup/original/krb.conf
+
+  >  No Output Expected
+
+  ls -lR ./backup/original
+
+  >  total 10
+  >  -rw-------   1 root     bin                  16 Feb 17 12:00 .mkey
+  >  -rw-r--r--   1 root     bin                  29 Feb 17 12:00 krb.conf
+  >  -rw-r--r--   1 root     bin                 168 Feb 17 12:01 pe_site
+  >  drwxr-xr-x   3 root     bin                 512 Feb 18 15:34 rgy_data
+  >  -rw-------   1 root     bin                 287 Feb 17 12:02 v5srvtab
+  >  
+  >  ./backup/original/rgy_data:
+  >  total 108
+  >  -rw-------   1 root     bin                3772 Feb 17 14:01 acct
+  >  -rw-------   1 root     bin               27388 Feb 17 14:01 acl
+  >  -rw-------   1 root     bin                7008 Feb 17 14:01 group
+  >  -rw-------   1 root     bin                  32 Feb 17 12:01 master_info
+  >  -rw-------   1 root     bin                 660 Feb 17 14:01 org
+  >  -rw-------   1 root     bin                7040 Feb 17 14:01 person
+  >  -rw-------   1 root     bin                 324 Feb 17 14:01 replicas
+  >  -rw-------   1 root     bin                2204 Feb 18 15:34 rgy
+  >  -rw-------   1 root     bin                  60 Feb 18 15:34 rgy_state
+  >  -rw-------   1 root     bin                 232 Feb 18 15:34 update_log
+
+- On admintest2 verify access to the master registry by attempting a dce_login
+  cell_admin -dce- and adding a new user.  The registry should still be read-
+  only so the adding of a new user should be disallowed.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  rgy_edit -update
+
+  >  Current site is: registry server at /.../admin_cell/subsys/dce/sec/master
+  >> rgy_edit=> domain principal
+  >  Domain changed to: principal
+  >> rgy_edit=> add
+  >> Add Principal=> Enter name: test_user
+  >> Enter UNIX number: (auto assign)
+  >> Enter full name: () Test User
+  >> Enter object creation quota: (unlimited)
+  >  ?(rgy_edit) Unable to add principal  "test_user" - bad state (dce / sec)
+  >> Do you wish to try again  [y/n]? (n) n
+  >> rgy_edit=> quit
+  >  bye.
+
+  exit
+
+  >  No Output Expected
+- On admintest3 verify access to the registry by attempting a dce_login
+  cell_admin -dce-.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  exit
+
+  >  No Output Expected
+
+- On admintest1 add five users named adminuser[1-5].  A group named admingroup
+  will also be added.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  sec_admin
+
+  >  Default replica:  /.../admin_cell/subsys/dce/sec/master
+  >  Default cell:     /.../admin_cell
+  >> sec_admin: state -service
+  >> sec_admin> info
+  >
+  >  Default replica:  /.../admin_cell/subsys/dce/sec/master
+  >  Default cell:     /.../admin_cell
+  >            State:                   in service - master
+  >            Last update received at: Tue Mar 30 10:06:32 1993
+  >            Last update's seqno:     0.2081
+  >> sec_admin> quit
+  >  bye.
+
+  >  No Output Expected
+
+  rgy_edit -update
+
+  >  Current site is: registry server at /.../admin_cell/subsys/dce/sec/master
+  >> rgy_edit=> domain principal
+  >  Domain changed to: principal
+  >> rgy_edit=> add
+  >> Add Principal=> Enter name: adminuser1
+  >> Enter UNIX number: (auto assign)
+  >> Enter full name: () Admin User #1
+  >> Enter object creation quota: (unlimited)
+  >> Add Principal=> Enter name: adminuser2
+  >> Enter UNIX number: (auto assign)
+  >> Enter full name: () Admin User #2
+  >> Enter object creation quota: (unlimited)
+  >> Add Principal=> Enter name: adminuser3
+  >> Enter UNIX number: (auto assign)
+  >> Enter full name: () Admin User #3
+  >> Enter object creation quota: (unlimited)
+  >> Add Principal=> Enter name: adminuser4
+  >> Enter UNIX number: (auto assign)
+  >> Enter full name: () Admin User #4
+  >> Enter object creation quota: (unlimited)
+  >> Add Principal=> Enter name: adminuser5
+  >> Enter UNIX number: (auto assign)
+  >> Enter full name: () Admin User #5
+  >> Enter object creation quota: (unlimited)
+  >> Add Principal=> Enter name:
+  >> rgy_edit=> view
+  >  nobody                                        -2
+  >  root                                           0
+  >  daemon                                         1
+  >  sys                                            2
+  >  bin                                            3
+  >  uucp                                           4
+  >  who                                            5
+  >  mail                                           6
+  >  tcb                                            9
+  >  dce-ptgt                                      20
+  >  dce-rgy                                       21
+  >  cell_admin                                   100
+  >  krbtgt/admin_cell                            101
+  >  hosts/admintest1/self                        102
+  >  hosts/admintest1/cds-server                  103
+  >  hosts/admintest1/gda                         104
+  >  hosts/admintest2/self                        105
+  >  hosts/admintest3/self                        106
+  >  adminuser1                                   107
+  >  adminuser2                                   108
+  >  adminuser3                                   109
+  >  adminuser4                                   110
+  >  adminuser5                                   111
+  >> rgy_edit=> v adminuser1 -f
+  >  adminuser1                                   107
+  >    Full name:  Admin User #1
+  >    Uuid:       0000006b-3b10-2b85-9b00-08002b24cf9f
+  >    Primary:  pr   Reserved:   --
+  >    Quota: unlimited
+  >> rgy_edit=> v adminuser2 -f
+  >  adminuser2                                   108
+  >    Full name:  Admin User #2
+  >    Uuid:       0000006c-3b20-2b85-9b00-08002b24cf9f
+  >    Primary:  pr   Reserved:   --
+  >    Quota: unlimited
+  >> rgy_edit=> v adminuser3 -f
+  >  adminuser3                                   109
+  >    Full name:  Admin User #3
+  >    Uuid:       0000006d-3b30-2b85-9b00-08002b24cf9f
+  >    Primary:  pr   Reserved:   --
+  >    Quota: unlimited
+  >> rgy_edit=> v adminuser4 -f
+  >  adminuser4                                   110
+  >    Full name:  Admin User #4
+  >    Uuid:       0000006e-3b3c-2b85-9b00-08002b24cf9f
+  >    Primary:  pr   Reserved:   --
+  >    Quota: unlimited
+  >> rgy_edit=> v adminuser5 -f
+  >  adminuser5                                   111
+  >    Full name:  Admin User #5
+  >    Uuid:       0000006f-3b46-2b85-9b00-08002b24cf9f
+  >    Primary:  pr   Reserved:   --
+  >    Quota: unlimited
+  >> rgy_edit=> domain group
+  >  Domain changed to: group
+  >> rgy_edit=> add
+  >> Add Group=> Enter name: admingroup
+  >> Enter UNIX number: (auto assign)
+  >> Enter full name: () Admin Group
+  >> Include group on PROJLIST [y/n]? (y) n
+  >> Add Group=> Enter name:
+  >> rgy_edit=> v
+  >  nogroup                                       -2
+  >  system                                         0
+  >  daemon                                         1
+  >  uucp                                           2
+  >  bin                                            3
+  >  kmem                                           4
+  >  mail                                           6
+  >  tty                                            7
+  >  none                                          12
+  >  tcb                                           18
+  >  acct-admin                                   100
+  >  subsys/dce/sec-admin                         101
+  >  subsys/dce/cds-admin                         102
+  >  subsys/dce/dfs-admin                         103
+  >  subsys/dce/dts-admin                         104
+  >  subsys/dce/dskl-admin                        105
+  >  subsys/dce/cds-server                        106
+  >  subsys/dce/dts-servers                       107
+  >  subsys/dce/dfs-fs-servers                    108
+  >  subsys/dce/dfs-bak-servers                   109
+  >  admingroup                                   110
+  >> rgy_edit=> v admingroup -f
+  >  admingroup                                   110
+  >    Full name:  Admin Group
+  >    Uuid:       0000006e-3c56-2b85-9b01-08002b24cf9f
+  >    Primary:  pr   Reserved:   --
+  >    Project List:nl  
+  >> rgy_edit=> domain account
+  >  Domain changed to: account
+  >> rgy_edit=> add adminuser1 -g admingroup -o none -pw admin -mp -dce-
+  >> rgy_edit=> add adminuser2 -g admingroup -o none -pw admin -mp -dce-
+  >> rgy_edit=> add adminuser3 -g admingroup -o none -pw admin -mp -dce-
+  >> rgy_edit=> add adminuser4 -g admingroup -o none -pw admin -mp -dce-
+  >> rgy_edit=> add adminuser5 -g admingroup -o none -pw admin -mp -dce-
+  >> rgy_edit=> view
+  >  nobody [nogroup none]:*:-2:-2::/::
+  >  root [system none]:*:0:0::/::
+  >  daemon [daemon none]:*:1:1::/::
+  >  uucp [uucp none]:*:4:2::/usr/spool/uucppublic:/usr/lib/uucp/uucico:
+  >  bin [bin none]:*:3:3::/bin::
+  >  dce-ptgt [none none]:*:20:12::/::
+  >  dce-rgy [none none]:*:21:12::/::
+  >  krbtgt/admin_cell [none none]:*:101:12::/::
+  >  cell_admin [none none]:*:100:12::/::
+  >  hosts/admintest1/self [none none]:*:102:12::/::
+  >  hosts/admintest1/cds-server [subsys/dce/cds-server none]:*:103:106::/::
+  >  hosts/admintest1/gda [subsys/dce/cds-server none]:*:104:106::/::
+  >  hosts/admintest2/self [none none]:*:105:12::/::
+  >  hosts/admintest3/self [none none]:*:106:12::/::
+  >  adminuser1 [admingroup none]:*:107:110::/::
+  >  adminuser2 [admingroup none]:*:108:110::/::
+  >  adminuser3 [admingroup none]:*:109:110::/::
+  >  adminuser4 [admingroup none]:*:110:110::/::
+  >  adminuser5 [admingroup none]:*:111:110::/::
+  >> rgy_edit=> v adminuser1
+  >  adminuser1 [admingroup none]:*:107:110::/::
+  >> rgy_edit=> v adminuser2
+  >  adminuser2 [admingroup none]:*:108:110::/::
+  >> rgy_edit=> v adminuser3
+  >  adminuser3 [admingroup none]:*:109:110::/::
+  >> rgy_edit=> v adminuser4
+  >  adminuser4 [admingroup none]:*:110:110::/::
+  >> rgy_edit=> v adminuser5
+  >  adminuser5 [admingroup none]:*:111:110::/::
+  >> rgy_edit=> quit
+  >  bye.
+
+  exit
+
+  >  No Output Expected
+
+- On admintest2 verify that the five new users added on admintest1 exist in
+  the replica registry which is located on admintest2 using the rgy_edit
+  view command.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+- It may be necessary to invoke rgy_edit a number of times before getting the
+  Replica Security Server.
+
+  rgy_edit
+
+  >  Current site is: registry server at /.../admin_cell/subsys/dce/sec/rep2   (read-only)
+  >> rgy_edit=> do g
+  >  Domain changed to: group
+  >> rgy_edit=> view admingroup -f
+  >  admingroup                                   110
+  >    Full name:  Admin Group
+  >    Uuid:       0000006e-3c56-2b85-9b01-08002b24cf9f
+  >    Primary:  pr   Reserved:   --
+  >    Project List:nl  
+  >> rgy_edit=> do p
+  >  Domain changed to: principal
+  >> rgy_edit=> view adminuser1
+  >  adminuser1                                   107
+  >> rgy_edit=> view adminuser2
+  >  adminuser2                                   108
+  >> rgy_edit=> view adminuser3
+  >  adminuser3                                   109
+  >> rgy_edit=> view adminuser4
+  >  adminuser4                                   110
+  >> rgy_edit=> view adminuser5
+  >  adminuser5                                   111
+  >> rgy_edit=> do a
+  >  Domain changed to: account
+  >> rgy_edit=> view adminuser1
+  >  adminuser1 [admingroup none]:*:107:110::/::
+  >> rgy_edit=> view adminuser2
+  >  adminuser2 [admingroup none]:*:108:110::/::
+  >> rgy_edit=> view adminuser3
+  >  adminuser3 [admingroup none]:*:109:110::/::
+  >> rgy_edit=> view adminuser4
+  >  adminuser4 [admingroup none]:*:110:110::/::
+  >> rgy_edit=> view adminuser5
+  >  adminuser5 [admingroup none]:*:111:110::/::
+  >> rgy_edit=> quit
+  >  bye.
+
+  exit
+
+  >  No Output Expected
+
+- On admintest1 disable the master registry by using the sec_admin: stop
+  command.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  sec_admin
+
+  >  Default replica:  /.../admin_cell/subsys/dce/sec/master
+  >  Default cell:     /.../admin_cell
+  >> sec_admin> info
+  >  Default replica:  /.../admin_cell/subsys/dce/sec/master
+  >  Default cell:     /.../admin_cell
+  >            State:              in service - master
+  >            Last update received at: Tue Mar 30 15:54:52 1993
+  >            Last update's seqno:     0.2105
+  >> sec_admin> stop
+  >> sec_admin> info
+  >  
+  >  Default replica:  /.../admin_cell/subsys/dce/sec/master
+  >  Default cell:     /.../admin_cell
+  >            State: ERROR - connection request rejected (dce / rpc)
+  >> sec_admin> quit
+  >  bye.
+
+  ps ax | grep -v grep | grep secd
+
+  >  No Output Expected
+
+  exit
+
+  >  No Output Expected
+
+********************************************************************************
+
+- On admintest3 try to login as adminuser3, this should work since the
+  replica is still available on admintest2.
+
+  dce_login adminuser3 admin
+
+  >  No Output Expected
+
+  klist | grep -i "Principal"
+
+  >          Global Principal: /.../admin1_cell/adminuser3
+  >          Principal: 0000006d-3b30-2b85-9b00-08002b24cf9f adminuser3
+  >  Default principal: adminuser3@admin1_cell
+
+  exit
+
+  >  No Output Expected
+
+- On admintest3 try to add a new user named adminuser6, this should fail since
+  the master registry on admintest1 is disabled.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  rgy_edit
+
+  >  Current site is: registry server at /.../admin_cell/subsys/dce/sec/rep2
+  >> rgy_edit=> do p
+  >  Domain changed to: principal
+  >> rgy_edit=> add
+  >> Add Principal=> Enter name: adminuser6
+  >> Enter UNIX number: (auto assign)
+  >> Enter full name: () Admin User #6
+  >> Enter object creation quota: (unlimited)
+  >  ?(rgy_edit) Unable to add principal  "adminuser6" - Replica is not the
+  >  master (dce / sec)
+  >> Do you wish to try again  [y/n]? (n)
+  >  rgy_edit=> quit
+  >  bye.
+
+  exit
+
+  >  No Output Expected
+
+- On admintest1 enable the master registry by executing the secd command.
+
+  secd
+
+  >  No Output Expected
+
+  ps ax | grep -v grep | grep secd
+
+  >  7930 pts/0    S <    0:05.05 secd
+
+- On admintest1 delete accounts adminuser4 and adminuser5 from the master
+  registry.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  rgy_edit -update
+
+  >  Current site is: registry server at /.../admin_cell/subsys/dce/sec/master
+  >> rgy_edit=> v
+  >  nobody [nogroup none]:*:-2:-2::/::
+  >  root [system none]:*:0:0::/::
+  >  daemon [daemon none]:*:1:1::/::
+  >  uucp [uucp none]:*:4:2::/usr/spool/uucppublic:/usr/lib/uucp/uucico:
+  >  bin [bin none]:*:3:3::/bin::
+  >  dce-ptgt [none none]:*:20:12::/::
+  >  dce-rgy [none none]:*:21:12::/::
+  >  krbtgt/admin_cell [none none]:*:101:12::/::
+  >  cell_admin [none none]:*:100:12::/::
+  >  hosts/admintest1/self [none none]:*:102:12::/::
+  >  hosts/admintest1/cds-server [subsys/dce/cds-server none]:*:103:106::/::
+  >  hosts/admintest1/gda [subsys/dce/cds-server none]:*:104:106::/::
+  >  hosts/admintest2/self [none none]:*:105:12::/::
+  >  hosts/admintest3/self [none none]:*:106:12::/::
+  >  adminuser1 [admingroup none]:*:107:110::/::
+  >  adminuser2 [admingroup none]:*:108:110::/::
+  >  adminuser3 [admingroup none]:*:109:110::/::
+  >  adminuser4 [admingroup none]:*:110:110::/::
+  >  adminuser5 [admingroup none]:*:111:110::/::
+  >> rgy_edit=> delete -p adminuser4 -g admingroup -o none
+  >  Please confirm delete of acct "adminuser4 admingroup none" [y/n]? (n) y
+  >> rgy_edit=> delete -p adminuser5 -g admingroup -o none
+  >  Please confirm delete of acct "adminuser5 admingroup none" [y/n]? (n) y
+  >> rgy_edit=> v
+  >  nobody [nogroup none]:*:-2:-2::/::
+  >  root [system none]:*:0:0::/::
+  >  daemon [daemon none]:*:1:1::/::
+  >  uucp [uucp none]:*:4:2::/usr/spool/uucppublic:/usr/lib/uucp/uucico:
+  >  bin [bin none]:*:3:3::/bin::
+  >  dce-ptgt [none none]:*:20:12::/::
+  >  dce-rgy [none none]:*:21:12::/::
+  >  krbtgt/admin_cell [none none]:*:101:12::/::
+  >  cell_admin [none none]:*:100:12::/::
+  >  hosts/admintest1/self [none none]:*:102:12::/::
+  >  hosts/admintest1/cds-server [subsys/dce/cds-server none]:*:103:106::/::
+  >  hosts/admintest1/gda [subsys/dce/cds-server none]:*:104:106::/::
+  >  hosts/admintest2/self [none none]:*:105:12::/::
+  >  hosts/admintest3/self [none none]:*:106:12::/::
+  >  adminuser1 [admingroup none]:*:107:110::/::
+  >  adminuser2 [admingroup none]:*:108:110::/::
+  >  adminuser3 [admingroup none]:*:109:110::/::
+  >> rgy_edit=> quit
+  >  bye.
+
+  exit
+
+  >  No Output Expected
+
+- On admintest2 verify that the adminuser4 and adminuser5 accounts have been
+  deleted using the rgy_edit view command.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+- It may be necessary to invoke rgy_edit a number of times before getting the
+  Replica Security Server.
+
+  rgy_edit
+
+  >  Current site is: registry server at /.../admin_cell/subsys/dce/sec/rep2   (read-only)
+  >> rgy_edit=> view adminuser3 -f
+  >  adminuser3 [admingroup none]:*:109:110::/::
+  >    created by: /.../admin_cell/cell_admin  1993/02/19.15:02
+  >    changed by: /.../admin_cell/cell_admin  1993/02/19.15:02
+  >    password is: valid, was last changed: 1993/02/19.15:02
+  >    Account expiration date: none
+  >    Account MAY be a server principal
+  >    Account MAY be a client principal
+  >    Account is: valid
+  >    Account CAN NOT get post-dated certificates
+  >    Account CAN get forwardable certificates
+  >    Certificates to this service account MAY be issued via TGT authentication
+  >    Account CAN get renewable certificates
+  >    Account CAN NOT get proxiable certificates
+  >    Account CAN NOT have duplicate session keys
+  >    Good since date: 1993/02/19.15:02
+  >    Max certificate lifetime: default-policy
+  >    Max renewable lifetime: default-policy
+  >> rgy_edit=> view adminuser4 -f
+  >  ?(rgy_edit) Cannot retrieve any matching entries for adminuser4   "" -
+  >  Entry not found (Registry Edit Kernel) (dce / sad)
+  >> rgy_edit=> view adminuser5 -f
+  >  ?(rgy_edit) Cannot retrieve any matching entries for adminuser5   "" -
+  >  Entry not found (Registry Edit Kernel) (dce / sad)
+  >  rgy_edit=> site
+  >  Current site is: registry server at /.../admin_cell/subsys/dce/sec/rep2 
+  >> rgy_edit=> quit
+  >  bye.
+
+  exit
+
+  >  No Output Expected
+
+- On admintest1 shutdown the master registry by doing a sec_admin: stop com-
+  mand so that the original master registry can be restored.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  sec_admin
+
+  >  Default replica:  /.../admin_cell/subsys/dce/sec/master
+  >  Default cell:     /.../admin_cell
+  >> sec_admin> stop
+  >> sec_admin> quit
+  >  bye.
+
+  ps ax | grep secd | grep -v grep
+
+  >  No Output Expected
+
+  exit
+
+  >  No Output Expected
+
+- On admintest3 attempt to login as adminuser3 while the registry is stopped,
+  this test should pass since the slave on admintest2 is still running.
+
+  dce_login adminuser3 admin
+
+  >  No Output Expected
+
+  exit
+
+  >  No Output Expected
+
+- On admintest1 restore the original master registry which was saved earlier
+  by copying the following files back into /opt/dcelocal:
+
+  rm -r /opt/dcelocal/var/security/rgy_data
+
+  >  No Output Expected
+
+  cp -pr ./backup/original/rgy_data /opt/dcelocal/var/security/rgy_data
+
+  >  No Output Expected
+
+  cp -p ./backup/original/.mkey /opt/dcelocal/var/security/.mkey
+
+  >  No Output Expected
+
+  rm -r /opt/dcelocal/var/security/lrgy_data
+
+  >  No Output Expected (Note that the files lrgy_data may not exist)
+
+  cp -pr ./backup/original/lrgy_data /opt/dcelocal/var/security/lrgy_data
+
+  >  No Output Expected (Note that the files lrgy_data may not exist)
+
+  rm -r /opt/dcelocal/var/security/lrgy_tgts
+
+  >  No Output Expected (Note that the files lrgy_tgts may not exist)
+
+  cp -pr ./backup/original/lrgy_tgts /opt/dcelocal/var/security/lrgy_tgts
+
+  >  No Output Expected (Note that the files lrgy_tgts may not exist)
+
+  cp -p ./backup/original/pe_site /opt/dcelocal/etc/security/pe_site
+
+  >  No Output Expected
+
+  cp -p ./backup/original/v5srvtab /krb5/v5srvtab
+
+  >  No Output Expected
+
+  cp -p ./backup/original/krb.conf /krb5/krb.conf
+
+  >  No Output Expected
+
+- On admintest1 restart the security server using the secd command.
+
+  secd -restore_master
+
+- This command will cause the master to mark all slaves to be 
+  reinitialized.
+
+  >  No Output Expected
+
+- On admintest1 verify that the original registry has been restored by
+  comparing the current master registry with the original master registry.
+
+- The admintest principals/accounts and admingroup should not be seen on the
+  master or replica security server.
+
+  On admintest1:
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  rgy_edit -update
+
+  >  Current site is: registry server at /.../admin_cell/subsys/dce/sec/master 
+  >> rgy_edit=> do o
+  >  Domain changed to: org
+  >> rgy_edit=> v
+  >  none                                          12
+  >> rgy_edit=> do g
+  >  Domain changed to: group
+  >> rgy_edit=> v
+  >  nogroup                                       -2
+  >  system                                         0
+  >  daemon                                         1
+  >  uucp                                           2
+  >  bin                                            3
+  >  kmem                                           4
+  >  mail                                           6
+  >  tty                                            7
+  >  none                                          12
+  >  tcb                                           18
+  >  acct-admin                                   100
+  >  subsys/dce/sec-admin                         101
+  >  subsys/dce/cds-admin                         102
+  >  subsys/dce/dfs-admin                         103
+  >  subsys/dce/dts-admin                         104
+  >  subsys/dce/dskl-admin                        105
+  >  subsys/dce/cds-server                        106
+  >  subsys/dce/dts-servers                       107
+  >  subsys/dce/dfs-fs-servers                    108
+  >  subsys/dce/dfs-bak-servers                   109
+  >> rgy_edit=> do p
+  >  Domain changed to: principal
+  >> rgy_edit=> v
+  >  nobody                                        -2
+  >  root                                           0
+  >  daemon                                         1
+  >  sys                                            2
+  >  bin                                            3
+  >  uucp                                           4
+  >  who                                            5
+  >  mail                                           6
+  >  tcb                                            9
+  >  dce-ptgt                                      20
+  >  dce-rgy                                       21
+  >  cell_admin                                   100
+  >  krbtgt/admin_cell                            101
+  >  hosts/admintest1/self                        102
+  >  hosts/admintest1/cds-server                  103
+  >  hosts/admintest1/gda                         104
+  >  hosts/admintest2/self                        105
+  >  hosts/admintest3/self                        106
+  >> rgy_edit=> do a
+  >  Domain changed to: account
+  >> rgy_edit=> v
+  >  nobody [nogroup none]:*:-2:-2::/::
+  >  root [system none]:*:0:0::/::
+  >  daemon [daemon none]:*:1:1::/::
+  >  uucp [uucp none]:*:4:2::/usr/spool/uucppublic:/usr/lib/uucp/uucico:
+  >  bin [bin none]:*:3:3::/bin::
+  >  dce-ptgt [none none]:*:20:12::/::
+  >  dce-rgy [none none]:*:21:12::/::
+  >  krbtgt/admin_cell [none none]:*:101:12::/::
+  >  cell_admin [none none]:*:100:12::/::
+  >  hosts/admintest1/self [none none]:*:102:12::/::
+  >  hosts/admintest1/cds-server [subsys/dce/cds-server none]:*:103:106::/::
+  >  hosts/admintest1/gda [subsys/dce/cds-server none]:*:104:106::/::
+  >  hosts/admintest2/self [none none]:*:105:12::/::
+  >  hosts/admintest3/self [none none]:*:106:12::/::
+  >> rgy_edit=> quit
+  >  bye.
+
+  exit
+
+  >  No Output Expected
+
+  On admintest2:
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+- It may be necessary to invoke rgy_edit a number of times before getting the
+  Replica Security Server.
+
+  rgy_edit
+
+  >  Current site is: registry server at /.../admin_cell/subsys/dce/sec/rep2   (read-only)
+  >> rgy_edit=> do o
+  >  Domain changed to: org
+  >> rgy_edit=> v
+  >  none                                          12
+  >> rgy_edit=> do g
+  >  Domain changed to: group
+  >> rgy_edit=> v
+  >  nogroup                                       -2
+  >  system                                         0
+  >  daemon                                         1
+  >  uucp                                           2
+  >  bin                                            3
+  >  kmem                                           4
+  >  mail                                           6
+  >  tty                                            7
+  >  none                                          12
+  >  tcb                                           18
+  >  acct-admin                                   100
+  >  subsys/dce/sec-admin                         101
+  >  subsys/dce/cds-admin                         102
+  >  subsys/dce/dfs-admin                         103
+  >  subsys/dce/dts-admin                         104
+  >  subsys/dce/dskl-admin                        105
+  >  subsys/dce/cds-server                        106
+  >  subsys/dce/dts-servers                       107
+  >  subsys/dce/dfs-fs-servers                    108
+  >  subsys/dce/dfs-bak-servers                   109
+  >> rgy_edit=> do p
+  >  Domain changed to: principal
+  >> rgy_edit=> v
+  >  nobody                                        -2
+  >  root                                           0
+  >  daemon                                         1
+  >  sys                                            2
+  >  bin                                            3
+  >  uucp                                           4
+  >  who                                            5
+  >  mail                                           6
+  >  tcb                                            9
+  >  dce-ptgt                                      20
+  >  dce-rgy                                       21
+  >  cell_admin                                   100
+  >  krbtgt/admin_cell                            101
+  >  hosts/admintest1/self                        102
+  >  hosts/admintest1/cds-server                  103
+  >  hosts/admintest1/gda                         104
+  >  hosts/admintest2/self                        105
+  >  hosts/admintest3/self                        106
+  >> rgy_edit=> do a
+  >  Domain changed to: account
+  >> rgy_edit=> v
+  >  nobody [nogroup none]:*:-2:-2::/::
+  >  root [system none]:*:0:0::/::
+  >  daemon [daemon none]:*:1:1::/::
+  >  uucp [uucp none]:*:4:2::/usr/spool/uucppublic:/usr/lib/uucp/uucico:
+  >  bin [bin none]:*:3:3::/bin::
+  >  dce-ptgt [none none]:*:20:12::/::
+  >  dce-rgy [none none]:*:21:12::/::
+  >  krbtgt/admin_cell [none none]:*:101:12::/::
+  >  cell_admin [none none]:*:100:12::/::
+  >  hosts/admintest1/self [none none]:*:102:12::/::
+  >  hosts/admintest1/cds-server [subsys/dce/cds-server none]:*:103:106::/::
+  >  hosts/admintest1/gda [subsys/dce/cds-server none]:*:104:106::/::
+  >  hosts/admintest2/self [none none]:*:105:12::/::
+  >  hosts/admintest3/self [none none]:*:106:12::/::
+  >> rgy_edit=> quit
+  >  bye.
+
+  exit
+
+  >  No Output Expected
+

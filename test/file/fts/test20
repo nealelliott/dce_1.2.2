@@ -1,0 +1,1505 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#  
+
+###############################################################################
+# Copyright (C) 1995, 1992 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS exporting UFS and/or LFS
+
+# This is a advanced test of the fts dump and restore commands on UFS and LFS
+
+###############################################################################
+
+# Usage:                test20
+
+# Typically run via:    test20 >& test20.out or via runtests
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS exported UFS or LFS. SERVER_1 should
+# export EPI_AGGRNAME_1 in case of LFS, and two UFS partitions (/tmp and one
+# other) in case of UFS. In case of UFS, the /tmp partition would be dumped
+# to a file in the other partition. Ensure that there is adequate space for 
+# the dump file. This would be about 5Mb. In case of LFS two filesets would be
+# created, and the contents of one would be dumped to a file in the other. In
+# case of UFS, the fileset tmp.ufs should be defined in the FLDB prior to
+# running this test.
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1 and $SERVER_2, in
+# order to run the fts commands contained in this script. You must also be
+# able to create mount points in $export_root.
+
+# Highest error number is: 40.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${EPI_AGGRNAME_1=epi1}
+: ${EPI_AGGRNAME_2=epi2}
+: ${SERVER_1=$hn}
+: ${SERVER_2=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name="/.../$CELL_NAME"}
+: ${dns_server_prefix="/.:/hosts/"}
+: ${export_root=/.../$CELL_NAME/fs}
+: ${mount_prefix=$export_root/test}
+
+cav_arg="$CELL_ARG $AUTH_ARG $VERB_ARG"
+ft=fts.test20.$$
+dumpfilepre=fts.test20.$$.dump
+copyfilepre=fts.test20.$$.copy
+
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+if [ "$dfs_FileSysType" = "$DFS_WORKS_ON_LFS" ]
+then
+   do_case1=TRUE
+   do_case2=TRUE
+   do_case3=TRUE
+   do_case4=TRUE
+   do_case5=TRUE
+   do_case6=TRUE
+   do_case7=TRUE
+   do_case8=TRUE
+else # dumps and restores on UFS should be enabled later
+   do_case1=FALSE
+   do_case2=FALSE
+   do_case3=FALSE
+   do_case4=FALSE
+   do_case5=FALSE
+   do_case6=FALSE
+   do_case7=FALSE
+   do_case8=FALSE
+fi
+
+fillUpFileset()
+{
+cp /etc/hosts x1
+i=0
+while [ $i -lt 2 ]
+  do
+    cp x1 x1.$i; rf=$?
+    if [ $rf -ne 0 ]
+      then 
+	break
+      fi
+    i=`expr $i + 1`
+  done
+for i in 1 2 3 4 5 
+  do
+    mkdir dir.$i; rf=$?
+    if [ $rf -ne 0 ]
+    then
+	echo "mkdir dir.$i failed, errno $rf, EXITING"
+	exit 1
+    fi
+    cp x1 dir.$i; rf=$?
+    if [ $rf -ne 0 ]
+    then
+	echo "cp x1 dir.$i failed, errno $rf, EXITING"
+	exit 1
+    fi
+  done
+}
+
+AddIncrementalChange()
+{
+for i in 6 7 8 9
+  do
+    mkdir dir.$i; rf=$?
+    if [ $rf -ne 0 ]
+    then
+	echo "mkdir dir.$i failed, errno $rf, EXITING"
+	exit 1
+    fi
+    cp x1 dir.$i; rf=$?
+    if [ $rf -ne 0 ]
+    then
+	echo "cp x1 dir.$i failed, errno $rf, EXITING"
+	exit 1
+    fi
+  done
+}
+
+AddAnotherIncrementalChange()
+{
+for i in 10 11 12 13
+  do
+    mkdir dir.$i
+    if [ $rf -ne 0 ]
+    then
+	echo "mkdir dir.$i failed, errno $rf, EXITING"
+	exit 1
+    fi
+    cp x1 dir.$i; rf=$?
+    if [ $rf -ne 0 ]
+    then
+	echo "cp x1 dir.$i failed, errno $rf, EXITING"
+	exit 1
+    fi
+  done
+}
+
+RemoveIncrementalChange()
+{
+for i in 6 7 8 9
+  do
+    if [ -d dir.$i ]
+    then
+	rm -rf dir.$i; rf=$?
+        if [ $rf -ne 0 ]
+        then
+		echo "rm -rf dir.$i failed, errno $rf, EXITING"
+		exit 1
+	    fi
+    fi
+  done
+}
+RemoveAnotherIncrementalChange()
+{
+for i in 10 11 12 13
+  do
+    if [ -d dir.$i ]
+    then
+	rm -rf dir.$i; rf=$?
+        if [ $rf -ne 0 ]
+        then
+		echo "rm -rf dir.$i failed, errno $rf, EXITING"
+		exit 1
+	fi
+    fi
+  done
+}
+  
+###############################################################################
+
+echo ""
+echo "$ty/$p starting as PID $$ at `date` on $hn"
+echo "   in cell $CELL_NAME."
+echo "Using aggregates $EPI_AGGRNAME_1 on $SERVER_1 and $EPI_AGGRNAME_2 on $SERVER_2."
+
+if test "$CELL_NAME" = ""
+   then echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting."
+        exit 2
+   fi
+
+###############################################################################
+
+# Here we test dump and restore on UFS or LFS filesets, depending on the 
+# command line switches used. For UFS testing, we need two UFS aggregates,
+# /tmp and one more. For LFS testing, we need two LFS filesets. In the UFS
+# case, we dump /tmp, and this has to be moderately populated. For LFS testing
+# we would dump one of the LFS filesets, and this has to be heavily populated.
+
+# Cleanup resources and quit
+cleanup()
+{
+ echo "******** FTS TEST 20 FAILED"
+ echo "Cleaning up by EXITING with status 1"
+ exit 1;
+}
+
+cleanup2()
+{
+if [ "$dfsFileSysType" = "$DFS_WORKS_ON_UFS" ]
+then
+  $bin_dir/fts delmount $mp1
+else # LFS
+  $bin_dir/fts delmount $mp1 $mp2
+  $bin_dir/fts delete $ft1 $dns_server_prefix$serv1 $aggr1 $cav_arg
+  $bin_dir/fts delete $ft2 $dns_server_prefix$serv2 $aggr2 $cav_arg
+  cm checkfilesets
+fi
+
+echo ""; echo "All done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+}
+
+# Routine to cleanup resources
+destroyResources()
+{
+if [ "$dfsFileSysType" = "$DFS_WORKS_ON_UFS" ]
+then
+  $bin_dir/fts delmount $mp1
+else # LFS
+  $bin_dir/fts delmount $mp1 $mp2
+  $bin_dir/fts delete $ft1 $dns_server_prefix$serv1 $aggr1 $cav_arg
+  $bin_dir/fts delete $ft2 $dns_server_prefix$serv2 $aggr2 $cav_arg
+  cm checkfilesets
+fi
+}
+
+# First we allocate the required resources depending on the file system we
+# aim to test.
+allocateResources()
+{
+errCount=0
+cd /
+if [ "$dfs_FileSysType" = "$DFS_WORKS_ON_UFS" ]
+then
+     aggr=$UFS_ROOT_2; ft=$UFS_FSNAME_2; mp=$mount_prefix/$UFS_MP_NAME_2
+# In the case of UFS, the fileset must exist, we do the mount point
+     fts crmount -dir $mp -fileset $ft 
+     if [ $? -ne 0 ]
+       then
+          echo "fts crmount exit status was $rf"
+	  echo "- command failed; ($p: E1)"
+	  rc=`expr $rc + 1`
+	  errCount=`expr $errCount + 1`
+       fi
+ft1=$UFS_FSNAME_2; ft2="root.dfs"; ft3="" 
+mp1=$mount_prefix/$UFS_MP_NAME_2; mp2=$mount_prefix; mp3=""
+else
+# In case of LFS, we create two filesets, one to dump, and another to write
+# the dump file in.
+# Let's try and see if we can create the two filesets in different aggregates
+
+aggr1=$EPI_AGGRNAME_1; serv1=$SERVER_1
+for i in 1 2
+do
+  ft=$EPI_FSNAME_2.$i; 
+  mp=$mount_prefix/$EPI_MP_NAME_2.$i
+  servVar="$`eval echo serv$i`"
+  servi=`eval echo "$servVar"`
+  aggrVar="$`eval echo aggr$i`"
+  aggri=`eval echo "$aggrVar"`
+  $bin_dir/fts create $ft $dns_server_prefix$servi $aggri $cav_arg
+  rf=$?
+  if [ $rf -ne 0 ]
+    then
+        echo "fts create exit status was $rf"
+	echo "- command failed; ($p: E2)"
+        rc=`expr $rc + 1`
+	errCount=`expr $errCount + 1`
+        cleanup
+    fi
+ 
+  fts crmount -dir $mp -fileset $ft; rf=$?
+  if [ $rf -ne 0 ]
+    then
+      echo "fts crmount -dir $mp -fileset $ft  exit status was $rf"
+      echo "- command failed; ($p: E3.1)"
+      rc=`expr $rc + 1`
+      errCount=`expr $errCount + 1`
+      cleanup
+    fi
+
+  setFsetRootProt $mp $testuid "E100"
+
+done
+ft1=$EPI_FSNAME_2.1; ft2=$EPI_FSNAME_2.2; ft3=$EPI_FSNAME_2.3
+mp1=$mount_prefix/$EPI_MP_NAME_2.1; mp2=$mount_prefix/$EPI_MP_NAME_2.2
+mp3=$mount_prefix/$EPI_MP_NAME_2.3
+fi
+
+cm checkfilesets
+
+$bin_dir/fts setquota -file $ft1 -size 4096 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+    echo "fts setquota exit status was $rf"
+    echo "inadequate space for testing"
+    echo "- command failed; ($p: E3.2)"
+    rc=`expr $rc + 1`
+    errCount=`expr $errCount + 1`
+    cleanup
+  fi
+
+$bin_dir/fts setquota -file $ft2 -size 20480 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+    echo "fts setquota exit status was $rf"
+    echo "inadequate space for testing"
+    echo "- command failed; ($p: E3.3)"
+    rc=`expr $rc + 1`
+    errCount=`expr $errCount + 1`
+    cleanup
+  fi
+
+if [ $errCount -ne 0 ]
+ then
+   cleanup
+ fi
+}
+
+populateResources()
+{
+# Now, populate the filesets
+errCount=0
+cd $mp1; fillUpFileset; cd /
+echo ""; echo "Ensure that there is adequate space for the dump file in $ft2"
+echo ""; echo "Fileset to be dumped - $ft1"
+$bin_dir/fts lsquota -file $ft1 $cav_arg; rf=$?
+echo ""; echo "Fileset to hold the dump file - $ft2"
+$bin_dir/fts lsquota -file $ft2 $cav_arg; rf=$?
+echo ""; echo Note\: tests may fail if the aggr containing $ft2 is too small
+if [ $rc -gt 0 ]
+  then
+      echo "Accumulated $rc errors, cannot continue"
+      cleanup
+  fi
+}
+
+checkResources()
+{
+checkErr=0
+$bin_dir/fts lsft -file $ft1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+ then
+  checkErr=1
+ fi
+$bin_dir/fts lsft -file $ft2 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+ then
+  checkErr=1
+ fi
+
+$bin_dir/fts lsmount $mp1; rf=$?
+if [ $rf -ne 0 ]
+ then
+  checkErr=1
+ fi
+$bin_dir/fts lsmount $mp2; rf=$?
+if [ $rf -ne 0 ]
+ then
+  checkErr=1
+ fi
+
+if [ $checkErr -ne 0 ]
+ then
+   checkErr=0
+   destroyResources
+   allocateResources
+   populateResources
+ fi
+}
+
+###############################################################################
+
+# check if EPI_AGGRNAME_1 and EPI_AGGRNAME_2 are exported and known to ftserver
+
+echo ""; echo Checking for existence of $EPI_AGGRNAME_1 on $SERVER_1
+
+fts lsaggr $dns_server_prefix$SERVER_1 | grep $EPI_AGGRNAME_1; rf=$?
+if test $rf -ne 0
+ then 
+   echo "- aggregate $EPI_AGGRNAME_1 not exported by $SERVER_1; $p ABORTING"
+   rc=`expr $rc + 1`; cleanup
+ fi
+echo ""; echo Checking for existence of $EPI_AGGRNAME_2 on $SERVER_2
+fts lsaggr $dns_server_prefix$SERVER_2 | grep $EPI_AGGRNAME_2; rf=$?
+if test $rf -ne 0
+ then
+   aggr2=$EPI_AGGRNAME_1
+   serv2=$SERVER_1
+ else
+   aggr2=$EPI_AGGRNAME_2
+   serv2=$SERVER_2
+ fi
+if [ "$EPI_AGGRNAME_3" = "" ]
+ then
+    :
+ else
+   echo ""; echo Checking for existence of $EPI_AGGRNAME_3 on $SERVER_2
+   fts lsaggr $dns_server_prefix$SERVER_2 | grep $EPI_AGGRNAME_3; rf=$?
+   if test $rf -ne 0
+     then
+	:
+     else
+       aggr2=$EPI_AGGRNAME_3
+       serv2=$SERVER_2
+     fi
+ fi
+
+###############################################################################
+
+# First allocate all we need
+allocateResources
+# Now populate our resorces
+populateResources
+
+# We are now ready to starting dumping and restoring uncontrollably. Lets go!
+# Case1: Copy the contents of the fileset to be dumped $ft1 into the other 
+# fileset $ft2. Dump the fileset $ft1 into a dump file in $ft2. Restore the
+# fileset $ft1 from the dump file, and compare the contents of $ft1 with
+# the copy made into $ft2.
+
+if [ $do_case1 = TRUE ]
+then
+errCount=0
+checkResources
+
+echo "Case 1: A single full dump and restore, then compare"
+
+dumpfile=${dumpfilepre}.case1
+copyfile=${copyfilepre}.case1
+
+rm -rf $mp2/$dumpfile $mp2/$copyfile
+
+cp -r $mp1 $mp2/$copyfile
+$bin_dir/fts dump -fileset $ft1 -time 0 -file $mp2/$dumpfile $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts dump exit status was $rf"
+     echo "- command failed; ($p: E4)"
+     rc=`expr $rc + 1`
+     echo "The dump failed, cannot do the restore"
+     errCount=`expr $errCount + 1`
+  fi
+# remove original fileset before we overwrite
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts delete $ft1 $dns_server_prefix$serv1 $aggr1 $cav_arg; rf=$?
+cm checkfilesets
+if [ $rf -ne 0 ]
+  then
+     echo "fts delete exit status was $rf"
+     echo "- command failed; ($p: E5)"
+     rc=`expr $rc + 1`
+     echo "The delete failed, cannot restore fileset, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts restore $ft1 $dns_server_prefix$serv1 $aggr1 $mp2/$dumpfile $cav_arg; rf=$?
+cm checkfilesets
+if [ $rf -ne 0 ]
+  then
+     echo "fts restore exit status was $rf"
+     echo "- command failed; ($p: E5.1)"
+     rc=`expr $rc + 1`
+     echo "The restore failed, cannot look inside fileset, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts lsheader $serv1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts lsheader exit status was $rf"
+     echo "- command failed; ($p: E5.1)"
+     rc=`expr $rc + 1`
+     echo "The lsheader failed, so cannot do the incremental restore, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+diff -r $mp1 $mp2/$copyfile; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "The restored fileset differs from the original fileset"
+     echo "- command failed; ($p: E6)"
+     errCount=`expr $errCount + 1`
+     rc=`expr $rc + 1`
+     cleanup
+  fi
+fi
+
+
+if [ $errCount -ne 0 ]
+ then
+     echo "Case 1 has $errCount errors, did not pass"
+     echo "Warning: Subsequent cases may fail because resources may have been"
+     echo "affected by this case."
+ else
+     rm -rf $mp2/$dumpfile $mp2/$copyfile
+ fi
+
+fi
+
+# Case2: We now test incremental dumps and restores. We make a full dump. We
+# then make some changes, say, adding a directory and a few files with data.
+# We then do a incremental dump. Then, we restore the full dump followed by
+# the incremental dump. We then do the usual comparison to make sure the dump
+# and restore went well
+
+if [ $do_case2 = TRUE ]
+then
+errCount=0
+checkResources
+
+echo "Case 2: Full and incremental dumps and restores"
+
+dumpfile=${dumpfilepre}.case2
+copyfile=${copyfilepre}.case2
+
+rm -rf $mp2/$dumpfile $mp2/$copyfile
+fullDate="`date '+%m/%d/%y %H:%M'`"
+sleep 120
+echo "  dumping at `date`; timestamp is ${fullDate}"
+$bin_dir/fts dump -fileset $ft1 -time 0 -file $mp2/$dumpfile.full $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts dump exit status was $rf"
+     echo "- command failed; ($p: E7)"
+     rc=`expr $rc + 1`
+     echo "The dumps failed, so cannot do the restore, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+cd $mp1; AddIncrementalChange; cd /
+cp -r $mp1 $mp2/$copyfile
+$bin_dir/fts dump -fileset $ft1 -time "$fullDate" -file $mp2/$dumpfile.incr $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts dump exit status was $rf"
+     echo "- command failed; ($p: E8)"
+     rc=`expr $rc + 1`
+     echo "The dumps failed, so cannot do the restore, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+# remove original fileset before we overwrite
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts delete $ft1 $dns_server_prefix$serv1 $aggr1 $cav_arg; rf=$?
+cm checkfilesets
+if [ $rf -ne 0 ]
+  then
+     echo "fts delete exit status was $rf"
+     echo "- command failed; ($p: E8.1)"
+     rc=`expr $rc + 1`
+     echo "The delete failed, cannot restore fileset, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts restore $ft1 $dns_server_prefix$serv1 $aggr1 $mp2/$dumpfile.full $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts restore exit status was $rf"
+     echo "- command failed; ($p: E9)"
+     rc=`expr $rc + 1`
+     echo "The full restore failed, so cannot do the incremental restore, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts lsheader $serv1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts lsheader exit status was $rf"
+     echo "- command failed; ($p: E9.1)"
+     rc=`expr $rc + 1`
+     echo "The lsheader failed, so cannot do the incremental restore, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts restore $ft1 $dns_server_prefix$serv1 $aggr1 $mp2/$dumpfile.incr -overwrite $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts restore exit status was $rf"
+     echo "- command failed; ($p: E10)"
+     rc=`expr $rc + 1`
+     echo "The restore failed, so cannot do the diff, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+cm checkfilesets
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts lshead $serv1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts lsheader exit status was $rf"
+     echo "- command failed; ($p: E10.1)"
+     rc=`expr $rc + 1`
+     echo "The lsheader failed, so cannot do the diff, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+diff -r $mp1 $mp2/$copyfile; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "The restored fileset differs from the original fileset"
+     echo "- command failed; ($p: E11)"
+     rc=`expr $rc + 1`
+     errCount=`expr $errCount + 1`
+     cleanup
+  fi
+fi
+
+cd $mp1; RemoveIncrementalChange; cd /
+
+if [ $errCount -ne 0 ]
+ then
+     echo "Case 2 has $errCount errors, did not pass"
+     echo "Warning: Subsequent cases may fail because resources may have been"
+     echo "affected by this case."
+ else
+     rm -rf $mp2/$dumpfile.full $mp2/$dumpfile.incr $mp2/$copyfile
+ fi
+fi
+
+# Case 3: Use the volume version of an LFS fileset for the incremental dump.
+# Restore the full and incremental filesets, and compare.
+
+if [ $do_case3 = TRUE ]
+then
+errCount=0
+checkResources
+
+echo "Case 3: Use fileset version for incremental dump, restore and compare"
+
+dumpfile=${dumpfilepre}.case3
+copyfile=${copyfilepre}.case3
+
+rm -rf $mp2/$dumpfile.full $mp2/$dumpfile.incr $mp2/$copyfile
+$bin_dir/fts dump -fileset $ft1 -time 0 -file $mp2/$dumpfile.full $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts dump exit status was $rf"
+     echo "- command failed; ($p: E12)"
+     rc=`expr $rc + 1`
+     echo "The dump failed, so cannot do the restore, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fileVer=`$bin_dir/fts lsft -file $ft1 $cav_arg | awk '/Version/ { print $6 }'`
+sync; sync; sleep 60
+cd $mp1; AddIncrementalChange; cd /
+cp -r $mp1 $mp2/$copyfile
+$bin_dir/fts dump -fileset $ft1 -version $fileVer -file $mp2/$dumpfile.incr $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts dump exit status was $rf"
+     echo "- command failed;($p: E13)"
+     rc=`expr $rc + 1`
+     echo "The dump failed, so cannot do the restore, cannot continue"
+     errCount=`expr $errCount + 1`
+
+  fi
+# remove original fileset before we overwrite
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts delete $ft1 $dns_server_prefix$serv1 $aggr1 $cav_arg; rf=$?
+cm checkfilesets
+if [ $rf -ne 0 ]
+  then
+     echo "fts delete exit status was $rf"
+     echo "- command failed; ($p: E13.1)"
+     rc=`expr $rc + 1`
+     echo "The delete failed, cannot restore fileset, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts restore $ft1 $dns_server_prefix$serv1 $aggr1 $mp2/$dumpfile.full$cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts restore exit status was $rf"
+     echo "- command failed; ($p: E14)"
+     rc=`expr $rc + 1`
+     echo "The restore failed, so cannot do the diff, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts lshead $serv1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts lsheader exit status was $rf"
+     echo "- command failed; ($p: E14.1)"
+     rc=`expr $rc + 1`
+     echo "The lsheader failed, so cannot do the incremental restore, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts restore $ft1 $dns_server_prefix$serv1 $aggr1 $mp2/$dumpfile.incr -overwrite $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts restore exit status was $rf"
+     echo "- command failed; ($p: E15)"
+     rc=`expr $rc + 1`
+     echo "The restore failed, so cannot do the diff, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+cm checkfilesets
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts lshead $serv1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts lsheader exit status was $rf"
+     echo "- command failed; ($p: E15.1)"
+     rc=`expr $rc + 1`
+     echo "The lsheader failed, so cannot do the diff, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+diff -r $mp1 $mp2/$copyfile; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "The restored fileset differs from the original fileset"
+     echo "- command failed; ($p: E16)"
+     errCount=`expr $errCount + 1`
+     rc=`expr $rc + 1`
+  fi
+fi
+
+cd $mp1; RemoveIncrementalChange; cd /
+if [ $errCount -ne 0 ]
+ then
+     echo "Case 3 has $errCount errors, did not pass"
+     echo "Warning: Subsequent cases may fail because resources may have been"
+     echo "affected by this case."
+ else
+     rm -rf $mp2/$dumpfile.full $mp2/$dumpfile.incr $mp2/$copyfile
+ fi
+
+fi
+
+# Case 4: Test the case where there is insufficient space to write the dump
+# file. If LFS, reduce the quota of $ft2 to a small value so that the dump
+# file won't fit in. If UFS don't run this test.
+
+if [ $do_case4 = TRUE ]
+then
+errCount=0
+checkResources
+
+echo "Case 4: Insufficient space to write the dump file"
+
+dumpfile=${dumpfilepre}.case4
+copyfile=${copyfilepre}.case4
+
+rm -rf $mp2/$dumpfile.full $mp2/$dumpfile.incr $mp2/$copyfile
+origQuota=`$bin_dir/fts lsquota -file $ft2 $cav_arg|tail -1|awk '{ print $2 }'`
+  $bin_dir/fts setquota -file $ft2 -size 1 $cav_arg; rf=$?
+  if [ $rf -ne 0 ]
+    then
+       echo "fts setquota exit status was $rf"
+       echo "- command failed; ($p: E17)"
+       errCount=`expr $errCount + 1`
+       rc=`expr $rc + 1`
+    fi
+  $bin_dir/fts dump -fileset $ft1 -time 0 -file $mp2/$dumpfile $cav_arg; rf=$?
+  if [ $rf -eq 0 ]
+    then
+     echo "fts dump exit status was $rf"
+     echo "- command failed; ($p: E18)"
+     errCount=`expr $errCount + 1`
+     rc=`expr $rc + 1`
+    fi
+# We may have to unlock the FLDB entry for $ft1, and wait until the fileset
+# state changes from busy to idle.
+  $bin_dir/fts unlock $ft1 $cav_arg; rf=$?
+  if [ $rf -ne 0 ]
+    then
+     echo "fts unlock exit status was $rf"
+     echo "- command failed; ($p: E19)"
+     errCount=`expr $errCount + 1`
+     rc=`expr $rc + 1`
+    fi
+  sync; sync; sleep 10
+  cm checkf; ls $mp1  # this will return once the fileset becomes free
+  sync; sync; sleep 10
+# We repeat the dump to make sure the fileset states are set correctly
+# following an erroneous dump
+  $bin_dir/fts dump -fileset $ft1 -time 0 -file $mp2/$dumpfile $cav_arg; rf=$?
+  if [ $rf -eq 0 ]
+    then
+     echo "fts dump exit status was $rf"
+     echo "- command failed; ($p: E20)"
+     rc=`expr $rc + 1`
+     errCount=`expr $errCount + 1`
+    fi
+# We may have to unlock the FLDB entry for $ft1, and wait until the fileset
+# state changes from busy to idle.
+  $bin_dir/fts unlock $ft1 $cav_arg; rf=$?
+  if [ $rf -ne 0 ]
+    then
+     echo "fts unlock exit status was $rf"
+     echo "- command failed; ($p: E21)"
+     rc=`expr $rc + 1`
+     errCount=`expr $errCount + 1`
+    fi
+  sync; sync; sleep 10
+  cm checkf; ls $mp1  # this will return once the fileset becomes free
+  sync; sync; sleep 10
+# Put back the quota to its previous value
+  $bin_dir/fts setquota -file $ft2 -size $origQuota $cav_arg; rf=$?
+  if [ $rf -ne 0 ]
+    then
+       echo "fts setquota exit status was $rf"
+       echo "- command failed; ($p: E22)"
+       rc=`expr $rc + 1`
+       errCount=`expr $errCount + 1`
+    fi
+
+  if [ $errCount -ne 0 ]
+   then
+     echo "Case 4 has $errCount errors, did not pass"
+     echo "Warning: Subsequent cases may fail because resources may have been"
+     echo "affected by this case."
+   else
+     rm -rf $mp2/$dumpfile
+   fi
+fi
+
+# Case 5: Test dump and restore with concurrent access of fileset via glue
+# start concurrent access
+
+if [ $do_case5 = TRUE ]
+then
+errCount=0
+checkResources
+
+echo "Case 5: Dump and restore with concurrent access of fileset via glue"
+
+dumpfile=${dumpfilepre}.case5
+copyfile=${copyfilepre}.case5
+
+rm -rf $mp2/$dumpfile
+
+(
+  i=0
+  while [ $i -le 30 ]
+  do
+    ls $mp1
+    touch $mp1/fts.$$.concurrent
+    i=`expr $i + 1`
+  done
+)&
+sync; sleep 5
+$bin_dir/fts dump -fileset $ft1 -time 0 -file $mp2/$dumpfile $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+   echo "fts dump exit status was $rf"
+   echo "- command failed; ($p: E23)"
+   rc=`expr $rc + 1`
+   errCount=`expr $errCount + 1`
+   echo "The dump failed, so cannot do the restore, cannot continue"
+  fi
+wait $!
+# remove original fileset before we overwrite
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts delete $ft1 $dns_server_prefix$serv1 $aggr1 $cav_arg; rf=$?
+cm checkfilesets
+if [ $rf -ne 0 ]
+  then
+     echo "fts delete exit status was $rf"
+     echo "- command failed; ($p: E23.1)"
+     rc=`expr $rc + 1`
+     echo "The delete failed, cannot restore fileset, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+  $bin_dir/fts restore $ft1 $dns_server_prefix$serv1 $aggr1 $mp2/$dumpfile -overwrite $cav_arg; rf=$?
+  if [ $rf -ne 0 ]
+    then
+     echo "fts restore exit status was $rf"
+     echo "- command failed; ($p: E24)"
+     rc=`expr $rc + 1`
+     errCount=`expr $errCount + 1`
+    fi
+fi
+cm checkfilesets
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts lshead $serv1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts lsheader exit status was $rf"
+     echo "- command failed; ($p: E24.1)"
+     rc=`expr $rc + 1`
+     echo "The lsheader failed, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+
+if [ $errCount -ne 0 ]
+ then
+     echo "Case 5 has $errCount errors, did not pass"
+     echo "Warning: Subsequent cases may fail because resources may have been"
+     echo "affected by this case."
+ else
+     rm -rf $mp2/$dumpfile
+ fi
+fi
+
+# Case 6: Test all the invalid parameter cases here.
+# Case 6.1: run dump with invalid version number 
+
+if [ $do_case6 = TRUE ]
+then
+errCount=0
+checkResources
+
+echo "Case 6: test all invalid dump parameters"
+
+dumpfile=${dumpfilepre}.case6
+copyfile=${copyfilepre}.case6
+
+fileVer=`$bin_dir/fts lsft -file $ft1 $cav_arg | awk '/Version/ { print $6 }'`
+verNo=`echo $fileVer|cut -d"," -f3`
+badVerNo=`expr $verNo + 100`
+$bin_dir/fts dump -fileset $ft1 -version $badVerNo -file $mp2/$dumpfile $cav_arg; rf=$?
+if [ $rf -eq 0 ]
+  then
+   echo "fts dump with invalid version number succeeds even though it"
+   echo "shouldn't. We're ignoring this for now..."
+  fi
+
+# Case 6.2: run dump with invalid time
+fullDate="`date '+%m/%d/%y %H:%M'`"
+badDate=`echo $fullDate | sed -n 's/..\//13\//p'`
+echo "  dumping at `date`; timestamp is ${fullDate}; bad date is ${badDate}"
+$bin_dir/fts dump -fileset $ft1 -time "$badDate" -file $mp2/$dumpfile $cav_arg; rf=$?
+if [ $rf -eq 0 ]
+  then
+   echo "fts dump exit status was $rf"
+   echo "- command succeeded; ($p: E26)"
+   rc=`expr $rc + 1`
+   errCount=`expr $errCount + 1`
+fi
+# Now, try using tomorrow as the date and see if it works
+day=`echo $fullDate|sed -n 's/.*\/\(.*\)\/.*/\1/p'`
+badDay=`expr $day + 1`; export badDay
+badDate="`echo $fullDate|sed -n 's/\(.*\)\/\(.*\)\/\(.*\)/\1\/$badDay\/\3/p'`"
+echo "  dumping at `date`; bad date is ${badDate}"
+$bin_dir/fts dump -fileset $ft1 -time "$badDate" -file $mp2/$dumpfile $cav_arg; rf=$?
+if [ $rf -eq 0 ]
+  then
+   echo "fts dump exit status was $rf"
+   echo "- command succeeded; ($p: E27)"
+   errCount=`expr $errCount + 1`
+   rc=`expr $rc + 1`
+fi
+
+# Case 6.3: restore from invalid file
+rm -rf $mp2/$dumpfile
+$bin_dir/fts delete $ft3 $dns_server_prefix$serv1 $aggr1 $cav_arg
+cm checkfilesets
+$bin_dir/fts restore $ft3 $dns_server_prefix$serv1 $aggr1 $mp2/$dumpfile $cav_arg; rf=$?
+cm checkfilesets
+if [ $rf -eq 0 ]
+  then
+   echo "fts restore exit status was $rf"
+   echo "- command succeeded; ($p: E28)"
+   errCount=`expr $errCount + 1`
+   rc=`expr $rc + 1`
+  fi
+$bin_dir/fts lsft -file $ft3 $cav_arg; rf=$?
+if [ $rf -eq 0 ]
+  then
+   echo "fts lsft exit status was $rf"
+   echo "- command succeeded; ($p: E29)"
+   errCount=`expr $errCount + 1`
+   rc=`expr $rc + 1`
+  fi
+
+# Case 6.4: invoke restore specifying ftid and ftname
+$bin_dir/fts dump -fileset $ft1 -time 0 -file $mp2/$dumpfile $cav_arg; rf=$?
+if [ $rf -eq 0 ]
+  then
+   $bin_dir/fts lshead $serv1 $cav_arg
+   $bin_dir/fts restore -ftname $ft1 -server $dns_server_prefix$serv1 -aggr $aggr1 -file $mp2/$dumpfile -ftid 1000 -overwrite $cav_arg; rf=$?
+   if [ $rf -eq 0 ]
+     then
+      $bin_dir/fts lsft -fileset 0,,1000 $cav_arg; rf=$?
+      if [ $rf -eq 0 ]
+      then
+       echo "fts lsft exit status was $rf"
+       echo "- command succeeded; ($p: E30)"
+       rc=`expr $rc + 1`
+       errCount=`expr $errCount + 1`
+      fi
+     fi
+  else
+   echo "fts dump exit status was $rf"
+   echo "- command succeeded; ($p: E30.1)"
+   rc=`expr $rc + 1`
+   errCount=`expr $errCount + 1`
+  fi
+# Put ft1 back to shape
+$bin_dir/fts delete $ft1 $dns_server_prefix$serv1 $aggr1 $cav_arg
+cm checkfilesets
+$bin_dir/fts restore -ftname $ft1 -server $dns_server_prefix$serv1 -aggr $aggr1 -file $mp2/$dumpfile $cav_arg; rf=$?
+cm checkfilesets
+if [ $rf -ne 0 ]
+  then
+    echo "fts restore exit status was $rf"
+    echo "- command succeeded; ($p: E30.2)"
+    rc=`expr $rc + 1`
+    errCount=`expr $errCount + 1`
+  fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts lshead $serv1 $cav_arg
+fi
+
+if [ $errCount -ne 0 ]
+ then
+     echo "Case 6 has $errCount errors, did not pass"
+     echo "Warning: Subsequent cases may fail because resources may have been"
+     echo "affected by this case."
+ else
+      rm -rf $mp2/$dumpfile* $mp2/$copyfile
+ fi
+fi
+
+# Case 7: Restore a full dump and an incremental dump, with an incremental
+# dump missing between the full and the second incremental. This is to test
+# if the restore code checks for time continuity in the dumps.
+
+if [ $do_case7 = TRUE ]
+then
+errCount=0
+checkResources
+
+echo "Case 7: Restoring full and incremental dumps with time gaps in them"
+echo "Looks like, the episode salvager may not like this test. So for now"
+echo "we restore full and incrementals in proper order."
+
+dumpfile=${dumpfilepre}.case7
+copyfile=${copyfilepre}.case7
+
+rm -rf $mp2/$dumpfile* $mp2/$copyfile
+fullDate1="`date '+%m/%d/%y %H:%M'`"
+sleep 120
+echo "  dumping at `date`; timestamp1 is ${fullDate1}"
+$bin_dir/fts dump -fileset $ft1 -time 0 -file $mp2/$dumpfile.full $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+   echo "fts dump exit status was $rf"
+   echo "- command failed; ($p: E31)"
+   rc=`expr $rc + 1`
+   echo "The dump failed, so cannot do the restore, cannot continue"
+   errCount=`expr $errCount + 1`
+  fi
+
+
+
+cd $mp1; AddIncrementalChange; cd /
+fullDate2="`date '+%m/%d/%y %H:%M'`"
+sleep 120
+echo "  dumping at `date`; timestamp2 is ${fullDate2}"
+$bin_dir/fts dump -fileset $ft1 -time "$fullDate1" -file $mp2/$dumpfile.incr1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+   echo "fts dump exit status was $rf"
+   echo "- command failed; ($p: E32)"
+   rc=`expr $rc + 1`
+   echo "The dump failed, so cannot do the restore, cannot continue"
+   errCount=`expr $errCount + 1`
+  fi
+
+
+
+cd $mp1; AddAnotherIncrementalChange; cd /
+$bin_dir/fts dump -fileset $ft1 -time "$fullDate2" -file $mp2/$dumpfile.incr2 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+   echo "fts dump exit status was $rf"
+   echo "- command failed; ($p: E33)"
+   rc=`expr $rc + 1`
+   echo "The dump failed, so cannot do the restore, cannot continue"
+   errCount=`expr $errCount + 1`
+  fi
+
+
+
+sync; sync; sleep 60
+
+cp -r $mp1 $mp2/$copyfile; rf=$?
+if [ $rf -ne 0 ]
+then
+	echo "cp -r $mp1 $mp2/$copyfile FAILED, errno $rf, EXITING"
+	cleanup
+fi
+
+# remove original fileset before we overwrite
+if [ $errCount -eq 0 ]
+then
+
+$bin_dir/fts delete $ft1 $dns_server_prefix$serv1 $aggr1 $cav_arg; rf=$?
+cm checkfilesets
+if [ $rf -ne 0 ]
+  then
+     echo "fts delete exit status was $rf"
+     echo "- command failed; ($p: E33.1)"
+     rc=`expr $rc + 1`
+     echo "The delete failed, cannot restore fileset, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts restore $ft1 $dns_server_prefix$serv1 $aggr1 $mp2/$dumpfile.full $cav_arg; rf=$?
+
+cm checkfilesets
+if [ $rf -ne 0 ]
+  then
+   echo "fts restore exit status was $rf"
+   echo "- command failed; ($p: E34)"
+   rc=`expr $rc + 1`
+   echo "The restore failed, so cannot do the incremental restores, cannot continue"
+   errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts lshead $serv1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts lsheader exit status was $rf"
+     echo "- command failed; ($p: E34.1)"
+     rc=`expr $rc + 1`
+     echo "The lsheader failed, so cannot do the incremental restore, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts restore $ft1 $dns_server_prefix$serv1 $aggr1 $mp2/$dumpfile.incr1 -overwrite $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+   echo "fts restore exit status was $rf"
+   echo "- command failed; ($p: E35)"
+   rc=`expr $rc + 1`
+   echo "The restore failed, so cannot do the incremental restore, cannot continue"
+   errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts restore $ft1 $dns_server_prefix$serv1 $aggr1 $mp2/$dumpfile.incr2 -overwrite $cav_arg; rf=$?
+cm checkfilesets
+if [ $rf -ne 0 ]
+  then
+   echo "fts restore exit status was $rf"
+   echo "- command failed; ($p: E35)"
+   rc=`expr $rc + 1`
+   echo "The restore failed, so cannot do the diff, cannot continue"
+   errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts lshead $serv1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts lsheader exit status was $rf"
+     echo "- command failed; ($p: E35.1)"
+     rc=`expr $rc + 1`
+     echo "The lsheader failed, so cannot do the diff, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+diff -r $mp1 $mp2/$copyfile; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "The restored fileset differs from the original fileset"
+     echo "- command failed; ($p: E36)"
+     errCount=`expr $errCount + 1`
+     rc=`expr $rc + 1`
+  fi
+fi
+# Put ft1 back to shape
+
+echo "$ft1 is now put back to its original shape"
+$bin_dir/fts delete $ft1 $dns_server_prefix$serv1 $aggr1 $cav_arg; rf=$?
+cm checkfilesets
+if [ $rf -ne 0 ]
+  then
+     echo "fts delete exit status was $rf"
+     echo "- command failed; ($p: E36.1)"
+     rc=`expr $rc + 1`
+     echo "The delete failed, cannot restore fileset, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+$bin_dir/fts lshead $serv1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts lsheader exit status was $rf"
+     echo "- command failed; ($p: E36.1.1)"
+     rc=`expr $rc + 1`
+     echo "The lsheader failed, so cannot do the incremental restore, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+$bin_dir/fts restore $ft1 $dns_server_prefix$serv1 $aggr1 $mp2/$dumpfile.full $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+   echo "fts restore exit status was $rf"
+   echo "- command failed; ($p: E36.2)"
+   rc=`expr $rc + 1`
+   echo "The restore failed, so cannot do the diff, cannot continue"
+   errCount=`expr $errCount + 1`
+  fi
+$bin_dir/fts lshead $serv1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts lsheader exit status was $rf"
+     echo "- command failed; ($p: E36.3)"
+     rc=`expr $rc + 1`
+     echo "The lsheader failed, so cannot do the incremental restore, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+
+$bin_dir/fts restore $ft1 $dns_server_prefix$serv1 $aggr1 $mp2/$dumpfile.incr1  -overwrite $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+   echo "fts restore exit status was $rf"
+   echo "- command failed; ($p: E36.4)"
+   rc=`expr $rc + 1`
+   echo "The restore failed, so cannot do the diff, cannot continue"
+   errCount=`expr $errCount + 1`
+  fi
+$bin_dir/fts lshead $serv1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts lsheader exit status was $rf"
+     echo "- command failed; ($p: E36.5)"
+     rc=`expr $rc + 1`
+     echo "The lsheader failed, so cannot do the incremental restore, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+$bin_dir/fts restore $ft1 $dns_server_prefix$serv1 $aggr1 $mp2/$dumpfile.incr2  -overwrite $cav_arg; rf=$?
+cm checkfilesets
+if [ $rf -ne 0 ]
+  then
+   echo "fts restore exit status was $rf"
+   echo "- command failed; ($p: E36.6)"
+   rc=`expr $rc + 1`
+   echo "The restore failed, so cannot do the diff, cannot continue"
+   errCount=`expr $errCount + 1`
+  fi
+$bin_dir/fts lshead $serv1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts lsheader exit status was $rf"
+     echo "- command failed; ($p: E36.7)"
+     rc=`expr $rc + 1`
+     echo "The lsheader failed, so cannot do the diff, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+diff -r $mp1 $mp2/$copyfile; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "The restored fileset differs from the original fileset"
+     echo "- command failed; ($p: E36.8)"
+     errCount=`expr $errCount + 1`
+     rc=`expr $rc + 1`
+  fi
+
+cd $mp1; RemoveIncrementalChange; cd /
+cd $mp1; RemoveAnotherIncrementalChange; cd /
+
+if [ $errCount -ne 0 ]
+ then
+     echo "Case 7 has $errCount errors, did not pass"
+     echo "Warning: Subsequent cases may fail because resources may have been"
+     echo "affected by this case."
+ else
+     rm -rf $mp2/$dumpfile.* $mp2/$copyfile
+ fi
+
+fi
+
+# Case 8: Restore an incremental dump as a new fileset. This test is only for
+# LFS case.
+
+if [ $do_case8 = TRUE ]
+then
+errCount=0
+checkResources
+
+echo "Case 8: restore an incremental as a new fileset"
+
+dumpfile=${dumpfilepre}.case8
+copyfile=${copyfilepre}.case8
+
+rm -rf $mp2/$dumpfile.* $mp2/$copyfile
+cp -r $mp1 $mp2/$copyfile
+$bin_dir/fts dump -fileset $ft1 -time 0 -file $mp2/$dumpfile.full $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+   echo "fts dump exit status was $rf"
+   echo "- command failed;($p: E37)"
+   rc=`expr $rc + 1`
+   echo "The dump failed, so cannot do the restore, cannot continue"
+   errCount=`expr $errCount + 1`
+  fi
+# remove original fileset before we overwrite
+$bin_dir/fts delete $ft3 $dns_server_prefix$serv1 $aggr1 $cav_arg
+cm checkfilesets
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts restore $ft3 $dns_server_prefix$serv1 $aggr1 $mp2/$dumpfile.full $cav_arg; rf=$?
+cm checkfilesets
+if [ $rf -ne 0 ]
+  then
+   echo "fts restore exit status was $rf"
+   echo "- command failed; ($p: E38)"
+   rc=`expr $rc + 1`
+   echo "The restore failed, so cannot do the crmount, cannot continue"
+   errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts lshead $serv1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts lshead exit status was $rf"
+     echo "- command failed; ($p: E38.1)"
+     rc=`expr $rc + 1`
+     echo "The lsheader failed, so cannot do the mount, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts crmount -dir $mp3 -fileset $ft3; rf=$?
+if [ $rf -ne 0 ]
+  then
+    echo "fts crmount exit status was $rf"
+    echo "- command failed; ($p: E39)"
+    rc=`expr $rc + 1`
+    echo "The crmount failed, so cannot do the diff, cannot continue"
+    errCount=`expr $errCount + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+diff -r $mp3 $mp2/$copyfile; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "The restored fileset differs from the original fileset"
+     echo "- command failed; ($p: E39.1)"
+     echo "The diff failed, so cannot test subsequent dump and restore"
+     errCount=`expr $errCount + 1`
+     rc=`expr $rc + 1`
+  fi
+fi
+if [ $errCount -eq 0 ]
+then
+  sync; sync; sleep 120
+  fullDate="`date '+%m/%d/%y %H:%M'`"
+  cd $mp1; AddIncrementalChange; cd /
+  rm -rf $mp2/$copyfile
+  cp -r $mp1 $mp2/$copyfile
+  echo "  dumping at `date`; timestamp is ${fullDate}"
+  $bin_dir/fts dump -fileset $ft1 -time "$fullDate" -file $mp2/$dumpfile.incr $cav_arg; rf=$?
+  if [ $rf -ne 0 ]
+   then
+     echo "fts dump exit status was $rf"
+     echo "- command failed; ($p: E40)"
+     rc=`expr $rc + 1`
+     echo "The dump failed, so cannot do the restore, cannot continue"
+     errCount=`expr $errCount + 1`
+   fi
+  sync; sync; sleep 60
+fi
+# remove original fileset before we overwrite
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts delete $ft3 $dns_server_prefix$serv1 $aggr1 $cav_arg; rf=$?
+cm checkfilesets
+if [ $rf -ne 0 ]
+  then
+     echo "fts delete exit status was $rf"
+     echo "- command failed; ($p: E40.1)"
+     rc=`expr $rc + 1`
+     echo "The delete failed, cannot restore fileset, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+#if [ $errCount -eq 0 ]
+#then
+#$bin_dir/fts restore $ft3 $dns_server_prefix$serv1 $aggr1 $mp2/$dumpfile.incr $cav_arg; rf=$?
+#cm checkfilesets
+#if [ $rf -eq 0 ]
+#  then
+#    echo "restoring an incremental dump onto a new fileset works!"
+#    echo " - not considering this an error"
+#   fi
+if [ $errCount -eq 0 ]
+then
+$bin_dir/fts lshead $serv1 $cav_arg; rf=$?
+if [ $rf -ne 0 ]
+  then
+     echo "fts lsheader exit status was $rf"
+     echo "- command failed; ($p: E40.2)"
+     rc=`expr $rc + 1`
+     echo "The lsheader failed, so cannot do the diff, cannot continue"
+     errCount=`expr $errCount + 1`
+  fi
+fi
+# if [ $errCount -eq 0 ]
+# then
+#     diff -r $mp3 $mp2/$copyfile; rf=$?
+#    if [ $rf -eq 0 ]
+#      then
+#        echo "The restored fileset does not differ from the original fileset"
+#        echo "- command failed; ($p: E40.3)"
+#        errCount=`expr $errCount + 1`
+#        rc=`expr $rc + 1`
+#      fi
+#   fi
+$bin_dir/fts delmount $mp3
+$bin_dir/fts delete $ft3 $dns_server_prefix$serv1 $aggr1 $cav_arg
+cm checkfilesets
+
+if [ $errCount -ne 0 ]
+ then
+     echo "Case 8 has $errCount errors, did not pass"
+     echo "Warning: Subsequent cases may fail because resources may have been"
+     echo "affected by this case."
+ else
+   rm -rf $mp2/$copyfile $mp2/$dumpfile.*
+ fi
+fi
+
+# Before quitting, lets try cleaning up the mess
+cleanup2
+
+
+

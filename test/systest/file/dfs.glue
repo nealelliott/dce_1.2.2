@@ -1,0 +1,676 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: dfs.glue,v $
+# Revision 1.1.14.2  1996/03/11  02:43:47  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:07:16  marty]
+#
+# Revision 1.1.14.1  1995/12/11  21:59:21  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:58:40  root]
+# 
+# Revision 1.1.12.2  1994/07/19  13:20:09  rdl
+# 	Made command line interface uniform with the other automated DFS system tests.
+# 	[1994/07/19  13:14:58  rdl]
+# 
+# Revision 1.1.12.1  1994/02/04  20:48:24  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:26:03  devsrc]
+# 
+# Revision 1.1.10.1  1993/12/28  19:25:49  sally
+# 	replaced #<tab> with #<space> in log
+# 	[1993/12/28  19:24:31  sally]
+# 
+# 	This is just an attempt to change the comment leader to # from #<tab> which
+# 	ode2.3 doesn't seem to appreciate.
+# 	[1993/12/28  18:56:34  sally]
+# 
+# Revision 1.1.8.3  1993/10/12  16:37:41  mort
+# 	OT 9043: add a kdestroy to follow every dce_login
+# 	[1993/10/12  16:37:08  mort]
+# 
+# Revision 1.1.8.2  1993/09/30  17:29:51  gmd
+# 	Changes for CRs 8445 and 8623:
+# 		- add necessary script text for killing and restarting
+# 		cache_mgr tests so dfs.glue cho can be > default certificate
+# 		lifetime.
+# 
+# 		- add comments to the beginning of dfs.glue and more NOTEs
+# 		to the README to clarify set up requirements for the test.
+# 	[1993/09/29  20:38:25  gmd]
+# 
+# Revision 1.1.8.1  1993/09/24  21:21:29  damon
+# 	Synched with ODE 2.1 based build
+# 	[1993/09/24  21:15:59  damon]
+# 
+# 	Change "rsh" command strings to "$RSH" variable, set according to
+# 	`uname` = "HP-UX".
+# 	Change awk print command to 'printf "%8d"' for TIMER calculation.
+# 	[1993/09/22  21:29:27  mort]
+# 
+# Revision 1.1.5.3  1993/07/12  15:53:07  gmd
+# 	Moved definition of TROOT to glue.data to prevent unnecessary
+# 	editing of this script.
+# 	[1993/07/12  15:51:29  gmd]
+# 
+# 	Changed loop for cc.log to be looser so that if a trace log is
+# 	made, it is not overrun with the tight failure loop, obscuring
+# 	the original problem.
+# 	[1993/07/07  18:15:34  gmd]
+# 
+# Revision 1.1.5.2  1993/05/17  19:07:52  gmd
+# 	Check that cache_mgr functional tests are installed
+# 	before trying to run them.
+# 	Don't loop forever for cc.log to contain port info.
+# 	[1993/05/17  19:02:42  gmd]
+# 
+# Revision 1.1.2.11  1993/03/10  23:36:27  gmd
+# 	Add "grep wheel" to line for defining PORT_CC to avoid the posibility
+# 	of output in cc.log from remote startup scripts.
+# 	[1993/03/10  23:36:01  gmd]
+# 
+# Revision 1.1.2.10  1993/03/10  20:55:51  gmd
+# 	Fix problems with starting cache consistency functional tests
+# 	in remote_cases - corrected rsh syntax and SPOKES definition.
+# 	Change cleanup_remote to remove files being left around.
+# 	[1993/03/10  20:55:18  gmd]
+# 
+# Revision 1.1.2.9  1993/03/09  21:28:55  gmd
+# 	Correct typo that prevented cleanup of test files and directories.
+# 	Add support for specifying LARGE_FILE choice via glue.data.
+# 	[1993/03/09  21:19:09  gmd]
+# 
+# Revision 1.1.2.8  1993/02/12  21:38:21  gmd
+# 	Replaced TROOT=/systest_deliverables with new 1.0.2 /dcetest/dcelocal
+# 	(set up by dcetest_config).
+# 	Removed erroneous LOCAL_DFS reference.
+# 	Added exits for fatal setup_rundir errors.
+# 	[1993/02/12  20:53:30  gmd]
+# 
+# Revision 1.1.2.7  1993/02/05  15:20:25  cjd
+# 	Embedded copyright notice
+# 	[1993/02/05  14:40:36  cjd]
+# 
+# Revision 1.1.3.2  1993/02/04  22:07:20  cjd
+# 	Embedded copyright notice
+# 
+# Revision 1.1.2.6  1993/01/29  01:27:51  gmd
+# 	Changed "rshsp $M"s to "rsh $M -n"s to avoid "Stopped (tty input)"
+# 	problems in remote cases.
+# 	[1993/01/29  01:27:28  gmd]
+# 
+# Revision 1.1.2.5  1993/01/26  19:01:27  gmd
+# 	Reorganized for readability and maintainability.
+# 	[1993/01/26  18:57:38  gmd]
+# 
+# Revision 1.1.2.4  1993/01/18  14:34:16  gmd
+# 	Added more time stamps.
+# 	[1993/01/18  14:30:58  gmd]
+# 
+# Revision 1.1.2.3  1993/01/07  19:02:46  gmd
+# 	Remove set -x!
+# 	[1993/01/07  18:59:54  gmd]
+# 
+# 	Added remote cache consistency code.
+# 	Added source of profile.dcest.
+# 	[1993/01/07  18:55:59  gmd]
+# 
+# 	Replaced blind "sleep 5" with while loop to capture cache consistency
+# 	test port information. Removed unnecessary comments.
+# 	[1993/01/04  23:40:33  gmd]
+# 
+# Revision 1.1.2.2  1993/01/03  23:31:56  gmd
+# 	Original version - does not yet support remote cache
+# 	consistency testing.
+# 	[1993/01/03  23:27:41  gmd]
+# 
+# $EndLog$
+#
+############################################################################
+# TITLE: dfs.glue
+# SYNTAX:
+# dfs.glue <datafile> <cho>
+# There will be one datafile per ufs partition and this script
+# is designed to be run with each datafile on the file server machine.
+# OBJECTIVE:
+# Test the glue code by accessing directories and files 
+# via their ufs and dfs paths.
+# DESCRIPTION:
+# Script utilizes the following individual tests:
+#
+#  $TROOT/systest/file/filewnr
+#  $TROOT/systest/file/dirread
+#  $TROOT/systest/file/dirwrite.sh
+#
+# and if RUN_CACHEMGRTESTS=TRUE:
+#
+#  $TROOT/file/cache_mgr/spoke
+#  $TROOT/file/cache_mgr/hub
+#
+# to verify that files and directories written via
+# the UFS path can be read via the DFS path from all MACHINES
+# and that files and directories written via the DFS path
+# on all MACHINES can be read via the UFS path on the file server machine.
+############################################################################
+setup_testinfo()
+{
+# tests
+# file integrity test - write and read
+FILEWRITE="${TROOT}/systest/file/filewnr -n $NUMFILEWRITES"
+FILEREAD="${TROOT}/systest/file/filewnr -n $NUMFILEWRITES -r"
+FILEREAD_AND_DELETE="${TROOT}/systest/file/filewnr -n $NUMFILEWRITES -r -d"
+
+# cache consistency test - client 
+CLIENT_CC=${TROOT}/file/cache_mgr/spoke
+
+# cache consistency test - server/driver 
+SERVER_CC=${TROOT}/file/cache_mgr/hub
+
+# directory integrity test - write half
+if [ "$LARGE_FILE" = "" ]; then
+	DIRWRITE="${TROOT}/systest/file/dirwrite.sh -n $NUMDIRENTRIES"
+else
+	DIRWRITE="${TROOT}/systest/file/dirwrite.sh -n $NUMDIRENTRIES -l $LARGE_FILE"
+fi
+
+# directory integrity test - read half
+DIRREAD="${TROOT}/systest/file/dirread -n $NUMDIRENTRIES"
+DIRREAD_AND_DELETE="${TROOT}/systest/file/dirread -n $NUMDIRENTRIES -d"
+
+# hostname used for identifying this machines directories/files/processes
+HOSTNAME=`hostname`
+
+# use the correct remote shell command per system type
+if [ `uname 2>/dev/null` = "HP-UX" ]; then
+	RSH=remsh
+else
+	RSH=rsh
+fi
+}
+############################################################################
+setup_trap()
+{
+# setup trap for interruptions
+
+trap	'echo
+	echo "========================================"
+	echo "Trap signal received..."
+	echo "========================================"
+	echo
+	cleanup
+	echo "START DATE AND TIME WAS $START_DATE"
+	echo "END DATE AND TIME IS `date`"
+	exit 1' 1 2 3 15
+}
+############################################################################
+setup_rundir()
+{
+RUNDIR=glue_run$$
+mkdir ${UFS_PATH}/${RUNDIR}
+if [ $? -ne 0 ]; then
+	echo "Error creating directory via ufs"
+	mkdir ${DFS_PATH}/${RUNDIR}
+	if [ $? -ne 0 ]; then
+		echo "Error creating directory via dfs too"
+		exit 1
+	fi
+fi
+if [ ! -d ${DFS_PATH}/${RUNDIR} ]; then
+	echo "Error seeing directory via dfs"
+	sleep $MAXTIME_DFSWRITEUPDATE
+	if [ ! -d ${DFS_PATH}/${RUNDIR} ]; then
+		echo "Even after sleeping $MAXTIME_DFSWRITEUPDATE seconds!"
+		exit 1
+	fi
+fi
+if [ ! -d ${UFS_PATH}/${RUNDIR} ]; then
+	echo "Error seeing directory via ufs"
+	exit 1
+fi
+}
+############################################################################
+cleanup()
+{
+if [ "$PIDS" != "" ]; then
+	kill $PIDS
+fi
+if [ "$CCPIDS" != "" ]; then
+	kill $CCPIDS
+fi
+cd ${UFS_PATH}
+rm -rf ${RUNDIR}
+}
+############################################################################
+local_cases()
+# read and write locally (2 cases):
+# write dfs - read ufs
+# write ufs - read dfs
+############################################################################
+{
+# file and directory integrity system tests
+local_write DFS ${ITERATION}
+local_read UFS ${ITERATION}
+local_write UFS ${ITERATION}
+local_read DFS ${ITERATION}
+
+# cache consistency functional tests
+if [ "$RUN_CACHEMGRTESTS" = "TRUE" ]; then
+	if [ -x $CLIENT_CC  -a  -x $SERVER_CC ];
+	then
+		local_spoke DFS
+		local_spoke UFS
+		local_run_hub
+	else
+		echo "WARNING: CACHE_MGR FUNCTIONAL TESTS NOT INSTALLED"
+		RUN_CACHEMGRTESTS=FALSE
+	fi
+fi
+
+# cleanup
+cleanup_local ${ITERATION}
+}
+############################################################################
+local_write()
+{
+if [ "$1" = "DFS" ]; then
+	cd ${DFS_PATH}/${RUNDIR}
+	PATTERN=DFS.${2}
+else
+	cd ${UFS_PATH}/${RUNDIR}
+	PATTERN=UFS.${2}
+fi
+
+echo "Local write via $1 starting at : `date`"
+${FILEWRITE} -f ${HOSTNAME}_${PATTERN} -p ${PATTERN}
+${DIRWRITE} -t testdir_${PATTERN}
+echo "Local write via $1 ending at : `date`"
+
+# sleep away the update time
+sleep $MAXTIME_DFSWRITEUPDATE
+}
+############################################################################
+local_spoke()
+{
+
+if [ "$1" = "DFS" ]; then
+	cd ${DFS_PATH}/${RUNDIR}
+else
+	cd ${UFS_PATH}/${RUNDIR}
+fi
+
+${CLIENT_CC} > cc.log 2>&1 &
+CCPIDS="$CCPIDS$! "
+
+# wait for port info to be stored in file
+# but don't wait forever!
+COUNT=0
+TOOMANY=2
+SLEEPVAL=100
+while [ "$PORT_CC" = "" ]; do
+	PORT_CC=`cat cc.log | grep wheel | awk '{print $7}'` 
+	sleep $SLEEPVAL
+	COUNT=`expr $COUNT + 1`
+	if [ $COUNT -gt $TOOMANY ]; then
+		echo "$SCRIPT FAILED - $TOOMANY LOOPS FOR CC.LOG"
+		exit 1
+	fi
+done
+
+if [ "$1" = "DFS" ]; then
+	LOCAL_DFS_SPOKE="${HOSTNAME}/${PORT_CC}"
+else
+	LOCAL_UFS_SPOKE="${HOSTNAME}/${PORT_CC}"
+fi
+PORT_CC=""
+rm cc.log
+}
+############################################################################
+local_read()
+# if reading via dfs, files written via ufs so look for UFS in pattern
+{
+if [ "$1" = "DFS" ]; then
+	cd ${DFS_PATH}/${RUNDIR}
+	PATTERN=UFS.${2}
+else
+# if reading via ufs, files written via dfs so look for DFS in pattern
+	cd ${UFS_PATH}/${RUNDIR}
+	PATTERN=DFS.${2}
+fi
+
+echo "Local read via ${1} starting at : `date`"
+echo "pwd = `pwd`"
+${FILEREAD} -f ${HOSTNAME}_${PATTERN} -p ${PATTERN}
+${DIRREAD} -t testdir_${PATTERN}
+echo "Local read via ${1} ending at : `date`"
+}
+############################################################################
+cleanup_local()
+{
+# via ufs, remove files written via dfs
+cd ${UFS_PATH}/${RUNDIR}
+PATTERN=DFS.$1
+
+${FILEREAD_AND_DELETE} -f ${HOSTNAME}_${PATTERN} -p ${PATTERN}
+${DIRREAD_AND_DELETE} -t testdir_${PATTERN}
+
+# via dfs, remove files written via ufs
+cd ${DFS_PATH}/${RUNDIR}
+PATTERN=UFS.$1
+
+${FILEREAD_AND_DELETE} -f ${HOSTNAME}_${PATTERN} -p ${PATTERN}
+${DIRREAD_AND_DELETE} -t testdir_${PATTERN}
+}
+############################################################################
+wait_for_clients()
+{
+START_WAIT=`date`
+echo "START_WAIT = $START_WAIT"
+for pid in $PIDS
+do
+### The following loop has been known to hang - safer to use ksh wait
+### while ps -ef |grep -v grep |grep $pid > /dev/null
+### do
+### 	:
+### done
+	wait $pid
+done
+END_WAIT=`date`
+echo "END_WAIT = $END_WAIT"
+}
+############################################################################
+remote_cases()
+# read and write remotely (2 cases):
+# local write ufs - remote reads via dfs
+# remote writes via dfs - local read ufs
+# local spokes - remote spokes - remote hub
+############################################################################
+{
+# file and directory integrity system tests
+local_write UFS ${HOSTNAME}.${ITERATION}
+remote_reads DFS ${HOSTNAME}.${ITERATION}
+remote_writes DFS
+local_read_of_remote_cases UFS
+
+# cache consistency functional tests
+# !!! add tests for existence of files on remote machines !!!
+if [ "$RUN_CACHEMGRTESTS" = "TRUE" ]; then
+	remote_spokes
+	remote_run_hub
+fi
+
+# cleanup_remote
+cleanup_remote UFS ${HOSTNAME}.${ITERATION}
+}
+#############################################################################
+remote_reads()
+{
+# if reading via dfs, files written via ufs so look for UFS in pattern
+if [ "$1" = "DFS" ]; then
+	cd ${DFS_PATH}/${RUNDIR}
+	PATTERN=UFS.${2}
+else
+	cd ${UFS_PATH}/${RUNDIR}
+	PATTERN=DFS.${2}
+fi
+echo "Remote reads starting at : `date`"
+N=$NUMPROCPERMACH
+while [ $N -gt 0 ]
+do
+	for M in $MACHINES
+	do
+		if [ "$M" = "$HOSTNAME" ]; then
+			${FILEREAD} -f ${DFS_PATH}/${RUNDIR}/${HOSTNAME}_${PATTERN} -p ${PATTERN}  &
+			PIDS="$PIDS$! "
+			${DIRREAD} -p ${DFS_PATH}/${RUNDIR} -t testdir_${PATTERN} &
+			PIDS="$PIDS$! "
+		else
+			$RSH $M -n dce_login $PRINC $PW -exec sh -c "'${FILEREAD} -f ${DFS_PATH}/${RUNDIR}/${HOSTNAME}_${PATTERN} -p ${PATTERN} ; kdestroy'" &
+			PIDS="$PIDS$! "
+			$RSH $M -n dce_login $PRINC $PW -exec sh -c "'${DIRREAD} -p ${DFS_PATH}/${RUNDIR} -t testdir_${PATTERN} ; kdestroy'" &
+			PIDS="$PIDS$! "
+		fi
+	done
+	N=`expr $N - 1`
+done
+wait_for_clients
+PIDS=""
+echo "Remote reads ending at : `date`"
+rm -rf ${DFS_PATH}/${RUNDIR}/testdir_${PATTERN}
+}
+#############################################################################
+remote_writes()
+{
+echo "Remote writes starting at : `date`"
+N=$NUMPROCPERMACH
+while [ $N -gt 0 ]
+do
+	for M in $MACHINES
+	do
+		if [ "$M" = "$HOSTNAME" ]; then
+			${FILEWRITE} -f ${DFS_PATH}/${RUNDIR}/${M}.${N}.${ITERATION}_dfs -p ${M}.${N}.${ITERATION} &
+			PIDS="$PIDS$! "
+			${DIRWRITE} -p ${DFS_PATH}/${RUNDIR} -t testdir_dfs_${M}.${N}.${ITERATION}  &
+			PIDS="$PIDS$! "
+		else
+			$RSH $M -n dce_login $PRINC $PW -exec sh -c "'${FILEWRITE} -f ${DFS_PATH}/${RUNDIR}/${M}.${N}.${ITERATION}_dfs -p ${M}.${N}.${ITERATION} ; kdestroy'"&
+			PIDS="$PIDS$! "
+			$RSH $M -n dce_login $PRINC $PW -exec sh -c "'${DIRWRITE} -p ${DFS_PATH}/${RUNDIR} -t testdir_dfs_${M}.${N}.${ITERATION} ; kdestroy'"&
+			PIDS="$PIDS$! "
+		fi
+	done
+	N=`expr $N - 1`
+done
+wait_for_clients "$PIDS"
+PIDS=""
+echo "Remote writes ending at : `date`"
+# sleep away the update time
+sleep $MAXTIME_DFSWRITEUPDATE
+}
+#############################################################################
+remote_spokes()
+{
+for M in $MACHINES
+do
+	if [ "$M" = "$HOSTNAME" ]; then
+		local_spoke DFS
+		SPOKES="$SPOKES $LOCAL_DFS_SPOKE"
+		LOCAL_DFS_SPOKE=""
+		local_spoke UFS
+		SPOKES="$SPOKES $LOCAL_UFS_SPOKE"
+		LOCAL_UFS_SPOKE=""
+	else
+		$RSH $M -n "cd ${DFS_PATH}/${RUNDIR}; dce_login $PRINC $PW -exec sh -c '${CLIENT_CC} ; kdestroy'" > ${DFS_PATH}/${RUNDIR}/cc.log 2>&1 &
+		CCPIDS="$CCPIDS$! "
+		#wait for port info to be stored in file
+		#but don't wait forever!
+		COUNT=0
+		TOOMANY=2
+		SLEEPVAL=100
+		while [ "$PORT_CC" = "" ]; do
+			sleep $SLEEPVAL
+			PORT_CC=`cat ${DFS_PATH}/${RUNDIR}/cc.log | grep wheel | awk '{print$7}'` 
+			COUNT=`expr $COUNT + 1`
+			if [ $COUNT -gt $TOOMANY ]; then
+				echo "$SCRIPT FAILED - $TOOMANY LOOPS FOR CC.LOG"
+				exit 1
+			fi
+		done
+		SPOKES="$SPOKES ${M}/${PORT_CC}"
+		PORT_CC=""
+		rm ${DFS_PATH}/${RUNDIR}/cc.log
+	fi
+done
+}
+#############################################################################
+local_read_of_remote_cases()
+{
+if [ "$1" = "DFS" ]; then
+	cd ${DFS_PATH}/${RUNDIR}
+else
+	cd ${UFS_PATH}/${RUNDIR}
+fi
+echo "Local read via ${1} starting at : `date`"
+
+N=$NUMPROCPERMACH
+while [ $N -gt 0 ]
+do
+	for M in $MACHINES
+	do
+		${FILEREAD_AND_DELETE} -f ${UFS_PATH}/${RUNDIR}/${M}.${N}.${ITERATION}_dfs -p ${M}.${N}.${ITERATION}
+		${DIRREAD_AND_DELETE} -t testdir_dfs_${M}.${N}.${ITERATION}
+	done
+	N=`expr $N - 1`
+done
+echo "Local read via $1 ending at : `date`"
+}
+#############################################################################
+local_run_hub()
+{
+cd ${DFS_PATH}/${RUNDIR}
+echo "SPOKES ARE $LOCAL_DFS_SPOKE $LOCAL_UFS_SPOKE"
+${SERVER_CC} $LOCAL_DFS_SPOKE $LOCAL_UFS_SPOKE
+LOCAL_DFS_SPOKE=""
+LOCAL_UFS_SPOKE=""
+kill $CCPIDS
+CCPIDS=""
+}
+#############################################################################
+remote_run_hub()
+{
+# ideally = running hub on successive remote machines
+# currently = running hub locally
+cd ${DFS_PATH}/${RUNDIR}
+echo "SPOKES ARE $SPOKES"
+${SERVER_CC} ${SPOKES}
+SPOKES=""
+kill $CCPIDS
+CCPIDS=""
+}
+#############################################################################
+cleanup_remote ()
+{
+if [ "$1" = "DFS" ]; then
+	cd ${UFS_PATH}/${RUNDIR}
+	PATTERN=DFS.${2}
+else
+	cd ${DFS_PATH}/${RUNDIR}
+	PATTERN=UFS.${2}
+fi
+
+${FILEREAD_AND_DELETE} -f ${HOSTNAME}_${PATTERN} -p ${PATTERN}
+}
+#############################################################################
+loop()
+{
+# calculate amount of time to run
+HOURS_TO_EXECUTE=$1
+SECONDS_TO_EXECUTE=`awk "BEGIN { print 3600 * $HOURS_TO_EXECUTE; exit; }"`
+TIMER='eval echo `awk "BEGIN { printf \"%8d\", \`date +"%j"\`*86400 + \`date +"%H"\`*3600 + \`date +"%M"\`*60 + \`date +"%S"\`; exit}"`'
+
+# run 'til done
+DONE="FALSE"
+ITERATION=0
+START_TIME=`$TIMER`
+while [ "$DONE" = "FALSE" ]
+do
+	local_cases
+	remote_cases
+	CURRENT_TIME=`$TIMER`
+	SECONDS_EXECUTED=`expr $CURRENT_TIME - $START_TIME`
+	ITERATION=`expr $ITERATION + 1`
+	echo "ITERATION $ITERATION COMPLETED AT `date`"
+	if [ "$SECONDS_EXECUTED" -gt "$SECONDS_TO_EXECUTE" ]; then
+		DONE="TRUE"
+	fi
+done
+echo "COMPLETED $ITERATION ITERATIONS!"
+}
+############################################################################
+# Main processing
+############################################################################
+# use input args
+SCRIPT=`basename $0`
+
+USAGE="Usage: `basename $0` [-f] data_file [-t] hours_to_execute"
+
+DATAFILE=
+while getopts :f:t: ARG
+do
+	case ${ARG} in
+		f)	if [ -n "$DATAFILE" ]	# multiple -f's?
+		then
+			echo $USAGE
+			exit 1
+		fi
+		DATAFILE=$OPTARG;;
+
+		t)	if [ -n "$HOURS" ]	# multiple -t's?
+		then
+			echo $USAGE
+			exit 1
+		fi
+		HOURS=$OPTARG;;
+
+		*)	echo $USAGE
+			exit 1;;
+	esac
+done
+shift $(($OPTIND - 1))
+
+if [ -n "$DATAFILE" -a -n "$HOURS" ]	# DATAFILE and HOURS defined yet?
+then
+	if [ $# -gt 0 ]
+	then
+		echo $USAGE
+		exit 1
+	fi
+elif [ $# -eq 2 ]			# DATAFILE and HOURS without -f & -t
+then
+	DATAFILE=$1
+	HOURS=$2
+else
+	echo $USAGE
+	exit 1
+fi
+
+if [ ! -r $DATAFILE ]		# DATAFILE exist and have read permission?
+then
+	echo "`basename $0`: Cannot open $DATAFILE for reading"
+	exit 2
+fi
+
+echo "Data file: $DATAFILE"
+echo "Running for $HOURS hours."
+
+START_DATE=`date`
+echo "START DATE AND TIME IS $START_DATE"
+
+# source in configuration data
+. $DATAFILE
+
+# setup
+setup_testinfo
+setup_trap
+setup_rundir
+
+# run 'til done
+loop $HOURS
+
+# be neat
+cleanup
+
+echo "START DATE AND TIME WAS $START_DATE"
+echo "END DATE AND TIME IS `date`"
+
+exit 0
+############################################################################
+# End of Main
+############################################################################
+

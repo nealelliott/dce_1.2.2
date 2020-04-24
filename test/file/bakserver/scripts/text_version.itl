@@ -1,0 +1,100 @@
+echo This test checks that version numbers in text are updated correctly
+
+!* connect to the bakserver
+
+bakServerConnect init hand
+
+set hightime int 360
+set midtime int 45
+set lowtime 30
+set id int  200
+set lock int 0
+set tlock int 0
+set BUDB_TEXT_COMPLETE int 1
+set numvertest 10 
+
+bakFreeAllLocks $hand $id
+
+echo Test that the text version gets updated when text is added to the database
+echo Also test concurrent adding of text of various types
+
+coLoop texttype 0 1 2
+set ilock local int 0
+set oldversion local int 0
+set curversion local int 0 
+
+
+set str local "Krypton"
+set len local #$str
+set charlist local fs_bakCharList $len $str
+
+* Get current version
+
+bakGetTextVersion $hand $texttype oldversion
+bakGetLock $hand  $id  $texttype  $hightime  ilock
+
+Loop i 1 1 $numvertest
+
+bakSaveText $hand $ilock $texttype  0  $BUDB_TEXT_COMPLETE $charlist
+
+* Get new text version
+bakGetTextVersion $hand $texttype curversion
+
+* now compare
+
+if ($curversion != ( $oldversion + $i)) {
+	echo Version update test failed 
+	} else {
+	echo Version update test succeeded
+	} 
+set i ($i + 1)
+endLoop
+
+* Now test that the version does not change when the BUDB_TEXT_COMPLETE flag is
+* not set 
+
+
+bakGetTextVersion $hand $texttype oldversion
+set offset local int 0 
+Loop i 1 1 ($numvertest - 1)
+
+bakSaveText $hand $ilock $texttype  $offset  0 $charlist
+
+bakGetTextVersion $hand $texttype curversion
+
+if ($curversion != $oldversion) {
+	echo Version update test failed 
+	} else {
+	echo Version update test Succeded
+	}
+
+set offset ($offset + $len)
+endLoop
+
+bakSaveText $hand $ilock $texttype  $offset $BUDB_TEXT_COMPLETE $charlist
+
+bakGetTextVersion $hand $texttype curversion
+
+if ($curversion != ($oldversion + 1)) {
+	echo Version update test failed 
+	} else {
+	echo Version update test Succeded
+	}
+
+endLoop
+
+bakFreeAllLocks $hand $id
+
+
+set status int 0
+set orphans int 0 
+set host int 0 
+
+bakDbVerify $hand status orphans host
+
+if ($status == 1) {
+	echo Version Tests Failed : Database cannot be verified
+	} else {
+	echo Version Tests Succeeded : Database verified
+	}
+

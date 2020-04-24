@@ -1,0 +1,376 @@
+* 
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* Note: Run this scripts solely from both dfs
+*
+
+*
+*> access tests.
+*
+* Test the mod bits (acls) in a distributed environment, for example, have a 
+*   dfs user create a file and have several other dfs user try to access
+*   the file. Test either the fails and passes. It is hard to have this
+*   kind of test without DITL and remote dce_login inside ITL.
+*
+* Check that stat reports setuid bits for appropriate objects, if sgidok 
+*   enabled. Check that all possibilities work.
+*
+
+* Note: 1. This scripts will create some dfs user accounts. In case
+*          of a interruption there will be those account left.
+*       2. Check if you have ../util there.
+
+*************************************************************************
+*  Test environment variables.
+*
+umask 0
+include config
+include common3.env
+
+* Set following variables before running the test.
+set baseUserName string jess
+
+* Repeat times to  the test.
+set loopTimes 2
+
+***********************************************************************
+!* Check if there are enough spokes.
+if ( $ITL_nspokes < 2 ) {
+  echo FAILED: To run the test you have to have $numUsers spokes.
+  quit
+}
+
+* There are two dce users.
+set userName1 string ($baseUserName+1)
+set userName2 string ($baseUserName+2)
+
+* Create DFS users.
+exec addUser_Proc $baseUserName 2 
+
+chdir $testDir
+
+* Get current volume (fileset) status.
+get_fileset_stat . volStat
+*set_fileset_stat . $VIOC_DEF_DEVOK
+*set_fileset_stat . $VIOC_DEF_SGIDOK
+* Recover volume (fileset) status.
+*set_fileset_stat . $volStat
+
+
+
+*
+* This is a procedure to remote login as a dfs user and access dfs.
+* 
+    set remoteDfs_Proc1 proc ENDPROC
+      echo
+      echo Procedure 1 (create file change modbit)
+ 
+      chdir $testDir
+     
+*
+* Establishing lots connections by dce login as new users
+*
+      sync_join "concurrent_dce_login" $timeout
+
+!* This process will functions as dfs user $userName1
+      dce_login $userName1 $userName1
+
+* Lots dfs user accessing dfs at once
+
+      open foo  (@O_CREAT|@O_RDWR)  0777 fid
+      write @fid "This is secret"
+      close @fid
+
+      open $testFile  (@O_CREAT|@O_RDWR)  0777 fid
+      write @fid "#!/bin/sh\n"
+      write @fid "cat foo\n"
+      close @fid
+
+      set command ( "./" + $testFile )
+      shellexe command
+
+      sync_join "begin_chmod_own" $timeout
+      chmod $testFile 0700
+      sync_join "begin_chmod_own_done" $timeout
+      sync_join "begin_chmod_group" $timeout
+      chmod $testFile 0770
+      sync_join "begin_chmod_group_done" $timeout
+      sync_join "begin_chmod_other" $timeout
+      chmod $testFile 0777
+      sync_join "begin_chmod_other_done" $timeout
+      sync_join "begin_chmod_groupx" $timeout
+      chmod $testFile 0750
+      sync_join "begin_chmod_groupx_done" $timeout
+      sync_join "begin_chmod_otherx" $timeout
+      chmod $testFile 0705
+      sync_join "begin_chmod_otherx_done" $timeout
+      sync_join "begin_chmod_groupr" $timeout
+      chmod $testFile 0740
+      sync_join "begin_chmod_groupr_done" $timeout
+      sync_join "begin_chmod_otherr" $timeout
+      chmod $testFile 0704
+      sync_join "begin_chmod_otherr_done" $timeout
+      sync_join "begin_chmod_groupw" $timeout
+      chmod $testFile 0720
+      sync_join "begin_chmod_groupw_done" $timeout
+      sync_join "begin_chmod_otherw" $timeout
+      chmod $testFile 0702
+      sync_join "begin_chmod_otherw_done" $timeout
+      sync_join "hub_chmod" $timeout
+* Note that hub is cell_admin and chmod to 0700.
+      sync_join "hub_chmod_done" $timeout
+      stat $testFile statVar
+      if ( @statVar.st_mode & 0077 ) {
+        echo FAILED: This account has no any right at this time.
+      }
+      sync_join "hub_chmod_back" $timeout
+      sync_join "hub_chmod_back_done" $timeout
+
+      sync_join "finish_sync" $timeout
+      
+      remove $testFile
+      remove foo
+
+      chdir $currentDir
+      echo 
+      echo end procudure 1 
+
+    ENDPROC
+*
+* This is a procedure to remote login as a dfs user and access dfs.
+* 
+    set remoteDfs_Proc2 proc ENDPROC
+      echo
+      echo Check file's modbits
+
+      set command ("./" + $testFile )
+ 
+      sync_join "concurrent_dce_login" $timeout
+
+!* This process will functions as dfs user $userName2
+      dce_login $userName2 $userName2
+
+      chdir $testDir
+
+      sync_join "begin_chmod_own" $timeout
+      sync_join "begin_chmod_own_done" $timeout
+      *chmod $testFile 0700
+      stat $testFile statVar
+      if ( @statVar.st_mode & 0077 ) {
+        echo FAILED: others can access the file (the bits are not 0700).
+      }
+      sync_join "begin_chmod_group" $timeout
+      sync_join "begin_chmod_group_done" $timeout
+      *chmod $testFile 0770
+      stat $testFile statVar
+      if ( @statVar.st_mode & 0007 ) {
+        echo FAILED: others can access the file (the bits are not 0770).
+      }
+      sync_join "begin_chmod_other" $timeout
+      sync_join "begin_chmod_other_done" $timeout
+      *chmod $testFile 0777
+      stat $testFile statVar
+      if ( !(@statVar.st_mode & 0777) ) {
+        echo FAILED: modbits are not 0777.
+      }
+      sync_join "begin_chmod_groupx" $timeout
+      sync_join "begin_chmod_groupx_done" $timeout
+      *chmod $testFile 0750
+      set ITL_IgnoreShellError 1
+      shellexe command
+* problem jess2 is belong to group ? but others XXXX
+      if ( @CommandResult != 0 ) {
+        echo FAILED: the current account should have exe permission.
+      }
+      set ITL_IgnoreShellError 0
+
+      sync_join "begin_chmod_otherx" $timeout
+      sync_join "begin_chmod_otherx_done" $timeout
+      *chmod $testFile 0705
+      set ITL_IgnoreShellError 1
+      shellexe command
+      if ( @CommandResult == 0 ) {
+        echo FAILED: the current account should not have execute permission.
+      }
+      set ITL_IgnoreShellError 0
+      sync_join "begin_chmod_groupr" $timeout
+      sync_join "begin_chmod_groupr_done" $timeout
+      *chmod $testFile 0740
+      *verifyStatus false
+      open $testFile @O_RDONLY 0 fid
+      *if ( @ITL_Status != 0 ) {
+      *  echo FAILED: The current account should have read permission.
+      *}
+      *verifyStatus true
+      close @fid
+      sync_join "begin_chmod_otherr" $timeout
+      sync_join "begin_chmod_otherr_done" $timeout
+      *chmod $testFile 0704
+      verifyStatus false
+      open $testFile @O_RDONLY 0 fid
+      if ( @ITL_Status == 0 ) {
+        echo FAILED: The current account should not have read permission.
+      }
+      close @fid
+      verifyStatus true
+      sync_join "begin_chmod_groupw" $timeout
+      sync_join "begin_chmod_groupw_done" $timeout
+      *chmod $testFile 0720
+      *verifyStatus false
+      open $testFile @O_WRONLY 0 fid
+      *if ( @ITL_Status != 0 ) {
+      *  echo FAILED: The current account should have write permission.
+      *}
+      *verifyStatus true
+      close @fid
+      sync_join "begin_chmod_otherw" $timeout
+      sync_join "begin_chmod_otherw_done" $timeout
+      *chmod $testFile 0702
+      verifyStatus false
+      open $testFile @O_WRONLY 0 fid
+      if ( @ITL_Status == 0 ) {
+        echo FAILED: The current account should not have write permission.
+      }
+      close @fid
+      verifyStatus true
+      sync_join "hub_chmod" $timeout
+* Note that hub is cell_admin and chmod 700.
+      sync_join "hub_chmod_done" $timeout
+      stat $testFile statVar
+      if ( @statVar.st_mode & 0077 ) {
+        echo FAILED: This account has no any right at this time.
+      }
+      sync_join "hub_chmod_back" $timeout
+      sync_join "hub_chmod_back_done" $timeout
+
+      sync_join "finish_sync" $timeout
+
+      chdir $currentDir
+      echo 
+      echo end procedure 2.
+ENDPROC
+
+loop z 1 1 $loopTimes
+
+!* Dispatch remote procedures.
+rexec_async $ITL_spoke[0] remoteDfs_Proc1 result[0] fsyncId[0]
+loop x 1 1 ($ITL_nspokes -1)
+  rexec_async $ITL_spoke[$x] remoteDfs_Proc2 result[$x] fsyncId[$x]
+endloop
+
+sync_create "concurrent_dce_login"  $ITL_nspokes $timeout
+sync_release "concurrent_dce_login"
+
+sync_create "begin_chmod_own"  $ITL_nspokes $timeout
+sync_release "begin_chmod_own"
+
+sync_create "begin_chmod_own_done"  $ITL_nspokes $timeout
+sync_release "begin_chmod_own_done"
+
+sync_create "begin_chmod_group"  $ITL_nspokes $timeout
+sync_release "begin_chmod_group"
+
+sync_create "begin_chmod_group_done"  $ITL_nspokes $timeout
+sync_release "begin_chmod_group_done"
+
+sync_create "begin_chmod_other"  $ITL_nspokes $timeout
+sync_release "begin_chmod_other"
+
+sync_create "begin_chmod_other_done"  $ITL_nspokes $timeout
+sync_release "begin_chmod_other_done"
+
+sync_create "begin_chmod_groupx"  $ITL_nspokes $timeout
+sync_release "begin_chmod_groupx"
+
+sync_create "begin_chmod_groupx_done"  $ITL_nspokes $timeout
+sync_release "begin_chmod_groupx_done"
+
+sync_create "begin_chmod_otherx"  $ITL_nspokes $timeout
+sync_release "begin_chmod_otherx"
+
+sync_create "begin_chmod_otherx_done"  $ITL_nspokes $timeout
+sync_release "begin_chmod_otherx_done"
+
+sync_create "begin_chmod_groupr"  $ITL_nspokes $timeout
+sync_release "begin_chmod_groupr"
+
+sync_create "begin_chmod_groupr_done"  $ITL_nspokes $timeout
+sync_release "begin_chmod_groupr_done"
+
+sync_create "begin_chmod_otherr"  $ITL_nspokes $timeout
+sync_release "begin_chmod_otherr"
+
+sync_create "begin_chmod_otherr_done"  $ITL_nspokes $timeout
+sync_release "begin_chmod_otherr_done"
+
+sync_create "begin_chmod_groupw"  $ITL_nspokes $timeout
+sync_release "begin_chmod_groupw"
+
+sync_create "begin_chmod_groupw_done"  $ITL_nspokes $timeout
+sync_release "begin_chmod_groupw_done"
+
+sync_create "begin_chmod_otherw"  $ITL_nspokes $timeout
+sync_release "begin_chmod_otherw"
+
+sync_create "begin_chmod_otherw_done"  $ITL_nspokes $timeout
+sync_release "begin_chmod_otherw_done"
+
+sync_create "hub_chmod"  $ITL_nspokes $timeout
+sync_release "hub_chmod"
+
+chmod $testFile 0700
+
+sync_create "hub_chmod_done"  $ITL_nspokes $timeout
+sync_release "hub_chmod_done"
+
+sync_create "hub_chmod_back"  $ITL_nspokes  $timeout
+sync_release "hub_chmod_back"
+
+chmod $testFile 0777
+
+sync_create "hub_chmod_back_done"  $ITL_nspokes  $timeout
+sync_release "hub_chmod_back_done"
+
+sync_create "finish_sync"  $ITL_nspokes  $timeout
+sync_release "finish_sync"
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $fsyncId[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+endloop
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+
+* Delete accounts.
+exec deleteUser_Proc $baseUserName 2
+
+echo
+echo Hub done.
+echo

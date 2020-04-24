@@ -1,0 +1,1926 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: dfs.lock,v $
+# Revision 1.1.15.2  1996/03/11  02:43:50  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:07:18  marty]
+#
+# Revision 1.1.15.1  1995/12/11  21:59:24  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:58:43  root]
+# 
+# Revision 1.1.13.4  1994/07/19  15:04:52  rdl
+# 	Fixed minor coding defects
+# 	[1994/07/19  15:04:10  rdl]
+# 
+# Revision 1.1.13.3  1994/07/19  14:26:00  rdl
+# 	Corrected typos in comments.
+# 	[1994/07/19  14:25:36  rdl]
+# 
+# Revision 1.1.13.2  1994/07/19  13:20:12  rdl
+# 	Made command line interface uniform with the other automated DFS system tests.
+# 	[1994/07/19  13:15:15  rdl]
+# 
+# Revision 1.1.13.1  1994/02/04  20:48:28  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:26:04  devsrc]
+# 
+# Revision 1.1.11.3  1994/01/25  22:27:37  rsarbo
+# 	Pass new logfile argument to client program.  client program
+# 	now write logfile on remote host rather than passing output
+# 	back through remsh.  Cleaned up logging messages.
+# 	[1994/01/25  22:17:58  rsarbo]
+# 
+# Revision 1.1.11.2  1994/01/10  17:51:28  annie
+# 	fixed for submission to the wrong tree
+# 	[1994/01/10  17:50:13  annie]
+# 
+# Revision 1.1.8.2  1993/12/28  22:03:01  gmd
+# 	changed comment leader from tab to space after #sign
+# 	[1993/12/28  22:01:38  gmd]
+# 
+# 	Per CRs 8645 and 8648, don't do an extra pass and inform user
+# 	that lower case "-p" specifies number of passes.
+# 
+# 	Per CR 9249, removed BINDIR reference - replaced with TROOT
+# 	variable used by all other dfs system tests. Defined STDEXC
+# 	variable in data file. Added conf_util.sh to list of "called
+# 	into" functions.
+# 	[1993/12/27  16:15:42  gmd]
+# 
+# Revision 1.1.8.1  1993/10/05  20:47:28  mort
+# 	Modify command invokation to accommodate HPUX.  Commands are rsh
+# 	(remsh), ps, awk, and echo.  Only rsh (remsh) requires a test for
+# 	HPUX.
+# 	[1993/10/01  18:17:38  mort]
+# 
+# Revision 1.1.6.6  1993/07/20  20:59:18  mhickey
+# 	Removed useless remove line.
+# 
+# 	Defect 8212.
+# 	[1993/07/20  20:46:16  mhickey]
+# 
+# Revision 1.1.6.5  1993/07/12  21:48:16  gmd
+# 	Fixed to correctly remove file written and read, ie.
+# 	rm $database.$ITERATION.
+# 	[1993/07/12  21:47:33  gmd]
+# 
+# Revision 1.1.6.4  1993/07/02  13:56:25  mhickey
+# 	Made fixes to address defects
+# 	  8208
+# 	  8210
+# 	  8211
+# 	  8212
+# 	  8215
+# 	[1993/07/01  20:59:02  mhickey]
+# 
+# Revision 1.1.6.3  1993/06/10  20:06:20  mhickey
+# 	Rewrote this.  Added verification of client startup, client
+# 	lock tries, client exit.  Added synchronization between client
+# 	and dfs.lock, better logging, and modularized everything.
+# 
+# 	Defect 8138.
+# 	[1993/06/10  19:56:53  mhickey]
+# 
+# Revision 1.1.2.7  1993/02/12  21:38:25  gmd
+# 	Replaced TROOT=/systest_deliverables with new 1.0.2 /dcetest/dcelocal
+# 	(set up by dcetest_config.)
+# 	[1993/02/12  20:54:27  gmd]
+# 
+# Revision 1.1.2.6  1993/02/05  15:20:28  cjd
+# 	Embedded copyright notice
+# 	[1993/02/05  14:40:41  cjd]
+# 
+# Revision 1.1.3.2  1993/02/04  22:07:28  cjd
+# 	Embedded copyright notice
+# 
+# Revision 1.1.2.5  1993/01/29  01:30:34  gmd
+# 	Changed "rshsp $M"s to "rsh $M -n"s to avoid "Stopped (tty input)"
+# 	problem.
+# 	[1993/01/29  01:30:12  gmd]
+# 
+# Revision 1.1.2.4  1993/01/18  14:34:19  gmd
+# 	Added more timestamps.
+# 	Removed unnecessary dce_logins.
+# 	[1993/01/18  14:32:07  gmd]
+# 
+# Revision 1.1.2.3  1993/01/08  19:32:14  gmd
+# 	Added logic to support multiple processes per client machine.
+# 	Also, don't rshsp if HOSTNAME = MACHINE.
+# 	[1993/01/08  19:15:42  gmd]
+# 
+# Revision 1.1.2.2  1993/01/07  19:02:56  gmd
+# 	Original version.
+# 	[1993/01/07  19:00:22  gmd]
+# 
+# $EndLog$
+############################################################################
+# TITLE: dfs.lock
+#
+# ASSOCIATION:
+#       This script is part of the DCE DFS system test suite.  The DCE
+#       system test plan describes fully the goals of this test.
+#
+# OBJECTIVE:
+# Test the lock code by concurrently accessing files 
+# NOTE: concurrency controlled using the existence and contents of a 
+#       file in dfs.
+#
+# LOGIC FLOW: 
+#       This script, when started, reads a configuration file that describes 
+#       the parameters for the test run.  The configuration file can be 
+#       specified by the command line option -f, the environmental variable
+#       DFSLOCK_CONFIG, or the default of "lock.data" can be used.
+#       The parameters are reported to the user, then connectivity to the 
+#       specified hosts and presence of the client binaries on the hosts
+#       is verified.  The iterative test looping then begins.  Each iteration
+#       of the test consists of a write case, during which all clients try
+#       to obtain write lock on a file and write and read data, and a read
+#       case, during which all clients try to obtain a shared read lock on a
+#       file and read data.  The processing during each iteration is as
+#       follows:
+#          - The requested clients are started, all attempting
+#            to get an exclusive write lock on the target file.  One of the 
+#            clients is started with a sleep value (the number of seconds to
+#            sleep after the synchronization file is found) of 0; the other
+#            clients are told to sleep for SLEEPRANGE (specified in the 
+#            configuration file) seconds after finding
+#            the synch file.  The client that is passed a sleep value of
+#            0 changes on each iteration so that each of the hosts will 
+#            eventually succeed in locking the target file irrespective of
+#            the relative processing speeds of the hosts involved (unless
+#            fewer iterations are executed than the number of hosts).  This
+#            makes sure that each platform in a heterogeneous test cell does
+#            the lock, the write and the read of the target file.
+#          - The clients print a READY message to their respective logs when
+#            they start up.  They then loop, looking for the synch file. 
+#          - This script polls the client logs looking for the READY message.
+#            When the READY message is found in all of the client logs, the
+#            synch file is created.    If the READY message is not found after
+#            READY_WAIT minutes (specified in the config file), then the 
+#            iteration fails.  This script then begins polling the 
+#            client logs for a TRIED LOCK message from each client.
+#          - When the clients find the synch file, they each sleep for a number
+#            of seconds, bounded by the sleep value they were passed, before 
+#            attempting the exclusive write lock.  As is implied above, one
+#            of the clients does not sleep, but instead attempts the lock
+#            immediately (and succeeds, we ferverently hope).  The client that
+#            has thus obtained the write lock on the file loops, looking 
+#            for the message "EW-LOCK-STATUS-OKAY" in the synch file.  
+#            The clients that had to sleep before trying the lock eventually
+#            awake, try the lock, fail, and exit.  After trying the lock, and
+#            before exitting, each client prints "TRIED LOCK / NO LOCK", or
+#            "TRIED LOCK / GOT LOCK" to it's log file.
+#          - When this script finds a "TRIED LOCK" message in all of the client
+#            log files, it checks that the correct client got the lock.  If the
+#            correct client did not get the lock, or if the TRIED LOCK message
+#            is not found after LOCK_WAIT minutes (specified in the config
+#            file), then the iteration fails.
+#            If everything is okay, this script prints "EW-LOCK-STATUS-OKAY"
+#            to the sync file, and begins polling the client log files for
+#            an "EXITTED" message.
+#          - The clients that had to sleep and failed to obtain the lock have
+#            exitted by this point.  The client that got the lock reads the
+#            EW-LOCK-STATUS-OKAY message from the synch file, and proceeds to
+#            write the specified data to the target file, and then to verify
+#            it by reading it back.  This client then exits.  On exit, each
+#            client prints "EXITTED / PASSED" or "EXITTED / FAILED" to it's
+#            log.
+#          - When this driver finds an EXITTED message in each of the client 
+#            logs, it determines, based on the PASSED or FAILED string in the
+#            message, whether the expected client, ergo the write part of
+#            the iteration, passed.  If the correct client did not pass, or if
+#            the EXITTED message is not found in all of the client logs after
+#            LOCK_WAIT minutes (specified in the config file), then the 
+#            iteration fails.
+#          - A message is printed indicating whether the write part of the 
+#            iteration passed.
+#          - the read part of the iteration is then run.  The steps in the 
+#            read part of the iteration are the same, except that:
+#             - ALL clients sleep before trying the lock
+#             - ALL clients are expected to get the lock, successfully read
+#               the specified data, and exit SUCCESSFULLY
+#          - A message is printed describing the status for the iteration.
+#       After each iteration, the client logs and the synch file are removed,
+#       unless the configuration file specifies that they are to be preserved
+#       (set CLEANUP=0 in the config file), or if the iteration failed.
+#
+# CALLED FROM:
+#       shell, test harness
+#
+# CALLS INTO:
+#       lock.data or specified datafile for parameters,
+#       filewnr (client program).
+# conf_util.sh (utility found in $STDEXC)
+#
+# SYNTAX:
+# dfs.lock [-f <datafile>]
+#                where <datafile> is the path to the data file.  This parameter
+#                can be omitted if the data file name is the default 
+#                "lock.data", or is specified via the environmental variable
+#                DFSLOCK_CONFIG.
+#       dfs.lock_cl <options>
+#                In order to allow the test to be run in a variety of ways 
+#                during porting or to see what the behavior is given different
+#                parameters in a flexible way, a link to the test named 
+#                dfs.lock_cl may be created.  If the test is invoked via this
+#                link, then a number of parameters can be specified via command
+#                line switches.  For a list of the available options, see the
+#                print_usage function, or create the link and run 
+#                "dfs.lock_cl -h"
+#
+############################################################################
+
+#############################################################################
+# init_vars() - give variables some inital values to ensure tests in other  #
+#               shell functions succeed.                                    #
+#############################################################################
+init_vars()
+{
+   #
+   # Cleanup flag  - default is no cleanup of log files
+   #
+   CLEANUP=0
+
+   #
+   # Client debugging - default is no extra client debug prints.
+   #
+   DEBUG_CLI=""
+
+   #
+   # Client debugging with remote_gdb
+   #  
+   REM_GDB_CLI=""
+
+   #
+   # Remote gdb host.  May be different than test machine for performance 
+   # reasons.
+   REM_GDB_XHOST=""
+
+   #
+   # total clients 
+   #
+   cli_to_start=0
+
+   #
+   # clients per machine
+   # 
+   cli_p_mach=0
+
+   #
+   # client machine list
+   #
+   cli_mach=""
+
+   #
+   # extra clients
+   # 
+   cli_fudge=0
+ 
+   #
+   # name of local host
+   #
+   localhost=`hostname`
+
+   #
+   # number of clients executing looking for a shared read lock
+   #
+   nsh_rd=0
+
+   #
+   # number of clients executing looking for an exclusive write lock
+   #
+   nex_wr=0
+
+   #
+   # number of write operations
+   # 
+   nwrites=0
+
+   #
+   # shared read to exclusive write clients  * 100
+   #
+   SH_RD_PCT=999
+
+   #
+   # ratio of shared read to exclusive write clients
+   #
+   sr_pct=0
+
+   #
+   # Number fo passes to run - default is 0 since default is to run for
+   # a duration, not a number of passes.
+   #
+   PASSES=0
+
+   #
+   # Hours to run from command line
+   #
+   CHOURS=0
+   HOURS=0
+
+   #
+   # Minutes to run
+   #
+   MINS=0
+
+   #
+   # Seconds for exclusive write clients to wait before attempting write lock
+   # 
+   cli_delay=0
+    
+   #
+   # log dir
+   #
+   log_dir=""
+
+   #
+   # temp directory
+   #
+   tmp_dir=""
+
+   #
+   # data dir - where the file to be written and read
+   #
+   data_dir=""
+
+   #
+   # basename for data file
+   #
+   data_base=""
+
+   #
+   # synch file directory. usually ends up being the same as the data_dir
+   # 
+   synch_dir=""
+
+   #
+   # basename for synch files
+   #
+   synch_base=""
+   
+
+   #
+   # wait periods for each stage of the test iteration; ie: the maximum number
+   # of minutes to wait for all the clients to complete a stage
+   # 
+   READY_WAIT=0
+   LOCK_WAIT=0   
+   EXIT_WAIT=0
+
+   #
+   # note the time
+   #
+   START_DATE=`date`
+   #
+   # this is a macro for converting the date to a number of seconds via 
+   # a call to eval.
+   #
+   TIMER='eval echo `awk "BEGIN { printf \"%8d\", \`date +"%j"\`*86400 + \`date +"%H"\`*3600 + \`date +"%M"\`*60 + \`date +"%S"\`; exit}"`'
+   #
+   # the starting time in seconds for use in calculating whether test run is
+   # complete.
+   #
+   START_TIME=`$TIMER`
+
+   # use the proper shell commands modulo system type
+   if [ `uname 2>/dev/null` = "HP-UX" ]; then
+	REMSH=remsh
+   else
+	REMSH=rsh
+   fi
+}
+
+
+############################################################################
+# setup_trap() - Sets up a trap handler for SIGHUP, SIGINTR, etc.          #
+#                Action is to exit on receipt of signal                    #
+############################################################################
+setup_trap() {
+trap	'echo
+	 echo "========================================"
+	 echo "Trap signal received..."
+	 echo "========================================"
+	 echo
+         kill_jobs final
+	 cleanup "final"
+	 END_DATE=`date`
+	 echo "Start time was $START_DATE"
+	 echo "End time is $END_DATE"
+	 echo "COMPLETED $ITERATION ITERATIONS!"
+	 exit 1' 1 2 3 1
+}
+
+print_usage()
+{
+ if [ "$SCRIPT" = "dfs.lock_cl" ]
+ then 
+   echo ""
+   echo "usage: dfs.lock_cl [-B <path>][-C <nclients>] [-c <machine>...] [-D <path>] [-d] [-f <path>] [-G <host>] [-H | -h ] [-t <hours>]  [-L <path>] [-m <minutes>][-P <passes>][-R][-r <shrd_read_pct>][-S <path>][-s <seconds>][-T <path>]"
+   echo "Where:"
+   echo "       -B path      specifies the path on each client machine where"
+   echo "                    the dfs.lock binaries are stored."
+   echo "       -C <num>     specifies the number of clients to run."
+   echo "       -c <mach>    specifies a machine on which to run a client."
+   echo "       -D <path>    specifies the path to the data directory."
+   echo "       -d           specifies that client debug info is to be printed"
+   echo "       -f <config>  specifies the path to the configuration file"
+   echo "       -G <host>    specifies clients will be run under remote gdb."
+   echo "                    <host> specifies the machine where the remote gdb"
+   echo "                    sessions will display, or \"local\" to specify" 
+   echo "                    the local system."
+   echo "       -t <hours>   specifies hours to run"
+   echo "       -h           prints this help message"
+   echo "       -H           prints this help message"
+   echo "       -L <path>    specifies the path to the log directory"
+   echo "       -m <mins>    specifies minutes to run"
+   echo "       -p <passes>  specifies passes to run"
+   echo "                    Note: -p cannot be specified if -t or -m is"
+   echo "                          specified and vice-versa"
+   echo "       -r <shared_read_pct> specifies percentage of clients that "
+   echo "                            will attempt to obtain a shared read "
+   echo "                            lock to the file"
+   echo "       -R           specifies that log files are to be removed after"
+   echo "                    the test run is complete."
+   echo "       -S <path>    specifies the directory in which to create the"
+   echo "                    synchronization directory."
+   echo "       -s <seconds> specifies the number of seconds the clients are"
+   echo "                    to sleep before attempting locking."
+   echo "       -T <path>    specifies the path to the directory to use when"
+   echo "                    creating temporary files."
+   echo ""
+ else
+   echo "usage: dfs.lock [-f <path_to_config_file>] [-t <hours>] [-H | -h]"
+   echo "Where:"
+   echo "       -f <config>  specifies the path to the configuration file"
+   echo "       -t <hours>   specifies hours to run"
+   echo "       -H           prints this help message"
+   echo "       -h           prints this help message"
+ fi
+}
+
+print_hi()
+{
+   echo ""
+   echo "Beginning DCE DFS File Locking System Test Execution at `date`"
+   echo "-------------------------------------------------------------------"
+   echo "   Test execution parameters are:"
+   echo "   ------------------------------"
+   if [ "$cli_mach" = "$localhost" ]
+   then
+      echo "   - Running $cli_to_start clients on: $localhost"
+   else
+      echo "   - Running $cli_to_start clients on: $cli_mach"
+      echo "     ($cli_p_mach clients per machine, $cli_fudge machines"
+      echo "      will run one extra client)"
+   fi
+   echo "   - Running $nsh_rd shared-read clients, $nex_wr exclusive write clients"
+   pr_pct=`echo "$sr_pct * 100; quit" | bc`
+   echo "     (approximately ${pr_pct}% shared read clients)"
+   echo "   - Clients writing will attempt $nwrites write operations"
+   if [ $PASSES -eq 0 ]
+   then
+      echo "   - Running for $HOURS hrs, $MINS mins."
+   else
+      echo "   - Running for $PASSES passes."
+   fi
+   echo "   - Waiting maximum of $READY_WAIT minutes for clients to print READY message."
+   echo "   - Waiting maximum of $LOCK_WAIT minutes for clients to print LOCK message."
+   echo "   - Waiting maximum of $EXIT_WAIT minutes for clients to print EXIT message."
+   echo "   - Using configuration file $conf_file"
+   [ "$DEBUG_CLI" != "" ] && echo "   - Clients are printing debug information"
+   [ "$REM_GDB_CLI" != "" ] && echo "   - Clients will be run under remote_gdb"
+   [ "$REM_GDB_XHOST" != "" ] && echo "   - Remote gdb sessions will display to $REM_GDB_XHOST"
+#   [ "$TIMING" = "-t" ] && echo "   - Clients are timing RPC's"
+   echo ""
+   echo "   Executables:" 
+   echo "   ------------"
+   echo "   - Expect executables to be in directory $exe_path"
+   echo ""
+   echo "   Log Files:"
+   echo "   ----------"
+   echo "   - Client shared read log files are $log_dir/<host>.$$.<pass_number>.<client>.read.log"
+   echo "   - Client exclusive write logs are $log_dir/<host>.$$.<pass_number>.<client>.write.log"
+   [ $CLEANUP -eq 0 ] && \
+		       echo "   - Log files will be saved after test is run" ||\
+		       echo "   - Log files will be removed after test run"
+   echo ""
+   echo "   Data Files:"
+   echo "   -----------"
+   echo "   - Data file is $data_base.<pass_number>"
+   echo "   - Synchronization file is $synch_base.<pass_number>.<case>"
+   echo ""
+   echo "   Temporary files:"
+   echo "   ----------------"
+   echo "   - Temporary files will be created in $tmp_dir"
+   echo "   --------------------------------------------------"
+   echo ""
+   echo ""
+
+}
+
+#############################################################################
+# wait_for_clients(mess, case, max_loop, err_file) - wait for message in    #
+#          client logs.                                                     #
+#          Loops, sleeping for 1 minute, then checking for a specified      #
+#          string in the log files for the clients from the specified case  #
+#          for the current iteration.  The max_loop parameter specifies a   #
+#          maximum number of times (minutes) to loop before declaring the   #
+#          client(s) hung.  This is a fail-safe to prevent the entire test  #
+#          run from becoming hung because of a hung client.  The err_file   #
+#          parameter tells wait_for_clients where to put the output         #
+#          indicating whcich clients did not print the specified message to #
+#          their logs for processing by the caller.                         #
+#############################################################################
+wait_for_clients()
+{
+   #
+   # get our params
+   #
+   # the message we are looking for
+   #
+   wfc_mess="$1"
+   #
+   # the case
+   #
+   wfc_case=$2
+   #
+   # the maximum number of checks
+   #
+   wfc_max_loop=$3
+   #
+   # the error output file
+   # 
+   wfc_errout=$4
+
+   #
+   # initialize the loopcount
+   #
+   wfc_lcount=1
+
+   # 
+   # print a message
+   # 
+   echo "      Looking for $wfc_mess in the logs for iteration $ITERATION ($wfc_case)"
+   echo "      Starting at `date` (maximum of $wfc_max_loop loops)."
+
+   #
+   # and do the loop
+   #
+   wfc_doloop=1
+   while ( [ $wfc_doloop -eq 1 ] )
+   do
+      #
+      # grep for lines containing the message from the client logs for the 
+      # specified case, and convert them into the form 
+      #    "cli_numb host os lock_type" 
+      # for the comparison to the client info file
+      #
+      grep "$wfc_mess" $log_dir/*.$$.$ITERATION.*.$wfc_case.log | awk '{print $2, $7, $10, $13}' | sort > $tmp_dir/$$.wfc_mess_lines.$wfc_case
+   
+      #
+      # Now diff the files. If they match, then all is well.  If not, then 
+      # keep looping
+      #
+      diff $cliinfo.$wfc_case $tmp_dir/$$.wfc_mess_lines.$wfc_case > $wfc_errout 2>&1
+  
+      # 
+      # check to see if we should exit. We should exit if all the client logs
+      # contained the specified message, or if the loop_max is reached
+      if [ $? -eq 0 ]
+      then
+         wfc_stat="all_got_mess"
+         wfc_doloop=0
+      elif [ $wfc_lcount -eq $wfc_max_loop ]
+      then
+         wfc_stat="max_loop"
+         wfc_doloop=0
+      else
+         #
+         # increment the loop count
+         #
+         wfc_lcount=`expr $wfc_lcount + 1`
+         #
+         # sleep a minute to give the clients a chance to catch up
+         # 
+         sleep 60
+      fi
+   done
+
+   #
+   # print a status message
+   # 
+   [ "$wfc_stat" = "all_got_mess" ] && stat_mess="All clients got message" || \
+                                       stat_mess="After $wfc_lcount loops some clients still missing message."
+   echo "      Done looking for $wfc_mess in the logs for iteration $ITERATION ($wfc_case)."
+   echo "      Finished at `date` (after $wfc_lcount loops)..."
+   echo "      $stat_mess"
+   if [ "$wfc_stat" != "all_got_mess" ]
+   then
+      echo "      The following clients did not print the message:"
+      awk '{ if ( NF > 1 ) printf("           %s %s %s %s\n", $2, $3, $4, $5); }' $wfc_errout
+   fi
+
+   #
+   # cleanup
+   #
+   echo "      Cleaning up temporary files..."
+   rm -f $tmp_dir/$$.wfc*
+}
+
+
+
+############################################################################
+# cleanup(case, [pass]) - cleanup for a pass or for the entire run         #
+#                                                                          #
+#      if CLEANUP is non-zero, cleanup the logs from specified pass or the #
+#      entire run.                                                         #
+############################################################################
+cleanup()
+{
+   #
+   # first arg is the context from which we were called
+   #
+   cu_case=$1
+   
+   [ "$cu_case" != "final" ] && cu_mess="pass $2, $cu_case" || \
+                                 cu_mess="$cu_case"
+
+   #
+   # print a message
+   #
+   echo ""
+   echo "   Starting $cu_mess cleanup at `date`"
+   echo "   -----------------------------------------------------------------"
+
+   #
+   # if context was "final" then remove the client info file and all the 
+   # logs if CLEANUP is true.
+   #
+   if [ "$cu_case" = "final" ]
+   then
+      rm -f $cliinfo
+   #
+   # else the second arg is the pass number, so cleanup the logs, etc. if
+   # CLEANUP is non-zero.
+   #
+   else
+      if [ $CLEANUP -eq 1 ]
+      then
+         rm -f $log_dir/*.$$.$2.*.$cu_case.log
+         rm -f $synch_base.$2.$cu_case
+         rm -f $cliinfo.$cu_case
+      fi
+   fi
+   #
+   # print a message
+   #
+   echo "   ------------------------------------------------------------------"
+   echo "   Finished $cu_mess cleanup at `date`"
+   echo ""
+}
+
+############################################################################
+# start_clients(case, [lock_cli_num]) - start the client jobs              #
+#     Starts the clients for the exclusive write or shared read cases.  If #
+#     starting exclusive write clients, the lock_cli is required, and is   #
+#     the client number of the client that will be helped to get the write #
+#     lock on the file.                                                    #
+############################################################################
+start_clients()
+{
+sc_case=$1
+if [ "$sc_case" = "write" ]
+then
+   lock_cli=$2
+fi
+
+sc_stat="okay"
+
+echo "   Beginning client startup for process $$ at `date`"
+echo "   -------------------------------------------------------------------"
+
+for nextrec in $cli_infos
+do
+   #
+   # break up the client info record
+   #
+   nextrec=`echo $nextrec | awk -F':' '{print $1, $2, $3, $4}'`
+   set $nextrec
+   seq=$1
+   host=$2
+   ostype=$3
+   lock_type=$4
+
+   if [ "$host" != "$localhost" ]
+   then
+      RSH="$REMSH $host -n dce_login $PRINC $PW -exec $REM_GDB_CLI $REM_GDB_XHOST"
+   else
+      RSH="$REM_GDB_CLI $REM_GDB_XHOST"
+   fi
+
+   #
+   # at this point, we should be fairly sure that the job will run, so 
+   # start her up
+   #
+   [ "$sc_case" = "write" -o "$sc_case" = "read_write" -a "$lock_type" = "EW" ] && \
+                                                lockstr="exclusive write" || \
+                                                lockstr="shared read"
+   lockstr2=""
+   if [ "$sc_case" = "write" ]
+   then
+      READONLY=""
+      lock_type="EW"
+      [ $seq -eq $lock_cli ] && { lockstr2="(gets lock)"; cli_sleep=0; } || \
+                              cli_sleep=$cli_delay
+   elif [ "$sc_case" = "read" ]
+   then
+      lock_type="SR"
+      READONLY=-r
+      cli_sleep=$cli_delay
+   fi
+
+   #
+   # report on the particulars of the client we are starting
+   #
+   echo "      STARTing $lockstr client $seq on $host ($ostype) at `date` $lockstr2"
+
+   #
+   # Locked and Loaded...FIRE! Err...I mean, start the next client. 
+   #
+   # In the client program we re-open the log file and attach it
+   # to stdout and stderr.  This means the file gets written directly
+   # on the remote machine rather than back through the remsh on the
+   # local machine.  Not only does this balance the load, it 
+   # results in a more consistent log file since the stdout and stderr
+   # streams can become jumbled when coming back through the remote
+   # shell. 
+   $RSH  $cli_path -f ${data_base}.$ITERATION -c $seq -l $lock_type -w $synch_base.$ITERATION.$sc_case -C ${lock_type}-LOCK-STATUS-OKAY $READONLY -p ${ITERATION} -n $nwrites -s $cli_sleep $DEBUG_CLI -L $log_dir/$host.$$.$ITERATION.$seq.$sc_case.log > $log_dir/$host.$$.$ITERATION.$seq.$sc_case.log 2>&1 &
+   if [ $? -ne 0 ]
+   then
+	echo "Remote shell error $? spawning client on $host:"
+   fi
+done
+
+#
+# To support the message checking synchronization we use, we now generate
+# a version of the cliinfo file that matches the clients we just started; ie:
+# the cliinfo file may say:
+#   1 mach1 OSF1 EW
+#   2 mach2 RIOS SR
+# but for the write case, this should look like
+#   1 mach1 OSF1 EW
+#   2 mach2 RIOS EW
+# and for the read case, it should look like this
+#   1 mach1 OSF1 SR
+#   2 mach2 RIOS SR
+#
+# As an optimization, if the percentage of shared read clients is 100% and
+# the case is "read", or if the shared read client percentage is 0% and
+# the case is write, we just copy the client info file.  The cliinfo file is
+# also just copied if the case is not all-write (ha ha) or all read.
+#
+if [ "$sc_case" = "read" -a $SH_RD_PCT -ne 100 -o \
+     "$sc_case" = "write" -a $SH_RD_PCT -ne 0 ] 
+then
+   [ "$sc_case" = "write" ] && { cltype="SR"; dltype="EW"; } || \
+                               { cltype="EW"; dltype="SR"; }
+   sed -e s/$cltype/$dltype/ $cliinfo > $cliinfo.$sc_case
+else
+   cp $cliinfo $cliinfo.$sc_case
+fi
+
+
+echo "   ------------------------------------------------------------------------"
+echo "   Finished client startup for process $$ at `date`"
+echo ""
+
+}
+ 
+##############################################################################
+# ready_check (case) - Checks client logs to see if all clients are READY    #
+#                                                                            #
+#              Convert the client info file and client log READY lines into  #
+#              wbat should be equivelant forms, then diff them.  If they     #
+#              don't match, we have a problem.                               #
+##############################################################################
+ready_check()
+{
+   rc_stat="okay"
+
+   #
+   # get the case type
+   #
+   rc_case=$1
+
+   #
+   # Print message
+   #
+   echo ""
+   echo "   Check startup for iteration $ITERATION ($rc_case) at `date`"
+   echo "   ------------------------------------------------------------------"
+
+   
+   # 
+   # look for the READY lines that tell us all of the clients are started
+   # 
+   wait_for_clients "READY" $rc_case $READY_WAIT $tmp_dir/$$.rc_chk_rdy_tmp.$rc_case 
+   #
+   # Report the results
+   #
+   if [ "$wfc_stat" != "all_got_mess" ]
+   then
+      rc_stat="error"
+      echo "      ERROR: CLIENT STARTUP FAILED!!"
+   else
+      echo "      Verified client startup...All clients report READY"
+   fi
+   
+   #
+   # cleanup
+   #
+   echo "      Removing temporary files..."
+   rm -f $tmp_dir/$$.rc*$rc_case
+
+   echo "   ------------------------------------------------------------------"
+   echo "   Startup check for iteration $ITERATION ($rc_case) done at `date`"
+   echo ""
+
+}
+
+  
+##############################################################################
+# check_lock_status(case, [lock_cli_nub]) - check the client logs to         #
+#                                           determine if locking was         #
+#                                           successful.                      #
+#                                                                            #
+#      If the case is "write" then the second arguement is the client number #
+#      of the client to whom we awarded the lock.  We grep for the string    #
+#      "TRIED LOCK" from the client logs; all client logs should have this   #
+#      string; if all the client logs do not have the string, then we report #
+#      an error.  If all the clients have tried the lock, we then grep for   #
+#      the string "GOT LOCK" from the client logs.  In the write case, we    #
+#      expect only the client indicated by the value of lock_cli_numb to     #
+#      get the lock.  In the read case, we expect all the clients to get the #
+#      lock.                                                                 #
+##############################################################################
+check_lock_status()
+{
+   # 
+   # the case we are checking the locking for 
+   #
+   cls_case=$1
+   #
+   # if cls_case is the write case, then we expect a lock client to be the 
+   # second arguement
+   #
+   [ "$cls_case" = "write" ]  && cls_lock_cli=$2
+
+   #
+   # Initialize the return status
+   # 
+   cls_stat="success"
+   
+   #
+   # Print message
+   #
+   echo ""
+   echo "   Check locking for iteration $ITERATION ($rc_case) at `date`"
+   echo "   ------------------------------------------------------------------"
+
+   # 
+   # look for the TRIED LOCK lines that tell us all of the clients have 
+   # tried the lock
+   # 
+   wait_for_clients "TRIED LOCK" $cls_case $LOCK_WAIT $tmp_dir/$$.cls_chk_out.$cls_case
+   #
+   # if the clients tried the lock, see if they did it right
+   #
+   if [ "$wfc_stat" = "all_got_mess" ]
+   then
+      echo "      Verified client lock tries...All clients report TRIED LOCK"
+      #
+      # grep the TRIED LOCK lines from the client logs for the specified case,
+      # and save the output since this line also tells if the lock was successful.
+      #
+      # convert them into the form "cli_numb host os lock_type" for the 
+      # comparison to the client info
+      #
+      grep "TRIED LOCK" $log_dir/*.$$.$ITERATION.*.$cls_case.log > $tmp_dir/$$.cls_lock_tries.$cls_case
+      #
+      # Now convert the output to the form used in the client info file.
+      #
+      awk '{print $2, $7, $10, $13}' $tmp_dir/$$.cls_lock_tries.$cls_case | sort > $tmp_dir/$$.cls_lock_lines.$cls_case
+   
+      #
+      # Now diff the files. If they match, then all is well.  If not, then there
+      # was a problem starting a client
+      #
+      diff $cliinfo.$cls_case $tmp_dir/$$.cls_lock_lines.$cls_case > $tmp_dir/$$.cls_chk_out.$cls_case 2>&1
+      
+      #
+      # check to see if the clients we expect got the lock.
+      #
+      # convert the client info list to what we think it should be.
+      #
+      if [ "$cls_case" = "write" ]
+      then
+         dltype="EW"
+         grstr="NO LOCK"
+         repstr="did not get lock"
+         sed -e "/^$cls_lock_cli /d" $cliinfo.$cls_case > $tmp_dir/$$.cls_lock_chk.$cls_case
+         locker=`grep "GOT LOCK" $tmp_dir/$$.cls_lock_tries.$cls_case | awk '{ print $2; }'`
+         if [ "$locker" != "$cls_lock_cli" ]
+         then
+            cls_stat="wrong_locker"
+            locker=`grep "GOT LOCK" $tmp_dir/$$.cls_lock_tries.$cls_case`
+         fi
+      else
+         dltype="SR"
+         grstr="GOT LOCK"
+         repstr="got lock"
+         cp $cliinfo.$cls_case $tmp_dir/$$.cls_lock_chk.$cls_case
+      fi
+
+      # 
+      # Get the list of clients that got the lock, and convert the output to
+      # the form used in the client info file.
+      #      
+      grep "$grstr" $tmp_dir/$$.cls_lock_tries.$cls_case | awk '{print $2, $7, $10, $13}' | sort > $tmp_dir/$$.cls_locker_lines.$cls_case
+
+      #
+      # Now diff the files, and if they match, we are in fat city
+      # 
+      diff $tmp_dir/$$.cls_locker_lines.$cls_case  $tmp_dir/$$.cls_lock_chk.$cls_case > $tmp_dir/$$.cls_locker_out.$cls_case
+      if [ $? -ne 0 ]
+      then
+         echo "      ERROR: CLIENT LOCKING FAILED ($cls_case case)!!"
+         echo "      Writing terminate message to synch file at `date`"
+         echo "TERMINATE TEST" > $synch_base.$ITERATION.$sc_case
+         [ "$cls_stat" = "wrong_locker" ] && { echo "            Unexpected client got the lock (expected $cls_lock_cli)";  echo "            Lock was obtained by:"; echo "               $locker"; }
+ echo "            The following clients $repstr:"
+         awk '{ if ( NF > 1 ) printf("           %s %s %s %s\n",$2, $3, $4, $5); }' $tmp_dir/$$.cls_locker_out.$cls_case
+         cls_stat="error"
+      else
+         echo "      Verified correct client(s) got file lock..."
+         echo "      Writing continue message to synch file at `date` "
+         /bin/echo "${dltype}-LOCK-STATUS-OKAY\c" > $synch_base.$ITERATION.$sc_case
+      fi
+   else  
+      cls_stat="error"
+      echo "      ERROR: CLIENT LOCKING FAILED!!"
+      echo "             The following clients did not report TRIED LOCK:"
+      awk '{ if ( NF > 1 ) printf("           %s %s %s %s\n",$2, $3, $4, $5); }' $tmp_dir/$$.cls_chk_out.$cls_case
+      echo "      Writing terminate message to synch file at `date`"
+      echo "TERMINATE TEST" > $synch_base.$ITERATION.$sc_case
+   fi
+   #
+   # Cleanup
+   #
+   echo "      Removing temporary files..."
+   rm -f $tmp_dir/$$.cls*$cls_case
+
+   echo "   ------------------------------------------------------------------"
+   echo "   Locking check for iteration $ITERATION ($rc_case) done at `date`"
+   echo ""
+
+
+}
+
+##############################################################################
+# check_run_status(<case>, [lock_cli]) - check to see if the test passed     #
+#         Checks the status from the client logs to see if the test ran as   #
+#         expected.  If the <case> is "write", then the second arguement is  #
+#         the number of the client that should have succeeded in writing the #
+#         file.  If it is the read case, then everybody should have passed.  #
+##############################################################################
+check_run_stat()
+{
+   crs_stat="okay"
+   #
+   # Get the case
+   #
+   crs_case=$1
+
+   #
+   # print a message
+   #
+   echo ""
+   echo "   Checking exit status for iteration $ITERATION ($rc_case) at `date`"
+   echo "   ------------------------------------------------------------------------"
+
+   #
+   # if this is the write case, get the lock cli
+   #
+   [ "$crs_case" = "write" ] && crs_lock_cli=$2
+
+   # 
+   # look for the EXITTED lines that tell us all of the clients are done
+   # 
+   wait_for_clients "EXITTED" $crs_case $EXIT_WAIT  $tmp_dir/$$.crs_prob_cli.$crs_case
+   #
+   # Report the results
+   #
+   if [ "$wfc_stat" != "all_got_mess" ]
+   then
+      echo "      ERRORS IN CLIENT EXIT!!"
+      echo "         The following clients do not appear to have exitted??:"
+      awk '{ if ( NF > 1 ) printf("           %s %s %s %s\n",$2, $3, $4, $5); }' $tmp_dir/$$.crs_prob_cli.$crs_case
+      crs_stat="error"
+      echo "      Writing terminate message to synch file at `date`"
+      echo "TERMINATE TEST" > $synch_base.$ITERATION.$sc_case
+   else
+      echo "      Verified client exits..."
+      echo "      Checking client exit statuses..."
+
+      #
+      # get the EXITTED lines for future comparisons
+      #
+      grep "EXITTED" $log_dir/*.$$.$ITERATION.*.$cls_case.log > $tmp_dir/$$.crs_comp_lines.$crs_case
+
+      #
+      # Now see who passed and failed
+      #
+      grep "PASSED" $tmp_dir/$$.crs_comp_lines.$crs_case | awk '{print $2, $7, $10, $13}' | sort > $tmp_dir/$$.crs_cli_passed.$crs_case
+
+      #
+      # Generate a file to compare the list of clients that passed against
+      #
+      if [ "$crs_case" = "write" ] 
+      then
+         #
+         # get the line for the client that should have passed from the client
+         # info file
+         #
+         egrep "^$crs_lock_cli " $cliinfo.$crs_case > $tmp_dir/$$.crs_pass_cli.$crs_case
+      else
+         #
+         # in the read case, we just compare against the client info file
+         #
+         cp  $cliinfo.$crs_case $tmp_dir/$$.crs_pass_cli.$crs_case
+      fi
+   
+      #
+      # See if the clients that passed are the clients that we expected
+      #
+      diff $tmp_dir/$$.crs_cli_passed.$crs_case $tmp_dir/$$.crs_pass_cli.$crs_case > $tmp_dir/$$.crs_chk_pass.$crs_case
+      #
+      # if any diffs, we have trouble
+      #
+      if [ $? -ne 0 ]
+      then
+         echo "      ERROR: UNEXPECTED CLIENT EXIT STATUS!!"
+         echo "          The following clients PASSED:"   
+         grep "<" $tmp_dir/$$.crs_chk_pass.$crs_case | awk  '{ if ( NF > 1 ) printf("           %s %s %s %s\n",$2, $3, $4, $5); }' 
+         echo "          The following clients FAILED:"
+         grep "FAILED" $tmp_dir/$$.crs_comp_lines.$crs_case | awk '{ if ( NF > 0) printf("           %s %s %s %s\n", $2, $7, $10, $13); }' | sort 
+         echo "          Expected the following clients to PASS:"
+         awk '{printf("            %s %s %s %s\n", $1, $2, $3, $4); }' $tmp_dir/$$.crs_pass_cli.$crs_case
+         echo "      Iteration $ITERATION ($crs_case) failed"
+         crs_stat="error"
+      else
+         echo "      Verified client exit statuses..."
+         echo "      Iteration $ITERATION ($crs_case) passed"
+      fi
+   fi
+ 
+   #
+   # cleanup
+   #             
+   echo "      Removing temporary files..."
+   rm -f $tmp_dir/$$.crs*.$crs_case
+
+   echo "   ----------------------------------------------------------------------"
+   echo "   Exit status check for iteration $ITERATION ($rc_case) done at `date`"
+   echo ""
+
+} 
+##############################################################################
+# kill_jobs() - kills all jobs indicated by the client logs for this process #
+#         greps the system names and pids of the clients from the logs and   #
+#         rsh's to the host (if necessary) and kills the job.                #
+##############################################################################
+kill_jobs()
+{
+   kj_case=$1
+   [ "$kj_case" = "final" ]  &&  kj_case='*'
+   #
+   # print a message
+   #
+   echo "     Starting to kill jobs for process $$ , iteration $ITERATION ($1) at `date`"
+   echo "   ---------------------------------------------------------------------"
+
+   #
+   # generate a list of pids for each host
+   #
+   for mach in $cli_mach
+   do
+      [ "$mach" = "$localhost" ] && RSH= || RSH="$REMSH $mach -n"
+      
+      pids=`grep READY $log_dir/$mach.$$.$ITERATION.*.$kj_case.log | awk '{print $5}'`
+      if [ "$pids" != "" ]
+      then
+         echo "   process ids for $mach are $pids"
+         echo "   attempting to kill $pids on $mach at `date`..."
+         $RSH kill -9 $pids
+         jobsleft=`$RSH ps -e | grep filewnr`
+         if [ "$jobsleft" = "" ]
+         then 
+            echo "   All jobs on $mach killed"
+         else
+            pidsleft=`echo $jobsleft | awk '{print $1}'`
+            echo "   Could not kill $pidsleft on $mach"
+         fi
+      else
+         echo "No jobs running on $mach..."
+      fi
+   done
+
+   echo "   ---------------------------------------------------------------------"
+   echo "     Finished killing jobs for process $$ at `date`"
+}
+
+##############################################################################
+# Main processing
+##############################################################################
+
+SCRIPT=`basename $0`
+#
+# initialize some variables
+#
+init_vars
+
+#
+# Parse the command line - only if we are invoked as dfs.lock_cl
+#
+if [ "$SCRIPT" = "dfs.lock_cl" ]
+then
+   while getopts :B:C:c:dD:f:G:Hht:L:m:n:p:Rs:S:r: ARG
+   do
+      case ${ARG} in 
+ 	       B) # the path to the binaries on the clients
+	          # we accept this at face value since we have no
+	          # quick way to check
+                  exe_path=$OPTARG
+                  ;;
+	       C) # number of clients to run
+                  cli_to_start=$OPTARG
+		  ;;
+	       c) # another client machine
+                  cli_mach="$cli_mach $OPTARG"
+		  ;;
+	       d) # debug the clients
+	          DEBUG_CLI=-v
+		  ;;
+               D) # Data dir
+                  data_base=$OPTARG
+                  ;;
+	       f) # config file path
+                  DFSLOCK_CONFIG=$OPTARG
+                  if [ ! -f $DFSLOCK_CONFIG ]
+                  then
+                     echo "Configuration file $DFS_CONFIG does not exist"
+                     print_usage
+                     exit 1
+                  fi
+		  ;;
+               G) # remote gdb the clients
+                  [ "$OPTARG" = "local" ] && REM_GDB_XHOST=$localhost:0.0 || \
+                                             REM_GDB_XHOST-$i:0.0
+                  ;;
+	       t) # Hours to run
+	          if [ $PASSES -ne 0 ]
+	          then
+		     echo "Can't specify -p with -t or -m"
+		     print_usage
+		     exit 1
+	          fi
+                  CHOURS=$OPTARG
+		  ;;
+	       H|h) # want print_usage
+	          print_usage
+	          exit 0
+		  ;;
+	       L) # the directory in which to store logs. 
+                  log_dir=$OPTARG
+		  ;;
+	       m) # Minutes to run 
+	          if [ $passes -ne 0 ]
+	          then
+		     echo "Can't specify -p with -t or -m"
+		     print_usage
+		     exit 1
+	          fi
+                  MINS=$OPTARG
+		  ;;
+	       n) # number of write operations
+                  nwrites=$OPTARG
+		  ;;
+	       p) # passes
+	          if [ $HOURS -ne 0 -o $MINS -ne 0 ]
+	          then
+		     echo "Can't specify -p with -t or -m"
+		     print_usage
+		     exit 1
+	          fi
+                  PASSES=$OPTARG
+		  ;;
+	       R) # Remove logs at end of test run
+	          CLEANUP=1
+		  ;;
+               s) # Client start delay
+                  cli_delay=$OPTARG
+                  ;;
+	       S) # Synchronization file name
+                  synch_dir=$OPTARG
+		  ;;
+	       r) # percent of clients to be run trying for shared read  lock
+                  SH_RD_PCT=$OPTARG
+                  if [ $SH_RD_PCT -gt 100 ]
+                  then
+                     echo "Bad value for exclusive write precent ($SH_RD_PCT > 100)."
+                     print_usage
+                     exit 1
+                  fi
+		  ;;
+	       *) # Huh?
+	          echo "Bad flag ${ARG}"
+	          print_usage
+	          exit 1
+		  ;;
+      esac 
+   done
+else
+   #
+   # only -f <config_file>, -t <hours to run>, and -h/-H  options allowed 
+   #
+   while getopts 'f:t:hH' ARG
+   do
+      case ${ARG} in
+	       f) # config file path
+                  DFSLOCK_CONFIG=$OPTARG
+                  if [ ! -f $DFSLOCK_CONFIG ]
+                  then
+                     echo "Configuration file $DFS_CONFIG does not exist"
+                     print_usage
+                     exit 1
+                  fi
+		  ;;
+	       t) # Hours to run
+                  CHOURS=$OPTARG
+		  ;;
+	       H|h) # want print_usage
+	          print_usage
+	          exit 0
+		  ;;
+	       *) # Huh?
+	          echo "Bad flag ${ARG}"
+	          print_usage
+	          exit 1
+		  ;;
+     esac
+  done
+fi
+#
+# get the default values from the configuration file
+#
+conf_file=${DFSLOCK_CONFIG:-lock.data}
+. $conf_file
+
+#
+# now set the parameters for the test.  A value supplied on the command line 
+# overrides a value from the configuration file.
+#
+#
+# list of client machines
+#
+[ -n "$cli_mach" ] || cli_mach=$CLI_MACHINES
+
+#
+# Number of clients to run
+#
+[ $cli_to_start -ne 0 ] || cli_to_start=$NCLIENTS
+
+#
+# path to binaries
+#
+[ -n "$exe_path" ] || exe_path=$TROOT
+
+#
+# path to remote gdb script - set if REM_GDB_XHOST is set
+#
+[ -n "$REM_GDB_XHOST" ] && REM_GDB_CLI="$exe_path/remote_gdb"
+
+#
+# client executable
+#
+cli_path=$exe_path/filewnr
+
+#
+# duration of run
+#
+[ $CHOURS -ne 0 ] && HOURS=$CHOURS
+
+#
+# data directory
+#
+[ -n "$data_dir" ] || data_dir=$DFS_PATH
+
+#
+# data file base name
+#
+data_base=$data_dir/data_file$$
+
+#
+# synch file base name
+#
+[ -n "$synch_dir" ] || synch_dir=$SYNCH_DIR
+
+#
+# synch file base name 
+#
+synch_base=$synch_dir/synch_file$$
+
+#
+# Log directory
+#
+[ -n "$log_dir" ] || log_dir=$LOG_DIR
+
+#
+# Temp directory
+#
+[ -n "$tmp_dir" ] || tmp_dir=$TMP_DIR
+
+#
+# client info file (for checking results)
+#
+cliinfo=$tmp_dir/dfs.lock_cliinfo$$
+
+#
+# Percent of clients that will try for an exclusive write lock on the file.
+#
+[ $SH_RD_PCT -eq 999 ] && SH_RD_PCT=$SH_READ_PCT
+
+#
+# Number of writes
+#
+[ $nwrites -eq 0 ] && nwrites=$NUMFILEWRITES
+ 
+#
+# client delay
+#
+[ $cli_delay -eq 0 ] && cli_delay=$SLEEPRANGE
+
+#
+# calculate percentage for clients to run looking for read locks and write
+# locks
+#
+sr_pct=`echo "scale=2; $SH_RD_PCT/100; quit" | bc`
+nsh_rd=`echo "($cli_to_start * $sr_pct)/1; quit" | bc`
+nex_wr=`expr $cli_to_start - $nsh_rd`
+
+#
+# calculate the number of clients per machine, and the "fudge".  The fudge is
+# the remainder of the division of total clients into machines.  An additional
+# client is started on each machine until the fudge is gone.
+#
+if [ "$cli_mach" != "$localhost" ]
+then
+  #
+  # Running on more than one system. Do the calculation.
+  #
+  # get number of machines 
+  #
+  nmach=`echo $cli_mach | awk '{print NF}'`
+  #
+  # handle the case where there are more machines than clients to be run.
+  # We loop through the client machines until we have the same number of
+  # machines as clients to run
+  #
+  if [ $nmach -gt $cli_to_start ]
+  then
+     CLIENTS=$cli_mach
+     nm=1
+     cli_mach=""
+     for i in $CLIENTS
+     do
+        cli_mach="$cli_mach $i"
+        if [ $nm -eq $cli_to_start ]
+        then
+           nmach=$nm
+           break
+        else
+           nm=`expr $nm + 1`
+        fi
+     done
+  fi            
+  #
+  # get base number of clients per machine
+  #
+  cli_p_mach=`echo "$cli_to_start/$nmach;quit" | bc`
+  #
+  # get the fudge
+  #
+  cli_fudge=`echo "$cli_to_start%$nmach;quit" | bc`
+else
+  #
+  # for the local machine case, we just prime the pertinent variables
+  #
+  cli_p_mach=$cli_to_start
+  cli_fudge=0
+fi
+
+#
+# Say hi
+#
+print_hi
+
+#
+# make sure that the log, tmp, synch and dta directories exist
+#
+#
+# source the file of tools that will create the path to the log dir.
+# STDEXC should be set in the environment to point to the directory containing
+# the systest tools.  This is usually done by sourcing the profile.dcest file.
+# 
+. $STDEXC/conf_util.sh
+for currdir in log+$log_dir synch+$synch_dir data+$data_dir tmp+$tmp_dir
+do
+   #
+   # get the type and the path
+   # 
+   type_and_path=`echo $currdir | tr '+' ' '`
+   set $type_and_path
+   dtype=$1
+   dpath=$2
+
+   #
+   # if the directory does not exist
+   #
+   if [ ! -d $dpath ]
+   then
+      #
+      # try to create it
+      #
+      echo "   Trying to create $dtype dir ($dpath)..."
+      conf_makepath $dpath
+      if [ "$conf_mp_out" = "error" ]
+      then
+	 echo "   Couldn't create $dtype dir."
+	 print_usage
+	 exit 1
+      else
+	 echo "   Created $dtype dir ($dpath)..."
+      fi
+   fi
+done
+
+
+
+if [ $PASSES -eq 0 ]
+then
+  SECONDS_TO_EXECUTE=`awk "BEGIN { print (3600 * $HOURS)+(60 * $MINS); exit; }"`
+fi
+
+#
+# setup trap handler
+#
+setup_trap
+
+# currently no dependence on profile.dcest
+# source in system test data
+#. ${TROOT}/systest/profile.dcest
+
+#
+# We want to run from the log directory, so cd over there now.
+#
+cd $log_dir
+if [ $? -ne 0 ]; then
+   echo "Error cd'ing to  $log_dir"
+   exit 1
+fi
+
+
+#
+# build the client info file
+#
+# loop through the list of machines, starting clients on each as 
+# dictated by the number of clients per machine and the fudge
+#
+echo ""
+echo "   Beginning to set up client run information at `date`"
+echo "   ----------------------------------------------------------------------------"
+
+#
+# initialize the list of client info records
+#
+cli_infos=""
+#
+# initialize the client sequence number - start at 1
+#
+cli_seq=1
+# 
+# initialize the count of clients assigned to exclusive write 
+#
+ex_wr_cli=0
+# 
+# initialize the count of clients assigned to shared read 
+#
+sh_rd_cli=0   
+#
+# Initialize list of clients numbers
+#
+cli_numbs=""
+
+for i in $cli_mach
+do
+  #
+  # set base value for clients for this machine
+  #
+  cli_this_mach=$cli_p_mach
+
+  #
+  # set the RSH variable
+  # 
+  #   If we are starting remote clients and the current machine is not the
+  #   local host, then RSH is set to be the preamble for a remote client 
+  #   startup, else it is null.
+  #
+  #
+  if [ "$i" != "$localhost" ]
+  then
+     RSH="$REMSH $i -n"
+     #
+     # test rsh access
+     #
+     good_acc=`$RSH echo true`
+     if [ "$good_acc" != "true" ]
+     then 
+        echo "   ACCESS for machine $i DENIED"
+        exit 1
+     fi
+  else
+     RSH=
+  fi
+
+  #
+  # get the O/S type
+  #
+  os=`$RSH uname`
+
+  #
+  # Check to see if we can find/execute the remote programs
+  #
+  for cliprog in $cli_path $REM_GDB_CLI
+  do
+     cando=`$RSH $cliprog -h 2>&1 | grep -i "usage"`
+     if [ "$cando" = "" ]
+     then
+        #
+        # report and quit
+        #
+        echo "   Can't run client executable $cliprog on $i..."
+        print_usage
+        cleanup final
+        exit 1
+     fi
+  done
+
+  #
+  # if we have fudge left, take one
+  #
+  if [ $cli_fudge -gt 0 ]
+  then
+     cli_this_mach=`expr $cli_this_mach + 1`
+     cli_fudge=`expr $cli_fudge - 1`
+  fi
+  
+  #
+  # initialize the per-machine client counter and seqence counter
+  #
+  cli_on_mach=0
+  preloop_seq=$cli_seq
+
+  #
+  # now loop until we have the right number of clients started on this
+  # machine.
+  #
+  while( [ $cli_on_mach -lt $cli_this_mach ] )
+  do
+     #
+     # figure out what lock type to use
+     #
+     # question one: what lock types are we running on this platform so far
+     #
+     did_ex_wr=`echo $ex_wr_platfm | grep $os`
+     did_sh_rd=`echo $sh_rd_platfm | grep $os`
+     
+     #
+     # second question: do we need an exclusive write client and want to run
+     # it on this platform?
+     #
+     if [ $ex_wr_cli -lt $nex_wr -a "$did_ex_wr" = "" ]
+     then
+        #
+        # we will start an exclusive write client
+        #
+        lock_type=EW
+        #
+        # add this platform to the list
+        #
+        ex_wr_platfm="$ex_wr_platfm $os"
+     #
+     # else if we need shared read and have none on this platform
+     #
+     elif [ $sh_rd_cli -lt $nsh_rd -a "$did_sh_rd" = "" ]
+     then
+       #
+       # need shared read clients, and none started on this platform so far, 
+       # so make the lock type shared read
+       #
+       lock_type=SR
+       #
+       # add this platform to the list
+       #
+       sh_rd_platfm="$sh_rd_platfm $os"
+
+    #
+    # else we have all the lock types running on all platforms w/i the bounds
+    # of the number of clients of each type we were to start, so just 
+    # start what ever kind is needed.
+    elif [ $ex_wr_cli -lt $nex_wr ]
+    then
+       lock_type=EW
+    else
+       lock_type=SR
+    fi
+   
+    #
+    # save the info on the client
+    #
+    echo "$cli_seq $i $os $lock_type" >> $cliinfo
+    cli_infos="$cli_infos $cli_seq:$i:$os:$lock_type"
+
+    #
+    # add the client sequence number to the client number list
+    #
+    cli_numbs="$cli_numbs $cli_seq"
+    
+    #
+    # adjust counts
+    #
+    [ "$lock_type" = "EW" ] && ex_wr_cli=`expr $ex_wr_cli + 1` || \
+                                      sh_rd_cli=`expr $sh_rd_cli + 1`
+   
+    cli_on_mach=`expr $cli_on_mach + 1`
+    cli_seq=`expr $cli_seq + 1`
+ done
+done  
+
+echo "   ----------------------------------------------------------------------------"
+echo "   Finished setting up client run information at `date`"
+echo ""
+
+
+############################################################
+# LOOP 
+###########################################################
+DONE="FALSE"
+ITERATION=0
+ITERATIONS_PASSED=0
+ITERATIONS_FAILED=0
+ITERATIONS_ERROR=0
+
+#
+# Initialize the list of numbers from which to select the write lock
+# winner.
+#
+avail_clients=$cli_numbs
+
+while [ "$DONE" = "FALSE" ]
+do
+   #
+   # Logic here is:
+   #   Do the exclusive write case first.  This means that we:
+   #       - pick a client to get the lock.
+   #       - start all the clients, telling them that they should try
+   #         to get an exclusive write lock.  All of the clients but the
+   #         selected client are told to sleep after finding the synch file so
+   #         that we can be reasonably sure that the selected client gets the
+   #         lock.
+   #       - Check that all clients are ready.
+   #       - Create the synch file.
+   #       - Wait till all of the clients report that they have tried to
+   #         get the lock, then write the message file to the synch file
+   #         that tells the selected client to close the file.
+   #       - Evaluate the results and report.
+   #  
+   #   Do the shared read case.  This means that we:
+   #       - start all the clients, telling them that they should try
+   #         to get an shared read lock. 
+   #       - Check that all clients are ready.
+   #       - Create the synch file.
+   #       - Wait till all of the clients report that they have tried to
+   #         get the lock, then write the message file to the synch file
+   #         that tells the clients to close the file.
+   #       - Evaluate the results and report.
+   #  
+   #
+   #
+ 
+   #
+   # Print message
+   #
+   echo ""
+   echo "BEGINNING dfs.lock ITERATION $ITERATION AT `date`"
+   echo "--------------------------------------------------------------------"
+   echo ""
+
+
+   skip_read=0
+   CASE_STAT=PASSED
+
+   for curr_case in write read
+   do
+      if [ "$curr_case" = "write" ]
+      then
+         #
+         # the write case
+         # 
+         # select a client that will get the write lock
+         #
+         # if all the client numbers have been used, then reload the list of 
+         # available client numbers.
+         #
+         if [ "$avail_clients" = "" ]
+         then
+            avail_clients=$cli_numbs
+         fi
+         # 
+         # pick the client
+         #
+         lock_cli=`echo $avail_clients | awk '{print $1}'`
+         #
+         # remove the client number from the list of available client numbers
+         #
+         avail_clients=`echo $avail_clients | \
+             sed -e "s/^$lock_cli //" -e "s/ $lock_cli$//" -e "s/ $lock_cli / /" -e "s/^$lock_cli$//"`
+      else
+         #
+         # the read case.  The only thing to do here is to unset the lock_cli
+         # variable, and see if we should skip this iteration because the 
+         # write case failed.
+         #
+         lock_cli=
+         if [ $skip_read -eq 1 ]
+         then
+            echo "$SCRIPT: Skipping read case for iteration $ITERATION"
+            continue
+         fi
+      fi
+    
+      #
+      # now start the clients for the current case
+      #
+      start_clients "$curr_case" $lock_cli
+      if [ "$sc_stat" != "okay" ]
+      then
+         echo "   ERROR starting $curr_case clients for iteration $ITERATION" 
+         CASE_STAT="got an ERROR"
+         kill_jobs $curr_case
+      fi
+
+      #
+      # Make sure everyone is ready
+      #
+      ready_check "$curr_case"
+      if [ "$rc_stat" != "okay" ]
+      then
+         echo "   ERROR in $curr_case client startup for iteration $ITERATION"
+         CASE_STAT="got an ERROR"
+         kill_jobs $curr_case
+      else
+         #
+         # Create the synch file
+         #
+         touch $synch_base.$ITERATION.$curr_case
+    
+         #
+         # Check to see if we got the expected locking
+         # 
+         check_lock_status "$curr_case" $lock_cli
+         if [ "$cls_stat" = "error" ]
+         then
+            echo "   ERROR in $curr_case client locking for iteration $ITERATION"
+            CASE_STAT="got an ERROR"
+            kill_jobs  $curr_case
+         else
+            #
+            # see if the iteration passed or failed 
+            #
+            check_run_stat $curr_case $lock_cli
+            if [ "$crs_stat" = "error" ]
+            then
+               kill_jobs $curr_case
+               CASE_STAT=FAILED
+            fi
+   
+         fi # locking check status
+      fi # ready check status
+ 
+      #
+      # Print the final status line for the case
+      #
+      if [ "$CASE_STAT" != "PASSED" ]
+      then
+         echo "$SCRIPT: ITERATION $ITERATION - $curr_case case $CASE_STAT."
+         if [ "$curr_case" = "write" ]
+         then
+            #
+            # don't bother with the read case this iteration since the
+            # file will not be there to read
+            #
+            echo "Will skip read case for iteration $ITERATION..."
+            skip_read=1
+         fi
+      else      
+         echo "$SCRIPT: ITERATION $ITERATION - $curr_case case passed."
+      fi
+
+      #
+      # cleanup after the case.  If the case failed, we always save the 
+      # log and synch files for post-mortem examination.
+      #
+      if [ "$CASE_STAT" = "PASSED" ]
+      then
+         cleanup "$curr_case" "$ITERATION"
+      fi
+
+   done  # for the case
+
+   if [ "$CASE_STAT" = "FAILED" ] 
+   then
+      ITERATIONS_FAILED=`expr $ITERATIONS_FAILED + 1`
+
+   elif [ "$CASE_STAT" = "got an ERROR" ]
+   then
+      ITERATIONS_ERROR=`expr $ITERATIONS_ERROR + 1`
+   else
+      ITERATIONS_PASSED=`expr $ITERATIONS_PASSED + 1`
+   fi
+
+   #
+   # Print the status for the iteration
+   #
+   echo ""
+   echo "ITERATION $ITERATION: $CASE_STAT"
+   echo ""
+   rm $data_base.$ITERATION
+
+   # 
+   # Print some stats, increment counters, check for exit condition, etc
+   #
+   CURRENT_TIME=`$TIMER`
+   SECONDS_EXECUTED=`expr $CURRENT_TIME - $START_TIME`
+   echo ""
+   echo "--------------------------------------------------------------------"
+   echo "COMPLETED dfs.lock ITERATION $ITERATION AT `date`"
+   echo ""
+   ITERATION=`expr $ITERATION + 1`
+   if [ $PASSES -ne 0 ]
+   then
+      if [ $ITERATION -eq $PASSES ]
+      then
+         DONE="TRUE"
+      fi
+   else
+      if [ "$SECONDS_EXECUTED" -gt "$SECONDS_TO_EXECUTE" ]
+      then
+	 DONE="TRUE"
+      fi
+   fi
+done  # for the ITERATION
+
+#
+# Print final stats
+#
+echo "COMPLETED $ITERATION ITERATIONS!"
+echo "  PASSED: $ITERATIONS_PASSED   FAILED: $ITERATIONS_FAILED  ERROR: $ITERATIONS_ERROR"
+echo "START DATE AND TIME WERE $START_DATE"
+echo "END DATE AND TIME IS $END_DATE"
+runhours=`echo "$SECONDS_EXECUTED/3600; quit" | bc`
+runmins=`echo "($SECONDS_EXECUTED%3600)/60; quit" | bc`
+echo "DURATION OF TEST RUN: $runhours HOURS, $runmins MINUTES"
+cleanup "final"
+
+echo ""
+echo "Completed DCE DFS File Locking System Test Execution at `date`"
+echo "-------------------------------------------------------------------"
+echo ""

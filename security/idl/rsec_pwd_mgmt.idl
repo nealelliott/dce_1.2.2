@@ -1,0 +1,158 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rsec_pwd_mgmt.idl,v $
+ * Revision 1.1.5.2  1996/03/09  23:28:55  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:44:19  marty]
+ *
+ * Revision 1.1.5.1  1995/12/08  17:36:29  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:55:50  root]
+ * 
+ * Revision 1.1.2.3  1994/08/31  15:58:45  mullan_s
+ * 	[OT11775] Made str_info_out, gen_info_out reference pointers.
+ * 	[1994/08/31  15:58:27  mullan_s]
+ * 
+ * Revision 1.1.2.2  1994/08/10  19:21:53  annie
+ * 	expand copyright with OSF copyright text
+ * 	[1994/08/10  17:16:09  annie]
+ * 
+ * Revision 1.1.2.1  1994/07/15  15:00:14  mdf
+ * 	Hewlett Packard Security Code Drop
+ * 	[1994/07/14  17:59:52  mdf]
+ * 
+ * $EndLog$
+ */
+/*
+**
+** Copyright (c) Hewlett-Packard Company 1994
+** Unpublished work. All Rights Reserved.
+**
+*/
+/* Password Management facility. 
+ *
+ * This interface provides a set of operations to manage password
+ * generation, reuse, and strength checking.
+ *
+ * These operations are supported by the password management server
+ * (pwd_mgmtd). 
+ *
+ */
+[
+    uuid(bababf24-dd2d-11cc-8dfb-080009353559),
+    pointer_default(ptr),
+    version(1.0)
+]
+
+interface rsec_pwd_mgmt {
+
+    import "dce/nbase.idl";
+    import "dce/passwd.idl";
+    import "dce/rgynbase.idl";
+    import "dce/sec_attr_base.idl";
+
+    /* r s e c _ p w d _ m g m t _ s t r _ c h k
+     *
+     * Strength check a user's password. This operation returns
+     * true if the user's password passed all policies or false
+     * if it did not or there was an error.
+     *
+     * This API is called by the security server if the following
+     * conditions are true :
+     *
+     * 1) The user has an instance of a pwd_val_type ERA and its value
+     *    is not none.
+     *
+     * 2) The user has an instance of a pwd_mgmt_binding ERA.
+     *
+     * Otherwise, the user's password will only be checked against
+     * the effective policy.
+     *
+     * Input:
+     *    handle : binding handle to pwd_mgmtd
+     *    princ  : principal name of the user
+     *    pwd    : user's password
+     *    pwd_val_type: the value of the pwd_val_type ERA
+     *    plcy_args : the number of entries in the plcy attribute set
+     *    plcy   : this is a set of attributes which are passed to
+     *             the pwd_mgmtd server. These are equivalent to
+     *             the entries contained in the well-known ERA set,
+     *             pwd_plcy_args. This well-known ERA set contains
+     *             at least the following entries :
+     *                 pwd_min_length : minimum length of password
+     *                 pwd_text_flags : password text policy flags
+     *             If the user does not specify values for them in
+     *             the well known ERA, secd will append the default
+     *             registry values in the plcy parameter.
+     *    str_info_in: additional information needed by the password
+     *             management server in order to strength check a password.
+     * Output:
+     *    str_info_out: additional information passed back by the password
+     *             management server after strength checking a password.
+     *    stp    : error status. the following errors may be returned:
+     *
+     *        sec_pwd_mgmt_str_check_failed
+     *        sec_pwd_mgmt_not_authorized
+     *        sec_pwd_mgmt_svr_error
+     *
+     */        
+    boolean32 rsec_pwd_mgmt_str_chk (
+        [in]                handle_t                  handle,
+        [in, ref]           sec_rgy_name_t            princ,
+        [in, ref]           sec_passwd_rec_t          *pwd,
+        [in]                signed32                  pwd_val_type,
+        [in]                unsigned32                plcy_args,
+        [in, size_is(plcy_args)]
+                            sec_attr_t                plcy[],
+        [in]                sec_bytes_t               str_info_in,
+        [out, ref]          sec_bytes_t               *str_info_out,
+        [out]               error_status_t            *stp
+    );
+
+    /* r s e c _ p w d _ m g m t _ g e n _ p w d
+     *
+     * Generates a password.
+     *
+     * Input:
+     *    pwd_mgmt_svr_h: binding handle to password management server.
+     *    princ_name: name of the principal requesting generated password.
+     *    plcy_args: number of password policy arguments
+     *    plcy: array of password policy args as specified by well known
+     *          ERA set pwd_policy_args.
+     *    num_pwds: number of generated passwords requested. NOTE that
+     *          server would be wise to set a limit on the number requested.
+     *    gen_info_in: additional information needed by the password
+     *          management server in order to generate password(s).
+     *
+     * Output:
+     *    gen_pwd_set: A set of generated passwords
+     *    gen_info_out: additional information generated by password server
+     *       on error conditions or also used for extensibility.
+     *    stp: error status. the following errors may be returned:
+     *
+     *        sec_pwd_mgmt_not_authorized
+     *        sec_pwd_mgmt_proxy_req
+     *        sec_pwd_mgmt_svr_error
+     */
+    void rsec_pwd_mgmt_gen_pwd (
+        [in]                handle_t                  pwd_mgmt_svr_h,
+        [in, ref]           sec_rgy_name_t            princ_name,
+        [in]                unsigned32                plcy_args,
+        [in, size_is(plcy_args)]
+                            sec_attr_t                plcy[],
+        [in]                sec_bytes_t               gen_info_in,
+        [in]                unsigned32                num_pwds,
+        [out]               unsigned32                *num_returned,
+        [out, size_is(num_pwds), length_is(*num_returned)]
+                            sec_passwd_rec_t          gen_pwd_set[],
+        [out, ref]          sec_bytes_t               *gen_info_out,
+        [out]               error_status_t            *stp
+    );
+}

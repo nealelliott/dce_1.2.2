@@ -1,0 +1,641 @@
+-- 
+-- @OSF_COPYRIGHT@
+-- COPYRIGHT NOTICE
+-- Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+-- ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+-- src directory for the full copyright text.
+-- 
+-- HISTORY
+-- $Log: ids.mvr,v $
+-- Revision 1.1.10.2  1996/03/09  23:12:53  marty
+-- 	Update OSF copyright year
+-- 	[1996/03/09  22:30:02  marty]
+--
+-- Revision 1.1.10.1  1995/12/08  15:22:58  root
+-- 	Submit OSF/DCE 1.2.1
+-- 	[1995/12/08  14:53:19  root]
+-- 
+-- Revision 1.1.8.3  1994/07/06  15:53:39  marrek
+-- 	Add version string in July 1994 code drop.
+-- 	[1994/07/06  15:40:20  marrek]
+-- 
+-- Revision 1.1.8.2  1994/05/10  15:50:27  marrek
+-- 	April 1994 code submission.
+-- 	[1994/04/27  12:14:58  marrek]
+-- 
+-- Revision 1.1.8.1  1994/02/22  18:36:01  marrek
+-- 	Code drop for dce1.1.
+-- 	[1994/02/08  09:48:08  marrek]
+-- 
+-- Revision 1.1.6.2  1993/08/11  10:13:14  marrek
+-- 	July 1993 code drop.
+-- 	[1993/07/29  12:30:50  marrek]
+-- 
+-- Revision 1.1.4.3  1992/12/31  18:12:00  bbelch
+-- 	Embedding copyright notice
+-- 	[1992/12/31  13:09:02  bbelch]
+-- 
+-- Revision 1.1.4.2  1992/11/27  16:34:44  marrek
+-- 	November 1992 code drop
+-- 	[1992/11/17  13:39:24  marrek]
+-- 
+-- Revision 1.1.2.2  1992/06/01  20:03:52  melman
+-- 	New GDS merged drop
+-- 	[1992/05/28  21:00:39  melman]
+-- 
+-- $EndLog$
+-- 
+-- $RCSfile: ids.mvr,v $ $Revision: 1.1.10.2 $ $Date: 1996/03/09 23:12:53 $
+-- 
+--/****************************************************************************
+--*                                                                           *
+--*         COPYRIGHT  (C)  SIEMENS NIXDORF INFORMATIONSSYSTEME AG 1991       *
+--*                                ALL RIGHTS RESERVED                        *
+--*                                                                           *
+--****************************************************************************/
+
+ids  DEFINITIONS ::=
+BEGIN
+EXPORTS ids_att_type, ids_utc_time;
+
+ids_psap (VAR psap: ids_psap)
+::= SEQUENCE {
+	[0] OCTETS (psap.psel.contents, psap.psel.nb)
+		ALLOCATE (psap.psel.contents: UC)
+	        INITIAL (psap.psel_defined = TRUE)
+		DEFAULT (psap.psel_defined = FALSE),
+	[1] OCTETS (psap.ssel.contents, psap.ssel.nb)
+		ALLOCATE (psap.ssel.contents: UC)
+		INITIAL (psap.ssel_defined = TRUE)
+		DEFAULT (psap.ssel_defined = FALSE),
+	[2] OCTETS (psap.tsel.contents, psap.tsel.nb)
+		ALLOCATE (psap.tsel.contents: UC)
+		INITIAL (psap.tsel_defined = TRUE)
+		DEFAULT (psap.tsel_defined = FALSE),
+	[3] SET OF
+		OCTETS (psap.nsap[i].contents, psap.nsap[i].nb)
+		ALLOCATE (psap.nsap[i].contents: UC)
+	    INDEXED BY i UP TO psap.nb_nsap
+	    ALLOCATE (psap.nsap: octet_string)
+	    DEFAULT (psap.nb_nsap = 0)}
+
+ids_utc_time (VAR x: ids_utc_time)
+::=  UTCTime (x.contents, x.nb)
+    ALLOCATE (x.contents: UC)
+
+-- ids_att_type (VAR x: ids_att_type)
+-- ::= [UNIVERSAL 6] IMPLICIT OCTETS(x.v, x.l)
+--    ALLOCATE (x.v: UC)
+
+ids_att_type (VAR x: ids_att_type)
+::= OBJECT ID (x.v, x.l)
+    ALLOCATE (x.v: UC)
+
+ids_att_value (val: asn1_field)
+::= ANY (val.v, val.l)
+    ALLOCATE (val.v: UC)
+
+ids_att (VAR att: ids_att)
+::=SEQUENCE { ids_att_type (att.type),
+		SET OF ids_att_value (att.values [i])
+		INDEXED BY i UP TO att.nb_values
+		ALLOCATE (att.values:ids_att_value)}
+
+ids_assertion (VAR assertion: ids_assertion)
+::= SEQUENCE {  ids_att_type (assertion.type),
+	        ids_att_value (assertion.value)}
+
+ids_rdname (VAR rdname: ids_rdname)
+::= SET OF ids_assertion (rdname.assertions [i])
+    INDEXED BY i UP TO rdname.nb_assertions
+	ALLOCATE (rdname.assertions: ids_assertion)
+
+ids_dist_name (VAR dist_name: ids_dist_name)
+::= SEQUENCE OF ids_rdname (dist_name.rdnames [i])
+    INDEXED BY i UP TO dist_name.nb_rdnames
+	ALLOCATE (dist_name.rdnames: ids_rdname)
+
+ids_name (VAR name: ids_name)
+::= ids_dist_name (name)
+
+ids_serv_controls (VAR serv_controls: ids_serv_controls)
+::= SET {[0] FLAGS {PREFER_CHAINING (0),
+                    CHAINING_PROHIBITED (1),
+                    LOCAL_SCOPE (2),
+                    DONT_USE_COPY (3),
+                    DONT_DEREFERENCE_ALIASES (4)}
+                (serv_controls.options, 5)
+                DEFAULT (serv_controls.options = IDS_UNDEFINED),
+	 [1] INTEGER {LOW_PRIOR    (0),
+		      MEDIUM_PRIOR (1),
+		      HIGH_PRIOR   (2)}
+		 (serv_controls.priority)
+	     DEFAULT(serv_controls.priority = MEDIUM_PRIOR),
+	 [2] INTEGER (serv_controls.time_limit)
+	     INITIAL (serv_controls.time_limit_defined = TRUE)
+	     DEFAULT(serv_controls.time_limit_defined = FALSE),
+	 [3] INTEGER (serv_controls.size_limit)
+	     INITIAL (serv_controls.size_limit_defined = TRUE)
+	     DEFAULT(serv_controls.size_limit_defined = FALSE),
+	 [4] INTEGER {DMD_SCOPE_REF     (0),
+		      COUNTRY_SCOPE_REF (1)}
+		(serv_controls.scope_ref)
+	     INITIAL (serv_controls.scope_ref_defined = TRUE)
+	     DEFAULT(serv_controls.scope_ref_defined = FALSE)}
+
+ids_extension (VAR extension: ids_extension)
+::= SET {[0] INTEGER (extension.ident),
+	 [1] BOOLEAN (extension.critical)
+		DEFAULT (extension.critical = FALSE),
+	 [2] ANY (extension.item.v, extension.item.l)
+		ALLOCATE (extension.item.v: UC)}
+
+ids_common_arg (VAR arg: ids_common_arg)
+::= SET {[30] ids_serv_controls (arg.controls)
+		DEFAULT (arg.controls.options = IDS_UNDEFINED;
+			 arg.controls.priority = MEDIUM_PRIOR;
+			 arg.controls.time_limit_defined = FALSE;
+			 arg.controls.size_limit_defined = FALSE;
+			 arg.controls.scope_ref_defined  = FALSE),
+	 [29] IGNORE,
+	 [28] ids_dist_name (arg.requestor)
+		INITIAL (arg.requestor_defined = TRUE)
+		DEFAULT (arg.requestor_defined = FALSE),
+	 [27] ids_op_prog (arg.op_prog)
+		DEFAULT (arg.op_prog.name_res_ph = NOTSTARTED),
+	 [26] INTEGER (arg.alias_rdn)
+		INITIAL (arg.alias_rdn_defined = TRUE)
+		DEFAULT (arg.alias_rdn_defined = FALSE),
+	 [25] SET OF ids_extension (arg.extensions [i])
+		INDEXED BY i UP TO arg.nb_extensions
+		ALLOCATE (arg.extensions: ids_extension)
+		INITIAL (arg.extensions_defined = TRUE)
+		DEFAULT (arg.extensions_defined = FALSE)}
+
+ids_common_res (VAR res: ids_common_res)
+::= SET {[30] IGNORE,
+	 [29] ids_dist_name (res.requestor)
+		INITIAL (res.requestor_defined = TRUE)
+		DEFAULT (res.requestor_defined = FALSE),
+	 [28] BOOLEAN (res.alias_deref)
+		INITIAL (res.alias_deref = TRUE)
+		DEFAULT (res.alias_deref = FALSE)}
+
+ids_entry_info_sel (VAR entry_info_sel: ids_entry_info_sel)
+::= SET {CHOICE entry_info_sel.is_all_att {
+		TRUE:    [0] NULL,
+		DEFAULT: [1] SET OF
+				ids_att_type (entry_info_sel.types [i])
+				INDEXED BY i UP TO entry_info_sel.nb_types
+				ALLOCATE (entry_info_sel.types: ids_att_type)}
+		INITIAL (entry_info_sel.is_all_att = FALSE)
+	    	DEFAULT (entry_info_sel.is_all_att = TRUE),
+         [2] INTEGER {ATT_TYPE_ONLY (0), ATT_TYPE_AND_VALUE (1)}
+                (entry_info_sel.info_type_mode)
+                DEFAULT (entry_info_sel.info_type_mode = ATT_TYPE_AND_VALUE)}
+
+ids_entry_info (VAR entry_info: ids_entry_info)
+::= SEQUENCE {ids_dist_name (entry_info.dist_name),
+	      BOOLEAN (entry_info.from_entry)
+		DEFAULT (entry_info.from_entry=TRUE),
+	      SET OF
+	      	CHOICE entry_info.infos[i].type_only {
+ 		  FALSE: ids_att (entry_info.infos[i].contents.attribute),
+ 		  DEFAULT: ids_att_type (entry_info.infos[i].contents.type)}
+		INITIAL (entry_info.infos[i].type_only = TRUE)
+	      INDEXED BY i UP TO entry_info.nb_info
+	      ALLOCATE (entry_info.infos: ids_info)
+	      INITIAL (entry_info.infos_defined = TRUE)
+	      DEFAULT (entry_info.infos_defined = FALSE)}
+
+ids_substring (VAR substring: ids_substring)
+::= SEQUENCE {	ids_att_type (substring.type),
+		SEQUENCE OF
+	      		CHOICE substring.patterns[i].mode {
+			PATTERN_INITIAL:
+			  [0] ids_att_value (substring.patterns[i].value),
+			PATTERN_ANY:
+			  [1] ids_att_value (substring.patterns[i].value),
+			PATTERN_FINAL:
+			  [2] ids_att_value (substring.patterns[i].value)}
+		INDEXED BY i UP TO substring.nb_pattern
+		ALLOCATE (substring.patterns: ids_pattern)}
+
+ids_filter_item (VAR filter_item: ids_filter_item)
+::= CHOICE filter_item.mode {
+	FILTER_ITEM_EQUAL:
+	  [0] ids_assertion (filter_item.value.equal),
+	FILTER_ITEM_SUBSTRING:
+	  [1] ids_substring (filter_item.value.substring),
+	FILTER_ITEM_GREATER_EQUAL:
+	  [2] ids_assertion (filter_item.value.gequal),
+	FILTER_ITEM_LESS_EQUAL:
+	  [3] ids_assertion (filter_item.value.lequal),
+	FILTER_ITEM_PRESENT:
+          [4] ids_att_type (filter_item.value.present),
+	FILTER_ITEM_APPROXIMATE:
+	  [5] ids_assertion (filter_item.value.approx_match)}
+
+ids_filter (VAR filter: ids_filter)
+::= CHOICE filter.mode {
+	FILTER_ITEM: [0] ids_filter_item (filter.value.fil_item),
+	FILTER_AND: [1] SET OF ids_filter (filter.value.fil_and.filters [i])
+	   INDEXED BY i UP TO filter.value.fil_and.nb_filters
+		   ALLOCATE (filter.value.fil_and.filters: ids_filter),
+	FILTER_OR: [2] SET OF ids_filter (filter.value.fil_or.filters [i])
+	   INDEXED BY i UP TO filter.value.fil_or.nb_filters
+		   ALLOCATE (filter.value.fil_or.filters: ids_filter),
+	FILTER_NOT: [3] ids_filter (filter.value.fil_not [0])
+		   ALLOCATE (filter.value.fil_not: ids_filter)}
+
+ids_op_prog (VAR op_prog: ids_op_prog)
+::= SET {
+	[0] ENUMERATED {NOTSTARTED (1), PROCEEDING (2), COMPLETED (3)}
+		(op_prog.name_res_ph),
+	[1] INTEGER (op_prog.next_rdn)
+		INITIAL (op_prog.next_rdn_defined = TRUE)
+		DEFAULT (op_prog.next_rdn_defined = FALSE)}
+
+ids_acc_pt (VAR acc_pt: ids_acc_pt)
+::= SET {
+	[0] ids_name (acc_pt.name),
+	[1] ids_psap (acc_pt.addr)}
+
+ids_cross_ref (VAR cross_ref: ids_cross_ref)
+::= SET { [0]	ids_dist_name 	(cross_ref.ctx_prefix),
+	  [1]	ids_acc_pt	(cross_ref.acc_pt)}
+
+ids_trace_infos (VAR trace_infos: ids_trace_infos)
+::= SEQUENCE OF
+	SET {	[0] ids_name (trace_infos.list[i].dsa),
+		[1] ids_name (trace_infos.list[i].target)
+		DEFAULT (trace_infos.list[i].target.nb_rdnames = IDS_UNDEFINED),
+		[2] ids_op_prog (trace_infos.list[i].op_prog)}
+    INDEXED BY i UP TO trace_infos.nb
+    ALLOCATE (trace_infos.list: ids_trace_info)
+
+ids_cont_reference (VAR cont_ref: ids_cont_reference)
+::= SET {[0] ids_name (cont_ref.target),
+	 [1] INTEGER (cont_ref.alias_rdn)
+		INITIAL (cont_ref.alias_rdn_defined = TRUE)
+		DEFAULT (cont_ref.alias_rdn_defined = FALSE),
+	 [2] ids_op_prog (cont_ref.op_prog),
+	 [3] INTEGER (cont_ref.rdn_resolved)
+	     	INITIAL (cont_ref.rdn_resolved_defined = TRUE)
+	     	DEFAULT (cont_ref.rdn_resolved_defined = FALSE),
+  	 [4] ENUMERATED {SUPERIOR(1),
+			 SUBORDINATE(2),
+			 CROSS(3),
+			 NON_SPEC_SUB(4)} (cont_ref.ref_type)
+		INITIAL (cont_ref.ref_type_defined = TRUE)
+		DEFAULT (cont_ref.ref_type_defined = FALSE),
+	 [5] SET OF ids_acc_pt (cont_ref.acc_pts [i])
+		INDEXED BY i UP TO cont_ref.nb_acc_pt
+		ALLOCATE (cont_ref.acc_pts: ids_acc_pt)
+	    }
+
+ids_validity (VAR validity: ids_validity)
+::= SET { [0] ids_utc_time (validity.time1)
+		INITIAL (validity.time1_defined = TRUE)
+		DEFAULT (validity.time1_defined = FALSE),
+	  [1] ids_utc_time (validity.time2)
+		INITIAL (validity.time2_defined = TRUE)
+		DEFAULT (validity.time2_defined = FALSE),
+	  [2] BITS (validity.random1.contents, validity.random1.nb)
+		ALLOCATE (validity.random1.contents: UC)
+		INITIAL (validity.random1_defined = TRUE)
+		DEFAULT (validity.random1_defined = FALSE),
+	  [3] BITS (validity.random2.contents, validity.random2.nb)
+		ALLOCATE (validity.random2.contents: UC)
+		INITIAL (validity.random2_defined = TRUE)
+		DEFAULT (validity.random2_defined = FALSE)}
+
+ids_bind_arg   (VAR arg: ids_bind_arg)
+::= [16] EXPLICIT SET { [0] CHOICE arg.cred_kind {
+	       CREDENTIAL_SIMPLE: [0] SEQUENCE {
+		[0] ids_dist_name (arg.credentials.simple.name),
+		[1] ids_validity (arg.credentials.simple.validity)
+		  INITIAL (arg.credentials.simple.validity_defined = TRUE)
+		  DEFAULT (arg.credentials.simple.validity_defined = FALSE),
+		[2] OCTETS (arg.credentials.simple.password.contents,
+			    arg.credentials.simple.password.nb)
+		  ALLOCATE (arg.credentials.simple.password.contents: UC)
+		  INITIAL (arg.credentials.simple.password_defined = TRUE)
+		  DEFAULT (arg.credentials.simple.password_defined = FALSE)},
+		CREDENTIAL_STRONG : [1] IGNORE,
+		CREDENTIAL_EXTERNAL: [2] ANY (arg.credentials.external.v,
+					      arg.credentials.external.l)
+				ALLOCATE (arg.credentials.external.v: UC)}
+		INITIAL (arg.cred_defined = TRUE)
+		DEFAULT (arg.cred_defined = FALSE),
+           [1] FLAGS {V1988(0)} (arg.version, 1)
+                DEFAULT (arg.version = V1988)}
+
+ids_bind_res   (VAR arg: ids_bind_res)
+::= [17] EXPLICIT SET { [0] CHOICE arg.cred_kind {
+	       CREDENTIAL_SIMPLE: [0] SEQUENCE {
+		[0] ids_dist_name (arg.credentials.simple.name),
+		[1] ids_validity (arg.credentials.simple.validity)
+		  INITIAL (arg.credentials.simple.validity_defined = TRUE)
+		  DEFAULT (arg.credentials.simple.validity_defined = FALSE),
+		[2] OCTETS (arg.credentials.simple.password.contents,
+			    arg.credentials.simple.password.nb)
+		  ALLOCATE (arg.credentials.simple.password.contents: UC)
+		  INITIAL (arg.credentials.simple.password_defined = TRUE)
+		  DEFAULT (arg.credentials.simple.password_defined = FALSE)},
+		CREDENTIAL_STRONG: [1] IGNORE,
+		CREDENTIAL_EXTERNAL: [2] ANY (arg.credentials.external.v,
+					      arg.credentials.external.l)
+				ALLOCATE (arg.credentials.external.v: UC)}
+		INITIAL (arg.cred_defined = TRUE)
+		DEFAULT (arg.cred_defined = FALSE),
+           [1] FLAGS {V1988(0)} (arg.version, 1)
+                DEFAULT (arg.version = V1988)}
+
+ids_ch_arg (VAR ch_arg: ids_ch_arg; arg: asn1_field)
+::= SET {
+	SET { 	[0]   ids_dist_name (ch_arg.originator)
+			DEFAULT (ch_arg.originator.nb_rdnames = IDS_UNDEFINED),
+	      	[1]   ids_dist_name (ch_arg.target)
+			DEFAULT (ch_arg.target.nb_rdnames = IDS_UNDEFINED),
+	  	[2]   ids_op_prog (ch_arg.op_prog)
+			DEFAULT (ch_arg.op_prog.name_res_ph = NOTSTARTED),
+	  	[3]   ids_trace_infos (ch_arg.trace_infos),
+	  	[4]   BOOLEAN (ch_arg.alias_deref)
+			DEFAULT (ch_arg.alias_deref = FALSE),
+	  	[5]   INTEGER (ch_arg.aliased_rdn)
+			DEFAULT (ch_arg.aliased_rdn = FALSE),
+		[11]  BOOLEAN (ch_arg.entry_only)
+			DEFAULT (ch_arg.entry_only = FALSE),
+	  	[6]    BOOLEAN (ch_arg.rt_cross_refs)
+			DEFAULT (ch_arg.rt_cross_refs = FALSE),
+	  	[7]   ENUMERATED (ch_arg.ref_type)
+			DEFAULT (ch_arg.ref_type = SUPERIOR),
+	  	[8]   ANY (ch_arg.domain_info.v,
+			   ch_arg.domain_info.l)
+			ALLOCATE (ch_arg.domain_info.v: UC)
+			DEFAULT (ch_arg.domain_info.l = IDS_UNDEFINED),
+	  	[9]   ids_utc_time (ch_arg.time_limit)
+			DEFAULT (ch_arg.time_limit.nb = IDS_UNDEFINED),
+		[10] IGNORE},
+       [0]   ANY (arg.v, arg.l)
+	     ALLOCATE (arg.v: UC)
+	     DEFAULT (arg.l = 0)}
+
+ids_ch_res (VAR ch_res: ids_ch_res; res: asn1_field)
+::= SET {
+	SET { [0] ANY (ch_res.domain_info.v,
+		       ch_res.domain_info.l)
+			ALLOCATE (ch_res.domain_info.v: UC)
+			DEFAULT (ch_res.domain_info.l = IDS_UNDEFINED),
+	      [1] SEQUENCE OF ids_cross_ref (ch_res.cross_refs [i])
+			INDEXED BY i UP TO ch_res.nb_cross_ref
+			ALLOCATE (ch_res.cross_refs: ids_cross_ref)
+			DEFAULT (ch_res.nb_cross_ref = IDS_UNDEFINED)},
+	[0]  ANY (res.v, res.l)
+	     ALLOCATE (res.v: UC)}
+
+ids_ch_null_res (VAR ch_res: ids_ch_res)
+::= SET {
+	SET { [0] ANY (ch_res.domain_info.v,
+		       ch_res.domain_info.l)
+			ALLOCATE (ch_res.domain_info.v: UC)
+			DEFAULT (ch_res.domain_info.l = IDS_UNDEFINED),
+	      [1] SEQUENCE OF ids_cross_ref (ch_res.cross_refs [i])
+			INDEXED BY i UP TO ch_res.nb_cross_ref
+			ALLOCATE (ch_res.cross_refs: ids_cross_ref)
+			DEFAULT (ch_res.nb_cross_ref = IDS_UNDEFINED)},
+	[0]  NULL}
+
+ids_read_arg (VAR arg: ids_read_arg;
+	      VAR common_arg: ids_common_arg)
+::= SET { [0] ids_name (arg.object),
+	  [1] ids_entry_info_sel (arg.selection)
+		DEFAULT (arg.selection.is_all_att = TRUE;
+			 arg.selection.info_type_mode = ATT_TYPE_AND_VALUE),
+        COMPONENTS OF ids_common_arg(common_arg)}
+
+ids_read_res   (VAR res: ids_read_res; VAR common_res: ids_common_res)
+::= SET { [0] ids_entry_info (res.entry_info),
+        COMPONENTS OF ids_common_res(common_res)}
+
+ids_compare_arg  (VAR arg: ids_compare_arg;
+		  VAR common_arg: ids_common_arg)
+::= SET { [0] ids_name (arg.object),
+	  [1] ids_assertion (arg.purported),
+        COMPONENTS OF ids_common_arg(common_arg)}
+
+ids_compare_res  (VAR res: ids_compare_res; VAR common_res: ids_common_res)
+::= SET { ids_dist_name (res.dname)
+		INITIAL (res.dname_defined = TRUE)
+		DEFAULT (res.dname_defined = FALSE),
+	  [0] BOOLEAN (res.matched),
+	  [1] BOOLEAN (res.from_entry)
+		DEFAULT (res.from_entry = TRUE),
+        COMPONENTS OF ids_common_res(common_res)}
+
+ids_abandon_arg  (arg: int)
+::= SEQUENCE { [0] INTEGER (arg)}
+
+ids_list_arg (VAR arg: ids_list_arg; VAR common_arg: ids_common_arg)
+::= SET { [0] ids_name (arg.object),
+        COMPONENTS OF ids_common_arg(common_arg)}
+
+ids_part_oq (VAR part_op: ids_part_oq)
+::= SET {[0] INTEGER {  TIME_LIMIT_EXCEEDED (0),
+                        SIZE_LIMIT_EXCEEDED (1),
+                        ADM_LIMIT_EXCEEDED  (2)}
+                (part_op.limit_pb)
+		INITIAL (part_op.limit_pb_defined = TRUE)
+		DEFAULT (part_op.limit_pb_defined = FALSE),
+	 [1] SET OF ids_cont_reference (part_op.unexplored [i])
+		INDEXED BY i UP TO part_op.nb_unexplored
+		ALLOCATE (part_op.unexplored: ids_cont_reference)
+		INITIAL (part_op.unexplored_defined = TRUE)
+		DEFAULT (part_op.unexplored_defined = FALSE),
+	 [2] BOOLEAN (part_op.un_crit_ext)
+		DEFAULT (part_op.un_crit_ext = FALSE)}
+
+ids_list_res   (VAR res: ids_list_res;
+		VAR common_res: ids_common_res)
+::= CHOICE res.uncorrelated {
+  FALSE:
+  SET {ids_dist_name (res.info.list_info.dname)
+	INITIAL (res.info.list_info.dname_defined = TRUE)
+	DEFAULT (res.info.list_info.dname_defined = FALSE),
+
+       [1] SET OF
+	     SEQUENCE {
+		ids_rdname
+		  (res.info.list_info.subordinates[i].rdname),
+	   	[0] BOOLEAN
+		   (res.info.list_info.subordinates[i].alias_entry)
+	     DEFAULT (res.info.list_info.subordinates[i].alias_entry = FALSE),
+	   	[1] BOOLEAN (res.info.list_info.subordinates[i].from_entry)
+	     DEFAULT (res.info.list_info.subordinates[i].from_entry = TRUE)}
+	   INDEXED BY i UP TO res.info.list_info.nb_subordinate
+	   ALLOCATE (res.info.list_info.subordinates: ids_subordinate),
+
+	[2] ids_part_oq (res.info.list_info.part_oq)
+		INITIAL (res.info.list_info.part_oq_defined = TRUE)
+		DEFAULT (res.info.list_info.part_oq_defined = FALSE),
+	COMPONENTS OF ids_common_res(common_res)},
+
+  TRUE: [0] SET OF ids_list_res (res.info.uncorr_list_info.list [i],common_res)
+		INDEXED BY i UP TO res.info.uncorr_list_info.nb
+		ALLOCATE (res.info.uncorr_list_info.list: ids_list_res)}
+
+ids_search_arg (VAR arg: ids_search_arg;
+		VAR common_arg: ids_common_arg)
+::= SET { [0] ids_name (arg.base_object),
+          [1] INTEGER { BASE_OBJECT     (0),
+                        ONE_LEVEL       (1),
+                        WHOLE_SUBTREE   (2)}
+                (arg.subset_mode)
+		DEFAULT (arg.subset_mode = BASE_OBJECT),
+	  [2] ids_filter (arg.filter)
+		DEFAULT (arg.filter.mode=1;
+			 arg.filter.value.fil_and.nb_filters = 0),
+	  [3] BOOLEAN  (arg.alias)
+		DEFAULT (arg.alias = TRUE),
+	  [4] ids_entry_info_sel (arg.selection)
+		DEFAULT (arg.selection.is_all_att = TRUE;
+			 arg.selection.info_type_mode = ATT_TYPE_AND_VALUE),
+          COMPONENTS OF ids_common_arg(common_arg)}
+
+ids_search_res (VAR res: ids_search_res; VAR common_res: ids_common_res)
+::= CHOICE res.uncorrelated {
+	FALSE: SET {ids_dist_name (res.info.search_info.dname)
+			INITIAL (res.info.search_info.dname_defined = TRUE)
+			DEFAULT (res.info.search_info.dname_defined = FALSE),
+	  	[0] SET OF ids_entry_info (res.info.search_info.infos[i])
+		      INDEXED BY i UP TO res.info.search_info.nb_info
+		      ALLOCATE (res.info.search_info.infos: ids_entry_info),
+		[2] ids_part_oq (res.info.search_info.part_oq)
+		      INITIAL (res.info.search_info.part_oq_defined = TRUE)
+		      DEFAULT (res.info.search_info.part_oq_defined = FALSE),
+                COMPONENTS OF ids_common_res(common_res)},
+	TRUE: [0] SET OF ids_search_res (res.info.uncorr_search_info.list [i],common_res)
+		  INDEXED BY i UP TO res.info.uncorr_search_info.nb
+		  ALLOCATE (res.info.uncorr_search_info.list: ids_search_res)}
+
+ids_add_arg (VAR arg: ids_add_arg; VAR common_arg: ids_common_arg)
+::= SET { [0] ids_dist_name (arg.object),
+	  [1] SET OF
+			ids_att (arg.atts[i])
+			INDEXED BY i UP TO arg.nb_att
+			ALLOCATE (arg.atts: ids_att),
+        COMPONENTS OF ids_common_arg(common_arg)}
+
+ids_remove_arg (VAR arg: ids_remove_arg; VAR common_arg: ids_common_arg)
+::= SET { [0] ids_dist_name (arg.object),
+        COMPONENTS OF ids_common_arg(common_arg)}
+
+ids_modify_arg (VAR arg: ids_modify_arg; VAR common_arg: ids_common_arg)
+::= SET { [0] ids_dist_name (arg.object),
+	  [1]  SEQUENCE OF
+                 CHOICE arg.changes[i].modif_kind {
+                        ENTRYMOD_ADD_ATT: [0]
+                                ids_att      (arg.changes[i].modif.add_att),
+                        ENTRYMOD_REMOV_ATT: [1]
+                                ids_att_type (arg.changes[i].modif.rm_att),
+                        ENTRYMOD_ADD_VAL: [2]
+                                ids_att      (arg.changes[i].modif.add_val),
+                        ENTRYMOD_REMOV_VAL: [3]
+                                ids_att      (arg.changes[i].modif.rm_val)}
+	       INDEXED BY i UP TO arg.nb_change
+	       ALLOCATE (arg.changes: ids_entry_modif),
+	  COMPONENTS OF ids_common_arg(common_arg)}
+
+ids_modify_rdn_arg (VAR arg: ids_modify_rdn_arg; VAR common_arg: ids_common_arg)
+::= SET { [0] ids_dist_name (arg.object),
+	  [1] ids_rdname (arg.new_rdn),
+	  [2] BOOLEAN (arg.delet)
+		DEFAULT (arg.delet = FALSE),
+          COMPONENTS OF ids_common_arg(common_arg)}
+
+ids_att_error (VAR att_error: ids_att_error)
+::= SET {  [0] ids_name (att_error.object),
+	   [1] SET OF SEQUENCE {
+                [0] INTEGER {NO_SUCH_ATT         (1),
+                             INV_ATT_SYNTAX_ATT_PB      (2),
+                             UNDEF_ATT_TYPE      (3),
+                             INAPP_MATCHING      (4),
+                             CONSTRAINT_VIOL     (5),
+                             ATT_VAL_EXISTS      (6)}
+                         (att_error.att_pb_list [i].att_pb),
+		[1] ids_att_type (att_error.att_pb_list [i].att_type),
+		[2] ids_att_value (att_error.att_pb_list [i].att_value)
+  		INITIAL (att_error.att_pb_list [i].att_value_defined = TRUE)
+		DEFAULT (att_error.att_pb_list [i].att_value_defined = FALSE)}
+		INDEXED BY i UP TO att_error.nb_pb
+  	        ALLOCATE (att_error.att_pb_list: ids_att_pb)}
+
+ids_name_error (VAR name_error: ids_name_error)
+::= SET { [0] INTEGER { NO_SUCH_OBJECT          (1),
+                        ALIAS_PB                (2),
+                        INV_ATT_SYNTAX_NAME_PB  (3),
+                        ALIAS_DEREF_PB          (4)}
+                  (name_error.pb),
+	  [1] ids_name (name_error.matched)}
+
+ids_referral (VAR referral: ids_referral)
+::= SET { [0] ids_cont_reference (referral.candidate)}
+
+ids_dsa_referral (VAR referral: ids_dsa_referral)
+::= SET {[0] ids_cont_reference (referral.candidate),
+	 [1] ids_dist_name (referral.ctx_pref)
+		DEFAULT (referral.ctx_pref.nb_rdnames = IDS_UNDEFINED),
+	 [2] ids_trace_infos (referral.trace_infos)
+		DEFAULT (referral.trace_infos_defined = FALSE)}
+
+ids_sec_error (VAR sec_error: ids_sec_error)
+::= SET { [0] INTEGER { INAPP_AUTHEN             (1),
+                        INV_CREDENTIALS          (2),
+                        INS_ACC_RIGHTS           (3),
+                        INV_SIGNATURE            (4),
+                        PROTECT_REQUIRED 	 (5),
+			NO_INFORMATION		 (6)}
+                (sec_error.pb)}
+
+ids_serv_error (VAR serv_error: ids_serv_error)
+::= SET { [0] INTEGER { BUSY                    (1),
+                        UNAVAILABLE             (2),
+                        UNWILL_TO_PERFORM       (3),
+                        CHAIN_REQUIRED          (4),
+                        UNABLE_TO_PROCEED       (5),
+                        INVALID_REF             (6),
+                        TIME_LIMIT_EXC          (7),
+                        ADM_SIZE_LIMIT_EXC      (8),
+                        LOOP_DETECTED           (9),
+                        UN_CRITIC_EXTENSION     (10),
+			OUT_OF_SCOPE		(11),
+			DIT_ERROR		(12)}
+                 (serv_error.pb)}
+
+ids_upd_error (VAR upd_error: ids_upd_error)
+::= SET { [0] INTEGER { NAMING_VIOL              (1),
+                        OBJ_CLASS_VIOL           (2),
+                        NOT_ALL_ON_NON_LEAF      (3),
+                        NOT_ALL_ON_RDN           (4),
+                        ENTRY_ALREADY_EXISTS     (5),
+                        AFF_MULT_DSAS            (6),
+                        OBJ_CLASS_MOD_PROHIB     (7)}
+                 (upd_error.pb)}
+
+ids_aban_failed (VAR aban_failed: ids_aban_failed)
+::= SET { [0] INTEGER { NO_SUCH_OP               (1),
+                        TOO_LATE                 (2),
+                        CANNOT_ABANDON           (3)}
+                 (aban_failed.pb),
+	  [1] INTEGER (aban_failed.inv_id)}
+
+ids_bind_error (VAR bind_error: ids_bind_error)
+::= [18] EXPLICIT SET { [0] FLAGS (bind_error.version, 1)
+              DEFAULT (bind_error.version = V1988),
+  	  CHOICE bind_error.is_service_error {
+		TRUE:  [1] INTEGER (bind_error.pb.serv_pb.pb),
+		FALSE: [2] INTEGER (bind_error.pb.sec_pb.pb)}}
+
+
+END

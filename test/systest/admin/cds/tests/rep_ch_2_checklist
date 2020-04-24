@@ -1,0 +1,684 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: rep_ch_2_checklist,v $
+# Revision 1.1.5.2  1996/03/11  02:37:08  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:04:46  marty]
+#
+# Revision 1.1.5.1  1995/12/11  21:53:54  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  20:54:41  root]
+# 
+# Revision 1.1.2.3  1993/02/05  15:16:55  cjd
+# 	Embedded copyright notice
+# 	[1993/02/05  14:35:51  cjd]
+# 
+# Revision 1.1.3.2  1993/02/04  21:44:21  cjd
+# 	Embedded copyright notice
+# 
+# Revision 1.1.2.2  1992/12/26  21:38:55  pellis
+# 	Initial version of test.
+# 	[1992/12/26  21:34:24  pellis]
+# 
+# $EndLog$
+#
+#   FILE_NAME: rep_ch_2.ksh
+#
+#   COMPONENT_NAME: dce.admin_test
+#
+#   FUNCTIONS:
+#
+#   USAGE:
+#
+#	rep_ch_2.ksh <secondary_CDS_server>
+#
+#   DESCRIPTION:
+#
+#	The purpose of this test is to verify server and client responses
+#	when replicas and clearinghouses are disabled or deleted.
+#
+#   DCE 1.0.2 TEST PLAN COVERAGE ( ++ = covered ):
+#
+#	II)	CDS
+#
+# ++		A) Install
+# ++			1) Server
+# ++			2) Client
+# ++		B) Configure
+# ++			1) Initial CDS Server
+# ++			2) Additional CDS Server(s)
+# ++			3) CDS Client
+#			4) Intercell
+#				a) DNS
+#					 i) show cell <cellname> as dns
+#					ii) Update DNS Data File
+#				b) GDS
+#					 i) show cell <cellname> as gds
+#					ii) Update DNS Data File
+#		C) Create
+# ++			1) Clearinghouse
+# ++			2) Replica Read/Write
+# ++ 			3) Replica Read Only
+#		D) Disable/Enable
+# 			1) Master Replica
+# ++				a) How Does the Client React When the Master
+# ++				   Replica is Disabled?
+# ++				b) How Does the Client React When the Master
+# ++				   Replica is Reenabled?
+# ++			2) Secondary Replica
+# ++				a) How Does the Client React When the Secondary
+# ++				   Replica is Disabled?
+# ++				b) How Does the Client React When the Secondary
+# ++				   Replica is Reenabled?
+# ++			3) Modifying a Directory's Replica Set
+# ++				a) How Does the Client React When a Replica is
+# ++				   Excluded From the Replica Set?
+# ++				b) How Does the Client React When a Replica is
+# ++				   Reincluded in the Replica Set?
+# 		E) Update/Modify
+# 			1) Skulking a Directory
+# 				a) Modifying a Directory's Convergence
+# ++			2) Modifying a Directory's Replica Set
+# ++ 				a) Designating a New Master Replica
+# ++					i) How Does the Client React When a New
+# ++					   Master Replica is Designated?
+#		F) Start/Stop
+#			1) GDA
+#				a) kill (Stop)
+#					i) How Does the Client React When GDA is
+#					   Stopped?
+#				b) gdad (Start)
+#					i) How Does the Client React When GDA is
+#					   Restarted?
+# 		G) Backup
+# 			1) Clearinghouse
+# 			2) Namespace
+# 				a) Remote
+# 				b) By Replication
+#		H) Cleanup
+#		I) Monitoring
+# ++		J) Reconfigure
+# ++			1) Clearinghouse
+#			2) Namespace
+#				a) From Remote Backup
+#				b) From Replica
+# ++			3) Relocating a Clearinghouse
+# ++				a) Disassociating a Clearinghouse from its Host
+# ++				   Server
+# ++				b) Copying the Clearinghouse Files to the Target
+# ++				   Server
+# ++				c) Starting the Clearinghouse on the Target
+# ++				   Server
+#		K) Unconfigure/Delete
+# ++ 			1) Replica
+# ++			2) Clearinghouse
+#			3) Client
+#				a) Remove All Namespace References to Client and
+#				   Attempt to Reconfigure it
+#		L) Crash Response
+# ++			1) How Does the Client React When the Master Replica
+# ++			   Goes Away During a Request?
+# ++				a) Does the Client Switch to a Replica?
+#			2) How Does the Server React When the Client Goes Away
+#			   During a Request?
+# 			3) What Happens When a Skulk Update is Attempted When
+# 			   One Replica is Down?
+#		M) Crash Recovery
+#			1) From Remote Backup
+#			2) From Replica
+#		N) Compatibility
+#			1) Use PMAX Namespace on RIOS
+#			2) Use RIOS Namespace on PMAX
+#			3) Use PMAX Clearinghouse on RIOS
+#			4) Use RIOS Clearinghouse on PMAX
+#			5) Use DCE 1.0.1 Namespace With DCE 1.0.2
+#			6) Use DCE 1.0.1 Clearinghouse With DCE 1.0.2
+#
+################################################################################
+
+- One three machine cell is required to successfully execute this test, it will
+  be referred to as admin_cell.  The three machines will be named admintest1,
+  admintest2 and admintest3.
+
+- Install SEC and CDS on admintest1.
+  Install CDS and DCE Client on admintest2.
+  Install CDS and DCE Client on admintest3.
+
+- Configure SEC and CDS on admintest1 naming the cell admin_cell.
+  Configure DCE Client and Additional CDS Server on admintest2 naming the
+  clearinghouse admintest2_ch.
+  Configure DCE Client and Additional CDS Server on admintest3 naming the
+  clearinghouse admintest3_ch.
+
+- On admintest1 create a test directory and object.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  cdscp create directory /.:/admindir
+
+  >  No Output Expected
+
+  cdscp set directory /.:/admindir CDS_Convergence = high
+
+  >  No Output Expected
+
+  cdscp create object /.:/admindir/adminobj
+
+  >  No Output Expected
+
+- On admintest2 verify the creation of the test directory and object by using
+  the show obj command.
+
+  cdscp show obj /.:/admindir/adminobj
+
+  >                     SHOW
+  >                   OBJECT   /.../admin_cell/admindir/adminobj
+  >                       AT   1992-11-25-14:07:16
+  >                  CDS_CTS = 1992-11-25-19:06:02.901815100/08-00-2b-12-c6-f5
+  >                  CDS_UTS = 1992-11-25-19:06:02.905721100/08-00-2b-12-c6-f5
+
+- On admintest3 verify the creation of the test directory and object by using
+  the show obj command.
+
+  cdscp show obj /.:/admindir/adminobj
+
+
+  >                     SHOW
+  >                   OBJECT   /.../admin_cell/admindir/adminobj
+  >                       AT   1992-11-25-14:08:39
+  >                  CDS_CTS = 1992-11-25-19:06:02.901815100/08-00-2b-12-c6-f5
+  >                  CDS_UTS = 1992-11-25-19:06:02.905721100/08-00-2b-12-c6-f5
+
+- On admintest1 create a readonly replica of the test directory in the clear-
+  inghouse admintest2_ch.
+
+  cdscp create replica /.:/admindir clearinghouse /.../admin_cell/admintest2_ch
+
+- On admintest2 verify the creation of the readonly replica using the show
+  dir and show replica commands.
+
+  cdscp show dir /.:/admindir
+
+  >                     SHOW
+  >                DIRECTORY   /.../admin_cell/admindir
+  >                       AT   1992-11-25-14:20:52
+  >         RPC_ClassVersion = 0100
+  >                  CDS_CTS = 1992-11-25-19:17:56.219084100/08-00-2b-12-c6-f5
+  >                  CDS_UTS = 1992-11-25-19:19:14.922164100/08-00-2b-12-c6-f5
+  >           CDS_ObjectUUID = 00216DF8-D164-1B13-AD34-08002B12C6F5
+  >             CDS_Replicas = :
+  >       Clearinghouse UUID = 005A5F96-9E96-1B13-9291-08002B12C6F5
+  >                    Tower = ncacn_ip_tcp:130.105.202.29[]
+  >                    Tower = ncadg_ip_udp:130.105.202.29[]
+  >             Replica type = master
+  >       Clearinghouse Name = /.../admin_cell/admintest1_ch
+  >             CDS_Replicas = :
+  >       Clearinghouse UUID = 002CB028-C14A-1B13-BDAC-08002B12C6F5
+  >                    Tower = ncacn_ip_tcp:130.105.202.27[]
+  >                    Tower = ncadg_ip_udp:130.105.202.27[]
+  >             Replica type = readonly
+  >       Clearinghouse Name = /.../admin_cell/admintest2_ch
+  >              CDS_AllUpTo = 1992-11-25-19:17:57.715146300/08-00-2b-12-c6-f5
+  >          CDS_Convergence = high
+  >        CDS_ParentPointer = :
+  >            Parent's UUID = 003603A9-9E9C-1B13-9291-08002B12C6F5
+  >                  Timeout = :
+  >               Expiration = 1992-11-25-19:17:56.223
+  >                Extension = +1-00:00:00.000
+  >                   MyName = /.../admin_cell/admindir
+  >     CDS_DirectoryVersion = 3.0
+  >         CDS_ReplicaState = on
+  >          CDS_ReplicaType = readonly
+  >            CDS_LastSkulk = 0
+  >           CDS_LastUpdate = 0
+  >                CDS_Epoch = 002337B4-D165-1B13-AD34-08002B12C6F5
+  >       CDS_ReplicaVersion = 3.0
+
+  cdscp show replica /.:/admindir clearinghouse /.:/admintest1_ch
+
+  >                     SHOW
+  >                  REPLICA   /.../admin_cell/admindir
+  >                       AT   1992-11-25-14:24:36
+  >         RPC_ClassVersion = 0100
+  >                  CDS_CTS = 1992-11-25-19:17:56.219084100/08-00-2b-12-c6-f5
+  >                  CDS_UTS = 1992-11-25-19:19:17.676086100/08-00-2b-12-c6-f5
+  >           CDS_ObjectUUID = 00216DF8-D164-1B13-AD34-08002B12C6F5
+  >             CDS_Replicas = :
+  >       Clearinghouse UUID = 005A5F96-9E96-1B13-9291-08002B12C6F5
+  >                    Tower = ncacn_ip_tcp:130.105.202.29[]
+  >                    Tower = ncadg_ip_udp:130.105.202.29[]
+  >             Replica type = master
+  >       Clearinghouse Name = /.../admin_cell/admintest1_ch
+  >             CDS_Replicas = :
+  >       Clearinghouse UUID = 002CB028-C14A-1B13-BDAC-08002B12C6F5
+  >                    Tower = ncacn_ip_tcp:130.105.202.27[]
+  >                    Tower = ncadg_ip_udp:130.105.202.27[]
+  >             Replica type = readonly
+  >       Clearinghouse Name = /.../admin_cell/admintest2_ch
+  >              CDS_AllUpTo = 1992-11-25-19:19:15.508128100/08-00-2b-12-c6-f5
+  >          CDS_Convergence = high
+  >        CDS_ParentPointer = :
+  >            Parent's UUID = 003603A9-9E9C-1B13-9291-08002B12C6F5
+  >                  Timeout = :
+  >               Expiration = 1992-11-26-19:19:17.055
+  >                Extension = +1-00:00:00.000
+  >                   MyName = /.../admin_cell/admindir
+  >     CDS_DirectoryVersion = 3.0
+  >         CDS_ReplicaState = on
+  >          CDS_ReplicaType = master
+  >            CDS_LastSkulk = 1992-11-25-19:19:15.508128100/08-00-2b-12-c6-f5
+  >           CDS_LastUpdate = 1992-11-25-19:19:17.676086100/08-00-2b-12-c6-f5
+  >          CDS_RingPointer = 005A5F96-9E96-1B13-9291-08002B12C6F5
+  >                CDS_Epoch = 002337B4-D165-1B13-AD34-08002B12C6F5
+  >       CDS_ReplicaVersion = 3.0
+
+  cdscp show replica /.:/admindir clearinghouse /.:/admintest2_ch
+
+  >                     SHOW
+  >                  REPLICA   /.../admin_cell/admindir
+  >                       AT   1992-11-25-14:25:18
+  >         RPC_ClassVersion = 0100
+  >                  CDS_CTS = 1992-11-25-19:17:56.219084100/08-00-2b-12-c6-f5
+  >                  CDS_UTS = 1992-11-25-19:19:14.922164100/08-00-2b-12-c6-f5
+  >           CDS_ObjectUUID = 00216DF8-D164-1B13-AD34-08002B12C6F5
+  >             CDS_Replicas = :
+  >       Clearinghouse UUID = 005A5F96-9E96-1B13-9291-08002B12C6F5
+  >                    Tower = ncacn_ip_tcp:130.105.202.29[]
+  >                    Tower = ncadg_ip_udp:130.105.202.29[]
+  >             Replica type = master
+  >       Clearinghouse Name = /.../admin_cell/admintest1_ch
+  >             CDS_Replicas = :
+  >       Clearinghouse UUID = 002CB028-C14A-1B13-BDAC-08002B12C6F5
+  >                    Tower = ncacn_ip_tcp:130.105.202.27[]
+  >                    Tower = ncadg_ip_udp:130.105.202.27[]
+  >             Replica type = readonly
+  >       Clearinghouse Name = /.../admin_cell/admintest2_ch
+  >              CDS_AllUpTo = 1992-11-25-19:17:57.715146300/08-00-2b-12-c6-f5
+  >          CDS_Convergence = high
+  >        CDS_ParentPointer = :
+  >            Parent's UUID = 003603A9-9E9C-1B13-9291-08002B12C6F5
+  >                  Timeout = :
+  >               Expiration = 1992-11-25-19:17:56.223
+  >                Extension = +1-00:00:00.000
+  >                   MyName = /.../admin_cell/admindir
+  >     CDS_DirectoryVersion = 3.0
+  >         CDS_ReplicaState = on
+  >          CDS_ReplicaType = readonly
+  >            CDS_LastSkulk = 0
+  >           CDS_LastUpdate = 0
+  >                CDS_Epoch = 002337B4-D165-1B13-AD34-08002B12C6F5
+  >       CDS_ReplicaVersion = 3.0
+
+- On admintest3 verify the creation of the readonly replica using the show
+  dir and show replica commands.  Note that the CDS_Epoch values are the
+  same when showing the replicas in both clearinghouses.
+
+  cdscp show dir /.:/admindir
+
+  >                     SHOW
+  >                DIRECTORY   /.../admin_cell/admindir
+  >                       AT   1992-11-25-14:29:32
+  >         RPC_ClassVersion = 0100
+  >                  CDS_CTS = 1992-11-25-19:17:56.219084100/08-00-2b-12-c6-f5
+  >                  CDS_UTS = 1992-11-25-19:19:17.676086100/08-00-2b-12-c6-f5
+  >           CDS_ObjectUUID = 00216DF8-D164-1B13-AD34-08002B12C6F5
+  >             CDS_Replicas = :
+  >       Clearinghouse UUID = 005A5F96-9E96-1B13-9291-08002B12C6F5
+  >                    Tower = ncacn_ip_tcp:130.105.202.29[]
+  >                    Tower = ncadg_ip_udp:130.105.202.29[]
+  >             Replica type = master
+  >       Clearinghouse Name = /.../admin_cell/admintest1_ch
+  >             CDS_Replicas = :
+  >       Clearinghouse UUID = 002CB028-C14A-1B13-BDAC-08002B12C6F5
+  >                    Tower = ncacn_ip_tcp:130.105.202.27[]
+  >                    Tower = ncadg_ip_udp:130.105.202.27[]
+  >             Replica type = readonly
+  >       Clearinghouse Name = /.../admin_cell/admintest2_ch
+  >              CDS_AllUpTo = 1992-11-25-19:19:15.508128100/08-00-2b-12-c6-f5
+  >          CDS_Convergence = high
+  >        CDS_ParentPointer = :
+  >            Parent's UUID = 003603A9-9E9C-1B13-9291-08002B12C6F5
+  >                  Timeout = :
+  >               Expiration = 1992-11-26-19:19:17.055
+  >                Extension = +1-00:00:00.000
+  >                   MyName = /.../admin_cell/admindir
+  >     CDS_DirectoryVersion = 3.0
+  >         CDS_ReplicaState = on
+  >          CDS_ReplicaType = master
+  >            CDS_LastSkulk = 1992-11-25-19:19:15.508128100/08-00-2b-12-c6-f5
+  >           CDS_LastUpdate = 1992-11-25-19:19:17.676086100/08-00-2b-12-c6-f5
+  >          CDS_RingPointer = 005A5F96-9E96-1B13-9291-08002B12C6F5
+  >                CDS_Epoch = 002337B4-D165-1B13-AD34-08002B12C6F5
+  >       CDS_ReplicaVersion = 3.0
+
+  cdscp show replica /.:/admindir clearinghouse /.:/admintest1_ch
+
+  >                     SHOW
+  >                  REPLICA   /.../admin_cell/admindir
+  >                       AT   1992-11-25-14:30:29
+  >         RPC_ClassVersion = 0100
+  >                  CDS_CTS = 1992-11-25-19:17:56.219084100/08-00-2b-12-c6-f5
+  >                  CDS_UTS = 1992-11-25-19:19:17.676086100/08-00-2b-12-c6-f5
+  >           CDS_ObjectUUID = 00216DF8-D164-1B13-AD34-08002B12C6F5
+  >             CDS_Replicas = :
+  >       Clearinghouse UUID = 005A5F96-9E96-1B13-9291-08002B12C6F5
+  >                    Tower = ncacn_ip_tcp:130.105.202.29[]
+  >                    Tower = ncadg_ip_udp:130.105.202.29[]
+  >             Replica type = master
+  >       Clearinghouse Name = /.../admin_cell/admintest1_ch
+  >             CDS_Replicas = :
+  >       Clearinghouse UUID = 002CB028-C14A-1B13-BDAC-08002B12C6F5
+  >                    Tower = ncacn_ip_tcp:130.105.202.27[]
+  >                    Tower = ncadg_ip_udp:130.105.202.27[]
+  >             Replica type = readonly
+  >       Clearinghouse Name = /.../admin_cell/admintest2_ch
+  >              CDS_AllUpTo = 1992-11-25-19:19:15.508128100/08-00-2b-12-c6-f5
+  >          CDS_Convergence = high
+  >        CDS_ParentPointer = :
+  >            Parent's UUID = 003603A9-9E9C-1B13-9291-08002B12C6F5
+  >                  Timeout = :
+  >               Expiration = 1992-11-26-19:19:17.055
+  >                Extension = +1-00:00:00.000
+  >                   MyName = /.../admin_cell/admindir
+  >     CDS_DirectoryVersion = 3.0
+  >         CDS_ReplicaState = on
+  >          CDS_ReplicaType = master
+  >            CDS_LastSkulk = 1992-11-25-19:19:15.508128100/08-00-2b-12-c6-f5
+  >           CDS_LastUpdate = 1992-11-25-19:19:17.676086100/08-00-2b-12-c6-f5
+  >          CDS_RingPointer = 005A5F96-9E96-1B13-9291-08002B12C6F5
+  >                CDS_Epoch = 002337B4-D165-1B13-AD34-08002B12C6F5
+  >       CDS_ReplicaVersion = 3.0
+
+  cdscp show replica /.:/admindir clearinghouse /.:/admintest2_ch
+
+  >                     SHOW
+  >                  REPLICA   /.../admin_cell/admindir
+  >                       AT   1992-11-25-14:31:17
+  >         RPC_ClassVersion = 0100
+  >                  CDS_CTS = 1992-11-25-19:17:56.219084100/08-00-2b-12-c6-f5
+  >                  CDS_UTS = 1992-11-25-19:19:14.922164100/08-00-2b-12-c6-f5
+  >           CDS_ObjectUUID = 00216DF8-D164-1B13-AD34-08002B12C6F5
+  >             CDS_Replicas = :
+  >       Clearinghouse UUID = 005A5F96-9E96-1B13-9291-08002B12C6F5
+  >                    Tower = ncacn_ip_tcp:130.105.202.29[]
+  >                    Tower = ncadg_ip_udp:130.105.202.29[]
+  >             Replica type = master
+  >       Clearinghouse Name = /.../admin_cell/admintest1_ch
+  >             CDS_Replicas = :
+  >       Clearinghouse UUID = 002CB028-C14A-1B13-BDAC-08002B12C6F5
+  >                    Tower = ncacn_ip_tcp:130.105.202.27[]
+  >                    Tower = ncadg_ip_udp:130.105.202.27[]
+  >             Replica type = readonly
+  >       Clearinghouse Name = /.../admin_cell/admintest2_ch
+  >              CDS_AllUpTo = 1992-11-25-19:17:57.715146300/08-00-2b-12-c6-f5
+  >          CDS_Convergence = high
+  >        CDS_ParentPointer = :
+  >            Parent's UUID = 003603A9-9E9C-1B13-9291-08002B12C6F5
+  >                  Timeout = :
+  >               Expiration = 1992-11-25-19:17:56.223
+  >                Extension = +1-00:00:00.000
+  >                   MyName = /.../admin_cell/admindir
+  >     CDS_DirectoryVersion = 3.0
+  >         CDS_ReplicaState = on
+  >          CDS_ReplicaType = readonly
+  >            CDS_LastSkulk = 0
+  >           CDS_LastUpdate = 0
+  >                CDS_Epoch = 002337B4-D165-1B13-AD34-08002B12C6F5
+  >       CDS_ReplicaVersion = 3.0
+
+- On admintest1 exclude /.:/admindir from admintest1_ch using the set dir
+  command.  Verify the exclusion using the show dir command, the replica
+  in admintest2_ch should now be the master and there should be no readonly
+  replica.
+
+  cdscp set directory /.:/admindir to new epoch master /.:/admintest2_ch \
+  exclude /.:/admintest1_ch
+
+  >  No Output Expected
+
+- On admintest3 verify the test directory exclusion from admintest1_ch using
+  the show replica command, the CDS_Epoch UUIDs should now be different.
+
+  cdscp show replica /.:/admindir clearinghouse /.:/admintest2_ch CDS_Epoch \
+  CDS_ReplicaType
+
+  >                     SHOW
+  >                  REPLICA   /.../admin_cell/admindir
+  >                       AT   1992-11-25-16:00:30
+  >                CDS_Epoch = 007C6DCA-E712-1B13-BBF2-08002B12C6F5
+  >          CDS_ReplicaType = master
+
+  cdscp show replica /.:/admindir clearinghouse /.:/admintest1_ch CDS_Epoch \
+  CDS_ReplicaType
+
+  >                     SHOW
+  >                  REPLICA   /.../admin_cell/admindir
+  >                       AT   1992-11-25-16:00:44
+  >                CDS_Epoch = 002337B4-D165-1B13-AD34-08002B12C6F5
+  >          CDS_ReplicaType = readonly
+
+- On admintest2 use the show dir command to verify that the test directory
+  is accessible in admintest2_ch.
+
+  cdscp show dir /.:/admindir
+
+  >                     SHOW
+  >                DIRECTORY   /.../admin_cell/admindir
+  >                       AT   1992-11-25-16:13:31
+  >         RPC_ClassVersion = 0100
+  >                  CDS_CTS = 1992-11-25-19:17:56.219084100/08-00-2b-12-c6-f5
+  >                  CDS_UTS = 1992-11-25-20:50:39.569379100/08-00-2b-12-c6-f5
+  >           CDS_ObjectUUID = 00216DF8-D164-1B13-AD34-08002B12C6F5
+  >             CDS_Replicas = :
+  >       Clearinghouse UUID = 002CB028-C14A-1B13-BDAC-08002B12C6F5
+  >                    Tower = ncacn_ip_tcp:130.105.202.27[]
+  >                    Tower = ncadg_ip_udp:130.105.202.27[]
+  >             Replica type = master
+  >       Clearinghouse Name = /.../admin_cell/admintest2_ch
+  >              CDS_AllUpTo = 1992-11-25-20:50:26.963949100/08-00-2b-12-c6-f5
+  >          CDS_Convergence = high
+  >        CDS_ParentPointer = :
+  >            Parent's UUID = 003603A9-9E9C-1B13-9291-08002B12C6F5
+  >                  Timeout = :
+  >               Expiration = 1992-11-26-20:50:27.108
+  >                Extension = +1-00:00:00.000
+  >                   MyName = /.../admin_cell/admindir
+  >     CDS_DirectoryVersion = 3.0
+  >         CDS_ReplicaState = on
+  >          CDS_ReplicaType = master
+  >            CDS_LastSkulk = 1992-11-25-20:50:26.963949100/08-00-2b-12-c6-f5
+  >           CDS_LastUpdate = 1992-11-25-20:50:39.569379100/08-00-2b-12-c6-f5
+  >          CDS_RingPointer = 002CB028-C14A-1B13-BDAC-08002B12C6F5
+  >                CDS_Epoch = 007C6DCA-E712-1B13-BBF2-08002B12C6F5
+  >       CDS_ReplicaVersion = 3.0
+
+- On admintest2 make the test directory in admintest1_ch readonly using the set
+  dir command.
+
+  dce_login cell_admin -dce-
+
+  >  Password must be changed!
+
+  cdscp set directory /.:/admindir to new epoch master /.:/admintest2_ch \
+  readonly /.:/admintest1_ch
+
+  >  No Output Expected
+
+- On admintest3 use the show replica command to verify that the test directory
+  replica in admintest1_ch is now included and readonly, the CDS_Epoch UUIDs
+  should now be the same.
+
+  cdscp show replica /.:/admindir clearinghouse /.:/admintest2_ch CDS_Epoch \
+  CDS_ReplicaType
+
+  >                     SHOW
+  >                  REPLICA   /.../admin_cell/admindir
+  >                       AT   1992-11-25-16:20:15
+  >                CDS_Epoch = 00562926-EDA0-1B13-BBF2-08002B12C6F5
+  >          CDS_ReplicaType = master
+
+  cdscp show replica /.:/admindir clearinghouse /.:/admintest1_ch CDS_Epoch \
+  CDS_ReplicaType
+
+  >                     SHOW
+  >                  REPLICA   /.../admin_cell/admindir
+  >                       AT   1992-11-25-16:20:36
+  >                CDS_Epoch = 00562926-EDA0-1B13-BBF2-08002B12C6F5
+  >          CDS_ReplicaType = readonly
+
+- On admintest1 use the show dir command to verify that the test directory
+  is accessible in admintest2_ch.
+
+  cdscp show dir /.:/admindir
+
+  >                     SHOW
+  >                DIRECTORY   /.../admin_cell/admindir
+  >                       AT   1992-11-25-16:27:47
+  >         RPC_ClassVersion = 0100
+  >                  CDS_CTS = 1992-11-25-19:17:56.219084100/08-00-2b-12-c6-f5
+  >                  CDS_UTS = 1992-11-25-21:18:30.478731100/08-00-2b-12-c6-f5
+  >           CDS_ObjectUUID = 00216DF8-D164-1B13-AD34-08002B12C6F5
+  >             CDS_Replicas = :
+  >       Clearinghouse UUID = 002CB028-C14A-1B13-BDAC-08002B12C6F5
+  >                    Tower = ncacn_ip_tcp:130.105.202.27[]
+  >                    Tower = ncadg_ip_udp:130.105.202.27[]
+  >             Replica type = master
+  >       Clearinghouse Name = /.../admin_cell/admintest2_ch
+  >             CDS_Replicas = :
+  >       Clearinghouse UUID = 005A5F96-9E96-1B13-9291-08002B12C6F5
+  >                    Tower = ncacn_ip_tcp:130.105.202.29[]
+  >                    Tower = ncadg_ip_udp:130.105.202.29[]
+  >             Replica type = readonly
+  >       Clearinghouse Name = /.../admin_cell/admintest1_ch
+  >              CDS_AllUpTo = 1992-11-25-21:18:25.623253100/08-00-2b-12-c6-f5
+  >          CDS_Convergence = high
+  >        CDS_ParentPointer = :
+  >            Parent's UUID = 003603A9-9E9C-1B13-9291-08002B12C6F5
+  >                  Timeout = :
+  >               Expiration = 1992-11-26-21:18:29.944
+  >                Extension = +1-00:00:00.000
+  >                   MyName = /.../admin_cell/admindir
+  >     CDS_DirectoryVersion = 3.0
+  >         CDS_ReplicaState = on
+  >          CDS_ReplicaType = readonly
+  >            CDS_LastSkulk = 1992-11-25-21:18:25.623253100/08-00-2b-12-c6-f5
+  >           CDS_LastUpdate = 1992-11-25-19:19:17.676086100/08-00-2b-12-c6-f5
+  >          CDS_RingPointer = 005A5F96-9E96-1B13-9291-08002B12C6F5
+  >                CDS_Epoch = 00562926-EDA0-1B13-BBF2-08002B12C6F5
+  >       CDS_ReplicaVersion = 3.0
+
+- On admintest2 verify the name of the clearinghouse in preperation for re-
+  locating it.
+
+  cdscp show server
+
+  >                       SHOW
+  >                     SERVER
+  >                         AT   1992-11-25-16:39:29
+  >              Creation Time = 1992-11-25-20:42:22.237
+  >           Future Skew Time = 300
+  >            Read Operations = 81
+  >           Write Operations = 0
+  >           Skulks Initiated = 2
+  >           Skulks Completed = 2
+  >  Times Lookup Paths Broken = 0
+  >           Crucial Replicas = 0
+  >      Child Update Failures = 0
+  >          Security Failures = 0
+  >       Known Clearinghouses = /.../admin_cell/admintest2_ch
+
+- On admintest2 disable the admintest2_ch clearinghouse using the clear
+  clearinghouse command.
+
+  cdscp disable server
+
+  >  No Output Expected
+  
+  cdscp clear clearinghouse /.:/admintest2_ch
+
+  >  No Output Expected
+
+- On admintest3 copy the admintest2_ch files locally from admintest2.
+
+  cd /opt/dcelocal/var/directory/cds
+
+  >  No Output Expected
+
+  ls
+
+  >  adm
+  >  admin_cell#admintest3_ch.checkpoint0000000001
+  >  admin_cell#admintest3_ch.tlog0000000001
+  >  admin_cell#admintest3_ch.version
+  >  cds_files
+  >  server_mgmt_acl.dat
+
+  rcp -pr admintest2:/opt/dcelocal/var/directory/cds/*admintest2* .
+
+  >  No Output Expected
+
+  ls
+
+  >  adm
+  >  admin_cell#admintest2_ch.checkpoint0000000003
+  >  admin_cell#admintest2_ch.tlog0000000003
+  >  admin_cell#admintest2_ch.version
+  >  admin_cell#admintest3_ch.checkpoint0000000001
+  >  admin_cell#admintest3_ch.tlog0000000001
+  >  admin_cell#admintest3_ch.version
+  >  cds_files
+  >  server_mgmt_acl.dat
+
+- On admintest3 let the CDS server know it is now the owner of a new clear-
+  inghouse named admintest2_ch.  Use the show server command to verify that
+  the clearinghouse is added.
+
+  cdscp show server
+
+  >                       SHOW
+  >                     SERVER
+  >                         AT   1992-11-25-16:53:17
+  >              Creation Time = 1992-11-25-18:15:07.136
+  >           Future Skew Time = 300
+  >            Read Operations = 39
+  >           Write Operations = 0
+  >           Skulks Initiated = 0
+  >           Skulks Completed = 0
+  >  Times Lookup Paths Broken = 0
+  >           Crucial Replicas = 0
+  >      Child Update Failures = 0
+  >          Security Failures = 0
+  >       Known Clearinghouses = /.../admin_cell/admintest3_ch
+
+  cdscp create clearinghouse /.:/admintest2_ch
+
+  >  No Output Expected
+
+  cdscp show server
+
+  >                       SHOW
+  >                     SERVER
+  >                         AT   1992-11-25-16:57:19
+  >              Creation Time = 1992-11-25-18:15:07.136
+  >           Future Skew Time = 300
+  >            Read Operations = 46
+  >           Write Operations = 0
+  >           Skulks Initiated = 0
+  >           Skulks Completed = 0
+  >  Times Lookup Paths Broken = 0
+  >           Crucial Replicas = 0
+  >      Child Update Failures = 0
+  >          Security Failures = 0
+  >       Known Clearinghouses = /.../admin_cell/admintest3_ch
+  >                            = /.../admin_cell/admintest2_ch
+
+- End of Test

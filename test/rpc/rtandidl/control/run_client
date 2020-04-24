@@ -1,0 +1,82 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: run_client,v $
+# Revision 1.1.6.2  1996/03/11  02:25:21  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  19:58:43  marty]
+#
+# Revision 1.1.6.1  1995/12/11  20:00:29  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  19:41:46  root]
+# 
+# Revision 1.1.4.2  1993/06/24  20:42:41  hinman
+# 	[hinman@sni] - Check in SNI merged version (these files have no tainted or private code
+# 	[1993/06/17  14:41:23  hinman]
+# 
+# Revision 1.1.2.2  1993/01/11  22:07:24  bbelch
+# 	Embedding copyright notice
+# 	[1993/01/06  18:00:53  bbelch]
+# 
+# $EndLog$
+#
+# This is a shell script driver for the RPC testcases 
+# 
+# Usage: run_client <server_host> {<testsh_dir> <testcase_dir> <inc_dir> <test>}
+#        run_client -testlist
+#             <server_host> is the host on which the "run_server" shell script
+#                     was executed.  
+#             <testsh_dir> - the default is $TESTSHDIR, which
+#                     should be an environment variable set to the location
+#                     of the "testsh" binary.
+#             <testcase_dir> - the default is $TESTDIR, which
+#                     should be an environment variable set to the location
+#                     of the testcase binaries.
+#             <inc_dir> - the default is $INCL, which should be an environment
+#                     variable set to the location of the exported dce header 
+#                     files.
+#             <test> - the default is to run "all" tests.
+#             -testlist will provide the user with a list of valid testcases.
+#
+
+if [ "$#" -lt 1 -o "$#" -gt 5 ]; then
+ echo "Usage:  run_client <serverhost> {<testsh_dir> <testcase_dir> <inc_dir> <test>}"
+ echo "   or:  run_client -testlist"
+ exit 1
+fi
+
+if [ $1 != "-testlist" ]; then
+	# Which host is the server running on?
+	SERVERHOST=${1:-`hostname`}
+	export SERVERHOST
+
+	# Where is the "testsh" binary?
+	TESTSHDIR=${2:-TESTSHDIR}
+
+	# Where are the testcase binaries?
+	TESTDIR=${3:-TESTDIR}
+
+	# Where are the DCE header files?
+        # This is used for the nocode.sh and cmd_line.sh tests only.
+	INCL=${4:-INCL}
+        export INCL
+
+	# Which testcase should be run?
+	TESTS=${5:-all}
+	echo $TESTS
+
+        # Execute the testcase
+	$TESTSHDIR/testsh -l$TESTS.log -I$TESTDIR $TESTS.tsh
+
+else
+        # Provide a list of valid testcases.  This script assumes
+        # the testcase control files are in the same directory as
+        # the run_client driver.
+        ls -1 *.tsh | cut -f1 -d"."
+fi

@@ -1,0 +1,482 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: movetsrtest,v $
+# Revision 1.1.115.1  1996/10/17  18:36:50  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:58:06  damon]
+#
+# Revision 1.1.110.1  1994/02/04  20:47:33  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:25:36  devsrc]
+# 
+# Revision 1.1.108.2  1994/01/20  18:44:17  annie
+# 	added copyright header
+# 	[1994/01/20  18:40:36  annie]
+# 
+# Revision 1.1.108.1  1993/12/07  17:46:35  jaffe
+# 	New File from Transarc 1.0.3a
+# 	[1993/12/02  22:01:35  jaffe]
+# 
+# $EndLog$
+#
+
+###############################################################################
+#    Copyright (C) 1991, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# List invocable component list
+iclist="ic1 ic2 ic3"
+
+# Map test purposes into invocable components
+ic1=readaftermove		# open file, move remotely, read file
+ic2=writemovewrite		# write file, move remotely, write file again, read remotely
+ic3=lockandmove			# lock a file, move fileset removely, try lock remotely
+
+# To make things run correctly on a RIOS
+LIBPATH=/usr/lib:/lib export LIBPATH
+
+# source in util functions
+if [ ! -r ${TESTTOP:-.}/utils ]
+  then
+	echo "Cannot find ${TESTTOP:-.}/utils.  Perhaps TESTTOP is not set properly" >&2
+fi
+. ${TESTTOP:-.}/utils
+
+if [ ! -r ${TESTTOP:-.}/remotelock ]
+  then
+	echo "Cannot find ${TESTTOP:-.}/remotelock.  Perhaps TESTTOP is not set properly" >&2
+fi
+. ${TESTTOP:-.}/remotelock
+
+# Set up parameters for this test
+Setup() {
+	hostname=`uname -n`
+	SERVER=`hostprincipal $hostname`
+	FILESET=tsrmove.$$
+	MOUNTPOINT=/.:/fs/tsrmove.$$
+	LOCALPATH=/testmnt.$$
+	AGGRLIST=`findaggrs`
+	getaggr() {
+		_aggrno=$1
+		set -- $AGGRLIST
+		eval echo \$$_aggrno
+	}
+	FROMAGGR=`getaggr 1`
+	if [ ! "$FROMAGGR" ]
+	  then
+		ErrorLog "Primary Episode aggregate not found"
+		tet_result UNRESOLVED
+		CaptureOff
+		echo "Setup Failed"
+		exit 1
+	fi
+	FROMDEV=`finddev $FROMAGGR`
+	if [ ! "$FROMDEV" ]
+	  then
+		ErrorLog "Cannot find device for primary Episode aggregate not found"
+		tet_result UNRESOLVED
+		CaptureOff
+		echo "Setup Failed"
+		exit 1
+	fi
+	
+	# try to find a remote machine
+	# remote principal -> REMOTE, remote aggr -> REMAGGR
+	findlfsremote $SERVER REMOTE REMAGGR
+	if [ $? -ne 0 ]
+	  then
+		ErrorLog "No remote machine with LFS aggregate available in cell"
+		tet_result UNRESOLVED
+		CaptureOff
+		echo "Setup Failed"
+		exit 1
+	fi
+	REMHOST=`basename $REMOTE`	# strip /.:/hosts/
+
+	if checkrsh $REMHOST
+	  then :
+	  else
+		ErrorLog "rsh apparently does not work to $REMHOST"
+		tet_result UNRESOLVED
+		CaptureOff
+		echo "Setup Failed"
+		exit 1
+	fi
+
+	if checkpath epimount epiunmount
+	  then 
+		:
+	  else
+		ErrorLog "One or both of epimount and epiunmount is not present in PATH"
+		tet_result UNRESOLVED
+		CaptureOff
+		echo "Setup Failed"
+		exit 1
+	fi
+
+	# create a local mount point on LOCALPATH, if necessary
+	if [ ! -d $LOCALPATH ]
+	  then
+		mkdir $LOCALPATH
+	fi
+
+	# create the fileset we're going to use
+	deletefileset $FILESET $MOUNTPOINT
+	if [ $? -ne 0 ]
+	  then
+		ErrorLog "Error deleting old fileset"
+		tet_result UNRESOLVED
+		CaptureOff
+		echo "Setup Failed"
+		exit 1
+	fi
+
+	createfileset $FILESET $SERVER $FROMAGGR $MOUNTPOINT VOLID
+	if [ $? -ne 0 ]
+	  then
+		ErrorLog "Error creating fileset $FILESET on $MOUNTPOINT"
+		tet_result UNRESOLVED
+		CaptureOff
+		echo "Setup Failed"
+		exit 1
+	fi
+
+	return
+}
+
+
+Cleanup()
+{
+	Log "Cleanup called"
+	epiunmount $LOCALPATH 2> /dev/null
+	rmdir $LOCALPATH
+	deletefileset $FILESET $MOUNTPOINT
+}
+
+PASS=0
+FAIL=0
+DUNNO=0
+result() {
+	_result=$1
+	case $_result in 
+		PASS)	PASS=`expr $PASS + 1`;;
+		FAIL)	FAIL=`expr $FAIL + 1`;;
+		UNRESOLVED)	DUNNO=`expr $DUNNO + 1`;;
+	esac
+
+	Log "invocable component returned $_result status"
+}
+
+######################################################################
+# Begin Test Purposes #
+#######################
+# readaftermove: write file, move fileset, read file -- IC 1
+readaftermove()
+{
+	MTESTFILE=$MOUNTPOINT/testfile.$$
+	LTESTFILE=$LOCALPATH/testfile.$$
+	_error=0
+
+	Log "The idea behind this test is to write a file, "
+	Log "move the fileset, then try to read the contents"
+	Log "of the file.  This test doesn't really test"
+	Log "token state as much as it tests the CM's ability"
+	Log "to find the fileset after a move."
+	Log ""
+
+	# mount Episode
+	if epimount $FILESET $LOCALPATH > /dev/null 2>&1
+	  then :
+	  else
+		ErrorLog "Error in 'epimount $FILESET $LOCALPATH'"
+		result UNRESOLVED
+		return
+	fi
+
+	# create file in episode (not in CM cache)
+	Log "creating $LTESTFILE"
+	makepow2 $LTESTFILE 10 "Testfile"
+	chmod 666 $LTESTFILE
+
+	# try to stat through DFS 
+	if [ ! -f $MTESTFILE ]
+	  then
+		ErrorLog "Cannot read file $MTESTFILE"
+		_error=1
+	fi
+
+	# unmount fileset
+	if epiunmount $LOCALPATH > /dev/null 2>&1
+	  then :
+	  else
+		ErrorLog "Error in 'epiunmount $LOCALPATH'"
+		_error=1
+	fi
+
+	if [ $_error -ne 0 ]
+	  then
+		result UNRESOLVED
+		return 
+	fi
+
+	# file is now created
+	# attempt to move fileset
+	Log "moving fileset $FILESET"
+	if fts move $FILESET -fromserver $SERVER -fromaggregate $FROMAGGR \
+			     -toserver $REMOTE -toaggregate $REMAGGR -localauth
+	  then :
+	  else
+		ErrorLog "fts move failed"
+		result UNRESOLVED
+		/bin/rm -f $MTESTFILE
+		return
+	fi
+	Log "fileset $FILESET moved"
+
+	# is fileset still accessible and is file still readable?
+	if checkwhereis $MOUNTPOINT $REMHOST
+	  then
+		# Try to read file
+		if grep Testfile $MTESTFILE > /dev/null 2>&1
+		  then
+			:
+		  else
+			ErrorLog "Could not read after move"
+			result FAIL
+			_error=1
+		fi
+	  else
+		ErrorLog "Fileset lost"
+		result FAIL
+		_error=1
+	fi
+
+	/bin/rm -f $MTESTFILE
+	# move fileset back
+	if fts move $FILESET -fromserver $REMOTE -fromaggregate $REMAGGR \
+			     -toserver $SERVER -toaggregate $FROMAGGR -localauth
+	  then :
+	  else
+		ErrorLog "Could not move fileset back from $REMAGGR to $FROMAGGR"
+	fi
+
+	if [ $_error -eq 0 ]
+	  then
+		result PASS
+	fi
+}
+
+# writemovewrite: write file, move fileset, write file again, read remotely -- IC 2
+writemovewrite()
+{
+	MTESTFILE=$MOUNTPOINT/testfile.$$
+	_error=0
+
+	Log "This test will open a file and write a string"
+	Log "to it.  It will then move the fileset and write"
+	Log "another string to it.  The file is closed and"
+	Log "read from the remote, where both strings will be"
+	Log "for.  This will test to make sure that the write"
+	Log "token is revoked on move and that the write token"
+	Log "state can be recovered."
+	Log ""
+
+	# open file for writing
+	Log "creating test file"
+	if touch $MTESTFILE
+	  then :
+		chmod 666 $MTESTFILE
+		acl_edit $MTESTFILE -m any_other:r
+		exec 4> $MTESTFILE
+	  else
+		ErrorLog "could not create test file"
+		result UNRESOLVED
+		return
+	fi
+	
+	# write first line into file
+	echo First >&4
+
+	# attempt to move fileset
+	Log "moving fileset $FILESET"
+	if fts move $FILESET -fromserver $SERVER -fromaggregate $FROMAGGR \
+			     -toserver $REMOTE -toaggregate $REMAGGR -localauth
+	  then :
+	  else
+		ErrorLog "fts move failed"
+		result UNRESOLVED
+		exec 4>&-
+		/bin/rm -f $MTESTFILE
+		return
+	fi
+	Log "fileset $FILESET moved"
+
+	# write file again; reobtain write token
+	if echo Second >&4
+	  then
+		# try to read file remotely: look for First
+		# read will revoke write token; dirty data written through
+		Log "checking file"
+		rsh $REMHOST "cat $MTESTFILE" | 
+		awk '/First/  { firstfound=1 }
+		     /Second/ { secondfound=1 }
+		     END      { if (firstfound + secondfound == 2) exit 0
+				else exit 1
+				}'
+		if [ $? -ne 0 ]
+		  then 		# success
+			ErrorLog "Could not read file remotely"
+			result FAIL
+			_error=1
+		fi
+	  else
+		ErrorLog "Could not write after move"
+		result FAIL
+		_error=1
+	fi
+
+	exec 4>&-
+	/bin/rm -f $MTESTFILE
+
+	# move fileset back
+	if fts move $FILESET -fromserver $REMOTE -fromaggregate $REMAGGR \
+			     -toserver $SERVER -toaggregate $FROMAGGR -localauth
+	  then :
+	  else
+		ErrorLog "Could not move fileset back from $REMAGGR to $FROMAGGR"
+	fi
+
+	if [ $_error -eq 0 ]
+	  then
+		result PASS
+	fi
+}
+
+# lockandmove: lock file, move fileset, try lock remotely -- IC 3
+lockandmove()
+{
+	MTESTFILE=$MOUNTPOINT/testfile.$$
+	_error=0
+
+	Log "The idea behind this test is to lock a file,"
+	Log "move the fileset, then try to lock it"
+	Log "remotely."
+	Log ""
+
+	Log "create lock file"
+	touch $MTESTFILE
+	chmod 666 $MTESTFILE
+	acl_edit $MTESTFILE -m any_other:r
+
+	Log "locking lock file"
+	if ${TESTTOP:-.}/trylock -nopause $MTESTFILE
+	  then :
+	  else
+		ErrorLog "Could not lock local file"
+		/bin/rm -f $MTESTFILE
+		result UNRESOLVED
+		return
+	fi
+
+	# lock again, but pause this time
+	(${TESTTOP:-.}/trylock $MTESTFILE) &
+	CHILDPID=$!
+
+	# attempt to move fileset
+	Log "moving fileset $FILESET"
+	if fts move $FILESET -fromserver $SERVER -fromaggregate $FROMAGGR \
+			     -toserver $REMOTE -toaggregate $REMAGGR -localauth
+	  then :
+	  else
+		ErrorLog "fts move failed"
+		result UNRESOLVED
+		kill $CHILDPID
+		/bin/rm -f $MTESTFILE
+		return
+	fi
+	Log "fileset $FILESET moved"
+
+	# check for existence of remote file
+	if rsh $REMHOST "ls $MTESTFILE && echo SUCCESS" | grep SUCCESS > /dev/null 2>&1
+	  then 
+		# try to obtain lock remotely
+		if getremotelock $REMHOST $MTESTFILE
+		  then
+			# should not have succeeded!!
+			if kill -0 $CHILDPID
+			  then 
+				# child pid still alive
+				ErrorLog "Remote lock erroneously succeeded"
+				result FAIL
+				_error=1
+			  else
+				# local lock proc is dead
+				ErrorLog "Local lock process died"
+				result UNRESOLVED
+				_error=1
+			fi
+		fi
+		cleanremote $REMHOST
+	  else
+		ErrorLog "Could not read $MTESTFILE remotely"
+		result FAIL
+		_error=1
+	fi
+
+	# kill local reader
+	Log "killing local locker"
+	kill $CHILDPID
+
+	# move fileset back
+	if fts move $FILESET -fromserver $REMOTE -fromaggregate $REMAGGR \
+			     -toserver $SERVER -toaggregate $FROMAGGR -localauth
+	  then :
+	  else
+		ErrorLog "Could not move fileset back from $REMAGGR to $FROMAGGR"
+	fi
+
+	if [ $_error -eq 0 ]
+	  then
+		result PASS
+	fi
+}
+
+Openlog tsrtest.`date +%m%d%y`
+Log "Running TSR tests on `date`"
+Log "Initializing..."
+CaptureOn
+Setup
+CaptureOff
+
+Log "Running test cases..."
+for ic in $iclist
+  do
+	func=`eval echo \\$$ic` export func
+	Log "------------------------------------------"
+	Log "Running invocable component: $func"
+	CaptureOn
+	eval $func
+	CaptureOff
+done
+
+Log "------------------------------------------"
+Log "Shutting down..."
+CaptureOn
+Cleanup
+CaptureOff
+
+if [ $FAIL -eq 0 -a $DUNNO -eq 0 ]
+  then
+	echo "all tests PASSED"
+	exit 0
+  else
+	echo "Pass: $PASS  Fail: $FAIL  Unresolved: $DUNNO"
+	exit 1
+fi

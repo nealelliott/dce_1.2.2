@@ -1,0 +1,347 @@
+                      MANUAL ACL TEST PROCDURES
+
+This document outlines the steps in manual testing a subset of ACL
+test cases, specifically
+    Cell Adminstrator rights
+    Network Root rights
+    File Owner rights
+
+Initial setup
+
+- Create principals, groups and accounts in the registry as per the
+  following map:
+
+    Principal   Group
+    acluou      aclgog
+    aclgou      aclgog
+    acluu       aclnog
+    aclgu       aclngog
+    acloou      aclnog
+
+
+Cell admin rights
+
+Cell_admin of the storing cell should have "c" rights on every 
+file and directory object in that cell.
+
+- "c" rights
+    1. Login as user acluou.
+    2. Create a file F.
+    3. Modify ACL on file F to be 
+        user_obj    rwxc
+        group_obj   rx
+        other_obj   x
+    4. Login in as cell_admin 
+    5. Modify F's ACL.
+        If you are not able to modify F's ACL, its a BUG.
+    6. Repeat 1-5 with the ACL on F being
+        user_obj    rwc
+        group_obj   rw
+        other_obj   r
+
+    7. Login as user acluou
+    8. Create a dir D
+    9. Modify ACL on dir D to be 
+        user_obj    rwxcid
+        group_obj   rx
+        other_obj   r
+    10. Login in as cell_admin
+    11. Modify D's object ACL
+            If you are not able to, its a BUG.
+    12. Repeat 11 with each of D's IO and IC ACL
+    13. Repeate 7-12 with the D's object ACL being
+        user_obj    rwcid
+        group_obj   rwid
+        other_obj   rwi 
+
+    14. Repeat 1-5 with ACL on F being
+        user_obj        rwxc
+        group_obj       rx
+        other_obj       r
+        mask_obj        rwx
+        user:aclgou     rwx
+        group:aclgog    rx
+    
+        and then
+        
+        user_obj        rwxc
+        group_obj       rx
+        other_obj       x
+        mask_obj        rx
+        user:aclgou     rx
+        group:aclgog    r
+
+    15. Repeat 7-12 with D's object ACL being
+        user_obj        rwcid
+        group_obj       rwid
+        other_obj       r
+        mask_obj        rwid
+        user:aclgou     rwi
+        group:aclgog    rwd
+    
+        and then
+
+        user_obj        rwci
+        group_obj       rw
+        other_obj       rw
+        mask_obj        rw
+        user:aclgou     r
+        group:aclgog    r
+
+- ACL with explicit denial of "c" right to cell_admin
+    1. Login as user acluou.
+    2. Create a file F.
+    3. Modify ACL on file F to be 
+        user_obj        rwxc
+        group_obj       rx
+        other_obj       r
+        mask_obj        rwx
+        user:cell_admin -
+    4. Login in as cell_admin 
+    5. Modify F's object ACL
+            If you are not able to, its a BUG.
+
+- ACL with explicit denial of c right to sys admin group 
+    1. Login as user acluou.
+    2. Create a file F.
+    3. Modify ACL on file F to be 
+        user_obj   			rwxc
+        group_obj      			rx
+        other_obj      			r
+        mask_obj     			rwx
+        group:subsys/dce/dfs-admin 	-
+    4. Login in as cell_admin 
+    5. Modify F's object ACL
+            If you are not able to, its a BUG.
+
+Network root access test    
+
+The cell's root account should have ALL rights on every file and directory
+object in that cell.
+
+NOTE: If none of the 3 ACL entries that are reflected in the UNIX mode
+bits, i.e. user_obj, group_obj (mask_obj if it exists), other_obj,
+have x permission, then even root does not x perm. This is a bug.  See
+defect 5430 for details. Hence the cases below that exercise x perm
+for root under these conditions, are KNOWN to currently fail.  Also
+note that these failures are not in DFS but in the native operating
+system which uses the results of a stat instead of the access call to
+decide whether the file can be executed.
+
+- Root rights
+    1. Login as user acluou.
+    2. Create a file F with the some data and copy /bin/ls into DFS as
+       file FLS.  
+    3. Modify ACL on file F and FLS to be 
+        user_obj    rwxc
+        group_obj   rx
+        other_obj   -
+    4. Login in as DCE root
+    5. Read F (cat)
+        If you are not able to read F, its a BUG.
+    6. Write into F (cat >>)
+        If you are not able to write into F, its a BUG.
+    7. Execute FLS
+        If you are not able to execute FLS, its a BUG.  
+    8. Modify F's ACL.
+        If you are not able to modify F's ACL, its a BUG.
+    9. Repeat 1-8 with the ACL on F and FLS being
+        user_obj    c
+        group_obj   -
+        other_obj   -
+
+    10. Login as user acluou
+    11. Create a dir D
+    12. Modify ACL on dir D to be 
+        user_obj    rwxcid
+        group_obj   rwxi
+        other_obj   -
+    13. Login in as DCE root
+    14. Cd into D. (x perm)
+        If you are not able to, its a BUG.
+    15. Create a file in D. (wi perm)
+        If you are not able to, its a BUG.
+    16. List files in D via ls (r perm).
+        If you are not able to, its a BUG.  
+    17. Delete the file created in 15. (wd perm).
+        If you are not able to, its a BUG.
+    18. Modify D's object ACL. (c perm).
+        If you are not able to, its a BUG.
+    19. Repeat 18 with each of D's IO and IC ACL.
+    20. Repeate 10-19 with the D's object ACL being
+        user_obj    c
+        group_obj   -
+        other_obj   -
+
+    21. Repeat 1-8 with the object ACL on F and FLS being
+        user_obj        rwxc
+        group_obj       rwx
+        other_obj       -
+        mask_obj        rwx
+        user:aclgou     rw
+        group:aclgog    rx
+
+        and then
+
+        user_obj        c
+        group_obj       -
+        other_obj       -
+        mask_obj        -
+        user:aclgou     -
+        group:aclgog    -
+
+    22. Repeat 10-19 with D's object ACL being
+
+        user_obj        rwxcid
+        group_obj       rwid
+        other_obj       -
+        mask_obj        rwid
+        user:aclgou     rwi
+        group:aclgog    rwd
+
+        and then
+
+        user_obj        c
+        group_obj       -
+        other_obj       -
+        mask_obj        -
+        user:aclgou     -
+        group:aclgog    -
+
+- ACL with explicit denial of rights to DCE root
+    1. Login as user acluou.
+    2. Create a file F with the some data and copy /bin/ls into DFS as
+       file FLS.  
+    3. Modify ACL on file F and FLS to be 
+        user_obj    rwxc
+        group_obj   rx
+        other_obj   -
+        mask_obj    rx
+        user:root   -       
+    4. Login in as DCE root
+    5. Read F (cat)
+        If you are not able to read F, its a BUG.
+    6. Write into F (cat >>)
+        If you are not able to write into F, its a BUG.
+    7. Execute FLS
+        If you are not able to execute FLS, its a BUG.  
+    8. Modify F's ACL.
+        If you are not able to modify F's ACL, its a BUG.
+
+    10. Login as user acluou
+    11. Create a dir D
+    12. Modify ACL on dir D to be 
+        user_obj    rwxcid
+        group_obj   rwxi
+        other_obj   -
+        mask_obj    rwxi
+        user:root   -       
+    13. Login in as DCE root
+    14. Cd into D. (x perm)
+        If you are not able to, its a BUG.
+    15. Create a file in D. (wi perm)
+        If you are not able to, its a BUG.
+    16. List files in D via ls (r perm).
+        If you are not able to, its a BUG.  
+    17. Delete the file created in 15. (wd perm).
+        If you are not able to, its a BUG.
+    18. Modify D's object ACL. (c perm).
+        If you are not able to, its a BUG.
+    19. Repeat 18 with each of D's IO and IC ACL.
+
+- File/dir owned by DCE root
+  A file owned by DCE root with an ACL with null rights except for
+  user_obj:c.
+
+    1. Login as DCE root
+    2. Create a file F with the some data and copy /bin/ls into DFS as
+       file FLS.  
+    3. Modify ACL on file F and FLS to be 
+        user_obj    c
+        group_obj   -
+        other_obj   -
+    4. Read F (cat)
+        If you are not able to read F, its a BUG.
+    5. Write into F (cat >>)
+        If you are not able to write into F, its a BUG.
+    6. Execute FLS
+        If you are not able to execute FLS, its a BUG.  
+    7. Modify F's ACL.
+        If you are not able to modify F's ACL, its a BUG.
+
+    8. Create a dir D
+    9. Modify ACL on dir D to be 
+        user_obj    c
+        group_obj   -
+        other_obj   -
+    10. Cd into D. (x perm)
+        If you are not able to, its a BUG.
+    11. Create a file in D. (wi perm)
+        If you are not able to, its a BUG.
+    12. List files in D via ls (r perm).
+        If you are not able to, its a BUG.  
+    13. Delete the file created in 11. (wd perm).
+        If you are not able to, its a BUG.
+    14. Modify D's object ACL. (c perm).
+        If you are not able to, its a BUG.
+    15. Repeat 14 with each of D's IO and IC ACL.
+
+File/dir owner implicit rights
+  A owner of a file or directory should always have c rights on the 
+  owned file or directory.
+
+    1. Login as acluou
+    2. Create a file F
+    3. Modify F's object ACL to be
+        user_obj    c
+        group_obj   -
+        other_obj   -
+       The operation should FAIL with an invalid DFS ACL message.
+       If the operation succeeds, its a BUG.
+       This ensures that owner cannot take away c right for user_obj
+       on file.
+
+    4. Login as cell_admin
+    5. Modify F's object ACL to be
+        user_obj    c
+        group_obj   -
+        other_obj   -
+       The operation should FAIL with an invalid DFS ACL message.
+       If the operation succeeds, its a BUG.
+       This ensures that cell_admin cannot do so either.
+
+    6. Login as root
+    7. Modify F's object ACL to be
+        user_obj    c
+        group_obj   -
+        other_obj   -
+       The operation should FAIL with an invalid DFS ACL message.
+       If the operation succeeds, its a BUG.
+       This ensures that root cannot do so either.
+
+    8. Login in acluou
+    9. Modify F's object ACL to be
+        user_obj    rwxcid
+        group_obj   rwxcid
+        other_obj   rwxcid
+    10. Login as aclgou
+    11. Modify F's object ACL to be
+        user_obj    rwxid
+        group_obj   rwxcid
+        other_obj   rwxcid
+       The operation should FAIL with an invalid DFS ACL message.
+       If the operation succeeds, its a BUG.
+       This ensures that other users with c right to ACL cannot do so
+       either.
+
+TIME ESTIMATES
+
+Automating Tests
+Test design and implementation      1.5d
+Test testing on Solaris             1.0d
+Test testing on AIX                 0.5d        
+                                    ----
+                                    3.0d
+                                    ----                                    
+
+Manual execution of this checklist  2-3 hrs.

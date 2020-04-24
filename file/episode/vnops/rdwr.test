@@ -1,0 +1,88 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: rdwr.test,v $
+# Revision 1.1.11.1  1996/10/02  17:45:11  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:36:27  damon]
+#
+# Revision 1.1.6.1  1994/06/09  14:06:15  annie
+# 	fixed copyright in src/file
+# 	[1994/06/09  13:21:44  annie]
+# 
+# Revision 1.1.4.3  1993/01/21  18:28:20  zeliff
+# 	Embedding copyright notices
+# 	[1993/01/19  16:52:17  zeliff]
+# 
+# Revision 1.1.4.2  1992/08/31  21:15:36  jaffe
+# 	Transarc delta: bwl-ot4882-misc-test-vnodeops-fixes 1.1
+# 	  Selected comments:
+# 	    Miscellaneous improvements to the vnops-layer out-of-kernel tests.
+# 	    Use new check_sizes opcode; also adjust read/write sizes to stay within
+# 	    inline limit, which is now less than 100.
+# 	[1992/08/30  03:43:07  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/06  14:17:14  jdp
+# 	Initial revision.
+# 	[1992/05/06  00:29:41  jdp]
+# 
+# $EndLog$
+rdwr 1
+
+# vnode tests
+
+open_device 1 4096 1024 1000
+create_aggregate
+
+exist_vol yyy 777,,888 170
+
+echo reading and writing, inline file (100 bytes)
+
+root_vnode
+vn_create foo
+vn_write 0 60 3
+vn_read 0 60 3
+check_sizes 60 4096 0
+vn_write 0 60
+vn_read 0 60
+check_sizes 60 4096 0
+
+echo appending; promotion to fragmented file (200 bytes)
+
+vn_append 60 4
+vn_read 60 60 4
+check_sizes 120 4096 2
+
+echo promotion to blocked file (20000 bytes)
+
+vn_write 0 20000 5
+vn_read 0 20000 5
+check_sizes 20000 4096 40
+
+echo indirect blocks (56000 bytes)
+
+vn_write 0 56000 6
+vn_read 0 56000 6
+check_sizes 56000 4096 120
+
+# double indirect:
+#vn_write ?? ?? ??
+#vn_write ?? ?? ??
+
+echo sparse file
+
+vn_write 76000 1000 7
+vn_read 76000 1000 7
+check_sizes 77000 4096 128
+vn_read 66000 100 0
+
+release_vnode
+unmount_vol
+
+check_device
+end
+

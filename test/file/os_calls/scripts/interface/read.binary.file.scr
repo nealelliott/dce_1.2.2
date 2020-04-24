@@ -1,0 +1,636 @@
+
+*
+* ID: $Id:
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+*  read.binary.file.scr --
+*	This script tests read system calls by accessing binary data.
+*
+
+*
+* Usage: file_test -I read.binary.file.scr
+*        file_test -I read.binary.file.scr -D
+*        or
+*        file_test < read.binary.file.scr
+*        or
+*        See file_test -help
+
+
+*  Requirement to run this scripts:
+*   1. Have common2.env script copied here, which will be called by this script.
+*
+
+*  Terminology:
+*  PASSED -- no problem for the testings.
+*  FAILED -- failed when doing basic checks.
+*  XXXXXX -- means will be enhanced later.
+
+*  Errors: 30
+
+*
+* call for defaults settings
+*
+include common2.env
+
+echo 
+echo Running read.binary.file.scr
+echo 
+
+*************************************************************************
+* Define variables.
+
+* Ulimit uses 512 bytes block size, so the 64 kb is 128 blocks.
+* The STRING256B contains 256 chars.
+* The numberOfTimes is used as the time number to increase the file size.
+
+set numberOfTimes 3
+set numberBlocks 128
+set numberOfLoops 256
+
+* This variable needs to be adjusted according to the default dcache entries
+* defined in CM (cm_dcache.h). It is defined currently as 100. We need
+* a number just little bit bigger than that.
+
+set numOfFilesToCreate ( $MAXDCACHEENTRY + 10 )
+
+
+* Get one-mega file.
+set oneMegaBin "onemegabin"
+!* Create a one-mega file $oneMegaBin
+exec createOneMegaBinary_Proc $oneMegaBin
+
+************************************************************************
+*  Read system call testings
+*
+!*                  BASIC CHECKINGS
+************************************************************************
+
+umask 0
+
+************************************************************************
+*
+*  Use vector data to test read sys calls.
+* 
+
+*
+* Open file, $oneMegaBin.
+*
+open $oneMegaBin $O_RDWR 0777 oneMegaBinId
+
+*
+!* Check that read calls aligned on chunk boundaries.
+*
+
+* Read first 15 64ks that are aligned on the boundaries.
+
+set junk vector 0
+loop x 1 1 14
+  read $oneMegaBinId $CONST64K junk
+  lseek $oneMegaBinId $SEEK_CUR -4
+  read $oneMegaBinId 4 junk
+  set value vector ( $CONST64K/4 -1 )
+  if ( $junk != $value ) {
+     set errorMessage "FAILED: The last byte in a chunk is not the one expected, $oneMegaBin. --E1"
+     exec err_Process
+  }
+  read $oneMegaBinId 4 junk
+  set value vector 0
+  if ( $junk != $value ) {
+     set errorMessage "FAILED: The first byte in another chunk is not the one expected, $oneMegaBin. --E2"
+     exec err_Process
+  }
+  lseek $oneMegaBinId $SEEK_CUR -4
+endloop
+
+*
+* Check the read aligned within a chunk.
+*
+
+* Read last 64k, each read 255 256bs.
+loop x 0 1 (16384-1)
+  read $oneMegaBinId 4 junk
+  set value vector $x
+  if ( $junk != $value ) {
+     set errorMessage "FAILED: The byte in a chunk is not the one expected, $oneMegaBin. --E3"
+     exec err_Process
+  }
+endloop
+
+*
+* Read last 40k from the oneMega file.
+*
+loop x 1 1 159
+  read $oneMegaBinId 256 junk
+  lseek $oneMegaBinId $SEEK_CUR -4
+  read $oneMegaBinId 4 junk
+  set value vector (256/4-1)
+  if ( $junk != $value ) {
+     set errorMessage "FAILED: The read is not aligned within a chunk, $oneMegaBin. --E4"
+     exec err_Process
+  }
+  read $oneMegaBinId 4 junk
+  set value vector 0
+  if ( $junk != $value ) {
+     set errorMessage "FAILED: The read is not aligned within a chunk, $oneMegaBin. --E5"
+     exec err_Process
+  }
+  lseek $oneMegaBinId $SEEK_CUR -4
+endloop
+
+* 
+* Read last 256 bytes and compare the whole vector.
+*
+
+read $oneMegaBinId 256 junk
+if ( $junk != $NUMVEC256B ) {
+   set errorMessage "FAILED: The read system call reads wrong data from last 256 byte of the file $oneMegaBin. --E6"
+   exec err_Process
+}
+  
+*
+!* Check that read calls span chunk boundaries.
+*
+
+* From the beginning of the file, skip first 32k.
+* Read 15 64ks and check the data.
+
+lseek $oneMegaBinId $SEEK_SET ($CONST64K/2)
+loop x 1 1 14
+  read $oneMegaBinId $CONST64K junk
+  lseek $oneMegaBinId $SEEK_CUR -4
+  read $oneMegaBinId 4 junk
+  set value vector ($CONST64K/(2*4) -1 )    
+  if ( $junk != $value ) {
+     set errorMessage "FAILED: The byte read when spanning chunk boundaries is wrong. --E7"
+     exec err_Process
+  }
+  read $oneMegaBinId 4 junk
+  set value vector ($CONST64K/(2*4)) 
+  if ( $junk != $value ) {
+     set errorMessage "FAILED: The byte read when spanning chunk boundaries is wrong. --E8"
+     exec err_Process
+  }
+  lseek $oneMegaBinId $SEEK_CUR -4
+endloop
+
+* read last second 64k + 40k.
+read $oneMegaBinId $CONST64K junk
+
+*
+* Read last 8k.
+*
+loop x 1 1 31
+  read $oneMegaBinId 256 junk
+  if ( $junk != $NUMVEC256B ) {
+    set errorMessage "FAILED: The read reads wrong data from last 32k of the file. --E9"
+    exec err_Process
+  }
+endloop
+
+*
+* Read last 256 bytes.
+*
+loop x 0 1 63
+  read $oneMegaBinId 4 junk
+  set value vector $x
+  if ( $value != $junk ) {
+    set errorMessage "FAILED: Read reads wrong data in the last 256 bytes of $oneMegaBin. --E10"
+    exec err_Process
+  }
+endloop
+
+close $oneMegaBinId
+
+*
+!* Check that read calls that overlap prefetched chunks.
+*
+    
+* Flushing a file (make the file unknown to the cache manager).
+
+echo $currentDir
+set commd ("cm flush -path "+$oneMegaBin)
+shellExec commd
+
+*
+!* Read first byte from the file (make the cache manager prefetch).
+*  We want to read the prefetched chunk as soon as we have read the first one.
+*  Here we have no guarantee that the second chunk prefetched or not.
+*
+open $oneMegaBin $O_RDWR 0 oneMegaBinId
+read $oneMegaBinId 1 junk
+
+*
+!* Now we should have the second chunk prefetched.
+*
+* read from the last byte of the chunk 64k+2 bytes.
+* (read overlap the prefetched chunk)
+
+lseek $oneMegaBinId $SEEK_SET ($CONST64K-1)
+read $oneMegaBinId ($CONST64K+2) junk
+read $oneMegaBinId 1 junk
+set value vector "0x00"
+if ( $junk != $value ) {
+  set errorMessage "FAILED: The second byte in the third chunk is not right. --E11"
+  exec err_Process
+}
+
+* Now we should have the fourth chunk prefetched.
+lseek $oneMegaBinId $SEEK_SET (3 * $CONST64K)
+read $oneMegaBinId $CONST64K junk
+if ( $junk != $NUMVEC64K ) {
+  set errorMessage "FAILED: The data in the fourth chunk is not right. --E12"
+  exec err_Process
+}
+
+* Hope that the following will let the file unknown to CM XXXXXX.
+close $oneMegaBinId
+shellExec commd
+
+*
+!* Read data within prefetched chunk.
+*
+open $oneMegaBin $O_RDWR 0 oneMegaBinId
+read $oneMegaBinId 1 junk
+
+*
+!* Now we should have the second chunk prefetched again.
+*
+* Let read from the last four bytes of the chunk 64k bytes.
+* (read overlap the prefetched chunk)
+lseek $oneMegaBinId $SEEK_SET ($CONST64K-1)
+read $oneMegaBinId ($CONST64K-3) junk
+read $oneMegaBinId 4 junk
+set value vector ($CONST64K/4-1)
+if ( $junk != $value ) {
+  set errorMessage "FAILED: The last four bytes in the prefetched chunk is not right. --E13"
+  exec err_Process
+}
+close $oneMegaBinId
+
+shellExec commd
+
+*
+!* Check reading from a file that is not being fetched.
+*  (by doing  a read for 64k and read data from the chunk that was just read.) 
+*
+open $oneMegaBin $O_RDWR 0 oneMegaBinId
+read $oneMegaBinId $CONST64K junk
+lseek $oneMegaBinId $SEEK_SET 256
+
+set lower vector (256/4)
+set upper vector (512/4-1)
+exec getNumVector $lower $upper value
+
+read $oneMegaBinId 256 junk
+if ( $junk != $value ) {
+  set errorMessage "FAILED: The second 256 bytes are not right. --E14"
+  exec err_Process
+}
+
+*
+* run through many chunks.
+*
+lseek $oneMegaBinId $SEEK_SET 0
+loop x 1 1 15
+  read $oneMegaBinId $CONST64K junk
+  if ( $junk != $NUMVEC64K ) {
+    set errorMessage "FAILED: The chunk data is wrong. --E15"
+    exec err_Process
+  }
+endloop
+
+* Leave the file open for the later access.
+
+
+*
+!* Check that create a chunk with part missing.
+*  (by writing data at 20k and data at 80k, say). 
+*   Then check the following cases:
+*     read spanning the end of the data written in the first chunk and the
+*          region in chunk 0 that was never written;
+*     read data completely contained within the first 20k;
+*     read data strictly past the part written in the last 20k;
+*     read spanning the end of the first chunk and the beginning of the
+*          second chunk, and finally spanning the first chunk's 0 region;
+*     read start at the second chunk's 0 region and finally encountering the 
+*          second chunk's non-zero region.
+*
+* Note: The CM is responsible for fill the region with 0's when we skip
+*       some piece of space for writing.
+
+* Prepare the file.
+open $testFile ($O_CREAT|$O_RDWR) 0777 testFileId
+
+* Skip from 0 to 20k (unix will deal with it internally).
+* Position the file pointer to 20k and write 1k non empty data.
+
+set lower vector (20480/4)
+set upper vector (((20480+1024)/4)-1)
+exec getNumVector $lower $upper value1
+
+lseek $testFileId $SEEK_SET 20480
+write $testFileId $value1
+
+* Skip 21k to 80k
+
+set lower vector (81920/4)
+set upper vector (((81920+1024)/4)-1)
+exec getNumVector $lower $upper value2
+
+* Position the file pointer to 80k and write 1k non empty data.
+lseek $testFileId $SEEK_SET 81920
+write $testFileId $value2
+
+* Skip 80k to 144k.
+* Position th file pointer to 144k and write 1k non-zero data.
+
+set lower vector (147456/4)
+set upper vector (((147456+1024)/4)-1)
+exec getNumVector $lower $upper value3
+
+lseek $testFileId $SEEK_SET 147456
+write $testFileId $value3
+
+close $testFileId
+shellExec commd
+
+
+* The file size should be  64k+81k = 145k (148480 bytes)
+stat $testFile var
+if ( $var.st_size != 148480 ) {
+  set errorMessage "FAILED: The size of the file created is different from expected. --E16"
+  exec err_Process
+}
+
+*
+!* Read data completely contained within the first 20k;
+*
+open $testFile ($O_CREAT|$O_RDWR) 0777 $testFileId
+
+set junk1 vector 0
+loop x 1 1 80
+  read $testFileId 256 junk1
+  if ( $junk1 != $NULL256B ) {
+    set errorMessage "FAILED: A read within first 20k of 0 region is failed. -
+-E17"
+    exec err_Process
+  }
+endloop
+
+*
+!* Read spanning the end of data written in the first chunk and the 0 region.
+*  Read data from 20k-128b to 20k + 128b total 256b that contains half zeros
+*  and half nonempty data..
+*
+set lower vector (20480/4)
+set upper vector (((20480+128)/4)-1)
+exec getNumVector $lower $upper value
+set value vector ($NULL128B + $value)
+
+lseek $testFileId $SEEK_SET (20480-128)
+read $testFileId 256 junk
+if ( $junk != $value ) {
+  set errorMessage "FAILED: The read spanning of 0 region and the data is failed. --E18"
+  exec err_Process
+}
+
+set lower vector (20480/4)
+set upper vector (((20480+256)/4)-1)
+exec getNumVector $lower $upper value
+
+lseek $testFileId $SEEK_SET (20480)
+read $testFileId 256 junk
+if ( $junk != $value ) {
+  set errorMessage "FAILED: The read spanning of the data is failed. --E19"
+  exec err_Process
+}
+ 
+*  Read data from 21k-128b to 21k + 128b total 256b that contains half non-empty
+*  and half zeros data..
+*
+*
+
+set lower vector ((21504-128)/4)
+set upper vector ((21504/4)-1)
+exec getNumVector $lower $upper value
+set value vector ($value + $NULL128B)
+
+lseek $testFileId $SEEK_SET (21504-128)
+read $testFileId 256 junk
+if ( $junk != $value ) {
+  set errorMessage "FAILED: The read spanning of data written and the 0 region is failed. --E20"
+  exec err_Process
+}
+
+*  read spanning the end of the first chunk and the beginning of the
+*          second chunk, and finally spanning the first chunk's 0 region;
+*
+*  Read data from 64k-128b to 64k + 128b total 256b that contains all zeros.
+*
+
+lseek $testFileId $SEEK_SET (65536-128)
+read $testFileId 256 junk
+if ( $junk != $NULL256B ) {
+  set errorMessage "FAILED: The read spanning of 0 region crossing the 64k boundary. --E21"
+  exec err_Process
+}
+
+*
+!* Read start at the second chunk's 0 region and finally encountering the 
+*          second chunk's non-zero region.
+*  Read data from 80k-128b to 80k + 128b total 256b that contains half zeros
+*  and half nonempty data..
+*
+set lower vector ((81920)/4)
+set upper vector (((81920+128)/4)-1)
+exec getNumVector $lower $upper value
+set value vector ($NULL128B + $value)
+
+lseek $testFileId $SEEK_SET (81920-128)
+read $testFileId 256 junk
+if ( $junk != $value ) {
+  set errorMessage "FAILED: The read spanning of 0 region and the data written in the 80k. --E22"
+  exec err_Process
+}
+
+*
+!* Read start at second chunk's non-zero region and the second chunk's 0 region.
+*
+*  Read data from 81k-128b to 81k + 128b total 256b that contains half empty
+*  and half non-empty data..
+
+set lower vector ((82944-128)/4)
+set upper vector ((82944/4)-1)
+exec getNumVector $lower $upper value
+set value vector ($value + $NULL128B)
+
+lseek $testFileId $SEEK_SET (82944-128)
+read $testFileId 256 junk
+if ( $junk != $value ) {
+  set errorMessage "FAILED: The read spanning of second chunk's non-0 region and the second chunk's 0 region. --E23"
+  exec err_Process
+}
+  
+*
+!* Read start at second chunk's non-zero region and the second chunk's 0 region.
+*
+*  Read data from 81k-128b to 81k + 128b total 256b that contains half empty
+*  and half non-empty data..
+
+set lower vector ((147456)/4)
+set upper vector (((147456+128)/4)-1)
+exec getNumVector $lower $upper value
+set value vector ($NULL128B + $value )
+
+lseek $testFileId $SEEK_SET (147456-128)
+read $testFileId 256 junk
+if ( $junk != $value ) {
+  set errorMessage "FAILED: The read spanning of second chunk's non-0 region and the second chunk's 0 region. --E24"
+  exec err_Process
+}
+
+*
+*
+* Read data strictly past the part written in the last 20k;
+*
+*
+!* Read call passing the eof.
+*
+
+verifyStatus false
+lseek $testFileId $SEEK_END 0
+read $testFileId 2 junk
+if ( $CommandResult > 0 ) {
+  set errorMessage "FAILED: The read pass the eof. --E25"
+  exec err_Process
+}
+verifyStatus true
+
+* Leave the big file opened so that we still have the token valid.
+
+shellExec commd
+
+*
+!* GetDOnLine via rdwr.
+!* Create $numOfFilesToCreate files (each file has 1 byte and it will take one dcache entry). 
+*  Hopefully, the dcache entry for the big file has been swapped out as those
+*  file created.
+*  (See the run through many chunks before.)
+*
+chdir $testDir
+loop x 1 1 $numOfFilesToCreate
+  set fileName ($testFile + $x)
+  open $fileName ($O_CREAT|$O_RDWR) 0777 fileNameId[$x]
+  write $fileNameId[$x] "f"
+  close $fileNameId[$x]
+endloop
+chdir ..
+
+*
+!* Access the big file again here.
+*
+lseek $oneMegaBinId $SEEK_SET 0
+loop x 1 1 15
+  read $oneMegaBinId $CONST64K junk
+endloop
+
+* Flush the status cache entry alone and then open the file for reading.
+* read it to see if anything missing.
+* XXXXXX Separate test for read only files.
+
+* Hope the following operation will flush the status cache only.
+stat $oneMegaBin var
+fsync $oneMegaBinId
+close $oneMegaBinId
+
+open $oneMegaBin $O_RDWR 0 oneMegaBinId
+
+shellexec commd
+
+loop x 1 1 15
+  read $oneMegaBinId $CONST64K junk
+  lseek $oneMegaBinId $SEEK_CUR -4
+  read $oneMegaBinId 4 junk
+  set value vector ($CONST64K/4 -1)
+  if ( $junk != $value ) {
+     set errorMessage ("FAILED: The last byte in the "+ $x + "th chunk is not the one expected $oneMegaBin. --E26")
+     exec err_Process
+  }
+  read $oneMegaBinId 4 junk
+  set value vector 0
+  if ( $junk != $value ) {
+     set errorMessage ("FAILED: The first byte in the "+($x+1)+"th chunk is not the one expected $oneMegaBin. --E27")
+     exec err_Process
+  }
+  lseek $oneMegaBinId $SEEK_CUR -4
+endloop
+
+*
+* Check tha read aligned within chunk boundaries.
+*
+
+* Read last 40k, each read 255 256bs.
+
+loop x 1 1 159
+  read $oneMegaBinId 256 junk
+  if ( $junk != $NUMVEC256B ) {
+     set errorMessage "FAILED: The read is not aligned within a chunk $oneMegaBin. --E28"
+     exec err_Process
+  }
+endloop
+
+* 
+* Read last 256 bytes and compare the whole string.
+*
+loop x 0 1 63
+  set value vector $x
+  read $oneMegaBinId 4 junk
+  if ( $junk != $value ) {
+    set errorMessage "FAILED: The read system call reads wrong data from last 256 byte of the file $oneMegaBin. --E29"
+    exec err_Process
+  }
+endloop  
+
+close $oneMegaBinId
+
+close $testFileId
+
+
+
+************************************************************************
+*
+!* Cleaning up and reporting.
+*
+
+remove $testFile
+
+chdir $testDir
+loop x 1 1 $numOfFilesToCreate
+  set fileName ($testFile + $x)
+  remove $fileName
+endloop
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+*rmdir $testDir
+exec report_Proc "read.binary.file.scr" $errorCounter
+echo 
+quit

@@ -1,0 +1,1010 @@
+#!/bin/sh 
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: test10,v $
+# Revision 1.1.129.1  1996/10/17  18:16:57  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:49:29  damon]
+#
+# Revision 1.1.124.1  1994/02/04  20:39:30  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:22:07  devsrc]
+# 
+# Revision 1.1.122.1  1993/12/07  17:41:00  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  18:36:16  jaffe]
+# 
+# Revision 1.1.4.5  1993/01/11  17:38:17  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  16:55:07  htf]
+# 
+# Revision 1.1.4.4  1992/10/28  16:00:02  jaffe
+# 	Transarc delta: comer-ot4849-misc-bos-command-test-cleanup 1.3
+# 	  Selected comments:
+# 	    Miscellaneous clean-up of the bos command test suite.
+# 	    o Use admin.dummy1 instead of admin.bos
+# 	    o Remove bos lsadmin call since list now no longer admin.bos
+# 	    o Delete user and local key (versions 1 and 2) before creating new user
+# 	    o Commented out code that was supposed to fail but would not since
+# 	    the original versions of the key were never deleted.
+# 	    o Changed sense on rmadmin which should really fail (since the admin
+# 	    list is not really empty).
+# 	    More cleanup of the bos test suite
+# 	    Given the ability to only add principals to the key table with
+# 	    rgy_edit locally, part of test10 should only be executed for
+# 	    single machine testing.
+# 	    Change Makefiles to install files into the export tree.  This should
+# 	    later be changed to install into the install tree as soon as we decide
+# 	    on the correct tree layout.  In the meantime, put the files under
+# 	    export/<machine>/test/bos.
+# 	Transarc delta: rajesh-5060-test-bos-addadmin-createlist-and-rmadmin-removelist 1.1
+# 	  Selected comments:
+# 
+# 	    OT 5033/5059 adds some functionality into the bos addadmin/rmadmin commands
+# 	    for the createlist/removelist flags. This delta contains the necessary
+# 	    modification to test this new functionality.
+# 	    The delta is only a checkpoint. Beth's delta for OT 5033/5059 adding
+# 	    this functionality is expected to be ready soon. This test delta
+# 	    should not be exported until the it has been tested against a build with
+# 	    Beth's delta.
+# 	    Add tests to test bos addadmin with the createlist flag but no
+# 	    principals/groups and to test bos rmadmin with the removelist flag but
+# 	    no principals/groups.
+# 	Transarc delta: rajesh-ot5113-fix-bos-test0-key-commands-usage 1.4
+# 	  Selected comments:
+# 	    Fix bos tests to use addkey and rmkey correctly and also to
+# 	    use a principal other than the default principal (which
+# 	    is the dfs-server principal on the server machine).
+# 	    This is only a checkpoint.
+# 	    See above.
+# 	    The main changes introduced by this delta is now tested.
+# 	    However, since this delta was opened in the same sandbox as
+# 	    the delta for OT 5060, and this delta does affect some of
+# 	    portion changed by the OT5060 delta, this delta should
+# 	    not be exported until OT50560 delta is exported.
+# 	    See above.
+# 	    Adding the user to each of the key commands was not enough. The -principal
+# 	    switch needs to be supplied also. Not specifying the -principal switch
+# 	    caused problems for bos rmkey which treated the username as another
+# 	    key version number (for the default principal dfs-server) to be deleted.
+# 	    Mike C. pointed out that the bos addkey command does not
+# 	    work for a principal that has no key yet in the security
+# 	    database. So instead of using dce_AddUserPrincipal, used
+# 	    an rgy_edit script to create the DCE principal and keys
+# 	    for the principal.
+# 	[1992/10/27  16:47:02  jaffe]
+# 
+# Revision 1.1.4.3  1992/09/25  17:01:06  jaffe
+# 	Transarc delta: rajesh-ot5142-convert-bos-tests-from-csh-to-sh 1.3
+# 	  Selected comments:
+# 	    Convert bos tests 4,5,6,8,9 and 10 from csh to sh.
+# 	    Convert test from csh to sh.
+# 	    Addition of a utility function to determine if a dfs-server principal
+# 	    exists for a machne. And more of csh-to-sh conversions.
+# 	    More of csh-to-sh conversions.
+# 	    More to csh-to-sh conversion. This version has been tested.
+# 	    See above.
+# 	[1992/09/23  20:41:30  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/28  19:04:08  jaffe
+# 	Transarc delta: rajesh-ot4450-bos-tests-create-dce-user-principals 1.1
+# 	  Selected comments:
+# 	    Create the DCE user principals needed for the tests.
+# 	Transarc delta: rajesh-ot4941-test-bos-addadmin-removelist 1.1
+# 	  Selected comments:
+# 	    Fix bos test 10 to test the removelist option on bos rmadmin command.
+# 	    Bos test10 incorrectly tries to test whether the removelist operation
+# 	    works correctly in the bos rmadmin by trying to remove a non-empty
+# 	    admin.bos list. Added code that will create a dummy admin list with
+# 	    DCE principals and then remove the principals and the list.
+# 	[1992/08/28  12:04:35  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/21  12:34:31  jaffe
+# 	Transarc delta: fred-merge-tests 1.1
+# 	  Files modified:
+# 	    Makefile
+# 	    bos: Makefile, READ_ME, init_dce, kills, runc, runtests
+# 	    bos: setup, shows
+# 	    bos/tests: Makefile, test0, test1, test10, test11, test12
+# 	    bos/tests: test2, test3, test4, test5, test6, test7, test8
+# 	    bos/tests: test9; bos/tests/procs: Makefile
+# 	    cm: Makefile, runtests, test0, test1, test2, test3, test4
+# 	    cm: test5, test6; config: chk_errnr, echeck, environment
+# 	    fs: Makefile, READ_ME, err1, err2, longalpha, longfox
+# 	    fs: longmix, prog1.c, rtest1, shortalpha, shortfox, shortmix
+# 	    fs: test1, test10, test2, test2b, test2s, test3, test4
+# 	    fs: test5, test6, test7, test8, test9
+# 	    fts: Makefile, check, etest.sed, etest1, etest2, etest3
+# 	    fts: etest4, etest5, etest6, rtest1, rtest2, runrtests
+# 	    fts: runtests, test1, test10, test11, test12, test13, test2
+# 	    fts: test3, test4, test5, test6, test7, test8, test9
+# 	    low: Makefile, ctrl.asc, prog11.c, prog12.c, prog14.c
+# 	    low: prog3a.c, prog8.c, prog9.c, rtest1, rtest2, styl.asc
+# 	    low: test1, test10, test11, test12, test13, test14, test2
+# 	    low: test3, test4, test5, test6, test7, test8, test9
+# 	    naming: Makefile, bostest, fstest, ftstest
+# 	    scout: Makefile, test1, test2; setup: Makefile, environment
+# 	    ubik: Makefile, READ_ME, init, kills, runc, setup, shows
+# 	    ubik: udbg; util: Makefile, sys.c
+# 	  Selected comments:
+# 	    Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	    the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	    should be looking at the same test code.
+# 	    Changes to facilitate merge of local DFS test code with the OSF's.
+# 
+# 	$TALog: test10,v $
+# 	Revision 4.26  1994/11/01  22:21:10  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r4.25 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	Revision 4.25  1993/11/15  22:54:26  andi
+# 	[merge of changes from 4.20 to 4.24 into 4.23]
+# 
+# Revision 4.24  1993/11/11  21:19:05  comer
+# 	A few more places where $(pwd) was being used.  Changed to `pwd`.
+# 	[from r4.20 by delta comer-db4664-fix-minor-bos-test-problems, r1.2]
+# 
+# Revision 4.23  1993/08/24  15:17:46  bwl
+# 	More changes for HP port.  Milestone:  got the low tests built;
+# 	can run cthon on DFS.  (But not on glued UFS.)
+# 
+# 	Changes for HP port.
+# 	[from r4.20 by delta bwl-o-db3961-port-103-to-HP, r1.11]
+# 
+# Revision 4.20  1993/03/31  18:55:09  comer
+# 	Due to the name->uuid cache, the bosserver may remember translations
+# 	beyond the lifetime of the principal.  If the principal is recreated,
+# 	the tests may fail.  If test10 or test0 is run multiple times, this
+# 	problem rears its ugly head.
+# 
+# 	Make the test principal name unique across runs.
+# 	[from r4.19 by delta comer-ot4511-bulletproof-bos-test10, r1.1]
+# 
+# Revision 4.19  1993/02/26  22:08:34  comer
+# 	Remove created principals after the test completes.
+# 
+# 	Remove created principals.
+# 	[from r4.18 by delta comer-ot7190-bos-test10-cleanup, r1.1]
+# 
+# Revision 4.18  1993/01/14  17:32:56  jaffe
+# 	revdrop of latest OSF copyright changes to these files
+# 	[from r4.17 by delta osf-revdrop-01-12-92, r1.1]
+# 
+# 	[1992/05/20  17:15:16  jaffe]
+# 
+# $EndLog$
+#
+
+###############################################################################
+#    Copyright (C) 1991, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This test is applicable to DFS running bosserver.
+# The script tests the bos admin subcommands.
+
+###############################################################################
+
+# Usage:                test10
+
+# Typically run via:    test10 >& test10.out
+# or via the bos/runtests script.
+
+###############################################################################
+
+# Test environment:
+# This test requires DFS server $SERVER_1 to be running bosserver. 
+# The tests create $user1 - $user6 DCE principals.
+
+# Privilege required: 
+# You must be authenticated to DCE as
+# cell_admin, and you must be logged into Unix as local root.
+
+# Highest error number is: 54.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+p1="$p:"
+rc=0
+ty=bos
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${VERB_ARG=""}
+: ${SERVER_1=$hn}
+: ${TESTTOP=`pwd`}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name=/.../$CELL_NAME}
+: ${dns_server_prefix=/.:/hosts/}
+
+PATH=":"$bin_dir":"$PATH
+sav_arg="-server $dns_server_prefix$SERVER_1 $AUTH_ARG $VERB_ARG"
+bos_testhome=$TESTTOP/$ty/tests/procs
+dummyAdminListArg="-adminlist admin.dummy"
+al_arg="-adminlist admin.dummy1"
+dummyAdminListArg2="-adminlist admin.dummy2"
+
+if [ "$TESTTOP" = "" ] 
+then
+    TESTTOP=`pwd`
+    UTIL_DIR="../util"
+else
+   echo TESTTOP is $TESTTOP
+   UTIL_DIR="$TESTTOP/util"
+fi
+
+echo 'UTIL_DIR is ' $UTIL_DIR
+
+#
+# Create DCE user principals $user1 - $user6.
+#
+
+: ${user1=usera$$}
+: ${user2=userb$$}
+: ${user3=userc$$}
+: ${user4=userd$$}
+: ${user5=usere$$}
+: ${user6=userf$$}
+
+$UTIL_DIR/dce_AddUserPrincipal -user $user1 
+$UTIL_DIR/dce_AddUserPrincipal -user $user2 
+$UTIL_DIR/dce_AddUserPrincipal -user $user3 
+$UTIL_DIR/dce_AddUserPrincipal -user $user4 
+$UTIL_DIR/dce_AddUserPrincipal -user $user5 
+$UTIL_DIR/dce_AddUserPrincipal -user $user6 
+
+: ${keyuser=userz$$}
+: ${group=system}
+: ${org=none}
+
+###############################################################################
+
+echo ""
+echo "RUNNING bos COMMANDS on SERVER $SERVER_1 in CELL $CELL_NAME."
+echo "========================================================================"
+date
+echo ""
+
+if [ "$CELL_NAME" = "" ] 
+then
+   echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting."
+   exit 2
+   fi
+
+###############################################################################
+
+echo ""; echo "Running bos admin subcommands..."
+echo bos addadmin $sav_arg -createlist $al_arg
+bos addadmin $sav_arg -createlist $al_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E4)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos lsadmin $sav_arg $al_arg
+bos lsadmin $sav_arg $al_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E5)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos addadmin -principal $user1 $sav_arg $al_arg
+bos addadmin -principal $user1 $sav_arg $al_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E6)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos addadmin $al_arg -principal $user2 $sav_arg 
+bos addadmin $al_arg -principal $user2 $sav_arg 
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E7)"
+  rc=`expr $rc + 1`
+fi
+
+echo ""; echo "This next command should fail, since $user2 is already there:"
+
+echo bos addadmin $sav_arg -principal $user2 $al_arg
+bos addadmin $sav_arg -principal $user2 $al_arg
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E8)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos addadmin -principal $user3 $sav_arg $al_arg
+bos addadmin -principal $user3 $sav_arg $al_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E9)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos addadmin -principal $user4 $sav_arg $al_arg
+bos addadmin -principal $user4 $sav_arg $al_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E10)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos addadmin $al_arg -principal $user5 $sav_arg 
+bos addadmin $al_arg -principal $user5 $sav_arg 
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E11)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos addadmin $sav_arg -principal $user6 $al_arg
+bos addadmin $sav_arg -principal $user6 $al_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E12)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos lsadmin $sav_arg $al_arg 
+bos lsadmin $sav_arg $al_arg 
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E13)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos rmadmin -principal $user1 $al_arg $sav_arg
+bos rmadmin -principal $user1 $al_arg $sav_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E14)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos rmadmin -principal $user2 $sav_arg $al_arg
+bos rmadmin -principal $user2 $sav_arg $al_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E15)"
+  rc=`expr $rc + 1`
+fi
+
+echo ""; echo "This next command should fail, since $user2 is not there:"
+
+echo bos rmadmin $sav_arg -principal $user2 $al_arg
+bos rmadmin $sav_arg -principal $user2 $al_arg
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E16)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos rmadmin $sav_arg -principal $user3 $al_arg
+bos rmadmin $sav_arg -principal $user3 $al_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E17)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos rmadmin $sav_arg -principal $user4 $al_arg
+bos rmadmin $sav_arg -principal $user4 $al_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E18)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos rmadmin $sav_arg -principal $user5 $al_arg
+bos rmadmin $sav_arg -principal $user5 $al_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E19)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos rmadmin $sav_arg -principal $user6 $al_arg
+bos rmadmin $sav_arg -principal $user6 $al_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E20)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos lsadmin $sav_arg $al_arg
+bos lsadmin $sav_arg $al_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E21)"
+  rc=`expr $rc + 1`
+fi
+
+###############################################################################
+
+echo ""; echo "The following commands should fail:"
+
+echo bos addadmin $al_arg $sav_arg 
+bos addadmin $al_arg $sav_arg 
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E22)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos addadmin -principal $user2 -server fubar_server $AUTH_ARG $al_arg
+bos addadmin -principal $user2 -server fubar_server $AUTH_ARG $al_arg
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E23)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos lsadmin -server fubar_server $AUTH_ARG $al_arg
+bos lsadmin -server fubar_server $AUTH_ARG $al_arg
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E24)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos rmadmin $al_arg $sav_arg 
+bos rmadmin $al_arg $sav_arg 
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E25)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos rmadmin $al_arg $sav_arg -principal foo_user
+bos rmadmin $al_arg $sav_arg -principal foo_user
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E26)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos rmadmin -principal fubar_user $al_arg
+bos rmadmin -principal fubar_user $al_arg
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E27)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos addadmin -principal $user3 -server fubar_server $AUTH_ARG $al_arg
+bos addadmin -principal $user3 -server fubar_server $AUTH_ARG $al_arg
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E28)"
+  rc=`expr $rc + 1`
+fi
+
+###############################################################################
+
+echo ""; echo "This final listing should not fail:"
+
+echo bos lsadmin $sav_arg $al_arg
+bos lsadmin $sav_arg $al_arg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E29)"
+  rc=`expr $rc + 1`
+fi
+
+###############################################################################
+
+# run these commands only on a single system
+if [ "${SERVER_1}" = "$hn" ] 
+then
+	echo ""; echo "Testing the bos keyfile subcommands..."
+	
+	rgy_edit <<-EOF
+	domain p
+	delete $keyuser
+	ktdel -p $keyuser -v 1
+	ktdel -p $keyuser -v 2
+	add $keyuser
+	domain a
+	add $keyuser -g $group -o $org -pw $keyuser -mp -dce-
+	ktadd -p $keyuser -pw $keyuser
+	ktadd -p $keyuser -a -r
+	quit
+	EOF
+	
+	echo bos lskeys $sav_arg
+	bos lskeys $sav_arg
+	if [ $? -ne 0 ] 
+	then
+	  echo "- failed ($p1 E30)"
+	  rc=`expr $rc + 1`
+	fi
+	
+	echo bos addkey -kvno 101 -password password_1 -principal $keyuser $sav_arg
+	bos addkey -kvno 101 -password password_1 -principal $keyuser $sav_arg
+	if [ $? -ne 0 ] 
+	then
+	  echo "- failed ($p1 E31)"
+	  rc=`expr $rc + 1`
+	fi
+	
+	echo bos addkey $sav_arg -kvno 102 -password password_2 -principal $keyuser
+	bos addkey $sav_arg -kvno 102 -password password_2 -principal $keyuser
+	if [ $? -ne 0 ] 
+	then
+	  echo "- failed ($p1 E32)"
+	  rc=`expr $rc + 1`
+	fi
+	
+	echo bos addkey -kvno 103 $sav_arg -password password_3 -principal $keyuser
+	bos addkey -kvno 103 $sav_arg -password password_3 -principal $keyuser
+	if [ $? -ne 0 ] 
+	then
+	  echo "- failed ($p1 E33)"
+	  rc=`expr $rc + 1`
+	fi
+	
+	echo bos addkey -password password_4 -kvno 104 $sav_arg -principal $keyuser
+	bos addkey -password password_4 -kvno 104 $sav_arg -principal $keyuser 
+	if [ $? -ne 0 ] 
+	then
+	  echo "- failed ($p1 E34)"
+	  rc=`expr $rc + 1`
+	fi
+	
+	echo bos addkey $sav_arg -password password_5 -kvno 105 -principal $keyuser
+	bos addkey $sav_arg -password password_5 -kvno 105 -principal $keyuser
+	if [ $? -ne 0 ] 
+	then
+	  echo "- failed ($p1 E35)"
+	  rc=`expr $rc + 1`
+	fi
+	
+	echo bos lskeys $sav_arg -principal $keyuser
+	bos lskeys $sav_arg -principal $keyuser
+	if [ $? -ne 0 ] 
+	then
+	  echo "- failed ($p1 E36)"
+	  rc=`expr $rc + 1`
+	fi
+	
+	echo bos rmkey -kvno 101 $sav_arg -principal $keyuser 
+	bos rmkey -kvno 101 $sav_arg -principal $keyuser
+	if [ $? -ne 0 ] 
+	then
+	  echo "- failed ($p1 E37)"
+	  rc=`expr $rc + 1`
+	fi
+	
+	echo bos rmkey -kvno 102 $sav_arg  -principal $keyuser
+	bos rmkey -kvno 102 $sav_arg -principal $keyuser
+	if [ $? -ne 0 ] 
+	then
+	  echo "- failed ($p1 E38)"
+	  rc=`expr $rc + 1`
+	fi
+	
+	echo bos lskeys $sav_arg -principal $keyuser
+	bos lskeys $sav_arg -principal $keyuser
+	if [ $? -ne 0 ] 
+	then
+	  echo "- failed ($p1 E39)"
+	  rc=`expr $rc + 1`
+	fi
+	
+	echo bos rmkey -kvno 103 $sav_arg -principal $keyuser
+	bos rmkey -kvno 103 $sav_arg -principal $keyuser
+	if [ $? -ne 0 ] 
+	then
+	  echo "- failed ($p1 E40)"
+	  rc=`expr $rc + 1`
+	fi
+	
+	echo bos rmkey -kvno 104 $sav_arg -principal $keyuser
+	bos rmkey -kvno 104 $sav_arg -principal $keyuser
+	if [ $? -ne 0 ] 
+	then
+	  echo "- failed ($p1 E41)"
+	  rc=`expr $rc + 1`
+	fi
+	
+	echo bos rmkey -kvno 105 $sav_arg -principal $keyuser
+	bos rmkey -kvno 105 $sav_arg -principal $keyuser
+	if [ $? -ne 0 ] 
+	then
+	  echo "- failed ($p1 E42)"
+	  rc=`expr $rc + 1`
+	fi
+	
+	#echo bos lskeys $sav_arg -principal $keyuser
+	#bos lskeys $sav_arg -principal $keyuser
+	#if [ $? -eq 0 ] 
+	#then
+	#  echo "- worked ($p1 E43)"
+	#  rc=`expr $rc + 1`
+	#fi
+	#
+	# delete all keys first
+	versions=`echo ktlist | rgy_edit | grep /$keyuser | awk '{print $2}'`
+	for vers in $versions
+	  do
+		echo "ktdel -p $keyuser -v $vers" | rgy_edit
+	done
+	#
+	# Delete DCE user principal user
+	#
+	rgy_edit <<EOF
+domain p
+delete $keyuser
+quit
+EOF
+
+fi
+################################################################################
+echo ""; echo "The following commands should fail:"
+
+echo bos addkey
+bos addkey
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E44)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos addkey $AUTH_ARG
+bos addkey $AUTH_ARG
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E45)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos addkey $sav_arg
+bos addkey $sav_arg
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E46)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos addkey -key key_10 $AUTH_ARG
+bos addkey -key key_10 $AUTH_ARG
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E47)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos lskeys -key key_11 -server fubar_server $AUTH_ARG
+bos lskeys -key key_11 -server fubar_server $AUTH_ARG
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E48)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos lskeys -server fubar_server $AUTH_ARG
+bos lskeys -server fubar_server $AUTH_ARG
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E49)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos rmkey
+bos rmkey
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E50)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos rmkey $AUTH_ARG
+bos rmkey $AUTH_ARG
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E51)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos rmkey $sav_arg
+bos rmkey $sav_arg
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E52)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos rmkey -kvno fubar_kvno $sav_arg
+bos rmkey -kvno fubar_kvno $sav_arg
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E53)"
+  rc=`expr $rc + 1`
+fi
+
+###############################################################################
+
+echo " "; echo "This last lskeys subcommand should not fail:"; echo " "
+
+echo bos lskeys $sav_arg 
+bos lskeys $sav_arg 
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E54)"
+  rc=`expr $rc + 1`
+fi
+
+###############################################################################
+
+#
+# Testing addadmin with -createlist and a principal with a dummy admin list
+#
+
+echo bos addadmin $sav_arg $dummyAdminListArg -principal $user1 -createlist
+bos addadmin $sav_arg $dummyAdminListArg -principal $user1 -createlist
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E60)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos lsadmin $sav_arg $dummyAdminListArg
+bos lsadmin $sav_arg $dummyAdminListArg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E61)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos addadmin $sav_arg $dummyAdminListArg -principal $user2
+bos addadmin $sav_arg $dummyAdminListArg -principal $user2
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E62)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos lsadmin $sav_arg $dummyAdminListArg
+bos lsadmin $sav_arg $dummyAdminListArg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E63)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos addadmin $sav_arg $dummyAdminListArg -principal $user3
+bos addadmin $sav_arg $dummyAdminListArg -principal $user3
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E64)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos lsadmin $sav_arg $dummyAdminListArg
+bos lsadmin $sav_arg $dummyAdminListArg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E65)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos addadmin $sav_arg $dummyAdminListArg -principal $user4
+bos addadmin $sav_arg $dummyAdminListArg -principal $user4
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E66)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos lsadmin $sav_arg $dummyAdminListArg
+bos lsadmin $sav_arg $dummyAdminListArg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E67)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos rmadmin $sav_arg -removelist $dummyAdminListArg
+bos rmadmin $sav_arg -removelist $dummyAdminListArg
+if [ $? -eq 0 ] 
+then
+  echo "- passed ($p1 E68)"
+  rc=`expr $rc + 1`
+fi
+
+#
+# Since the dummy admin list had entries, it should not be gone
+# To test this a bos lsadmin does the trick
+#
+
+echo bos lsadmin $sav_arg $dummyAdminListArg
+bos lsadmin $sav_arg $dummyAdminListArg
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E69)"
+  rc=`expr $rc + 1`
+fi
+
+#
+# Remove all entries in the dummy admin list and the admin list itself.
+# i.e. test rmadmin with removelist and principals
+
+echo bos rmadmin $sav_arg $dummyAdminListArg -principal $user1 $user2 $user3 $user4 -removelist
+bos rmadmin $sav_arg $dummyAdminListArg -principal $user1 $user2 $user3 $user4 -removelist
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E70)"
+  rc=`expr $rc + 1`
+fi
+
+# 
+# ASSERT: The dummy admin list should no longer exist.
+#
+
+echo bos lsadmin $sav_arg $dummyAdminListArg
+bos lsadmin $sav_arg $dummyAdminListArg
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E71)"
+  rc=`expr $rc + 1`
+fi
+
+#
+# Test the changes introduced by OT 5059 
+#      bos addadmin with only createlist and
+#      bos rmadmin with only removelist on an empty adminlist
+#
+
+echo ""; echo "Running bos admin subcommands..."
+
+echo bos lsadmin $sav_arg $dummyAdminListArg2
+bos lsadmin $sav_arg $dummyAdminListArg2
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E90)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos addadmin $sav_arg -createlist $dummyAdminListArg2
+bos addadmin $sav_arg -createlist $dummyAdminListArg2
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E91)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos lsadmin $sav_arg $dummyAdminListArg2
+bos lsadmin $sav_arg $dummyAdminListArg2
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E92)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos addadmin -principal $user1 $sav_arg $dummyAdminListArg2
+bos addadmin -principal $user1 $sav_arg $dummyAdminListArg2
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E93)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos lsadmin $sav_arg $dummyAdminListArg2
+bos lsadmin $sav_arg $dummyAdminListArg2
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E94)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos rmadmin -principal $user1 $sav_arg $dummyAdminListArg2
+bos rmadmin -principal $user1 $sav_arg $dummyAdminListArg2
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E95)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos lsadmin $sav_arg $dummyAdminListArg2
+bos lsadmin $sav_arg $dummyAdminListArg2
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E96)"
+  rc=`expr $rc + 1`
+fi
+
+#
+# ASSERT: The $dummyAdminListArg2 adminlist should be empty.
+#
+
+echo bos rmadmin $sav_arg $dummyAdminListArg2 -removelist
+bos rmadmin $sav_arg $dummyAdminListArg2 -removelist
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E97)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos lsadmin $sav_arg $dummyAdminListArg2
+bos lsadmin $sav_arg $dummyAdminListArg2
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E98)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos addadmin $sav_arg -createlist $dummyAdminListArg2
+bos addadmin $sav_arg -createlist $dummyAdminListArg2
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E100)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos lsadmin $sav_arg $dummyAdminListArg2
+bos lsadmin $sav_arg $dummyAdminListArg2
+if [ $? -ne 0 ] 
+then
+  echo "- worked ($p1 E101)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos rmadmin $sav_arg $dummyAdminListArg2 -removelist
+bos rmadmin $sav_arg $dummyAdminListArg2 -removelist
+if [ $? -ne 0 ] 
+then
+  echo "- failed ($p1 E102)"
+  rc=`expr $rc + 1`
+fi
+
+echo bos lsadmin $sav_arg $dummyAdminListArg2
+bos lsadmin $sav_arg $dummyAdminListArg2
+if [ $? -eq 0 ] 
+then
+  echo "- worked ($p1 E103)"
+  rc=`expr $rc + 1`
+fi
+
+###############################################################################
+bos rmadmin $sav_arg $al_arg -removelist
+###############################################################################
+
+sync 
+sync 
+sleep 2
+
+# clean up created principals
+rgy_edit <<EOF
+do p
+delete $user1
+delete $user2
+delete $user3
+delete $user4
+delete $user5
+delete $user6
+EOF
+
+echo ""; echo "Done at `date`."; echo ""
+if [  $rc -eq 0 ] 
+then
+   echo "$ty/$p PASSED"
+   else
+   echo "$ty/$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################

@@ -1,0 +1,777 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for 
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: user.dcp,v $
+# Revision 1.1.6.2  1996/08/09  11:52:43  arvind
+# 	Merge pk changes.
+# 	[1996/07/01  14:54 UTC  truitt  /main/DCE_1.2.2/truitt_dcecp_pk/1]
+#
+# 	Fix usertouser placement in argument table.
+# 	[1996/05/24  23:22 UTC  sommerfeld  /main/DCE_1.2.2/1]
+#
+# Revision 1.1.6.1  1996/06/04  21:43:16  arvind
+# 	Merge u2u changes from mb_u2u
+# 	[1996/05/06  21:58 UTC  burati  /main/DCE_1.2/2]
+# 
+# 	merge user2user work
+# 	[1996/05/02  18:49 UTC  burati  /main/DCE_1.2/mb_u2u/1]
+# 
+# 	u2u work off Mothra, before 1.2 branch is available
+# 	[1996/04/29  21:49 UTC  burati  /main/HPDCE02/mb_mothra8/1]
+# 
+# Revision 1.1.4.2  1996/03/09  23:06:40  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:25:30  marty]
+# 
+# Revision 1.1.4.1  1995/12/08  21:24:35  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/6  1995/10/17  15:49 UTC  kevins
+# 	Merge chfts15887 into HPDCE02
+# 
+# 	HP revision /main/HPDCE02/kevins_chfts15887/1  1995/10/17  15:40 UTC  kevins
+# 	Need to modify the method for setting script debuging variable.
+# 
+# 	HP revision /main/HPDCE02/5  1995/10/13  12:30 UTC  kevins
+# 	Merge  CHFts16625 to HPDCE02
+# 
+# 	HP revision /main/HPDCE02/kevins_chfts16462/1  1995/10/12  20:50 UTC  kevins
+# 	The 'user show ' command apparently does not display multiple users. CHFts16625
+# 
+# 	HP revision /main/HPDCE02/4  1995/10/10  14:52 UTC  truitt
+# 	Merge message changes.
+# 
+# 	HP revision /main/HPDCE02/truitt_dcecp_chfts49/1  1995/10/06  13:49 UTC  truitt
+# 	CHFts16537: Make sure all help messages fit in the eighty character limit.
+# 
+# 	HP revision /main/HPDCE02/3  1995/10/09  13:01 UTC  kevins
+# 	Merge CHFts16572 into Mainline
+# 
+# 	HP revision /main/HPDCE02/kevins_chfts16572/1  1995/10/06  20:09 UTC  kevins
+# 	ERA handling on user create is not working. CHFts16572
+# 
+# 	HP revision /main/HPDCE02/2  1995/03/31  18:46 UTC  truitt
+# 	Merge message change.
+# 
+# 	HP revision /main/HPDCE02/truitt_mothra_chfts24/1  1995/03/31  18:45 UTC  truitt
+# 	CHFts14890: Change the operations message.
+# 
+# 	HP revision /main/HPDCE02/1  1994/11/15  20:14 UTC  truitt
+# 	Initial HPDCE02 branch.
+# 
+# 	HP revision /main/truitt_dcecp_01/1  1994/11/15  20:13 UTC  truitt
+# 	Fix help and error messages.
+# 	[1995/12/08  17:58:01  root]
+# 
+# Revision 1.1.2.6  1994/09/30  23:06:35  kevins
+# 	OT 12454 removed unnecessary debug statement
+# 	[1994/09/30  22:50:44  kevins]
+# 
+# Revision 1.1.2.5  1994/09/29  21:23:34  kevins
+# 	OT 12337 Wrote verbose help messages
+# 	[1994/09/29  21:23:09  kevins]
+# 
+# Revision 1.1.2.4  1994/09/22  18:34:03  kevins
+# 	OT 12296 modified task script debug entries
+# 	[1994/09/22  18:26:12  kevins]
+# 
+# Revision 1.1.2.3  1994/08/03  21:00:41  kevins
+# 	OT 11478 Reworked help sub-processing
+# 	[1994/08/03  20:42:50  kevins]
+# 
+# Revision 1.1.2.2  1994/06/30  17:51:02  kevins
+# 	OT 11143 Added better error checking/processing
+# 	[1994/06/30  17:50:51  kevins]
+# 
+# Revision 1.1.2.1  1994/06/26  10:39:08  kevins
+# 	OT 9691 Initial User Task Submission
+# 	[1994/06/24  18:29:43  kevins]
+# 
+# $EndLog$
+#
+
+if { [ info globals USER_DEBUG ] == "" } {
+    set USER_DEBUG 0
+}
+
+# proc user - This procedure is the front end for the user task 
+# scripts. All argument checking for the provided switches is done 
+# in the individual functions. 
+#
+
+proc user { args } {
+  set arg_table {
+    {create command function_call _dcp_create_user 
+       "Creates a DCE user." }
+    {delete command function_call _dcp_delete_user 
+       "Deletes a DCE user."}
+    {show command function_call _dcp_show_user 
+       "Shows the attributes of a DCE user."}
+    {help help help_list        
+       "Prints a summary of command-line options."}
+    {operations operations operation_list 
+       "Returns a list of the valid operations for this command."}}
+
+  set verbose_prose \
+"This object allows the manipulation of a DCE user.  A user is represented 
+as a principal and account with membership in a group and organization as 
+well as having a directory in the CDS namespace.  A user may be created, 
+deleted or attribute information returned.  The argument is a list of either 
+relative or fully qualified principal names.  All fixed attributes of the 
+principal and account object may be specified when creating a user.  The -force
+option to the create verb allows the group or organization for that user to 
+be created if necessary.  The user is provided a directory in the CDS 
+namespace, with the appropriate ACLs.  Access to create a user requires 
+the correct ACLs on principal, group and organization directories within 
+the registry and the clearinghouse and users directory in the CDS namespace."
+
+  _dcp_user_debug $args
+  
+  set local_args $args
+
+  parseargs $arg_table local_args -found_one
+  
+  if { [info local help_prose ] > 0 } { return $help_prose }
+
+
+  if { [info local function_call ] > 0 } {
+    return [$function_call local_args]
+  } else {
+    error "\"user\" object requires a verb to form a command."
+  }
+
+}
+#
+#_dcp_delete_user - This procedure deletes a DCE user. 
+#
+
+proc _dcp_delete_user {local_args} {
+
+    upvar 1 local_args cargs 
+    set local_args $cargs
+
+    _dcp_user_debug "local_args = $local_args" 
+    parseargs "" local_args -no_leftovers
+    if { [info local help_prose ] > 0 } { return }
+
+    if { [llength $local_args] > 1 } {
+      error "Unrecognized argument [lindex $local_args 1]."  
+    } elseif { [llength $local_args] == 0 } { error "No user name." 
+    } else { set account_name $local_args }
+
+    set account_name [lindex $account_name 0]
+
+    foreach element $account_name {
+      set _dcp_cell_name [name parse $element]
+      if {[llength $_dcp_cell_name] < 2} {
+	error "Unable to parse \"$element\"."
+      }
+
+      set user_name [lindex $_dcp_cell_name 1]
+      set user_dir_path [format "%s/users" [lindex $_dcp_cell_name 0]]
+      set user_path [format "%s/%s" $user_dir_path $user_name ]
+
+      set list_of_principals [principal catalog -simplename]
+      if { [lsearch $list_of_principals $user_name] == -1 } {
+        error "User \"$element\" does not exist."
+      } else {
+        principal delete $element
+        set list_of_dirs [directory list $user_dir_path]
+        if { [lsearch $list_of_dirs $user_path] == -1 } {
+          error "User directory \"$user_path\" does not exist."
+        } else {
+	  directory delete $user_path -tree
+        }
+      }
+   
+    }
+}
+
+#
+#_dcp_show_user - This procedure shows the principal and account 
+#     attribute lists for a specified user.
+#
+
+proc _dcp_show_user {local_args} {
+
+
+    upvar 1 local_args cargs 
+    set local_args $cargs
+  
+    parseargs "" local_args -no_leftovers
+
+    if { [info local help_prose ] > 0 } { return }
+
+    if { [llength $local_args] > 1 } {
+      error "Unrecognized argument [lindex $local_args 1]."  
+    } elseif { [llength $local_args] == 0 } { error "No user name." 
+    } else { set account_name $local_args }
+
+    _dcp_user_debug "Show user $account_name"
+
+    # I need to take the first element of the account_name  in order to 
+    # eliminate list nesting. 
+
+    set account_name [lindex $account_name 0]
+    set _dcp_principals [principal catalog -simplename]
+
+    set _dcp_user_attributes ""    
+    # Show each account that has been requested. 
+
+    foreach element $account_name {
+      if { [lsearch $_dcp_principals $element] == -1 } {
+	error "User \"$element\" does not exist."
+      } else {
+	set _dcp_user_attributes [format "%s\n%s" \
+				  $_dcp_user_attributes \
+                                  [principal show $element]]
+      }
+
+      set _dcp_accounts [account catalog -simplename]
+      if { [lsearch $_dcp_accounts $element] == -1 } {
+	error "User \"$element\" does not exist."
+      } else {
+	set _dcp_user_attributes [format "%s\n%s" \
+				  $_dcp_user_attributes \
+				  [account show $element -all]]
+      }
+    }
+    return $_dcp_user_attributes
+
+}
+#
+# _dcp_cleanup_user_create This function cleans up after a failure in one of the
+#                user create functions. 
+#
+
+proc _dcp_cleanup_user_create {account_name args} {
+     
+     _dcp_user_debug " $account_name $args"
+     if { [lsearch $args -principal] != -1 } {
+        _dcp_user_debug "Delete principal $account_name"
+        principal delete $account_name 
+     }
+     if { [lsearch $args -group] != -1 } { 
+        upvar 1 group clean_group
+        _dcp_user_debug "Delete group $clean_group"
+        group delete $clean_group
+     }
+     if { [lsearch $args -org] != -1 } {
+        upvar 1 organization clean_org
+        _dcp_user_debug "Delete organization $clean_org"
+        organization delete $clean_org
+     }
+
+}
+
+#
+# _dcp_add_namespace_entry - add an entry into the CDS namespace for the user.
+#                      If the name is multi level generate a complete set of 
+#                      directorys.
+# 
+proc _dcp_add_namespace_entry {account_name} {
+
+    set _dcp_cell_name [name parse $account_name]
+    if {[llength $_dcp_cell_name] < 2} {
+      error "Unable to parse \"$account_name\"."
+    }
+    
+    set new_user_name [lindex $_dcp_cell_name 1]
+    set user_dir_path [format "%s/users" [lindex $_dcp_cell_name 0]]
+    set user_path [format "%s/%s" $user_dir_path $new_user_name ]
+    set cell_directory_list [directory list [lindex $_dcp_cell_name 0] \
+                            -directories]
+
+    if { [lsearch $cell_directory_list $user_dir_path ] == -1} {
+       directory create $user_dir_path 
+    }
+    set user_directory_list [directory list $user_dir_path -directories]
+    if { [lsearch $user_directory_list $user_path ] != -1 } {
+       error "CDS Name \"$user_path\" already exists."
+    } else {
+       foreach element [split $new_user_name /] {
+        set user_dir_path [format "%s/%s" $user_dir_path $element]
+        if { [lsearch $user_directory_list $user_dir_path] == -1 } {
+           directory create $user_dir_path
+        }
+       }
+       acl modify $user_dir_path -add user:$new_user_name:rwtci
+    }
+    
+}
+#
+# proc _dcp_add_account_entry - add an account into the 
+# registry.
+#
+
+proc _dcp_add_account_entry {account_name account_args} {
+
+    set list_of_accounts [account catalog -simplename]
+    if { [lsearch $list_of_accounts $account_name] == -1} {
+        account create $account_name -attribute $account_args
+    } else {
+        error "User \"$account_name\" account already exists."
+    }
+}
+
+#
+# proc _dcp_add_group_entry - Add a principal name to a group.
+#
+
+proc _dcp_add_group_entry {group account_name} {
+
+    set group_name [lindex [name parse $group] 1]
+    set list_of_groups [group catalog -simplename]
+    if {[lsearch $list_of_groups $group_name] == -1} {
+       error "Group \"$group\" does not exist."
+    }
+
+    set list_of_group_entries [group list $group -simplename]
+    if { [lsearch $list_of_group_entries $account_name] == -1} {
+         group add $group -member $account_name
+    } else {
+         error "Group \"$group\" already has an entry for \"$account_name\"."
+    }
+}
+
+#
+# proc _dcp_add_org_entry - Add a principal name to an organization.
+#
+proc _dcp_add_org_entry {organization account_name} {
+
+    set org_name [lindex [name parse $organization] 1]
+    set list_of_organ [organization catalog -simplename]
+    if {[lsearch $list_of_organ $org_name] == -1} {
+       error "Organization \"$organization\" does not exist."
+    }
+
+    set list_of_org_entries [organization list $organization -simplename]
+    if { [lsearch $list_of_org_entries $account_name] == -1} {
+       organization add $organization -member $account_name
+    } else {
+       error "Organization \"$organization\" already has an entry for \"$account_name\"."
+    }
+}
+
+#
+# This procdedure creates a group in the current registry _s(sec) 
+# if that group does not yet exist.
+#
+
+proc _dcp_create_group {group group_created} {
+
+    upvar 1 group_created grp_crt
+    set list_of_groups [group catalog -simplename]
+    if { [lsearch $list_of_groups $group] == -1} {
+        _dcp_user_debug "Create group $group"
+        group create $group
+        set grp_crt 1
+    } 
+    return 0
+}
+
+#
+# This proc creates an organization in the current registry _s(sec) 
+# if that organization does not yet exist.
+#
+proc _dcp_create_org {organization org_created} {
+
+    upvar 1 org_created org_crt
+    set list_of_orgs [organization catalog -simplename]
+    if { [lsearch $list_of_orgs $organization] == -1} {
+        _dcp_user_debug "Create organzation $organization"
+        organization create $organization
+        set org_crt 1
+    } 
+    return 0
+}
+
+#
+# This proc creates a principal in the current registry _s(sec)
+# if that principal does not yet exist.
+#
+
+proc _dcp_create_principal_entry { principal_name princ_args} {
+
+
+
+  set list_of_principals [principal catalog]
+  if { [lsearch $list_of_principals $principal_name] == -1} {
+    if { [llength $princ_args ] != 0 } {
+      _dcp_user_debug "Create principal $principal_name -attribute $princ_args"
+      principal create $principal_name -attribute $princ_args
+    } else {
+      _dcp_user_debug "Create principal $principal_name"
+      principal create $principal_name 
+    }
+  } else {
+    error "Principal \"$principal_name\" already exists."
+  }
+        
+}
+
+#
+# proc _dcp_create_user - This procedure actually creates a DCE user. 
+# Several steps are performed. If the principal does not exist 
+# a new one is created. If the groups do not exist an a -force switch is
+# set then two new groups will be added. The user will be added to the 
+# groups. The account will then be created. An entry in the CDS 
+# namespace will then be created with the appropriate ACL's.
+#
+
+proc _dcp_create_user { local_args } {
+  set arg_table {
+    {-alias string alias
+         "Add principal named as an alias of specified uid."}
+    {-attribute string attribute_list
+         "Provide attributes in an attribute list format."}
+    {-client string client 
+         "Can the account principal be a client."}
+    {-description string descr
+         "A general description of the account."}
+    {-dupkey string dupkey
+         "Can the account principal have duplicate keys."}
+    {-expdate string expdate
+         "When does the account expire."}
+    {-force boolean force
+         "Force creation of group or organization if they don't exist."}
+    {-forwardabletkt string forwadabletkt
+         "Can the account receive a forwarded ticket."}
+    {-fullname string fullname
+         "Fullname of user."}
+    {-group string group 
+         "Primary group user should be member of."}
+    {-home string home
+         "Users home directory."}
+    {-maxtktlife string maxtktlife
+         "The maximum ticket life for the account."}
+    {-maxtktrenew string maxtktrenew
+         "The maximum ticket renewal time."}
+    {-mypwd string mypwd 
+         "Password of user adding account."}
+    {-organization string organization 
+         "Primary organization user should be member of."}
+    {-password string password 
+         "Initial password of user."}
+    {-postdatedtkt string postdatedtkt
+         "Can the principal receive a post dated ticket."}
+    {-proxiabletkt string proxiabletkt
+         "Can the account issue a proxiable/forwarded ticket."}
+    {-pwdvalid string pwdvalid
+         "Is the password valid."}
+    {-quota string quota
+         "Quota of the principal to be added."} 
+    {-renewabletkt string renewabletkt
+         "Can the account receive a renewed ticket."}
+    {-server string server
+         "Can the principal act as a server."}
+    {-shell string shell
+         "Initial shell of user."}
+    {-stdtgtauth string stdtgtauth
+         "Can the principal use the standard ticket granting service."}
+    {-uid integer uid 
+         "User Identifier of the principal to be added."}
+    {-usertouser string usertouser
+         "Must the server register auth info by means of user to user."}}
+
+    upvar 1 local_args cargs 
+    set local_args $cargs
+    set account_args ""    
+    set princ_args ""
+    set group_args ""
+    set force 0
+
+    _dcp_user_debug "Before parseargs local_args  \"$local_args\""
+
+    parseargs $arg_table local_args -no_leftovers
+
+    if { [info local help_prose ] > 0 } { return }
+
+    _dcp_user_debug "After parseargs local_args = $local_args" 
+
+    if { [llength $local_args] > 1 } {
+      error "Unrecognized argument [lindex $local_args 1]."  
+    } elseif { [llength $local_args] == 0 } { error "No user name." 
+    } else { set account_name $local_args }
+
+    if { [info local attribute_list] > 0} {
+       set pile_of_attributes "alias client descr dupkey usertouser expdate\
+       force forwadabletkt fullname group home maxtktlife maxtktrenew \
+       mypwd organization password postdatedtkt proxiabletkt pwdvalid \
+       quota renewabletkt server shell stdgtauth"
+       process_attribute_list attribute_list $pile_of_attributes
+    }
+
+    if { [info local group] > 0} {
+      set account_args [format "%s {%s %s}" $account_args group $group] 
+    } else { error "No group name specified." }
+
+    if { [info local organization] > 0} {
+      set account_args [format "%s {%s %s}" $account_args organiz $organization] 
+    } else { error "No organization name specified." }
+
+    if { [info local password] > 0} {
+      set account_args [format "%s {%s %s}" $account_args password $password] 
+    } else { error "No password specified." }
+
+    if { [info local mypwd] > 0 } {
+      set account_args [format "%s {%s %s}" $account_args mypwd $mypwd]  
+    } else { error "No admin password specified." }
+
+    if { [info local fullname] > 0 } {
+      set princ_args [format "%s {%s {%s}}" $princ_args fullname $fullname]
+      set group_args [format "%s {%s {%s}}" $group_args fullname $fullname]
+      _dcp_user_debug "Fullname = $fullname, principal args = $princ_args"
+    }
+   
+    if { [info local uid] > 0 } { 
+      set princ_args [format "%s {%s %s}" $princ_args uid $uid]
+    }
+    
+    if { [ info local quota ] > 0 } {
+      set princ_args [format "%s {%s %s}" $princ_args quota $quota] 
+    }
+
+    #
+    # Process all era elements. The era elements are stored in global 
+    # variables defined in process_attribute_list
+    #
+    foreach era_element [info globals _dcp_era_*] {
+      global [set era_element]
+        set princ_args [format "%s {%s %s}" \
+                                            $princ_args \
+                                            [set [set era_element](name)] \
+                                            [set [set era_element](value)]]
+      _dcp_user_debug "Principal args = $princ_args"
+      unset [set era_element]
+    }
+
+    if { [info local home] > 0 } {
+      set account_args [format "%s {%s %s}" $account_args home $home]
+    }
+
+    if { [info local shell ] > 0 } {
+       set account_args [format "%s {%s %s}" $account_args shell $shell ]
+    } 
+    
+    if { [info local acctlife ] > 0 } {
+       set account_args [format "%s {%s %s}" $account_args acctlife $acctlife]
+    }
+
+    if { [info local client ] > 0 } {
+       set account_args [format "%s {%s %s}" $account_args client $client]
+    }
+
+    if { [info local descr ] > 0 } {
+       set account_args [format "%s {%s %s}" $account_args description $descr]
+    }
+
+    if { [info local dupkey ] > 0 } {
+       set account_args [format "%s {%s %s}" $account_args dupkey $dupkey]
+    }
+    if { [info local usertouser ] > 0 } {
+       set account_args [format "%s {%s %s}" $account_args usertouser $usertouser]
+    }
+    if { [info local forwadabletkt ] > 0 } {
+       set account_args [format "%s {%s %s}" $account_args forwadabletkt \
+			 $forwadabletkt]
+    }
+
+    if { [info local maxtktlife ] > 0 } {
+       set account_args [format "%s {%s %s}" $account_args maxtktlife \
+			 $maxtktlife]
+    }
+
+    if { [info local maxtktrenew ] > 0 } {
+       set account_args [format "%s {%s %s}" $account_args maxtktrenew \
+			 $maxtktrenew]
+    }
+
+    if { [info local postdatedtkt ] > 0 } {
+       set account_args [format "%s {%s %s}" $account_args postdatedtkt \
+			 $postdatedtkt]
+    }
+
+    if { [info local proxiabletkt] > 0 } {
+       set account_args [format "%s {%s %s}" $account_args proxiabletkt \
+			 $proxiabletkt]
+    }
+
+    if { [info local pwdvalid] > 0 } {
+       set account_args [format "%s {%s %s}" $account_args pwdvalid $pwdvalid]
+    }
+
+    if { [info local renewabletkt] > 0 } {
+       set account_args [format "%s {%s %s}" $account_args renewabletkt \
+			 $renewabletkt]
+    }
+
+    if { [info local server ] > 0 } {
+       set account_args [format "%s {%s %s}" $account_args server $server ]
+    }
+
+    if { [info local stdtgtauth] > 0 } {
+       set account_args [format "%s {%s %s}" $account_args stdtgtauth \
+                         $stdtgtauth]
+    }
+
+    set account_name [lindex $account_name 0]
+    set group_created 0
+    set org_created 0
+    set group_arg ""
+    set org_arg ""
+    
+    foreach element $account_name {
+      set clup_user "_dcp_cleanup_user_create $element -principal"
+
+      _dcp_create_principal_entry $element $princ_args
+      
+      if { $force == 1 } {
+  	if {[ catch {_dcp_create_group $group group_created} msg] != 0 } {
+              _dcp_cleanup_user_create $element -principal
+              error $msg
+          }
+          if { $group_created == 1 } {
+             set group_arg "-group group"
+          }
+          if {[ catch {_dcp_create_org $organization org_created} msg] != 0 } {
+              set clup_user [concat $clup_user $group_arg]
+              eval $clup_user
+              error $msg
+          } 
+          if { $org_created == 1 } {
+              set org_arg "-org organization"
+          }
+      }
+      set clup_user [concat $clup_user $group_arg $org_arg]
+      if {[catch {_dcp_add_group_entry $group  $element} msg] != 0} {
+          eval $clup_user
+          error $msg
+      }
+  
+      if {[catch {_dcp_add_org_entry $organization $element} msg] != 0 } {
+           eval $clup_user
+          error $msg
+      }
+   
+      if {[catch {_dcp_add_account_entry $element $account_args} msg] != 0} {
+          eval $clup_user
+          error $msg
+      }
+      
+      if {[catch {_dcp_add_namespace_entry $element} msg] != 0} { 
+          eval $clup_user
+          error $msg
+      }
+    }
+    set _n $account_name
+    return 
+}
+
+#
+# process_attribute_list - This will take and attribute_list and parse out the 
+#                          appropriate attributes as defined in 
+#                          pile_of_attributes
+#
+
+proc process_attribute_list {attribute_list pile_of_attributes} {
+
+
+   # 
+   # Set each of the attribute names up as independent variables. 
+   # In this fashion we can use the variables as storage locations 
+   # for value of the attribute.
+   #
+
+   foreach element $pile_of_attributes { upvar 1 $element _dcp_$element }
+
+   upvar 1 attribute_list _dcp_attribute_list
+
+   # 
+   # Check the list contents 
+   #
+   set _dcp_attribute_list [check_list_list $_dcp_attribute_list]
+
+   #
+   # Foreach entry in the attribute list acquire the attribute name
+   # First verify that this is not an ambiguous attribute name. 
+   # If the name is not ambiguous but it is a known pgo account attribute 
+   # verify that the attribute has the correct number of arguments and
+   # save the argument in the attribute name. 
+   # If it is neither ambiguous nor a known attribute assumne the attribute
+   # is an ERA. Set up an era global array variable with name and value in two 
+   # seperate entries in the array. These global array variables will be read 
+   # when constructing the attribute list for principal creation. The name 
+   # variable simply verifies that each global ERA array variable has 
+   # a unique name. This is reuired since the user may add a multi-valued 
+   # array in two segments eg {{stringarray one} {stringarray two}}.
+
+   set name 1
+   foreach element $_dcp_attribute_list {
+       set attribute_name [lindex $element 0]
+       set _dcp_attr_name [info vars _dcp_$attribute_name*] 
+       _dcp_user_debug "Attribute_name = $attribute_name"
+       set _dcp_attr_name_len [llength $_dcp_attr_name] 
+       if { $_dcp_attr_name_len > 1} {
+           error \
+            "Ambiguous attribute \"$attribute_name\" could be: $_dcp_attr_name."
+       } elseif { $_dcp_attr_name_len == 1 } {
+           set attribute_value [lindex $element 1]
+           if { [llength $element] != 2 } {
+             error "Incorrect attribute list element \"$element\"."
+           }            
+           set [set _dcp_attr_name] $attribute_value
+       } elseif { $_dcp_attr_name_len == 0 } {
+            set era_element [lreplace $element 0 0]
+            _dcp_user_debug "_dcp_era_value = $era_element"
+            global _dcp_era_${name}_${attribute_name}
+            set _dcp_era_${name}_${attribute_name}(name) $attribute_name
+            set _dcp_era_${name}_${attribute_name}(value) $era_element
+            incr name
+       }
+   }
+
+}
+
+#
+#  This function will take care of attribute lists that are not simple to parse. 
+#  A simple attribute list is {a b}. However this can be difficult to 
+#  parse by process_attribute_list{} which is expecting to have attributes passed 
+#  in as {{a b} {c d}}. This routine will encase {a b} with {}'s to make parsing 
+#  trivial. This will also correctly handle {name val1 val2 ... ...} and 
+#  {name {val1 val2 ... ...}} All of which can confuse process_attribute_list
+#
+proc check_list_list {attribute_list} {
+
+   set not_list_list 0
+   set i 0
+   set j 0
+
+   foreach element $attribute_list {
+        _dcp_user_debug "element values = $element"
+        if {[llength $element] == 1} { 
+           incr j
+        }
+        incr i
+   }
+   if {$i == $j || $j == 1} {
+      return [format "{%s}" $attribute_list]
+   } 
+   return $attribute_list
+}
+  
+   
+proc _dcp_user_debug {args} {
+    global USER_DEBUG
+
+    if {$USER_DEBUG != 0} {
+	puts stderr "DEBUG: [lindex [info level [expr [info level] - 1]] 0]:\
+                             [string range $args 1 \
+                             [expr [string length $args] - 2]]"
+    }
+}

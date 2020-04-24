@@ -1,0 +1,266 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rdaclif.idl,v $
+ * Revision 1.1.8.2  1996/03/09  23:28:09  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:37  marty]
+ *
+ * Revision 1.1.8.1  1995/12/08  17:32:42  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:55:10  root]
+ * 
+ * Revision 1.1.6.1  1994/01/28  23:10:50  burati
+ * 	Delegation/EPAC changes - update interface revision to 1.0 (dlg_bl1)
+ * 	[1994/01/18  20:53:10  burati]
+ * 
+ * Revision 1.1.4.2  1992/12/29  13:30:15  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:48:29  zeliff]
+ * 
+ * Revision 1.1.2.2  1992/05/08  14:49:31  burati
+ * 	Cleaned up comments.
+ * 	[1992/05/07  15:15:48  burati]
+ * 
+ * 	Add rdacl_get_mgr_types_semantics(...)
+ * 	[1992/04/29  03:05:27  burati]
+ * 
+ * Revision 1.1  1992/01/19  14:55:25  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+
+/*
+** Copyright (c) Hewlett-Packard Company 1991, 1993
+** Unpublished work. All Rights Reserved.
+*/
+
+[
+    uuid(47B33331-8000-0000-0D00-01DC6C000000),
+    version(1.0)
+]
+
+interface rdaclif {
+
+    import "dce/rdaclbase.idl";
+
+    /*  r d a c l _ l o o k u p
+     *
+     *  retrieve acls associated with the object referred to in the handle
+     *  parameter.  The component_name argument is used to further identify
+     *  the entity being protected by the acls.
+     *
+     *  Comparable to POSIX acl_read()
+     */
+    void rdacl_lookup (
+        [in]        handle_t                    h,
+        [in]        sec_acl_component_name_t    component_name,
+        [in, ref]   uuid_t                      *manager_type,   
+        [in]        sec_acl_type_t              sec_acl_type,
+        [out]       sec_acl_result_t            *result
+    );
+
+
+    /*  r d a c l _ r e p l a c e
+     *
+     * Replace the acl associated with the object referred to in the handle.
+     * ACLs are immutable, the replace operation takes the new acl and throws
+     * away the old acl associated with the object.  The component_name
+     * argument is used to further identify the entity being protected by the
+     * acl.
+     *
+     * Comparable to POSIX acl_write()
+     */
+    void rdacl_replace (
+        [in]        handle_t                    h,
+        [in]        sec_acl_component_name_t    component_name,
+        [in, ref]   uuid_t                      *manager_type,   
+        [in]        sec_acl_type_t              sec_acl_type,
+        [in]        sec_acl_list_t              *sec_acl_list,
+        [out]       error_status_t              *st
+    );
+
+
+    /* r d a c l _ g e t _ a c c e s s
+     *
+     *  Determine the caller's access to the specified object.  This is 
+     *  useful for implenting operations like the conventional UNIX access
+     *  function.
+     */
+    void rdacl_get_access (
+        [in]        handle_t                    h,
+        [in]        sec_acl_component_name_t    component_name,
+        [in, ref]   uuid_t                      *manager_type,
+        [out, ref]  sec_acl_permset_t           *net_rights,
+        [out]       error_status_t              *st
+    );
+
+
+    /* r d a c l _ t e s t _ a c c e s s
+     *
+     * Determine if the caller has the requested access.
+     */
+    boolean32 rdacl_test_access (
+        [in]        handle_t                    h,
+        [in]        sec_acl_component_name_t    component_name,
+        [in, ref]   uuid_t                      *manager_type,   
+        [in]        sec_acl_permset_t           desired_permset,
+        [out]       error_status_t              *st
+    );
+
+
+    /* r d a c l _ t e s t _ a c c e s s _ o n _ b e h a l f
+     *
+     * Determine if the subject has the requested access.  This function
+     * returns true if the accecss is available to both the caller and
+     * the subject identified in the call.
+     */
+     boolean32 rdacl_test_access_on_behalf (
+        [in]        handle_t                    h,
+        [in]        sec_acl_component_name_t    component_name,
+        [in, ref]   uuid_t                      *manager_type,   
+        [in, ptr]   sec_id_pac_t                *subject,
+        [in]        sec_acl_permset_t           desired_permset,
+        [out]       error_status_t              *st
+    );
+
+
+    /* r d a c l _ g e t _ m a n a g e r _ t y p e s
+     *
+     * Determine the types of acls protecting an object.  ACL editors/browsers
+     * use this operation to determine the sec_acl manager types that a
+     * particular reference monitor is using to protect a selected entity.
+     *
+     * num_types is the total number of acl manager types supported by this
+     * entity - if it is greater than the size avail, this function should be
+     * invoked again with a buffer of the appropriate size.
+     *
+     * If num_types is greater than 1, the object is polymorphic - i.e., the
+     * named object supports acl manager types for each form of the selected
+     * entity.
+     *
+     * If the acl for the target object contains more than 32 permission
+     * bits, multiple manager types can be used - one for each 32 bit wide
+     * slice of permissions.  The manager_types array does not include all
+     * the manager types that are chained together in this way - it only
+     * includes the root of each chain.  The chain is obtained via calls to
+     * rdacl_get_printstring.
+     */
+    void rdacl_get_manager_types (
+        [in]        handle_t                    h,
+        [in]        sec_acl_component_name_t    component_name,
+        [in]        sec_acl_type_t              sec_acl_type,
+        [in]        unsigned32                  size_avail,
+        [out]       unsigned32                  *size_used,
+        [out]       unsigned32                  *num_types,
+        [out, size_is(size_avail), length_is(*size_used)]
+                    uuid_t                      manager_types[],
+        [out]       error_status_t              *st
+    );
+
+
+    /* r d a c l _ g e t _ p r i n t s t r i n g 
+     *
+     * Retrieve printable representations for each permission bit that the
+     * sec_acl manager will support.  There may be aliases for common
+     * permission combinations - by convention simple entries should
+     * appear at the beginning of the array, and combinations should
+     * appear at the end.  When false the tokenize flag indicates that
+     * permission printstrings are unambiguous and therefore printstrings
+     * for various permissions can be concatenated.  When true, however, 
+     * this property does not hold and the strings should be tokenized
+     * before input or output. The manager_info string provides a name and
+     * help info for the manager type as well as the complete set of
+     * supported permission bits. total_num_printstrings is the total
+     * number of acl printstrings supported by this acl manager type - if
+     * it is greater than the size avail, this function should be invoked
+     * again with a buffer of the appropriate size.
+     *
+     * If the acl for the target object contains more than 32 permission
+     * bits, multiple manager types can be used - one for each 32 bit wide
+     * slice of permissions.  When this is the case the manager_type_chain
+     * parameter is set to the uuid of the next manager type in the set.  The
+     * final result for the chain returns uuid_nil in the manager_type_chain
+     * parameter.
+     */
+    void rdacl_get_printstring (
+        [in]        handle_t                h,
+        [in, ref]   uuid_t                  *manager_type,   
+        [in]        unsigned32              size_avail,
+        [out]       uuid_t                  *manager_type_chain,
+        [out]       sec_acl_printstring_t   *manager_info,
+        [out]       boolean32               *tokenize,
+        [out]       unsigned32              *total_num_printstrings,
+        [out]       unsigned32              *size_used,
+        [out, size_is(size_avail), length_is(*size_used)]
+                    sec_acl_printstring_t   printstrings[],
+        [out]       error_status_t          *st
+    );
+
+
+    /*  r d a c l _ g e t _ r e f e r r a l
+     *
+     * Obtain a referral to an acl update site.  This function is used when
+     * the current acl site yields a sec_acl_site_readonly error.  Some
+     * replication managers will require all updates for a given object to
+     * be directed to a given replica.  Clients of the generic acl interface may
+     * know they are dealing with an object that is replicated in this way. 
+     * This function allows them to recover from this problem and rebind to
+     * the proper update site.
+     */
+    void rdacl_get_referral (
+        [in]        handle_t                    h,
+        [in]        sec_acl_component_name_t    component_name,
+        [in, ref]   uuid_t                      *manager_type,   
+        [in]        sec_acl_type_t              sec_acl_type,
+        [out]       sec_acl_tower_set_t         *towers,
+        [out]       error_status_t              *st
+    );
+
+
+    /* r d a c l _ g e t _ m g r _ t y p e s _ s e m a n t i c s
+     *
+     * Determine the types of acls protecting an object. ACL editors/browsers
+     * use this operation to determine the acl manager types that a particular
+     * reference monitor is using to protect a selected entity.
+     *
+     * num_types is the total number of acl manager types supported by this
+     * entity - if it is greater than the size avail, this function should be
+     * invoked again with a buffer of the appropriate size.
+     *
+     * If num_types is greater than 1, the object is polymorphic - i.e., the
+     * named object supports acl manager types for each form of the selected
+     * entity.
+     *
+     * If the acl for the target object contains more than 32 permission
+     * bits, multiple manager types can be used - one for each 32 bit wide
+     * slice of permissions.  The manager_types array does not include all
+     * the manager types that are chained together in this way - it only
+     * includes the root of each chain.  The chain is obtained via calls to
+     * rdacl_get_printstring.
+     *
+     * For each manager_type, determine which, if any, POSIX semantics the
+     * manager supports.  If the semantics aren't of use to the caller, then
+     * rdacl_get_manager_types() should be used instead.
+     */
+    void rdacl_get_mgr_types_semantics (
+        [in]        handle_t                    h,
+        [in]        sec_acl_component_name_t    component_name,
+        [in]        sec_acl_type_t              sec_acl_type,
+        [in]        unsigned32                  size_avail,
+        [out]       unsigned32                  *size_used,
+        [out]       unsigned32                  *num_types,
+        [out, size_is(size_avail), length_is(*size_used)]
+                    uuid_t                      manager_types[],
+        [out, size_is(size_avail), length_is(*size_used)]
+                    sec_acl_posix_semantics_t   posix_semantics[],
+        [out, ref]  error_status_t              *st
+    );
+}

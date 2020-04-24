@@ -1,0 +1,620 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rs_attr.idl,v $
+ * Revision 1.1.8.3  1996/03/09  23:28:21  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:48  marty]
+ *
+ * Revision 1.1.8.2  1995/12/08  17:33:47  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:55:21  root]
+ * 
+ * Revision 1.1.4.1  1994/10/17  17:01:14  mob
+ * 	Fix for OT 11951 - idl files contain wrong information
+ * 	[1994/10/14  19:06:45  mob]
+ * 
+ * Revision 1.1.2.3  1994/08/04  16:12:56  mdf
+ * 	Hewlett Packard Security Code Drop
+ * 	[1994/07/26  19:09:47  mdf]
+ * 
+ * Revision 1.1.2.2  1994/06/17  18:42:25  devsrc
+ * 	cr10872 - fix copyright
+ * 	[1994/06/17  18:09:03  devsrc]
+ * 
+ * Revision 1.1.2.1  1994/03/02  17:55:15  hanfei
+ * 	Initial ERA drop
+ * 	[1994/02/18  19:19:47  hanfei]
+ * 
+ * $EndLog$
+ */
+/*
+** Copyright (c) Hewlett-Packard Company 1994
+** Unpublished work. All Rights Reserved.
+**
+**      Registry Server Attributes Manipulation Interface
+**            security/idl/rs_attr.idl
+**
+*/
+[
+    uuid(a71fc1e8-567f-11cb-98a0-08001e04de8c)
+]
+interface rs_attr {
+
+    import "dce/rs_attr_base.idl";
+    import "dce/rsbase.idl";
+
+    /*
+     * Private Datatypes for the attribute manipulation interface
+     */
+
+    /*
+     * ATTRIBUTE OPERATIONS
+     */
+    /* r s _ a t t r _ c u r s o r _ i n i t
+     *
+     * Initialize a scan cursor
+     *
+     *    In Parameters:
+     *        component_name - identifies the registry object on which
+     *            to perform this operation.
+     *        
+     *    Out Parameters:
+     *        cur_num_attrs - the current total number of attributes
+     *            attached to this object at the time of this call.
+     *        cursor - cursor initialized to the first in the
+     *            list of attributes on this object.
+     *
+     *    Errors:
+     */
+    void rs_attr_cursor_init (
+        [in]        handle_t                        h,
+        [in]        sec_attr_component_name_t       component_name,
+        [out]       unsigned32                      *cur_num_attrs,
+        [out]       rs_attr_cursor_t                *cursor,
+	[out]	    rs_cache_data_t		    *cache_info,
+        [out]       error_status_t                  *st_p
+    );
+
+
+    /* r s _ a t t r _ l o o k u p _ b y _ i d
+     *
+     * Read attribute(s) by ID.  Useful for programmatic access.
+     * If the number of query attribute keys (num_attr_keys)
+     * is 0, this function will return all attributes that
+     * the caller is authorized to see.
+     *
+     * Multi-instanced attributes:
+     * Multi-instanced attributes are returned as independent attribute
+     * instances sharing the same attribute type uuid.
+     * To learn the exact number of instances in a given multi-instanced
+     * attribute, call this operation with only a single query id.
+     * The num_returned plus the num_left will specify the total
+     * number of instances for that attribute type.
+     *
+     * Attribute Sets:
+     * Reads of an attribute set return all instances of members 
+     * of that set.  The attribute set instance will not be returned.
+     *
+     * Triggers:
+     * If the requested attribute type is associated with a query
+     * trigger, the value returned for the attribute will be the
+     * binding (as set in the schema entry) of the trigger server.
+     * The caller must bind to the trigger server and pass the
+     * original input query attribute to the sec_attr_trig_query call
+     * in order to retrieve the attribute value.
+     *
+     * The list cursor is used to establish the point
+     * in the attribute list from which the server should start
+     * processing the query.  List cursors should be initialized with
+     * the cursor_init function.  If the list cursor parameter is
+     * uninitialized, the server will begin processing the query with the
+     * first attribute that satisfies the search criteria.
+     *
+     * If the output parameter num_left is larger than 0, then the
+     * output buffer supplied was not big enough.  Num_left is a hint
+     * at the number of attributes that were not possible to return
+     * due to space constraints.  This number may be inaccurate if
+     * the server allows updates between successive query calls.
+     *
+     *    In Parameters:
+     *        component_name - identifies the registry object on which
+     *            to perform this operation.
+     *        num_attr_keys - specifies the number of elements in the
+     *            input attr_keys array.
+     *        space_avail - specifies the size of the output attrs array.
+     *        attr_keys - in the attr_id field of each element, contains
+     *            the attribute type id of the attribute instance(s)
+     *            requested by this lookup. If the requested attribute
+     *            type is associated with a query trigger, the attr_val
+     *            field may be used to pass in optional information 
+     *            required by the trigger query. If no information is
+     *            to be passed in the attr_val field (whether the type
+     *            indicates a trigger query or not), the attr_val
+     *            encoding type should be set to
+     *            sec_attr_enc_void.
+     *            
+     *    In/Out Parameters:
+     *        cursor - in: initialized or uninitialized cursor;
+     *            out: cursor advanced past attributes returned 
+     *                in this call.
+     *
+     *    Out Parameters:
+     *        num_returned - specifies the number of attribute instances
+     *            returned in the attrs array.
+     *        attrs - contains the attributes retrieved by id.
+     *        num_left - hints at the number of attributes matching the
+     *            search criteria that could not be returned due to
+     *            space contraints in the attrs buffer.
+     *
+     */
+    void rs_attr_lookup_by_id (
+        [in]        handle_t                        h,
+        [in]        sec_attr_component_name_t       component_name,
+        [in, out]   rs_attr_cursor_t                *cursor,
+        [in]        unsigned32                      num_attr_keys,
+        [in]        unsigned32                      space_avail,
+        [in, size_is(num_attr_keys)]
+                    sec_attr_t                      attr_keys[],
+        [out]       unsigned32                      *num_returned,
+        [out, size_is(space_avail), length_is(*num_returned)]
+                    sec_attr_t                      attrs[],
+        [out]       unsigned32                      *num_left,
+	[out]	    rs_cache_data_t		    *cache_info,
+        [out]       error_status_t                  *st_p
+    );
+
+
+    /* r s _ a t t r _ l o o k u p _ n o _ e x p a n d
+     *
+     * Read attributes by ID without expanding attribute sets
+     * to their constituent member attributes.  Useful for
+     * reading the value (list of member attribute type uuids) 
+     * of an attribute with encoding type attr_set.
+     * If the number of query attribute keys (num_attr_keys)
+     * is 0, this function will return all attributes that
+     * the caller is authorized to see.
+     *
+     * Multi-instanced attributes:
+     * Multi-instanced attributes are returned as independent attribute
+     * instances sharing the same attribute type uuid.
+     * To learn the exact number of instances in a given multi-instanced
+     * attribute, call this operation with only a single query id.
+     * The num_returned plus the num_left will specify the total
+     * number of instances for that attribute type.
+     *
+     * Attribute Sets:
+     * Attribute sets are not expanded in this operation.
+     * If an attribute set is requested on the lookup, only the 
+     * attribute set instances (no member instances) are returned.
+     *
+     * Triggers:
+     * If the requested attribute type is associated with a query
+     * trigger, the value returned for the attribute will be the
+     * binding (as set in the schema entry) of the trigger server.
+     * The caller must bind to the trigger server and pass the
+     * original input query attribute to the sec_attr_trig_query call
+     * in order to retrieve the attribute value.
+     *
+     * The list cursor is used to establish the point
+     * in the attribute list from which the server should start
+     * processing the query.  List cursors should be initialized with
+     * the cursor_init function.  If the list cursor parameter is
+     * uninitialized, the server will begin processing the query with the
+     * first attribute that satisfies the search criteria.
+     *
+     * If the output parameter num_left is larger than 0, then the
+     * output buffer supplied was not big enough.  Num_left is a hint
+     * at the number of attribute sets that were not possible to return
+     * due to space constraints.  This number may be inaccurate if
+     * the server allows updates between succesive query calls.
+     *
+     *    In Parameters:
+     *        component_name - identifies the registry object on which
+     *            to perform this operation.
+     *        num_attr_keys - specifies the number of elements in the
+     *            input attr_keys array.
+     *        space_avail - specifies the size of the output attrs array.
+     *        attr_keys - in the attr_id field of each element, contains
+     *            the attribute type id of the attribute instance(s)
+     *            requested by this lookup. If the requested attribute
+     *            type is associated with a query trigger, the attr_val
+     *            field may be used to pass in optional information 
+     *            required by the trigger query. If no information is
+     *            to be passed in the attr_val field (whether the type
+     *            indicates a trigger query or not), the attr_val
+     *            encoding type should be set to sec_attr_enc_void.
+     *            
+     *    In/Out Parameters:
+     *        cursor - in: initialized or uninitialized cursor; 
+     *            out: cursor advanced past attributes returned
+     *            in this call.
+     *
+     *    Out Parameters:
+     *        num_returned - specifies the number of attribute
+     *            instances returned in the attrs array.
+     *        attrs - contains the attributes retrieved by id.
+     *        num_left - hints at the number of attributes matching the
+     *            search criteria that could not be returned due to
+     *            space contraints in the attrs buffer.
+     *
+     */
+    void rs_attr_lookup_no_expand (
+        [in]        handle_t                        h,
+        [in]        sec_attr_component_name_t       component_name,
+        [in, out]   rs_attr_cursor_t                *cursor,
+        [in]        unsigned32                      num_attr_keys,
+        [in]        unsigned32                      space_avail,
+        [in, size_is(num_attr_keys)]
+                    sec_attr_t                      attr_keys[],
+        [out]       unsigned32                      *num_returned,
+        [out, size_is(space_avail), length_is(*num_returned)]
+                    sec_attr_t                      attrs[],
+        [out]       unsigned32                      *num_left,
+	[out]	    rs_cache_data_t		    *cache_info,
+        [out]       error_status_t                  *st_p
+    );
+
+
+    /* r s _ a t t r _ l o o k u p _ b y _ n a m e
+     *
+     * Read one attribute by name.  Useful for an interactive editor.
+     *
+     * Multi-instanced attributes:
+     * If more than one instance of the named attribute exists on this
+     * object, the "more_available" warning status code will be 
+     * returned.  This status indicates the caller should 
+     * resubmit the request to rs_attr_lookup_by_id using the
+     * attr_id returned by this call, in order to retrieve every
+     * instance of this attribute.
+     *
+     * Attribute Sets;
+     * If attr_name identifies an attribute set, the attribute set
+     * instance, not a member instance, will be returned with the
+     * warning status code "attribute set_instance."  In order to
+     * retrieve the members of this set, the caller should resubmit
+     * the request to rs_attr_lookup_by_id using the attribute set's
+     * attr_id returned by this call.
+     *
+     * Triggers:
+     * If the requested attribute type is associated with a query
+     * trigger, the value returned for the attribute will be the
+     * binding (as set in the schema entry) of the trigger server.
+     * The caller must bind to the trigger server and pass the
+     * original input query attribute to the sec_attr_trig_query call
+     * in order to retrieve the attribute value.
+     *
+     *    In Parameters:
+     *        component_name - identifies the registry object on which
+     *            to perform this operation.
+     *        attr_name - the name of the attribute type to be retrieved.
+     *
+     *    Out Parameters:
+     *        attr - the first attribute instance of the named type.
+     *
+     */
+    void rs_attr_lookup_by_name (
+            [in]         handle_t                       h,
+            [in]         sec_attr_component_name_t      component_name,
+            [in, string] char                           *attr_name,
+            [out]        sec_attr_t                     *attr,
+	    [out]        rs_cache_data_t		*cache_info,
+            [out]        error_status_t                 *st_p
+    );
+
+
+    /* r s _ a t t r _ u p d a t e
+     *
+     * Write/Create an attribute.  This is an atomic operation.  All
+     * attributes are written/created or none are modified.
+     *
+     * If an attribute instance already exists which is identical
+     * in both type and value to an input attribute, the
+     * "instance already exists" error is returned.
+     * 
+     * The first attribute causing the update to fail is identified in
+     * "failure_index".  If the failure cannot be attributed to a
+     * given attribute, then -1 is returned in the failure index.
+     *
+     * Multi-instanced Attributes:
+     * If the schema entry for a given attribute specifies that
+     * multi-instanced attributes are not allowed AND an instance of
+     * that attribute type already exists on the object, the instance
+     * is overwritten with the new attribute.  If multi-instanced attributes
+     * are allowed, a new instance is created without modification to
+     * the already-present instance.
+     *
+     * Attribute Sets:
+     * This operation may be used to update attribute set instances.
+     * No expansion of a set to its members occurs on update operations.
+     *
+     * Triggers:
+     * If an input attribute is associated with a query trigger,
+     * the input value is ignored and a "stub" instance of the
+     * attribute is created on the named object. It is assumed that
+     * the real attribute values are maintained at the trigger server
+     * through a different interface.
+     * The "stub" instance in the ERA database maintains the association
+     * of the attribute with the named object and may be used to store
+     * info that optimizes queries on this attribute.
+     * If an input attribute is associated with an update trigger,
+     * it is assumed that the caller has already performed the
+     * sec_attr_trig_update operation and that output from that call
+     * was provided as input to this rs_attr_update call.
+     *
+     *    In Parameters:
+     *        component_name - identifies the registry object on which
+     *            to perform this operation.
+     *        num_to_write - specifies the number of attributes in
+     *            the in_attrs array.
+     *        in_attrs - contains the attribute instances to be written.
+     *
+     *    Out Parameters:
+     *        failure_index - in an error case, contains the index
+     *            of the element in in_attrs[] that caused the update to
+     *            fail, or -1 if the failure cannot be attributed to
+     *            a given attribute.
+     *
+     */
+    void rs_attr_update (
+        [in]        handle_t                        h,
+        [in]        sec_attr_component_name_t       component_name,
+        [in]        unsigned32                      num_to_write,
+        [in, size_is(num_to_write)]
+                    sec_attr_t                      in_attrs[],
+        [out]       signed32                        *failure_index,
+	[out]	    rs_cache_data_t		    *cache_info,
+        [out]       error_status_t                  *st_p
+    );
+
+
+    /* r s _ a t t r _ t e s t _ a n d _ u p d a t e
+     *
+     * Update attributes if a set of control attributes retain
+     * specified values.  This is an atomic operation - if any of the
+     * test values do not match, then none of the updates are
+     * performed.  If the update should be performed, but the write
+     * cannot occur to any member of the update set, the entire
+     * update fails and the first problematic attribute encountered is
+     * identified in the output failure index.  If the update fails and
+     * can't be attributed to a given update attribute, -1 is
+     * returned as the failure index.
+     *
+     * Matching rules are based on exact matches of each primitive
+     * datatype.
+     *
+     * Multi-instanced Attributes:
+     * If an attribute type in the test_attr array is multi-instanced 
+     * the named object, the test attribute must match at least one
+     * instance of that attribute on the named object.  There is no
+     * requirement that every instance of a multi-instanced attribute 
+     * must be present in test_attr for a successful match.
+     * Multi-instanced attribute updates are handled as in rs_attr_update.
+     *
+     * Attribute Sets:
+     * Attribute set updates are handled as in rs_attr_update.
+     *
+     * Triggers:
+     * For attributes in the test_attr array, query triggers are 
+     * not supported.  The test will fail with "query trigger not
+     * supported by this operation" if a test_attr is associated
+     * with a query trigger.
+     * For attributes in the update_attr array, triggers are 
+     * handled as in rs_attr_update.
+     *
+     *    In Parameters:
+     *        component_name - identifies the registry object on which
+     *            to perform this operation.
+     *        num_to_test - specifies the number of control attributes
+     *            in the test_attrs array.
+     *        test_attrs - contains control attributes, whose types and
+     *            values must exactly match those of instances on the
+     *            registry object in order for the update to take place.
+     *        num_to_write - specifies the number of attributes in
+     *            the update_attrs array.
+     *        update_attrs - contains the attribute instances to be
+     *            written.
+     *
+     *    Out Parameters:
+     *        failure_index - in an error case, contains the index
+     *            of the element in update_attr[] that caused the update
+     *            to fail, or -1 if the failure cannot be attributed to
+     *            a given attribute.
+     *
+     */
+    void rs_attr_test_and_update (
+        [in]        handle_t                        h,
+        [in]        sec_attr_component_name_t       component_name,
+        [in]        unsigned32                      num_to_test,
+        [in, size_is(num_to_test)]
+                    sec_attr_t                      test_attrs[],
+        [in]        unsigned32                      num_to_write,
+        [in, size_is(num_to_write)]
+                    sec_attr_t                      update_attrs[],
+        [out]       signed32                        *failure_index,
+	[out]	    rs_cache_data_t		    *cache_info,
+        [out]       error_status_t                  *st_p
+    );
+
+
+    /* r s _ a t t r _ d e l e t e
+     *
+     * Delete attribute(s).  This is an atomic operation.  All
+     * attributes are deleted or none are modified.  The first
+     * attribute causing the delete to fail is identified in
+     * "failure_index".  If the failure cannot be attributed to a
+     * given attribute, then -1 is returned in the failure index.
+     * A failure does not occur if the attribute to be deleted 
+     * doesn't exist in the first place.
+     *
+     * An attribute to be deleted may be identified only by its type
+     * uuid (the value encoding type is set to sec_attr_enc_void).
+     * 
+     * This operation deletes every attribute instance of the input
+     * type.  The input value of the attribute is ignored.
+     *
+     * Multi-instanced Attributes:
+     * If an input attribute contains a type uuid with no value AND
+     * that type uuid identifies a multi-instanced attribute,
+     * all instances of that attribute type are deleted.
+     * To perform a delete of just one instance of a multi-valued
+     * attribute, use rs_attr_update() instead.
+     *
+     * Attribute Sets:
+     * Delete of an attribute with encoding type "attr_set" will
+     * delete the attr_set instance and NOT the attributes which
+     * are members of the set.
+     *
+     * Triggers:
+     * There is no trigger associated with the delete operation.
+     *
+     *    In Parameters:
+     *        component_name - identifies the registry object on which
+     *            to perform this operation.
+     *        num_to_delete - specifies the number of attributes
+     *            in the attrs array.
+     *        attrs - contains the attributes to be deleted. 
+     *            Every attribute instance of this type will be deleted.
+     *            If the type alone is enough to unambiguously 
+     *            identify the attribute to be deleted, set the
+     *            attribute value encoding type to sec_attr_enc_void.
+     *
+     *    Out Parameters:
+     *        failure_index - in an error case, contains the index
+     *            of the element in attrs[] that caused the delete
+     *            to fail, or -1 if the failure cannot be attributed to
+     *            a given attribute type.
+     *
+     */
+    void rs_attr_delete (
+        [in]        handle_t                        h,
+        [in]        sec_attr_component_name_t       component_name,
+        [in]        unsigned32                      num_to_delete,
+        [in, size_is(num_to_delete)]
+                    sec_attr_t                      attrs[],
+        [out]       signed32                        *failure_index,
+	[out]	    rs_cache_data_t		    *cache_info,
+        [out]       error_status_t                  *st_p
+    );
+
+
+    /* r s _ a t t r _  g e t _ r e f e r r a l
+     *
+     * Obtain a referral to an attribute update site.  This function is
+     * used when the current attribute manipulation site yields a
+     * sec_attr_site_readonly error.  Some replication managers
+     * will require all updates for a given object to be directed to
+     * a given replica.  Clients of the generic attribute interface may
+     * not know they are dealing with an object that is replicated in
+     * this way.  This function allows them to recover from this
+     * problem and rebind to the proper update site.
+     *
+     *    In Parameters:
+     *        component_name - identifies the registry object on which
+     *            to perform this operation.
+     *        attr_id - identifies the attribute for which an update
+     *            site is required.
+     *
+     *    Out Parameters:
+     *        towers - binding information for a suitable update site.
+     */
+    void rs_attr_get_referral (
+        [in]        handle_t                    h,
+        [in]        sec_attr_component_name_t   component_name,
+        [in]        uuid_t                      *attr_id,
+        [out]       sec_attr_twr_set_p_t        *towers,
+	[out]	    rs_cache_data_t		*cache_info,
+        [out]       error_status_t              *st_p
+    );
+
+
+    /* r s _ a t t r _ g e t _ e f f e c t i v e
+     *
+     * Read the "effective" attributes by id.  The server
+     * allocates a buffer large enough to return ALL the
+     * requested attributes so that subsequent calls are
+     * not necessary.
+     *
+     * By "effective," the following "inheritance" mechanism
+     * is implied:
+     * A. If the object identified by "component_name" possesses instances
+     * of the requested attribute type, return them; else, do B.
+     * B. If the schema_entry for the requested attribute type
+     * does not have the "apply_defaults" flag set, no 
+     * attribute inheritance should take place, so return with no
+     * attributes of this type.  If the "apply_defaults"
+     * flag *is* set, do C.
+     * C. If the object is a principal associated with an account,
+     * do D; otherwise, do E.
+     * D. If the org associated with the principal's account
+     * possesses instances of the requested attribute type, return
+     * them; otherwise do E.
+     * E. If the policy object possesses instances of the requested
+     * attribute type, return them; otherwise, no instances of
+     * this type will be returned.
+     *
+     * If the number of query attribute keys (num_attr_keys)
+     * is 0, this function will return all attributes that
+     * the caller is authorized to see.
+     *
+     * Multi-instanced attributes:
+     * Multi-instanced attributes are returned as independent attribute
+     * instances sharing the same attribute type uuid.
+     * To learn the exact number of instances in a given multi-instanced
+     * attribute, call this operation with only a single query id.
+     * The num_returned plus the num_left will specify the total
+     * number of instances for that attribute type.
+     *
+     * Attribute Sets:
+     * Reads of an attribute set return all instances of members 
+     * of that set.  The attribute set instance will not be returned.
+     *
+     * Triggers:
+     * If the requested attribute type is associated with a query
+     * trigger, the value returned for the attribute will be the
+     * binding (as set in the schema entry) of the trigger server.
+     * The caller must bind to the trigger server and pass the
+     * original input query attribute to the sec_attr_trig_query call
+     * in order to retrieve the attribute value.
+     *
+     *    In Parameters:
+     *        component_name - identifies the registry object on which
+     *            to perform this operation.
+     *        num_attr_keys - specifies the number of elements in the
+     *            input attr_keys array.
+     *        attr_keys - in the attr_id field of each element, contains
+     *            the attribute type id of the attribute instance(s)
+     *            requested by this lookup. If the requested attribute
+     *            type is associated with a query trigger, the attr_val
+     *            field may be used to pass in optional information 
+     *            required by the trigger query. If no information is
+     *            to be passed in the attr_val field (whether the type
+     *            indicates a trigger query or not), the attr_val
+     *            encoding type should be set to
+     *            sec_attr_enc_void.
+     *            
+     *    Out Parameters:
+     *        attr_list - an attribute vector allocated by the server
+     *		  containing all of the attributes matching the
+     *		  search criteria.
+     *
+     */
+    void rs_attr_get_effective (
+        [in]		handle_t			h,
+        [in]		sec_attr_component_name_t	component_name,
+        [in]		unsigned32                      num_attr_keys,
+        [in, size_is(num_attr_keys)]
+			sec_attr_t			attr_keys[],
+        [out, ref]	sec_attr_vec_t			*attr_list,
+	[out]		rs_cache_data_t			*cache_info,
+        [out]		error_status_t			*st_p
+    );
+
+
+}

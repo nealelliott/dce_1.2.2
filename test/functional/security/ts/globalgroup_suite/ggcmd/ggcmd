@@ -1,0 +1,767 @@
+#!/bin/ksh
+
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+#
+# HISTORY
+# $Log: ggcmd,v $
+# Revision 1.1.2.1  1996/10/16  14:06:37  arvind
+# 	OSF DCE 1.2.2 Drop 4.5
+# 	[1996/10/16  13:58:39  arvind]
+#
+# $EndLog$
+#
+
+#
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1 ic2 ic3 ic4 ic5 ic6 ic7 ic8 ic9 ic10 ic11 ic12 ic13 ic14" 
+ic1="check_ggcmd_1"
+ic2="check_ggcmd_2"
+ic3="check_ggcmd_3"
+ic4="check_ggcmd_4"
+ic5="check_ggcmd_5"
+ic6="check_ggcmd_6"
+ic7="check_ggcmd_7"
+ic8="check_ggcmd_8"
+ic9="check_ggcmd_9"
+ic10="check_ggcmd_10"
+ic11="check_ggcmd_11"
+ic12="check_ggcmd_12a"
+ic13="check_ggcmd_12bc"
+ic14="check_ggcmd_12d"
+test_purp_list="check_ggcmd_1 check_ggcmd_2 check_ggcmd_3 check_ggcmd_4 check_ggcmd_5 check_ggcmd_6 check_ggcmd_7 check_ggcmd_8 check_ggcmd_9 check_ggcmd_10 check_ggcmd_11 check_ggcmd_12a check_ggcmd_12bc check_ggcmd_12d"
+
+. $TET_ROOT/test/functional/security/lib/gg.functions
+
+startup ()
+{
+        tet_infoline "Prepare for testing GGCMD"
+
+	if [ ! -f /usr/bin/dce_login_noexec ]; then
+	        ln -s /usr/bin/dce_login /usr/bin/dce_login_noexec 2>/dev/null
+	fi
+
+        dce_auth $CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in startup"
+		del_test_purp
+		return
+        fi
+
+	setup_for_cdscache available
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	setup_for_registry_connect /.../$cR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	setup_pgo_for_local_cell create
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        dce_unauth $CELL_ADMIN
+
+        dce_auth /.../$cR/$CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in startup"
+		del_test_purp
+		return
+        fi
+
+	setup_pgo_for_remote_cell create /.../$cR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        dce_unauth /.../$cR/$CELL_ADMIN
+
+        dce_auth $CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in startup"
+		del_test_purp
+		return
+        fi
+
+	setup_for_cdscache unavailable
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+        dce_unauth $CELL_ADMIN
+
+        unset REGISTRY_SITE_NAME
+        tet_infoline "default registry site will be used..."
+}	# end startup ()
+
+# Ensure test accounts are not left in the registry
+cleanup ()
+{
+        dce_auth /.../$cR/$CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in cleanup"
+        fi
+
+	setup_pgo_for_remote_cell clean /.../$cR
+
+        dce_unauth /.../$cR/$CELL_ADMIN
+
+        dce_auth $CELL_ADMIN $PASSWORD
+        if [ $? -ne 0 ]; then
+                tet_infoline "ERROR: failed to login in cleanup"
+        fi
+
+	setup_pgo_for_local_cell clean
+	setup_for_cdscache unavailable
+
+        dce_unauth $CELL_ADMIN
+
+        rm -f /usr/bin/dce_login_noexec
+
+        rm -f ${GG_INPUT} ${GG_OUTPUT}
+
+}	# end cleanup
+
+check_ggcmd_1 ()
+{
+#set -x
+	tet_infoline "(1) Login to local cell and verify the initial condition"
+
+	# Authenticate the cell
+	dce_auth /.../$cL/$CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	check_item_begin "GGCMD-01-01"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-01-02"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+}
+
+check_ggcmd_2 ()
+{
+#set -x
+	tet_infoline "(2) Verify adding/deleting local principal"
+
+	check_item_begin "GGCMD-02-01"
+	add_to_group_by_dcecp $gG -m $pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-02-02"
+	view_group_members_by_dcecp $gG -m $pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-02-03"
+	add_to_group_by_dcecp $gG -m $pL	# already exist, but no error
+	check_item_done "$?"
+	check_item_begin "GGCMD-02-04"
+	view_group_members_by_dcecp $gG -m $pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-02-05"
+	remove_from_group_by_dcecp $gG -m $pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-02-06"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-02-07"
+	remove_from_group_by_dcecp $gG -m $pL	# already removed, but no error
+	check_item_done "$?"
+	check_item_begin "GGCMD-02-08"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-02-09"
+	add_to_group_by_rgy_edit $gG $pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-02-10"
+	view_group_members_by_rgy_edit $gG $pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-02-11"
+	add_to_group_by_rgy_edit $gG $pL	# already exist, but no error
+	check_item_done "$?"
+	check_item_begin "GGCMD-02-12"
+	view_group_members_by_rgy_edit $gG $pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-02-13"
+	remove_from_group_by_rgy_edit $gG $pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-02-14"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-02-15"
+	remove_from_group_by_rgy_edit $gG $pL	# already removed, but no error
+	check_item_done "$?"
+	check_item_begin "GGCMD-02-16"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+}
+
+check_ggcmd_3 ()
+{
+#set -x
+	tet_infoline "(3) Verify adding/deleting local principal (with fully qualified name format)"
+
+	check_item_begin "GGCMD-03-01"
+	add_to_group_by_dcecp $gG -m /.../$cL/$pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-03-02"
+	view_group_members_by_dcecp $gG -m /.../$cL/$pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-03-03"
+	add_to_group_by_dcecp $gG -m /.../$cL/$pL	# alredy exist, but no error
+	check_item_done "$?"
+	check_item_begin "GGCMD-03-04"
+	view_group_members_by_dcecp $gG -m /.../$cL/$pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-03-05"
+	remove_from_group_by_dcecp $gG -m /.../$cL/$pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-03-06"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-03-07"
+	remove_from_group_by_dcecp $gG -m /.../$cL/$pL	# already removed, but no error
+	check_item_done "$?"
+	check_item_begin "GGCMD-03-08"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-03-09"
+	add_to_group_by_rgy_edit $gG /.../$cL/$pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-03-10"
+	view_group_members_by_rgy_edit $gG $pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-03-11"
+	add_to_group_by_rgy_edit $gG /.../$cL/$pL	# already exist, but no error
+	check_item_done "$?"
+	check_item_begin "GGCMD-03-12"
+	view_group_members_by_rgy_edit $gG $pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-03-13"
+	remove_from_group_by_rgy_edit $gG /.../$cL/$pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-03-14"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-03-15"
+	remove_from_group_by_rgy_edit $gG /.../$cL/$pL	# already removed, but no error
+	check_item_done "$?"
+	check_item_begin "GGCMD-03-16"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+}
+
+check_ggcmd_4 ()
+{
+#set -x
+	tet_infoline "(4) Verify adding/deleting remote principal in the UNKNOWN cell"
+
+	check_item_begin "GGCMD-04-01"
+	add_neg_to_group_by_dcecp $gG -m /.../$cU/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-04-02"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-04-03"
+	remove_neg_from_group_by_dcecp $gG -m /.../$cU/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-04-04"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-04-05"
+	add_neg_to_group_by_rgy_edit $gG /.../$cU/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-04-06"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-04-07"
+	remove_neg_from_group_by_rgy_edit $gG /.../$cU/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-04-08"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+
+	setup_for_cdscache available
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+}
+
+check_ggcmd_5 ()
+{
+#set -x
+	tet_infoline "(5) Verify adding/deleting remote principal in the UNTRUSTED cell"
+
+        # Logout
+        dce_unauth $CELL_ADMIN
+
+	check_item_begin "GGCMD-05-01"
+	add_neg_to_group_by_dcecp $gG -m /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-05-02"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-05-03"
+	remove_neg_from_group_by_dcecp $gG -m /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-05-04"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-05-05"
+	add_neg_to_group_by_rgy_edit $gG /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-05-06"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-05-07"
+	remove_neg_from_group_by_rgy_edit $gG /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-05-08"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+
+        # Log back in
+	dce_auth /.../$cL/$CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	setup_for_registry_connect /.../$cR
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+}
+
+check_ggcmd_6 ()
+{
+#set -x
+	tet_infoline "(6) Verify adding/deleting UNKNOWN principal in the remote cell"
+
+	check_item_begin "GGCMD-06-01"
+	add_neg_to_group_by_dcecp $gG -m /.../$cR/$pU
+	check_item_done "$?"
+	check_item_begin "GGCMD-06-02"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-06-03"
+	remove_neg_from_group_by_dcecp $gG -m /.../$cR/$pU
+	check_item_done "$?"
+	check_item_begin "GGCMD-06-04"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-06-05"
+	add_neg_to_group_by_rgy_edit $gG /.../$cR/$pU
+	check_item_done "$?"
+	check_item_begin "GGCMD-06-06"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-06-07"
+	remove_neg_from_group_by_rgy_edit $gG /.../$cR/$pU
+	check_item_done "$?"
+	check_item_begin "GGCMD-06-08"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+}
+
+check_ggcmd_7 ()
+{
+#set -x
+	tet_infoline "(7) Verify adding/deleting object which is NOT the principal in the remote cell"
+
+	check_item_begin "GGCMD-07-01"
+	add_neg_to_group_by_dcecp $gG -m /.../$cR/$gR
+	check_item_done "$?"
+	check_item_begin "GGCMD-07-02"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-07-03"
+	remove_neg_from_group_by_dcecp $gG -m /.../$cR/$gR
+	check_item_done "$?"
+	check_item_begin "GGCMD-07-04"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-07-05"
+	add_neg_to_group_by_rgy_edit $gG /.../$cR/$gR
+	check_item_done "$?"
+	check_item_begin "GGCMD-07-06"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-07-07"
+	remove_neg_from_group_by_rgy_edit $gG /.../$cR/$gR
+	check_item_done "$?"
+	check_item_begin "GGCMD-07-08"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+}
+
+check_ggcmd_8 ()
+{
+#set -x
+	tet_infoline "(8) Verify adding/deleting remote principal"
+
+	check_item_begin "GGCMD-08-01"
+	add_to_group_by_dcecp $gG -m /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-08-02"
+	view_group_members_by_dcecp $gG -m /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-08-03"
+	add_to_group_by_dcecp $gG -m /.../$cR/$pR	# already exist, but no error
+	check_item_done "$?"
+	check_item_begin "GGCMD-08-04"
+	view_group_members_by_dcecp $gG -m /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-08-05"
+	remove_from_group_by_dcecp $gG -m /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-08-06"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-08-07"
+	remove_neg_from_group_by_dcecp $gG -m /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-08-08"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-08-09"
+	add_to_group_by_rgy_edit $gG /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-08-10"
+	view_group_members_by_rgy_edit $gG /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-08-11"
+	add_to_group_by_rgy_edit $gG /.../$cR/$pR	# alredy exists, but no error
+	check_item_done "$?"
+	check_item_begin "GGCMD-08-12"
+	view_group_members_by_rgy_edit $gG /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-08-13"
+	remove_from_group_by_rgy_edit $gG /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-08-14"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-08-15"
+	remove_neg_from_group_by_rgy_edit $gG /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-08-16"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+}
+
+check_ggcmd_9 ()
+{
+#set -x
+	tet_infoline "(9) Variety of remote principal names"
+
+	check_item_begin "GGCMD-09-01"
+	add_to_group_by_dcecp $gG -m /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGCMD-09-02"
+	view_group_members_by_dcecp $gG -m /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGCMD-09-04"
+	remove_from_group_by_dcecp $gG -m /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGCMD-09-05"
+	add_to_group_by_dcecp $gG -m /.../$cR/$pRl
+	check_item_done "$?"
+	check_item_begin "GGCMD-09-06"
+	view_group_members_by_dcecp $gG -m /.../$cR/$pRl
+	check_item_done "$?"
+	check_item_begin "GGCMD-09-08"
+	remove_from_group_by_dcecp $gG -m /.../$cR/$pRl
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-09-09"
+	add_to_group_by_rgy_edit $gG /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGCMD-09-10"
+	view_group_members_by_rgy_edit $gG /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGCMD-09-12"
+	remove_from_group_by_rgy_edit $gG /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGCMD-09-13"
+	add_to_group_by_rgy_edit $gG /.../$cR/$pRl
+	check_item_done "$?"
+	check_item_begin "GGCMD-09-14"
+	view_group_members_by_rgy_edit $gG /.../$cR/$pRl
+	check_item_done "$?"
+	check_item_begin "GGCMD-09-16"
+	remove_from_group_by_rgy_edit $gG /.../$cR/$pRl
+	check_item_done "$?"
+}
+
+check_ggcmd_10 ()
+{
+#set -x
+	tet_infoline "(10) Verify containing multiple members in the group membership list"
+
+	check_item_begin "GGCMD-10-01"
+	add_to_group_by_dcecp $gG -m /.../$cR/$pRl $pL /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGCMD-10-02"
+	view_group_members_by_dcecp $gG -m /.../$cR/$pRl $pL /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGCMD-10-03"
+	remove_from_group_by_dcecp $gG -m /.../$cR/$pRl $pL /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGCMD-10-04"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-10-05"
+	add_neg_to_group_by_dcecp $gG -m /.../$cR/$pU $pL /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-10-06"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-10-07"
+	remove_neg_from_group_by_dcecp $gG -m /.../$cR/$pU $pL /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-10-08"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-10-11"
+	remove_neg_from_group_by_dcecp $gG -m /.../$cR/$pR $pL /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-10-12"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-10-13"
+	add_to_group_by_rgy_edit $gG /.../$cR/$pRl $pL /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGCMD-10-14"
+	view_group_members_by_rgy_edit $gG /.../$cR/$pRl $pL /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGCMD-10-15"
+	remove_from_group_by_rgy_edit $gG /.../$cR/$pRl $pL /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGCMD-10-16"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-10-17"
+	add_neg_to_group_by_rgy_edit $gG $pL /.../$cR/$pR /.../$cR/$pU 
+	check_item_done "$?"
+	check_item_begin "GGCMD-10-18"
+	view_group_members_by_rgy_edit $gG $pL /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-10-19"
+	remove_neg_from_group_by_rgy_edit $gG $pL /.../$cR/$pR /.../$cR/$pU 
+	check_item_done "$?"
+	check_item_begin "GGCMD-10-20"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-10-23"
+	remove_neg_from_group_by_rgy_edit $gG /.../$cR/$pR $pL /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-10-24"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+}
+
+check_ggcmd_11 ()
+{
+#set -x
+	tet_infoline "(11) Verify manipulating multiple groups in one operation"
+
+	check_item_begin "GGCMD-11-01"
+	add_to_group_by_dcecp $gG $gGa -m /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-11-02"
+	view_group_members_by_dcecp $gG $gGa -m /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-11-03"
+	add_to_group_by_dcecp $gG $gGa -m /.../$cR/$pRl $pL /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGCMD-11-04"
+	view_group_members_by_dcecp $gG $Ga -m /.../$cR/$pRl $pL /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGCMD-11-05"
+	view_group_members_by_dcecp $gG $gGa -s -m /.../$cR/$pRl $pL /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGCMD-11-06"
+	remove_from_group_by_dcecp $gG $gGa -m /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-11-07"
+	view_group_members_by_dcecp $gG $gGa -m /.../$cR/$pRl $pL /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGCMD-11-08"
+	remove_from_group_by_dcecp $gG $gGa -m /.../$cR/$pRl $pL /.../$cR/$pRs
+	check_item_done "$?"
+	check_item_begin "GGCMD-11-09"
+	view_group_members_by_dcecp $gG $gGa
+	check_item_done "$?"
+	check_item_begin "GGCMD-11-10"
+	view_group_members_by_dcecp $gG $gGa -s
+	check_item_done "$?"
+}
+
+check_ggcmd_12a ()
+{
+#set -x
+	tet_infoline "(12a) Verify sub effects in the membership operation"
+
+	check_item_begin "GGCMD-12-01"
+	add_to_group_by_dcecp $gG -m $pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-02"
+	add_to_group_by_dcecp $gG -m /.../$cR/$pR
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-12-03"
+	view_group_members_by_dcecp $gG -m $pL /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-04"
+	view_group_members_by_dcecp $gG -s -m $pL /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-05"
+	view_memberships_by_dcecp pL -m $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-06"
+	view_memberships_by_dcecp /.../$cL/$pL -m $gG
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-12-08"
+	view_group_members_by_rgy_edit $gG $pL /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-09"
+	view_memberships_by_rgy_edit $pL $gG
+	check_item_done "$?"
+
+	dce_unauth /.../$cL
+}
+
+check_ggcmd_12bc ()
+{
+#set -x
+	tet_infoline "(12b) Verify sub effects in the membership operation"
+
+	tet_infoline "(12c) Verify sub effects in the membership operation"
+
+	# Authenticate the cell
+	dce_auth /.../$cL/$CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+
+	check_item_begin "GGCMD-12-21"
+	remove_from_group_by_dcecp $gG -m $pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-22"
+	remove_from_group_by_dcecp $gG -m /.../$cR/$pR
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-12-23"
+	view_group_members_by_dcecp $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-24"
+	view_group_members_by_dcecp $gG -s
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-25"
+	view_memberships_by_dcecp $pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-26"
+	view_memberships_by_dcecp /.../$cL/$pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-27"
+	view_memberships_by_dcecp /.../$cR/$pR
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-12-28"
+	view_group_members_by_rgy_edit $gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-29"
+	view_memberships_by_rgy_edit $pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-30"
+	view_memberships_by_rgy_edit /.../$cL/$pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-31"
+	view_memberships_by_rgy_edit /.../$cR/$pR
+	check_item_done "$?"
+
+	dce_unauth /.../$cL
+}
+
+check_ggcmd_12d ()
+{
+#set -x
+	tet_infoline "(12d) Verify sub effects in the membership operation"
+
+	# Authenticate the cell
+	dce_auth /.../$cR/$CELL_ADMIN $PASSWORD
+	if [ $? -ne 0 ]; then
+		del_test_purp
+		return
+	fi
+        export REGISTRY_SITE_NAME="/.../$cR"
+        tet_infoline "registry site ${REGISTRY_SITE_NAME} will be used..."
+
+	check_item_begin "GGCMD-12-32"
+	view_group_members_by_dcecp /.../$cL/$gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-33"
+	view_group_members_by_dcecp /.../$cL/$gG -s
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-34"
+	view_memberships_by_dcecp $pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-35"
+	view_memberships_by_dcecp /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-36"
+	view_memberships_by_dcecp /.../$cL/$pL
+	check_item_done "$?"
+
+	check_item_begin "GGCMD-12-37"
+	view_group_members_by_rgy_edit /.../$cL/$gG
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-38"
+	view_memberships_by_rgy_edit $pL
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-39"
+	view_memberships_by_rgy_edit /.../$cR/$pR
+	check_item_done "$?"
+	check_item_begin "GGCMD-12-40"
+	view_memberships_by_rgy_edit /.../$cL/$pL
+	check_item_done "$?"
+
+        unset REGISTRY_SITE_NAME
+        tet_infoline "default registry site will be used..."
+	dce_unauth /.../$cR
+}
+
+. $TET_ROOT/lib/ksh/tetapi.ksh
+. $TET_ROOT/lib/ksh/tcm.ksh

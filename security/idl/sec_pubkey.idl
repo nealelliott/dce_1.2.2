@@ -1,0 +1,361 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: sec_pubkey.idl,v $
+ * Revision 1.1.2.4  1996/11/13  18:02:50  arvind
+ * 	CHFts20136: add sec_pubkey_find_domain() and its output structure.
+ * 	[1996/10/15  19:54 UTC  aha  /main/DCE_1.2.2/aha_pk10/1]
+ *
+ * 	CHFts19896: public key version support
+ * 	[1996/09/16  16:47 UTC  aha  /main/DCE_1.2.2/aha_pk9_3/2]
+ *
+ * 	Change sec_pk_pubkey_p_t to sec_pk_pubkey_t *
+ * 	[1996/09/13  23:45 UTC  aha  /main/DCE_1.2.2/aha_pk9_3/1]
+ *
+ * 	Bug fixes for sec_pubkey
+ * 	[1996/07/15  19:43 UTC  aha  /main/DCE122_PK/aha_pk6/2]
+ *
+ * Revision 1.1.2.3  1996/10/03  14:54:38  arvind
+ * 	CHFts19896: public key version support
+ * 	[1996/09/16  16:47 UTC  aha  /main/DCE_1.2.2/aha_pk9_3/2]
+ * 
+ * 	Change sec_pk_pubkey_p_t to sec_pk_pubkey_t *
+ * 	[1996/09/13  23:45 UTC  aha  /main/DCE_1.2.2/aha_pk9_3/1]
+ * 
+ * 	API changes for public key version numbers
+ * 	[1996/09/10  21:09 UTC  aha  /main/DCE_1.2.2/aha_pk9_2/2]
+ * 
+ * 	Support key version in keyfiles
+ * 	[1996/09/06  18:20 UTC  aha  /main/DCE_1.2.2/aha_pk9_2/1]
+ * 
+ * 	Bug fixes for sec_pubkey
+ * 	[1996/07/18  17:35 UTC  aha  /main/DCE_1.2.2/3]
+ * 
+ * 	pass uuids by reference.
+ * 	add pk domain support.
+ * 	[1996/08/09  17:42 UTC  sommerfeld  /main/DCE122_PK/sommerfeld_pk_kdc/1]
+ * 
+ * 	Bug fixes for sec_pubkey
+ * 	[1996/07/15  19:43 UTC  aha  /main/DCE122_PK/aha_pk6/2]
+ * 
+ * Revision 1.1.2.2  1996/08/09  12:07:13  arvind
+ * 	Bug fixes for sec_pubkey
+ * 	[1996/07/15  19:43 UTC  aha  /main/DCE122_PK/aha_pk6/2]
+ * 
+ * 	Merge-out and bugfixes and Registry work
+ * 	[1996/07/13  20:50 UTC  aha  /main/DCE122_PK/aha_pk6/1]
+ * 
+ * 	Merge PSM, sec_pvtkey, sec_pubkey, dced, base defs for Public Key Login
+ * 	[1996/06/11  18:00 UTC  aha  /main/DCE_1.2.2/1]
+ * 
+ * Revision 1.1.2.1  1996/07/08  20:20:29  arvind
+ * 	OSF DCE1.2.2 Drop3
+ * 	sec_pubkey.idl,v
+ * 	Revision /main/DCE_1.2.2/2  1996/06/13  21:30 UTC  sommerfeld
+ * 	remove double indirection.
+ * 	[1996/06/11  18:59 UTC  sommerfeld  /main/DCE122_PK/sommerfeld_pk_indir/1]
+ * 
+ * Revision /main/DCE_1.2.2/1  1996/06/11  18:00 UTC  aha
+ * 	Merge PSM, sec_pvtkey, sec_pubkey, dced, base defs for Public Key Login
+ * 
+ * Revision /main/DCE122_PK/1  1996/06/04  18:53 UTC  psn
+ * 	Merge PK work from DCE12_PK off of DCE_1.2 to DCE122_PK off of DCE_1.2.2.
+ * 
+ * Revision /main/DCE12_PK/3  1996/05/21  18:34 UTC  aha
+ * 	Merge bugfixes for dced and sec_pubkey based on code review
+ * 
+ * Revision /main/DCE12_PK/aha_pk3/1  1996/05/21  13:05 UTC  aha
+ * 	Fix sec_pubkey_store pubkey parameter to be simple pointer;
+ * 	update comments
+ * 
+ * Revision /main/DCE12_PK/2  1996/04/17  16:54 UTC  aha
+ * 	Add log history
+ * 
+ * $EndLog$
+ */
+/*
+** Copyright (c) Hewlett-Packard Company 1996
+** Unpublished work.  All Rights Reserved.
+**
+**   Public Key Storage and Retrieval Interface
+**
+*/
+
+[
+    local
+]
+
+interface sec_pubkey {
+
+    import "dce/rgynbase.idl";
+    import "dce/sec_pk_base.idl";
+
+    typedef error_status_t (*sec_pk_key_retrieval_fn_t)(
+		[in] void *principal,
+		[in] sec_pk_domain_t *domain,
+		[in] sec_pk_usage_flags_t usage,
+		[in,out] unsigned32 *kvno,
+		[out] sec_pk_pubkey_t *pubkey_p
+    );
+
+    typedef error_status_t (*sec_pk_key_storage_fn_t)(
+		[in] void *principal,
+		[in] sec_pk_domain_t *domain,
+		[in] sec_pk_usage_flags_t usage,
+		[in,out] unsigned32 *kvno,
+		[in] sec_pk_pubkey_t *pubkey_p
+    );
+
+    typedef struct 
+    {
+        sec_pk_domain_t domain;
+        sec_pk_key_retrieval_fn_t r;
+        sec_pk_key_storage_fn_t s;
+    } sec_pk_domain_def;
+
+    error_status_t sec_pubkey_define_domain (
+	sec_pk_domain_t *domain,
+	sec_pk_key_retrieval_fn_t retrieve,
+	sec_pk_key_retrieval_fn_t store
+    );
+
+    sec_pk_domain_def *sec_pubkey_find_domain(
+        sec_pk_domain_t *domain
+    );
+
+    /* PUBLIC KEY STORAGE AND RETRIEVAL OPERATIONS
+     *
+     * These interfaces are used within the sec_psm interface,
+     * and the sec_login interface, but may also be used
+     * directly by user applications.
+     *
+     */
+
+    /* s e c _ p u b k e y _ s t o r e
+     *
+     * Function:
+     *     Store a public key value for a principal
+     *
+     *     Stores an X.509 DER-encoded public key value of type
+     *     SubjectPublicKeyInfo in the public key storage
+     *     facility.  This operation overwrites any
+     *     existing public key storage for <principal>, and
+     *     creates public key storage if none exists.
+     *
+     *     In the reference implementation:
+     *     - domain must always be sec_pk_domain_dce_pk_login
+     *     - usage must be either sec_pk_usage_digitalSignature,
+     *       sec_pk_usage_keyEncipherment, or both.
+     *     - If usage is sec_pk_usage_digitalSignature the public 
+     *       key is stored in the DCEPKAuthentication ERA attached
+     *       to the principal.
+     *     - If usage is sec_pk_usage_keyEncipherment, the public key is
+     *       stored in the DCEPKKeyEncipherment ERA.
+     *
+     *     Default ACLs for the reference implementation on the
+     *     underlying ERA storage locations will allow only a
+     *     principal with sec_admin privileges to perform
+     *     this operation.  Sites may choose to modify the ACLs
+     *     on the underlying ERAs to allow the owner principal
+     *     to modify the public key as well, although sites
+     *     should be aware that ability to modify a principal's
+     *     public key equates to the ability to impersonate the
+     *     principal.
+     *
+     * In Parameters:
+     *     principal  - the canonical name in the specified
+     *                  domain of the principal whose public
+     *                  key is being stored (sec_rgy_name_t
+     *                  containing /.../cell/principal in
+     *                  reference implementation)
+     *     domain     - a UUID identifying the domain in which
+     *                  the key is used
+     *                  (sec_pk_domain_dce_pk_login in
+     *                  reference implementation)
+     *     usage      - usage(s) of the key being stored
+     *                  (sec_pk_usage_digitalSignature,
+     *                  sec_pk_usage_keyEncipherment, or both
+     *                  in reference implementation)
+     *     kvno       - key version; if 0,
+     *                  retrieves newest version.
+     *                  (must be 0 in the reference implementation)
+     *     pubkey_p   - pointer to an X.509 DER-encoded public key
+     *                  value of type SubjectPublicKeyInfo
+     *
+     * Out Parameters:
+     *     None
+     *
+     * Errors:
+     *     error_status_ok
+     *     sec_pk_e_domain_unsupported,
+     *     sec_pk_e_usage_unsupported,
+     *     sec_pk_e_key_vers_unsupported
+     *     sec_pk_e_no_memory
+     *
+     * Errors passed through from:
+     *     uuid_equal
+     *     sec_rgy_attr_update
+     */
+    error_status_t sec_pubkey_store (
+        [in]  void                  *principal,
+        [in]  sec_pk_domain_t       *domain,
+        [in]  sec_pk_usage_flags_t  usage,
+        [in,out]  unsigned32            *kvno,
+        [in]  sec_pk_pubkey_t     *pubkey_p
+    );
+
+    /* s e c _ p u b k e y _ r e t r i e v e
+     *
+     * Function:
+     *     Retrieves an X.509 DER-encoded public key value with
+     *     type SubjectPublicKeyInfo from the public key
+     *     storage facility for a given principal.
+     *
+     *     In the reference implementation:
+     *     - domain must always be sec_pk_domain_dce_pk_login
+     *     - usage must be either sec_pk_usage_digitalSignature or
+     *       sec_pk_usage_keyEncipherment
+     *     - If usage is sec_pk_usage_digitalSignature the
+     *       public key is retrieved from the
+     *       DCEPKAuthentication ERA attached to the
+     *       principal.
+     *     - If usage is sec_pk_usage_keyEncipherment, the
+     *       public key is retrieved from the
+     *       DCEPKKeyEncipherment ERA.
+     *
+     *     Default ACLs for the reference implementation allow
+     *     any principal to perform this operation.
+     *
+     * In Parameters:
+     *     principal  - the canonical name in the specified
+     *                  domain of the principal whose public
+     *                  key is being retrieved
+     *                  (sec_rgy_name_t in reference
+     *                   implementation)
+     *     domain     - a UUID identifying the domain in which
+     *                  the key is used
+     *                  (sec_pk_domain_dce_pk_login in reference implementation)
+     *     usage      - usage of the key being retrieved
+     *                  (sec_pk_usage_digitalSignature, or
+     *                  sec_pk_usage_keyEncipherment, but not
+     *                   both, in reference implementation)
+     *     kvno       - key version to be retrieved; if 0,
+     *                  retrieves newest version.
+     *                  (must be 0 in the reference implementation)
+     *
+     * Out Parameters:
+     *     pubkey_p   - pointer to an X.509 DER-encoded
+     *                  public key value of type
+     *                  SubjectPublicKeyInfo; storage for this
+     *                  structure must be freed using the
+     *                  sec_pk_data_free() function.
+     *
+     * Errors:
+     *     error_status_ok
+     *     sec_pk_e_key_vers_unsupported
+     *     sec_pk_e_usage_unsupported
+     *     sec_pk_e_key_attr_read_failed
+     *     sec_pk_e_no_memory
+     *
+     * Errors passed through from:
+     *     sec_id_global_parse_name
+     *     sec_rgy_cell_bind
+     *     sec_rgy_attr_cursor_alloc
+     *     sec_rgy_attr_lookup_by_id
+     *     uuid_equal
+     */
+    error_status_t sec_pubkey_retrieve (
+        [in]  void                   *principal,
+        [in]  sec_pk_domain_t        *domain,
+        [in]  sec_pk_usage_flags_t   usage,
+        [in,out]  unsigned32         *kvno,
+        [out] sec_pk_pubkey_t        *pubkey_p
+    );
+
+    /* s e c _ p u b k e y _ r e a d _ k e y f i l e
+     *
+     * Function:
+     *    Read a key from a keyfile.  Keyfile is assumed
+     *    to have format as follows:
+     *    unsigned32  'P' 'K' 'E' 'Y'
+     *    unsigned32  file format version# (must be 1 or 2)
+     *    unsigned32  key_version (file format version 2 only)
+     *    unsigned32  key_length
+     *    byte        key[key_length]
+     *
+     * In Parameters:
+     *    keyfilepath      -path to keyfile
+     *    key_version_p    -NULL or pointer to key version number
+     *                      desired; if 0, any key version accepted
+     *
+     * Out Parameters:
+     *    key_version_p    -NULL or pointer to key version number
+     *                      being returned
+     *    file_fmt_ver_p   -address of file format version (NULL if
+     *                      no output file format desired).  This will
+     *                      be returned if it can be read, even if
+     *                      version does not match or key can't be read.
+     *    key_ret_p        -address of sec_pk_data_t key; caller must
+     *                      allocate the sec_pk_data_t before calling
+     *                      this function.  The caller must
+     *                      deallocate key.data (and, if malloc'd,
+     *                      key) when finished.  In the case of a
+     *                      private key, key.data should be zeroed
+     *                      before being deallocated.
+     *
+     * Errors:
+     *     sec_pk_e_kf_param_not_alloc - A parameter other than file_fmt_ver_p NULL
+     *     sec_pk_e_kf_open_err        - error opening the keyfile
+     *     sec_pk_e_kf_read_err        - error reading the keyfile
+     *     sec_pk_e_kf_format_err      - keyfile did not start with 'P''K''E''Y'
+     *     sec_pk_e_kf_version_err     - keyfile version not 1 or 2
+     *     sec_pk_e_no_memory          - unable to allocate memory for key data
+     */
+    error_status_t sec_pubkey_read_keyfile(
+        [in]     char          *keyfilepath,
+        [in]     unsigned32    *file_fmt_ver_p,
+        [in,out] unsigned32    *key_version_p,
+        [out]    sec_pk_data_t *key_ret_p
+    );
+
+    /* s e c _ p u b k e y _ w r i t e _ k e y f i l e
+     *
+     * Function:
+     *    Write a key value to a keyfile.  Keyfile 
+     *    has following format:
+     *    unsigned32  'P' 'K' 'E' 'Y'
+     *    unsigned32  file format version# (2)
+     *    unsigned32  key_version
+     *    unsigned32  key_length
+     *    byte        key[key_length]
+     *
+     * In Parameters:
+     *    keyfilepath      -path to keyfile
+     *    key_version_p    -pointer to key version to be written
+     *    key_p            -address of sec_pk_data_t structure holding
+     *                      the key to be written
+     *
+     * Out Parameters:
+     *    key_version_p    -pointer to key version written
+     *    file_fmt_ver_p   -address of file format version written
+     *                      (NULL if you don't want this)
+     *
+     * Errors:
+     *     sec_pk_e_kf_param_not_alloc - parameter other than file_fmt_ver_p NULL
+     *     sec_pk_e_kf_open_err        - error opening the keyfile for writing
+     *     sec_pk_e_kf_write_err       - error writing the keyfile
+     */
+    error_status_t sec_pubkey_write_keyfile(
+        [in]  char            *keyfilepath,
+        [in]  sec_pk_data_t   *key_p,
+        [in,out] unsigned32   *key_version_p,
+        [out] unsigned32      *file_fmt_ver_p
+    );
+}
+

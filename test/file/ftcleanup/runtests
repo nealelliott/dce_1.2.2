@@ -1,0 +1,199 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+
+###############################################################################
+#    Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This is a driver script, which runs ftcleanup/mtest*. The tests there are
+# applicable to DFS exporting Episode filesets.
+
+###############################################################################
+
+# Usage:                runtests [-nt <iter>] [-np <procs>] [-server1 <host>]
+#				 [-server2 <host>]
+
+# Typically run via:
+#	On server: runtests
+#	On client: runtests -server1 <hostname> -server2 <hostname>
+#		   server1 and server2 can be the same host
+
+# A test log is produced; the default name is ./mov.runtests.log.
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode and UFS.
+# DFS server $SERVER_1 must export Episode aggregates $SERV1_AGGR1
+# and $SERV1_AGGR3, and $SERVER_2 must export $SERV2_AGGR2.
+# $SERVER_1 and $SERVER_2 can be the same machine.
+
+#
+# If the values of the following variables are other that the default, set them
+# before running the tests.
+#
+# Variable Name		Default Value
+# -------------         -------------
+# MOV_LOG_HOME		pwd
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1 and $SERVER_2, in
+# order to run the fts commands contained in this suite. You must also be
+# able to create mount points in /:/.
+
+###############################################################################
+
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=mov
+
+: ${MOV_VERBOSE="OFF"}
+: ${MOV_LOG_HOME=`pwd`}
+: ${TESTTOP=$dn}	# you may have to copy fts and other tests to TESTTOP
+
+export TESTTOP
+
+: ${lf=$MOV_LOG_HOME/$ty.$p.log}
+
+###############################################################################
+
+usage()
+{
+  echo "Usage: runtests [-nt <iter>] [-np <procs>] [-server1 <host>]"
+  echo "[-server2 <host>] [-help]"
+}
+
+  
+np=1; npf=FALSE
+nt=1; ntf=FALSE
+s1f=FALSE; s2f=FALSE
+
+for a in $*
+do
+   if test $npf = TRUE; then np=$a; npf=FALSE
+   elif test $ntf = TRUE; then nt=$a; ntf=FALSE
+   elif test $s1f = TRUE; then SERVER_1=$a; s1f=FALSE
+   elif test $s2f = TRUE; then SERVER_2=$a; s2f=FALSE
+   else
+      case $a in
+         -np) npf=TRUE ;;
+         -nt) ntf=TRUE ;;
+	 -server1) s1f=TRUE ;;
+	 -server2) s2f=TRUE ;;
+	 -help) usage; exit 0 ;;
+	 -h) usage; exit 0 ;;
+         *) echo "$p: invalid argument \"$a\"" | tee -a $lf; exit 2 ;;
+      esac
+   fi
+done
+
+if test $npf = TRUE
+then echo "$p: -np requires an argument" | tee -a $lf; exit 2
+elif test $np -lt 1
+then echo "$p: number of processes must be >= 1" | tee -a $lf; exit 2
+elif test $ntf = TRUE
+then echo "$p: -nt requires an argument" | tee -a $lf; exit 2
+elif test $nt -lt 0
+then echo "$p: number of times must be >= 0" | tee -a $lf; exit 2
+elif test $s1f = TRUE
+then echo "$p: -server1 requires a host name/addr as argument" | tee -a $lf; exit 2
+elif test $s2f = TRUE
+then echo "$p: -server2 requires a host name/addr as argument" | tee -a $lf; exit 2
+fi
+
+# Load the test context.
+. $dn/statusCheck
+
+###############################################################################
+
+(
+echo ""
+echo "$np processes; $nt times; parent process number $$."
+) | tee -a $lf
+
+if test $SERVER_1 = $SERVER_2
+   then
+	echo "Cleanup tests require two distinct servers---aborting."
+	exit 3
+   fi
+
+: ${MOV_TESTS="1 2 3 4 5"}
+
+###############################################################################
+
+t=1
+while test $t -le $nt -o $nt -eq 0
+do
+(echo ""; echo "Starting iteration number $t") | tee -a $lf
+
+mlogf=/tmp/$ty.LG.$$
+pr=1
+while test $pr -le $np
+   do
+   (echo ""; echo "Iteration $t starting process number $pr at `date`.") |
+      tee -a $lf
+   (
+   rc=0; outfile=/tmp/$ty.$pr.$$; rm -rf $outfile
+   echo outFile is $outfile  
+   (echo ""; echo "Listing ${test_root}/ ..."; ls -lL ${test_root}/ 2>&1) | tee -a $lf
+
+   for f in $MOV_TESTS
+       do
+       test=mtest$f
+       (echo ""; echo "Iteration $t process $pr running $test.") | tee -a $lf
+       sync; sync
+       if [ "$MOV_VERBOSE" = "ON" ]
+       then
+          sh -x $TESTTOP/$test > $outfile 2>&1
+       else
+          sh $TESTTOP/$test > $outfile 2>&1
+       fi
+       rf=$?; rc=`expr $rc + $rf`
+       sync; sync
+       cat $outfile | tee -a $lf
+       (echo ""; echo "Iteration $t process $pr $test returned $rf.") |
+          tee -a $lf
+       sync; sync
+       rm -f $outfile
+       (echo ""; echo "Listing ${test_root}/..."; ls -lL ${test_root}/ 2>&1) | tee -a $lf
+       sync; sync
+       done
+
+   echo "$rc" > $mlogf.$pr
+   (echo ""; echo "   process number $pr done at `date`.") | tee -a $lf
+   ) &
+   pr=`expr $pr + 1`
+   done
+
+echo "" | tee -a $lf
+wait
+
+pr=1
+while test $pr -le $np
+    do
+	rf=`cat $mlogf.$pr`; rc=`expr $rc + $rf`
+	/bin/rm -f $mlogf.$pr
+	pr=`expr $pr + 1`
+    done
+
+echo "Iteration number $t completed at `date`." | tee -a $lf
+t=`expr $t + 1`
+done
+
+###############################################################################
+
+(echo ""; echo "Tests (${MOV_TESTS}) complete at `date`."; echo "") | tee -a $lf
+if test $rc -eq 0
+   then echo "$ty/$p PASSED" | tee -a $lf
+   else echo "$ty/$p FAILED ($rc errors)" | tee -a $lf
+   fi
+
+exit $rc
+
+###############################################################################

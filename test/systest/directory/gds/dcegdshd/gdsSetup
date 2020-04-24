@@ -1,0 +1,1815 @@
+#!/bin/ksh
+#set -x
+# 
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: gdsSetup,v $
+# Revision 1.1.5.2  1996/03/11  02:41:29  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:06:26  marty]
+#
+# Revision 1.1.5.1  1995/12/13  21:55:23  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/1  1994/11/09  19:23 UTC  bissen
+# 	merge HPDCE01
+# 
+# 	HP revision /main/HPDCE01/2  1994/04/12  14:27 UTC  truitt
+# 
+# 	HP revision /main/HPDCE01/truitt_junk/1  1994/04/12  14:22 UTC  truitt
+# 	clean up file
+# 
+# 	HP revision /main/HPDCE01/1  1994/03/18  15:39 UTC  truitt
+# 	update gds test to latest tet version
+# 
+# 	HP revision /main/truitt_systest_work/1  1994/03/18  15:10 UTC  truitt
+# 	Update test to latest tet version
+# 	[1995/12/13  21:45:02  root]
+# 
+# 	Fixes to handle the odd return from expr on OSF/1,
+# 	support for use of the GDS_NCLIENTS variable to
+# 	specify the number of GDS clinet procs, and replaced
+# 	gds_var_set with the more generic and flexible
+# 	checkvars.
+# 
+# 	Defects: 9398, 9399
+# 	[1993/11/08  21:20:22  mhickey]
+# 
+# 	Some minor cleanup things:
+# 	  rm some temp files, and fix the
+# 	  syntax of some compares.
+# 
+# 	defect 9209
+# 	[1993/11/04  21:52:45  mhickey]
+# 
+# 	Added a line to remove the files used to check the
+# 	gdsconf copy of database files to the dir{dir-id}
+# 	directory.
+# 
+# 	defect 9209.
+# 	[1993/11/04  18:29:12  mhickey]
+# 
+# 	Fixed to handle numeric return from expr on 486
+# 
+# 	defect 9209.
+# 	[1993/11/03  22:04:32  mhickey]
+# 
+# 	See log below  - trying to fix an ode problem
+# 	[1993/10/28  21:03:55  mhickey]
+# 
+# 	Fixed a couple of small shakeout defects uncovered during use.
+# 
+# 	defect 9209.
+# 	[1993/10/28  20:58:36  mhickey]
+# 
+# 	Enhanced to support setting up the gds_xds_str_001 system test.
+# 
+# 	Defect 9209.
+# 	[1993/10/20  16:35:09  mhickey]
+# 
+# 	Enhanced to support setting up the gds_xds_str_001 system test.
+# 
+# 	Defect 9209.
+# 	[1993/10/21  17:19:12  mhickey]
+# 
+# 	Fixed error output if GDS_DIR_ID not defined in sTest file.
+# 
+# 	Defect 7071
+# 	[1993/04/03  05:00:34  mhickey]
+# 
+# 	Fixes to the fixes for dce1.0.2.
+# 
+# 	  Support for different port numbers for dir id 1 and 2.
+# 
+# 	  Suppress display of gdsditadm screens (Attempt to keep
+# 	  gdsditadm via rsh from core-dumping).
+# 
+# 	  Fix variable overloading,
+# 
+# 	  Add/fix info messages.
+# 
+# 	defect 7071
+# 	[1993/04/03  04:38:56  mhickey]
+# 
+# 	Embedded copyright notice
+# 	[1993/02/05  14:48:59  cjd]
+# 
+# 	Resubmit of file to 1.0.2 because file was truncated when carried
+# 	from 1.0.1....defect 4817.
+# 	[1992/09/11  14:36:00  mhickey]
+# 
+# Revision 1.1.2.2  1993/09/29  21:55:05  pellis
+# 	Ported to DCE 1.0.3.
+# 	[1993/09/29  21:53:26  pellis]
+# 
+# Revision 1.1.2.1  1993/09/23  20:24:19  pellis
+# 	Moved from ./systest/tools/*.
+# 	[1993/09/23  20:18:36  pellis]
+# 
+# Revision 1.1.5.2  1993/02/05  13:18:16  cjd
+# 	Embedded copyright notice
+# 
+# Revision 1.1.2.5  1992/09/10  15:33:05  mhickey
+# 	Resubmitting
+# 	[1992/09/10  15:31:29  mhickey]
+# 
+# Revision 1.1.2.4  1992/09/10  15:25:56  mhickey
+# 	Resubmit. Initial submission apparently truncated file.
+# 
+# 	Defect 4817.
+# 	[1992/09/02  10:49:43  mhickey]
+# 
+# Revision 1.1.2.2  1992/07/27  18:56:26  mhickey
+# 	Ported to latest GDS code, added lots of checking and
+# 	functional fixes.  See comments below for detailed list of
+# 	changes.
+# 
+# 	Defect 4817
+# 	[1992/07/27  16:42:43  mhickey]
+# 
+# $EndLog$
+
+#######################
+##   Change Notes    ##
+#######################
+# 
+# 8/15/91	Frank Ginac (OSF) 	Initial design/coding
+#		Wayne Mock (IBM)	
+# 8/20/91	Wayne Mock (IBM)	Integrated our system test logging
+#					tools.
+# 8/27/91	Wayne Mock (IBM)	Integrated the gethost utility into
+#					the gds_getip().
+# 7/22/92       Mark Hickey (OSF)       - Added gds_check_recov_dir_sys(),
+#                                             gds_check_dir_sys(), 
+#                                             gds_recov_dir_sys(), 
+#                                             gds_add_dsa_to_cache, and 
+#                                         integrated them into main program.
+#                                       - Ported gdsditadm batch files up to
+#                                         current rev of GDS.
+#                                       - Fixed the initialization for 
+#                                         non-initial dsa's so that you end
+#                                         up with an administrative domain.
+#                                       - Genericized AIX-specific portions
+#                                       - Removed the workaround for the 
+#                                         gdssysadm defect since it is fixed.
+#                                       - Added awk code to workaround the 
+#                                         problem of non-reinitialized buffers
+#                                         in gdsditadm
+#                                       - Added code to get all dsa's in test 
+#                                         into master DSA's cache.
+#                                       
+#
+# 10/19/93      Mark Hickey             - re-wrote gds_is_initial_dsa,
+#                                       - added gds_parse_config to replace
+#                                         redundant parsing of the config
+#                                         spec,
+#                                       - added parse_dir_id_spec to parse
+#                                         the new format config lines and set
+#                                         variables for DSA configs
+#                                       - Added error checking to all
+#                                         gdsditadm sessions via calls to the
+#                                         new routine 
+#                                         gds_check_gdsditadm_session
+#                                       - Compressed the routines 
+#                                         gds_create_client_server_other and 
+#                                         gds_create_client_server_initial
+#                                         into gds_create_client_server.  
+#                                         Modified main routine to change dir
+#                                         to
+#                                     /opt/dcelocal/var/adm/directory/gds/adm
+#                                       - to make core files (if they are 
+#                                         generated during testing) easy to 
+#                                         find, and made the logic in the 
+#                                         main loop dir-id centric.  
+#                                       This script can now be used to config
+#                                       GDS for the X** functional tests,
+#                                       dcegdshd, or gds_xds_str_001.
+#
+#
+
+printenv
+PGM=`basename $0`
+STEP=1
+LOCHOST=`hostname`
+
+#
+# The JOURNAL variable is automatically used to mean the place to put
+# the output from xx_*, in addition to writing it to standard out.
+# Since worldSetup is changing to capture our output via rsh in a file 
+# on the system on which worldSetup is run, and 
+# we don't want to have to create a directory and file on the 
+# host where gdsSetup is running just for a log that the driver 
+# will never read, so we just dump the stuff that is tee'd in the xx_*
+# routines in the bit bucket.  This allows us to give worldSetup the stuff we
+# want without changing the xx_* routines.
+#
+JOURNAL=/dev/null ; export JOURNAL
+ER=/tmp/$PGM.$$
+
+###############################################################################
+#
+# Name:         gds_getip()
+#
+# Interface:    $1 ::= <hostname>
+#
+# Return codes: 255 = failure to find hostname in /etc/hosts
+#                 1 = success
+#
+# Return val:   IP addr
+#
+# Authors:      Frank Ginac (OSF) and Wayne Mock (IBM)
+#
+###############################################################################
+gds_getip()
+{
+#set -x
+	getip "$1"
+	if [ "$?" -ne 0 ]; then
+		xx_error "Cannot find IP addr of ${1}..."
+		echo >$ER
+		return 255
+	else
+		return 1
+	fi
+} # gds_getip()
+
+###############################################################################
+# gds_check_gdsditadm_session(file)
+#    Runs an awk script across the file specifed by $1 and returns any
+#    output in gds_cgs_out
+#
+###############################################################################
+gds_check_gdsditadm_session()
+{
+#set -x
+   gds_cgs_out=""
+   if [ ! -f ${DCELOCAL}/var/adm/directory/gds/adm/$1 ]
+   then
+      gds_cgs_out="Couldn't open ${DCELOCAL}/var/adm/directory/gds/adm/$1"
+   else
+      # Awk the log file to see if we had any errors.
+      gds_cgs_out=`awk '{if ($1 == "ERROR:") printem=1; if (printem == 1) print $0; }' ${DCELOCAL}/var/adm/directory/gds/adm/$1`
+      rm -f ${DCELOCAL}/var/adm/directory/gds/adm/$1
+   fi
+}
+
+###############################################################################
+#
+# Name:         gds_is_initial_dsa()
+#
+# Synopsis:     If no arg, then checks the list of initial DSA's to see 
+#               if the LOCHOST is an inital DSA; if so, sets ISINIT to the
+#               directory id.  If an arg is passed, then sets CURR_ID_INIT
+#               to the inital dsa name for the passed dir id (if any initial
+#               dsa is specified for that id).
+#
+# Input:        $GDS_INITIALDSA, $LOCHOST, $1
+# 
+# Output:       $ISINIT, CURR_ID_INIT
+#
+# Return codes: 0 = false 
+#               1 = true
+#
+# Authors:      Frank Ginac(OSF), rewrite by Mark Hickey(OSF)
+#
+###############################################################################
+gds_is_initial_dsa()
+{
+#set -x
+
+   #
+   # if we are passed an id, save it, since it will otherwise be overwritten
+   # by the 'set' command below.
+   #
+   [ $# -ne 0 ] && { CURR_ID_INIT=""; passed_id=$1; } || passed_id=0
+   #
+   # loop through the inital DSA's 
+   #
+   for i in $GDS_INITIALDSA
+   do
+      #
+      # seperate the record into dir number and machine spec
+      #
+      set `echo $i | tr ',' ' '`
+      #
+      # convert the machine spec to a machine name
+      #
+      thishost=`eval "echo \\$$2"`
+      
+      # if we have an arg, then the caller wants to know if there is
+      # an initial DSA for the directory id $1.
+      #
+      if [ $passed_id -ne 0 ]
+      then 
+         [ $1 -eq $passed_id ] && { CURR_ID_INIT=$thishost; return 1; } 
+      elif [ "$thishost" = "$LOCHOST" ]
+      then
+         ISINIT="$ISINIT $1 "
+      fi
+   done 
+   if [ $passed_id -ne 0 ]
+   then
+      [ "$CURR_ID_INIT" != "" ] && return 1 || return 0
+   fi
+   [ "$ISINIT" != "" ] && return 1 || return 0
+
+} # gds_is_initial()
+
+#############################################################################
+# checkvars(varlist)                                                        #
+#    Check that each variable in the list has a value                       #
+#############################################################################
+checkvars()
+{
+   cv_stat=okay
+   vlist=$1
+
+   xx_log "Beginning variable list check for process $$ at `date`"
+   xx_log "---------------------------------------------------------------"
+   for i in $vlist
+   do
+      res=`eval "echo \\$$i"`
+      if [ "$res" = "" ]
+      then
+         xx_error "$i is undefined"
+         cv_stat=error
+      else
+         xx_log "$i = $res"
+      fi
+   done
+   [ "$cv_stat" = "okay" ] && return 1 || return 255
+   xx_log "---------------------------------------------------------------"
+   xx_log "Finished variable list check for process $$ at `date`"
+
+}
+
+###############################################################################
+#
+# Name:         gds_initialize()
+#
+# Interface:    $1 ::= <config-file>, $GDS_DSADNPREFIX, $PATH, $NLSPATH
+#
+# Return codes: 1   = environment initialized.
+#		255 = GDS_DSADNPREFIX not set correctly.
+#
+# Return val:   PGM, LOCHOST, COUNTRY, ORGANIZ, ORGUNIT, COMNAM1,
+#               PATH, NLSPATH
+#
+# Authors:      Wayne Mock (IBM), Frank Ginac(OSF)
+#
+###############################################################################
+gds_initialize()
+{
+#set -x
+
+   PGM=`basename $0`
+   INIT=0
+   CONF=""
+
+   if [ $# -lt 1 -o $# -gt 2 ]
+   then 
+      echo  "usage:  $PGM <config-file> [init]"
+      return 255
+   fi
+   for arg in $*
+   do
+      case $arg in
+         init)  INIT=1
+                xx_log "Setting up $LOCHOST in init mode..."
+                ;;
+            *) if [ -f "$arg" ] 
+               then
+                  xx_log "Using config file $arg..."
+                  CONF_FILE=$arg
+               fi
+      esac
+   done
+   if [ ! -n "$CONF_FILE" ]
+   then
+      echo "No config file specified..."
+      echo  "usage:  $PGM <config-file> [init]"                           
+      return 255
+   fi
+   LOCHOST=`hostname`
+   ISINIT=0
+   OTHER_DSAS=""
+   MACH_TO_DSA=""
+ 
+     
+
+   #
+   # pull in the machine definitions, initial dsa specs and config info
+   # for the machines to be set up.
+   #
+   . $CONF_FILE
+
+   #
+   # stolen from setup.i.gds so that we needn't include this whole file
+   # for these three lines.
+   #
+   id | egrep "(root|operator)" >>/dev/null 2>&1
+   rcheck $? 0 "Running as root or operator?" || { echo echo >$ER; exit 1; }
+   xx_log ""
+
+   set $GDS_DSADNPREFIX
+   COUNTRY=$1
+   ORGANIZ=$2
+   ORGUNIT=$3
+   COMNAM1=$4
+
+   if [ ! "$COUNTRY" -o ! "$ORGANIZ" -o ! "$ORGUNIT" -o ! "$COMNAM1" ]; then
+	 xx_error "The GDS_DSADNPREFIX is not defined correctly."
+	>$ER
+         return 255
+   fi
+
+#  Set necessary environment variables for admin tools gdssysadm and
+#  gdsditadm.
+
+   NLSPATH=$NLSPATH:/usr/lib/nls/msg/%L/%N
+   export NLSPATH
+
+   return 1
+
+} # gds_initialize
+
+###############################################################################
+#
+# Name:         gds_create_client_only()
+#
+# Interface:    $LOCHOSTIP, $CURR_ID_DUAPORT, $COUNTRY, $ORGANIZ, $ORGUNIT,
+#               $COMNAM1, $CURR_ID_DEF, $CURR_ID, $CURR_ID_DSAPORT,
+#               $CURR_ID_INIT, $CURR_ID_INITIP $CURR_ID_DEFIP
+#
+# Return codes: None
+#
+# Return val:   None
+#
+# Authors:      Frank Ginac(OSF)
+#
+###############################################################################
+gds_create_client_only()
+{
+#set -x
+#
+# Configure the directory system.
+#
+xx_log "Configuring ${CURR_ID} as a client-only."
+gdsconf $DCELOCAL/var/adm/directory/gds 1 $CURR_ID Client-System 0 no C-isam ${GDS_NCLIENTS} $DCELOCAL/etc $DCELOCAL/var/directory/gds $DCELOCAL
+
+#
+# Activate the directory system.
+#
+gdssysadm -fA -p
+
+#
+# Initialize the DUA cache.
+#
+gdsditadm -i$CURR_ID -dCACHE -o1 client_init > /dev/null <<EOF
+:**** Add Client Address ****:
+:Operation:05
+:P-Selector:
+:S-Selector:
+:T-Selector:Client
+:Net-address 1:TCP/IP!internet=${LOCHOSTIP}+port=$CURR_ID_DUAPORT
+:Net-address 2:
+:Net-address 3:
+:Net-address 4:
+:Net-address 5:
+:**** RETURN ****:
+:operation:00
+:**** Administration ****:
+:Function:0
+EOF
+
+gds_check_gdsditadm_session client_init
+if [ "$gds_cgs_out" != "" ]
+then
+   client_anyerrors="$gds_cgs_out"
+   return 0;
+fi
+
+#
+# Generate the string from internet= on to avoid the problem of 
+# buffer overwriting in GDS
+#
+DEFDSASTRING=`echo ${CURR_ID_DEFIP} ${CURR_ID_DSAPORT} | awk '{ xxx="________"; sp_need= 15-length($1); printf("%s+port=%s%s",$1,$2,substr(xxx,1,sp_need))}'`
+
+gdsditadm -i$CURR_ID -dCACHE -o1 client_init > /dev/null <<EOF
+:**** AddObject (Add default dsa to the cache) ****:
+:Operation:01
+:Objekttypnummer:07
+:country:$COUNTRY
+:organization:$ORGANIZ
+:OrganizationalUnit:$ORGUNIT
+:Common-Name:$COMNAM1
+:Common-Name:$CURR_ID_DEF
+:ObjectClass:DSA
+:Auxiliary Object class:NO
+:Attribute Name 1:Presentation-Address
+:Attribute Name 2:DSA-Type
+:Attribute Name 3:
+:Attribute Name 4:
+:Attribute Name 5:
+:More:
+:attributName:DSA-Type
+:attributwert:default'
+:attributwert:
+:attributName:
+:attributwert:
+:attributwert:
+:attributName:
+:attributwert:
+:attributwert:
+:P-Selector:
+:S-Selector:
+:T-Selector:Server
+:Net-address 1:TCP/IP!internet=${DEFDSASTRING}
+:Net-address 2:
+:Net-address 3:
+:Net-address 4:
+:Net-address 5:
+:******** RETURN ******:
+:operation:00
+:**** Administration ****:
+:Function:0
+EOF
+
+#
+# check log for gdsditadm errors
+#
+gds_check_gdsditadm_session client_init
+if [ "$gds_cgs_out" != "" ]
+then
+   client_anyerrors="$gds_cgs_out"
+   return 0;
+fi
+
+if [ "$CURR_ID_INIT" != "" ]
+then
+   INITDSASTRING=`echo ${CURR_ID_INITIP} ${CURR_ID_DSAPORT} | awk '{ xxx="________"; sp_need= 15-length($1); printf("%s+port=%s%s",$1,$2,substr(xxx,1,sp_need))}'`
+   gdsditadm -i$CURR_ID -dCACHE -o1 client_init > /dev/null <<EOF
+:**** AddObject (Add initial dsa to the cache) ****:
+:Operation:01
+:Objekttypnummer:07
+:country:$COUNTRY
+:organization:$ORGANIZ
+:OrganizationalUnit:$ORGUNIT
+:Common-Name:$COMNAM1
+:Common-Name:$CURR_ID_INIT
+:ObjectClass:DSA
+:Auxiliary Object class:NO
+:Attribute Name 1:Presentation-Address
+:Attribute Name 2:
+:Attribute Name 3:
+:Attribute Name 4:
+:Attribute Name 5:
+:More:
+:P-Selector:
+:S-Selector:
+:T-Selector:Server
+:Net-address 1:TCP/IP!internet=${INITDSASTRING}
+:Net-address 2:
+:Net-address 3:
+:Net-address 4:
+:Net-address 5:
+:******** RETURN ******:
+:operation:00
+:**** Administration ****:
+:Function:0
+EOF
+
+   gds_check_gdsditadm_session client_init
+   if [ "$gds_cgs_out" != "" ]
+   then
+      client_anyerrors="$gds_cgs_out"
+      return 0;
+   fi
+fi ## if [ "$CURR_ID_INIT" != "" ]
+
+} # gds_create_client_only
+
+##################################################################################
+# 
+# Name: gds_add_dsa_to_cache()
+#
+# Purpose: Add a dsa object to the cache.
+#
+# Action: Adds the dsa object to the cache.
+#
+# Interface: $1 = the dsa to add, COUNTRY, ORGANIZ, ORGUNIT, COMNAM1,
+#		  GDS_DSAPORT , GDS_HOSTCONFIG, LOCHOST
+#
+# Return Codes: 255 if Error reported by GDS during the add
+#                 1 if no error reported.
+#
+# Author: Mark Hickey (OSF)
+#
+##################################################################################
+gds_add_dsa_to_cache()
+{
+#set -x
+
+#
+# what we actually get here is a host name, but we can map this.  Save
+# the name so it doesn't get stomped on.
+dsa_to_add=$1
+
+#
+# look for the ip address of the dsa to be added.  If this is in the 
+# machine to dsa map, then get the DSA name from the machine name for 
+# the cache add.
+#
+isspec=`expr "$MACH_TO_DSA" : "[-0-9a-zA-Z _,:]*\($1:[-0-9a-zA-Z]*\)"`
+[ "$isspec" != "" -a "$isspec" != "0" ] &&  { set `echo $isspec | tr ':' ' '`; dsa_to_add=$2; }
+
+DSAIP=`getip $1`
+
+# did we get it?
+
+if [ $? -ne 0 ] ; then
+
+   # couldn't find the ip address, so return error
+   xx_error "gds_add_dsa_to_cache: Can't get IP address for $11"
+   return 255
+fi
+
+#
+# Add the object to the cache, logging errors to a tmp file.
+#
+gdsditadm -i$CURR_ID -dCACHE -o1 add_dsa > /dev/null <<EOF
+:**** AddObject (Add default dsa to the cache) ****:
+:Operation:01
+:Objekttypnummer:07
+:country:$COUNTRY
+:organization:$ORGANIZ
+:OrganizationalUnit:$ORGUNIT
+:Common-Name:$COMNAM1
+:Common-Name:$dsa_to_add
+:ObjectClass:DSA
+:Auxiliary Object class:NO
+:Attribute Name 1:Presentation-Address
+:Attribute Name 2:
+:Attribute Name 3:
+:Attribute Name 4:
+:Attribute Name 5:
+:More:
+:P-Selector:
+:S-Selector:
+:T-Selector:Server
+:Net-address 1:TCP/IP!internet=${DSAIP}+port=${CURR_ID_DSAPORT}
+:Net-address 2:
+:Net-address 3:
+:Net-address 4:
+:Net-address 5:
+:******** RETURN ******:
+:operation:00
+:**** Administration ****:
+:Function:0
+EOF
+
+#
+# Check the log file for error messages
+#
+gds_check_gdsditadm_session add_dsa
+if [ "$gds_cgs_out" != "" ]
+then
+   xx_error "Errors while adding dsa $dsa_to_add to cache:"
+   xx_error "   $gds_cgs_out"
+   return 255
+else
+   return 1
+fi
+
+} # gds_add_dsa_to_cache()
+
+###############################################################################
+#
+# Name:         gds_create_client_server()
+#
+# Interface:    $LOCHOSTIP, $CURR_ID_DUAPORT, $COUNTRY, $ORGANIZ, $ORGUNIT,
+#               $COMNAM1, $CURR_ID_DEF, $CURR_ID_DEFIP, $CURR_ID_DSAPORT, 
+#               $LOCHOST $1= {initial | other}
+#
+# Return codes: None
+#
+# Return val:   None
+#
+# Authors:      Mark Hickey (OSF)
+#
+###############################################################################
+
+gds_create_client_server()
+{
+#set -x
+
+cli_srv_anyerrors=""
+
+# Configure the directory system.
+xx_log "Configuring dir id $CURR_ID"
+gdsconf $DCELOCAL/var/adm/directory/gds 1 $CURR_ID Clt/Srv-System 1 '*' C-isam ${GDS_NCLIENTS} $DCELOCAL/etc $DCELOCAL/var/directory/gds $DCELOCAL
+
+xx_log "Checking the gdsconf copy of files to ${DCELOCAL}/var/directory/gds/dsa/dir${CURR_ID}"
+
+#
+# check for a problem we saw during setup 10-26-93 - files not
+# copied to the var/directory/gds/dsa/dirX directory
+#
+# generate a list of the files in the ${DCELOCAL}/var/directory/gds/dsa
+# directory
+#
+ls -l ${DCELOCAL}/var/directory/gds/dsa | grep "^\-" | awk '{print $9}' > /tmp/g_s_dsa.$$
+
+#
+# Now generate a list of the files in the 
+# ${DCELOCAL}/var/directory/gds/dsa/dirX directory
+#
+ls -l ${DCELOCAL}/var/directory/gds/dsa/dir${CURR_ID} | grep "^\-" | awk '{print $9}' > /tmp/g_s_dsaX.$$
+diff /tmp/g_s_dsa.$$ /tmp/g_s_dsaX.$$ | grep -v "schema_ib" | grep "<" > /tmp/g_s_missing.$$
+ismissing=`grep "<" /tmp/g_s_missing.$$`
+if [  "$ismissing" != "" ]
+then
+   xx_error "gdsconf FAILED!  The following files were not copied to the"
+   xx_error "directory ${DCELOCAL}/var/directory/gds/dsa/dir${CURR_ID}:"
+   xx_error "`awk '$1 == \"<\" {printf(\"   %s\n\", $2);}' /tmp/g_s_missing.$$`"
+   cli_srv_anyerrors="gdsconf failed"
+   return 0
+fi
+
+#
+# cleanup the temporary files crated during the gdsconf check.
+#
+rm -f /tmp/g_s_*.$$
+
+# Activate the directory system.
+xx_log "Activating directory service"
+gdssysadm -fA -p
+
+# Initialize the DUA cache.
+LOCDSASTRING=`echo ${LOCHOSTIP} ${CURR_ID_DSAPORT} | awk '{ xxx="________"; sp_need= 15-length($1); printf("%s+port=%s%s",$1,$2,substr(xxx,1,sp_need))}'`
+
+#
+# define additional variables for other dsa's if this is not the initial DSA
+#
+if [ "$1" != "initial" ]
+then
+   CLISTRING=`echo ${LOCHOSTIP} ${CURR_ID_DUAPORT} | awk '{ xxx="________"; sp_need= 15-length($1); printf("%s+port=%s%s",$1,$2,substr(xxx,1,sp_need))}'`
+   DEFDSASTRING=`echo ${CURR_ID_DEFIP} ${CURR_ID_DSAPORT} | awk '{ xxx="________"; sp_need= 15-length($1); printf("%s+port=%s%s",$1,$2,substr(xxx,1,sp_need))}'`
+   #
+   # the type for the local DSA
+   #
+   loc_dsa_type="local"
+else
+   #
+   # the type for the local dsa
+   #
+   loc_dsa_type="default/local"
+fi
+gdsditadm -i$CURR_ID -dCACHE -o1 cli_srv_dsa.out > /dev/null <<EOF
+:**** Initialize dua cache ****:
+:**** Add Client Address *******:
+:Operation:05
+:P-Selector:
+:S-Selector:
+:T-Selector:Client
+:Net-address 1:TCP/IP!internet=${LOCHOSTIP}+port=${CURR_ID_DUAPORT}
+:Net-address 2:
+:Net-address 3:
+:Net-address 4:
+:Net-address 5:
+:**** AddObject (Add default/local dsa to the cache) ****:
+:Operation:01
+:Objekttypnummer:07
+:country:$COUNTRY
+:organization:$ORGANIZ
+:OrganizationalUnit:$ORGUNIT
+:Common-Name:$COMNAM1
+:Common-Name:$LOCNAME
+:ObjectClass:DSA
+:Auxiliary Object class:NO
+:Attribute Name 1:Presentation-Address
+:Attribute Name 2:DSA-Type
+:Attribute Name 3:
+:Attribute Name 4:
+:Attribute Name 5:
+:More:
+:attributName:DSA-Type
+:attributwert:${loc_dsa_type}'
+:attributwert:
+:attributName:
+:attributwert:
+:attributwert:
+:attributName:
+:attributwert:
+:attributwert:
+:P-Selector:
+:S-Selector:
+:T-Selector:Server
+:Net-address 1:TCP/IP!internet=${LOCDSASTRING}
+:Net-address 2:
+:Net-address 3:
+:Net-address 4:
+:Net-address 5:
+:******** RETURN ******:
+:operation:00
+:**** Administration ****:
+:Function:0
+EOF
+
+#
+# check log for gdsditadm errors
+#
+gds_check_gdsditadm_session cli_srv_dsa.out
+if [ "$gds_cgs_out" != "" ]
+then
+   cli_srv_anyerrors="$gds_cgs_out"
+   return 0
+fi
+
+
+#
+# IF this is the initial DSA
+#
+if [ "$1" = "initial" ]
+then
+   # Wait 2.5 minutes (2.0 min necessary + .5 min for added measure to allow
+   # DSA to get its NSAP from the DUA cache.
+   xx_log 'Sleeping 2.5 minutes...'
+   sleep 150
+
+   # Add the other DSA's involved to the cache (this will include the initial 
+   for odsa in $OTHER_DSAS
+   do
+      #
+      # the add_dsa_to_cache routine expects machine names, so no converting
+      # here
+      #
+      xx_log "Adding information for DSA on $odsa to the DUA cache..."
+      gds_add_dsa_to_cache $odsa
+      if [ $? -eq 1 ] ; then
+         xx_log "Finished adding $odsa."
+      else
+         xx_error "Couldn't add $odsa to cache."
+      fi
+   done
+
+   # Add initial DSA object to the namespace.
+   gdsditadm cli_srv_dsa.out > /dev/null <<EOF
+:*** Login to the default DSA ***:
+:directory id:$CURR_ID
+:password:
+:Country:
+:Organisation:
+:Organisational unit:
+:common name:
+:options:Logon to the Default DSA
+:*** Option 1: object administration ***:
+:Administration:1
+:**** AddObject ${COUNTRY} ****:
+:Operation:01
+:Objekttypnummer:02
+:country:$COUNTRY
+:ObjectClass:C
+:Auxiliary Object class:NO
+:Attribute Name 1:
+:Attribute Name 2:
+:Attribute Name 3:
+:Attribute Name 4:
+:Attribute Name 5:
+:More:
+:**** AddObject ${COUNTRY}/${ORGANIZ} ****:
+:Operation:01
+:Objekttypnummer:03
+:country:$COUNTRY
+:organization:$ORGANIZ
+:ObjectClass:ORG
+:Auxiliary Object class:NO
+:Attribute Name 1:
+:Attribute Name 2:
+:Attribute Name 3:
+:Attribute Name 4:
+:Attribute Name 5:
+:More:
+:**** AddObject ${COUNTRY}/${ORGANIZ}/${ORGUNIT} ****:
+:Operation:01
+:Objekttypnummer:04
+:country:$COUNTRY
+:organization:$ORGANIZ
+:OrganizationalUnit:$ORGUNIT
+:ObjectClass:OU
+:Auxiliary Object class:NO
+:Attribute Name 1:
+:Attribute Name 2:
+:Attribute Name 3:
+:Attribute Name 4:
+:Attribute Name 5:
+:More:
+:**** AddObject ${COUNTRY}/${ORGANIZ}/${ORGUNIT}/${COMNAM1} ****:
+:Operation:01
+:Objekttypnummer:05
+:country:$COUNTRY
+:organization:$ORGANIZ
+:OrganizationalUnit:$ORGUNIT
+:User:$COMNAM1
+:ObjectClass:APP
+:Auxiliary Object class:NO
+:Attribute Name 1:
+:Attribute Name 2:
+:Attribute Name 3:
+:Attribute Name 4:
+:Attribute Name 5:
+:More:
+:**** AddObject ${COUNTRY}/${ORGANIZ}/${ORGUNIT}/${COMNAM1}/${LOCNAME} ****:
+:Operation:01
+:Objekttypnummer:07
+:country:$COUNTRY
+:organization:$ORGANIZ
+:OrganizationalUnit:$ORGUNIT
+:User:$COMNAM1
+:DSA-Name:$LOCNAME
+:ObjectClass:DSA
+:Auxiliary Object class:NO
+:Attribute Name 1:Presentation-Address
+:Attribute Name 2:User-Password
+:Attribute Name 3:
+:Attribute Name 4:
+:Attribute Name 5:
+:More:
+:attributName:User-Password
+:attributwert:dsa'
+:attributwert:
+:attributName:
+:attributwert:
+:attributwert:
+:attributName:
+:attributwert:
+:attributwert:
+:P-Selector:
+:S-Selector:
+:T-Selector:Server
+:Net-address 1:TCP/IP!internet=${LOCHOSTIP}+port=${CURR_ID_DSAPORT}
+:Net-address 2:
+:Net-address 3:
+:Net-address 4:
+:Net-address 5:
+:******** RETURN ******:
+:operation:0
+:**** Administration ****:
+:Function:0
+EOF
+
+   #
+   # check log for gdsditadm errors
+   #
+   gds_check_gdsditadm_session cli_srv_dsa.out
+   if [ "$gds_cgs_out" != "" ]
+   then
+      cli_srv_anyerrors="$gds_cgs_out"
+      return 0
+   fi
+else
+   #
+   # add the default DSA to the cache
+   #
+   gdsditadm -i$CURR_ID -dCACHE -o1 cli_srv_dsa.out  >/dev/null <<EOF
+:**** Initialize dua cache ****:
+:**** AddObject (Add default dsa to the cache) ****:
+:Operation:01
+:Objekttypnummer:07
+:country:$COUNTRY
+:organization:$ORGANIZ
+:OrganizationalUnit:$ORGUNIT
+:Common-Name:$COMNAM1
+:Common-Name:$CURR_ID_DEF
+:ObjectClass:DSA
+:Auxiliary Object class:NO
+:Attribute Name 1:Presentation-Address
+:Attribute Name 2:DSA-Type
+:Attribute Name 3:
+:Attribute Name 4:
+:Attribute Name 5:
+:More:
+:attributName:DSA-Type
+:attributwert:default'
+:attributwert:
+:attributName:
+:attributwert:
+:attributwert:
+:attributName:
+:attributwert:
+:attributwert:
+:P-Selector:
+:S-Selector:
+:T-Selector:Server
+:Net-address 1:TCP/IP!internet=${DEFDSASTRING}
+:Net-address 2:
+:Net-address 3:
+:Net-address 4:
+:Net-address 5:
+:******** RETURN ******:
+:operation:0
+:**** Administration ****:
+:Function:0
+EOF
+
+   #
+   # check log for gdsditadm errors
+   #
+   gds_check_gdsditadm_session cli_srv_dsa.out
+   if [ "$gds_cgs_out" != "" ]
+   then
+      cli_srv_anyerrors="$gds_cgs_out"
+      return 0
+   fi
+
+      
+   # Wait 2.5 minutes (2 min necessary + .5 min for added measure to allow
+   #  DSA to get its NSAP from the DUA cache.
+
+   xx_log 'Sleeping 2.5 minutes...'
+   sleep 150
+
+   if [ "$CURR_ID_INIT" != "" ]
+   then
+      xx_log "Adding $LOCNAME to administrative domain with initial dsa $CURR_ID_INIT"
+      xx_log "Checking for write access to current directory (`pwd`)"
+      xx_log "This is required for copying the DIT from the initial dsa..."
+      #
+      # check to see if we can write in this directory
+      #
+      touch ./$$ > /dev/null 2>&1
+      if [ $? -ne 0 ]
+      then
+         cli_srv_anyerrors="Can't write to current directory!!"
+         return 0
+      else
+         xx_log "Verified write-access to current directory"
+         rm ./$$
+      fi
+
+      #
+      # Add initial DSA to the cache
+      #
+      INITDSASTRING=`echo ${CURR_ID_INITIP} ${CURR_ID_DSAPORT} | awk '{ xxx="________"; sp_need= 15-length($1); printf("%s+port=%s%s",$1,$2,substr(xxx,1,sp_need))}'`
+      gdsditadm -i$CURR_ID -dCACHE -o1 cli_srv_dsa.out  >/dev/null <<EOF
+:**** Initialize dua cache ****:
+:**** AddObject (Add initial dsa to the cache) ****:
+:Operation:01
+:Objekttypnummer:07
+:country:$COUNTRY
+:organization:$ORGANIZ
+:OrganizationalUnit:$ORGUNIT
+:Common-Name:$COMNAM1
+:Common-Name:$CURR_ID_INIT
+:ObjectClass:DSA
+:Auxiliary Object class:NO
+:Attribute Name 1:Presentation-Address
+:Attribute Name 2:
+:Attribute Name 3:
+:Attribute Name 4:
+:Attribute Name 5:
+:More:
+:P-Selector:
+:S-Selector:
+:T-Selector:Server
+:Net-address 1:TCP/IP!internet=${INITDSASTRING}
+:Net-address 2:
+:Net-address 3:
+:Net-address 4:
+:Net-address 5:
+:******** RETURN ******:
+:operation:0
+:**** Administration ****:
+:Function:0
+EOF
+
+      #
+      # check log for gdsditadm errors
+      #
+      gds_check_gdsditadm_session cli_srv_dsa.out
+      if [ "$gds_cgs_out" != "" ]
+      then
+         cli_srv_anyerrors="$gds_cgs_out"
+         return 0
+      fi
+
+      #
+      # change the schema Master Knowledge to the initial DSA
+      #
+      gdsditadm -i$CURR_ID -d/C=${COUNTRY}/O=${ORGANIZ}/OU=${ORGUNIT}/CN=${COMNAM1}/CN=${LOCNAME} -o1 cli_srv_dsa.out >/dev/null <<EOF
+:**** ModifyAttribute Master-Knowledge of Schema ****:
+:Operation:07
+:Objekttypnummer:01
+:Scheme:Schema
+:ObjectClass:SCH
+:Auxiliary Object class:NO
+:attributName:Master-Knowledge
+:old value:/C=${COUNTRY}/O=${ORGANIZ}/OU=${ORGUNIT}/CN=${COMNAM1}/CN=${LOCNAME}'
+:old value:
+:new value:/C=${COUNTRY}/O=${ORGANIZ}/OU=${ORGUNIT}/CN=${COMNAM1}/CN=${CURR_ID_INIT}'
+:new value:
+:**** Return ****:
+:operation:0
+:**** Administration ****:
+:Function:0
+EOF
+
+
+      #
+      # check log for gdsditadm errors
+      #
+      gds_check_gdsditadm_session cli_srv_dsa.out
+      if [ "$gds_cgs_out" != "" ]
+      then
+         cli_srv_anyerrors="$gds_cgs_out"
+         return 0
+      fi
+
+      # Logon to local DSA and copy ROOT from initial DSA to local DSA.
+      LOCDSA=`echo ${LOCNAME}| awk '{ xxx="________"; sp_need= 15-length($1); printf("%s%s",$1,substr(xxx,1,sp_need))}'` 
+      gdsditadm -i$CURR_ID -d/C=${COUNTRY}/O=${ORGANIZ}/OU=${ORGUNIT}/CN=${COMNAM1}/CN=${LOCNAME} -o4 cli_srv_dsa.out > /dev/null <<EOF
+:**** Copy subtree country to ROOT ****:
+:operation:3
+:**** Select Country object *******:
+:Objekttypnummer:02
+:**** object type subtree *******:
+:object type: '
+:******** country = $COUNTRY *********:
+:country:$COUNTRY
+:****** Source DSA selection ******:
+:Source DSA:  '
+:country:$COUNTRY
+:organization:$ORGANIZ
+:OrganizationalUnit:$ORGUNIT
+:Common-Name:$COMNAM1
+:Common-Name:$CURR_ID_INIT
+:options:'
+:********* Copy to root object ********:
+:Objekttypnummer:0
+:********* Overwrite existing objects **********:
+:overwrite:Y
+:********* original acl **********:
+:ACL:Original
+:Target DSA: '
+:country:$COUNTRY
+:organization:$ORGANIZ
+:OrganizationalUnit:$ORGUNIT
+:Common-Name:$COMNAM1
+:Common-Name:$LOCDSA
+:options:'
+:*****return*****:
+:operation:0
+:**** Administration ****:
+:Function:0
+EOF
+
+      #
+      # check log for gdsditadm errors
+      #
+      gds_check_gdsditadm_session cli_srv_dsa.out
+      if [ "$gds_cgs_out" != "" ]
+      then
+         cli_srv_anyerrors="$gds_cgs_out"
+         return 0
+      fi
+   
+      # Deactivate and the reactivate the installation.
+      gdssysadm -fd -p
+      gdssysadm -fA -p
+ 
+      #
+      # sleep a couple o'secs to let the DSA get itself sane.
+      #
+      sleep 30
+      cli_srv_anyerrors=""
+
+      # Logon to local DSA and add local DSA to the name space.
+      gdsditadm -i$CURR_ID -d/C=${COUNTRY}/O=${ORGANIZ}/OU=${ORGUNIT}/CN=${COMNAM1}/CN=${LOCNAME} -o1 cli_srv_dsa.out > /dev/null <<EOF
+:**** AddObject ${COUNTRY}/${ORGANIZ}/${ORGUNIT}/${COMNAM1}/${LOCNAME} ****:
+:Operation:01
+:Objekttypnummer:07
+:****** object spec ******:
+:country:$COUNTRY
+:organization:$ORGANIZ
+:OrganizationalUnit:$ORGUNIT
+:User:$COMNAM1
+:DSA-Name:$LOCNAME
+:ObjectClass:DSA
+:Auxiliary Object class:NO
+:Attribute Name 1:Presentation-Address
+:Attribute Name 2:User-Password
+:Attribute Name 3:
+:Attribute Name 4:
+:Attribute Name 5:
+:More:
+:attributName:User-Password
+:attributwert:dsa'
+:attributwert:
+:attributName:
+:attributwert:
+:attributwert:
+:attributName:
+:attributwert:
+:attributwert:
+:P-Selector:
+:S-Selector:
+:T-Selector:Server
+:Net-address 1:TCP/IP!internet=${LOCHOSTIP}+port=${CURR_ID_DSAPORT}
+:Net-address 2:
+:Net-address 3:
+:Net-address 4:
+:Net-address 5:
+:******** RETURN ******:
+:operation:0
+:**** Administration ****:
+:Function:0
+EOF
+
+      #
+      # check log for gdsditadm errors
+      #
+      gds_check_gdsditadm_session cli_srv_dsa.out
+      if [ "$gds_cgs_out" != "" ]
+      then
+         cli_srv_anyerrors="$gds_cgs_out"
+         return 0
+      fi
+
+   fi ## endif [ "$CURR_ID_INIT" != "" ]
+fi ## if [ "$1" = "initial" ]
+
+
+   
+} # gds_create_client_server_initial
+
+
+################################################################################
+#
+# Name:    gds_check_dir_sys()
+#
+# Purpose: Determine if the directory system configuration and initialization 
+#          was successful.
+#
+# Action:  Use gdsdirinfo.awk to check the output of the dirinfo command.  If
+#	   the result of running gdsdirinfo does not look correct, then de-
+#	   activate and reactivate the directory system via gdssysadm to try
+#	   to correct the problems.  Run gdsdirinfo and check the output again.
+#	   If the gdsdirinfo output is still not correct, return the failure
+#	   value. 
+#
+# Interface: $1 is one of cli_only or cli_srv
+# 
+# Return Codes: 1 means failure; could not get a clean gdsdirinfo from the 
+#                                directory system
+#               0 means success; got a clean gdsdirinfo.
+#
+# Author:  Mark Hickey (OSF)
+#
+################################################################################
+
+gds_check_dir_sys()
+{
+#set -x
+
+  # the first thing in the input file to the awk is the specs for the 
+  # configs that should be running.
+
+  cat /tmp/$$.specs > /tmp/awkinp.$$
+
+  # now dump the gdsdirinfo into the file
+
+  gdsdirinfo | grep -v "^#" | sort >> /tmp/awkinp.$$
+  
+  # Mark end of input
+
+  echo "EOINPUT" >> /tmp/awkinp.$$
+  
+  # run the awk
+
+  result=`awk -f $STDEXC/gdsdirinfo.awk /tmp/awkinp.$$`
+  rm -f /tmp/awkinp.$$
+
+  if [ $result -ne 0 ] ; then 
+     return 1
+  else
+     return 0
+  fi
+
+}  # gds_check_dir_sys
+
+################################################################################
+#
+# Name:    gds_recov_dir_sys()
+#
+# Purpose: Cycle activation of the directory service to try to fix the state.
+#
+# Action:  Deactivate and reactivate the directory system via gdssysadm.
+#
+# Interface: None
+#
+# Return Codes: None
+################################################################################
+
+gds_recov_dir_sys()
+{
+#set -x
+
+   # Directory service is not in correct state.  Try to recover it by 
+   # cycling activation.
+
+   gdssysadm -fd -p
+   gdssysadm -fA -p
+
+   # We toss in a sleep here to make sure the DSA has time to get the
+   # address from the cache
+
+   echo "Sleeping for 30 seconds"
+   sleep 30
+
+} # gds_recov_dir_sys
+
+################################################################################
+#
+# Name:    gds_check_recov_dir_sys()
+#
+# Purpose: Determine if the directory system configuration and initialization 
+#          was successful.
+#
+# Action:  Use gds_check_dir_sys to check the state of the directory system.
+#          If the state is incorrect, then attempt to recover by calling 
+#          gds_recov_dir_sys.  Call gds_check_dir_sys to see if the recover 
+#          was successful; if not return the error value.
+#
+# Interface: $1 is one of cli_only or cli_srv
+# 
+# Return Codes: 1 means failure; could not get a clean gdsdirinfo from the 
+#                                directory system
+#               0 means success; got a clean gdsdirinfo.
+#
+# Author:  Mark Hickey (OSF)
+#
+################################################################################
+
+gds_check_recov_dir_sys()
+{
+#set -x
+
+   # See what the current state of the directory system is
+
+   gds_check_dir_sys
+
+   if [ $? -ne 0 ] ; then 
+
+      # Attempt to recover the directory system
+
+      gds_recov_dir_sys
+   
+      # check state again
+
+      gds_check_dir_sys
+     
+      if [ $? -ne 0 ] ; then
+         return 1
+      fi
+   fi
+   
+
+   # if we got here, we are okay
+
+   return 0
+
+} # gds_check_recov_dir_sys
+
+#####################################################################
+#                                                                   #
+# gds_parse_dir_id_spec                                             #
+#                                                                   #
+#    Parses a dir id spec and sets variables for use by other       #
+#    routines in configuring and setting up that dir id on this     #
+#    system.                                                        #
+#                                                                   #
+#    Input : a dir id spec in the form <id>,<type>,<default-dsa>    #
+#    Output: CURR_ID, CURR_ID_TYPE, CURR_ID_DEF, CURR_ID_INIT       #
+#    Return: 1 if all variables set, 2 if other error               #
+#                                                                   #
+#####################################################################
+gds_parse_dir_id_spec()
+{
+#set -x
+   
+   error=0
+   errstr=""
+   errval=""
+   #
+   # break up the spec into it's pieces
+   #
+   spec=$1
+   set `echo $1 | tr ',' ' '`
+   #
+   # see if we got the right number of pieces
+   #
+   if [ $# -ne 3 ] 
+   then
+      echo "gds_parse_dir_id: failed - missing parts of spec ($spec)"
+      return 0
+   fi
+
+   #
+   # current id
+   #
+   CURR_ID=$1
+   #
+   # check the current id type
+   #
+   if [ "$2" != "Cli" -a "$2" != "Cli-Srv" ]
+   then 
+      echo "gds_parse_dir_id: failed - bad installation type in spec ($spec)"
+      return 0
+   else
+      CURR_ID_TYPE=$2
+   fi
+   #
+   # default dsa for current id
+   #
+   # the dsa may have a different name than the machine it is on.  Check the
+   # machine to dsa name map for an entry for this machine.
+   #
+   CURR_ID_DEF=`eval "echo \\$${3}"`
+   isspec=`expr "$MACH_TO_DSA" : "[-0-9a-zA-Z _,:]*\($CURR_ID_DEF:[-0-9a-zA-Z]*\)"`
+   if [ "$isspec" = "" -o "$isspec" = "0" ] 
+   then
+      machstr=$CURR_ID_DEF
+   else
+      set `echo $isspec | tr ':' ' '`
+      CURR_ID_DEF=$2
+      machstr=$1
+   fi
+   #
+   # ip address of default dsa
+   #
+   CURR_ID_DEFMACH=$machstr
+   CURR_ID_DEFIP=`getip $machstr`
+   if [ $? -ne 0 ]
+   then 
+      xx_error "gds_parse_dir_id: failed - can't get default dsa ip..."
+      return 0
+   fi
+   #
+   # initial dsa if any, unless we are the initial dsa for the CURR_ID
+   #
+   inisinit=`echo "$ISINIT" | grep " $CURR_ID "`
+   if [ "$inisinit" = "" ]
+   then
+      gds_is_initial_dsa $CURR_ID
+      if [ "$CURR_ID_INIT" != "" ]
+      then
+         #
+         # dsa name of initial dsa
+         #
+         isspec=`expr "$MACH_TO_DSA" : "[-0-9a-zA-Z _,:]*\($CURR_ID_INIT:[-0-9a-zA-Z]*\)"`
+         if [ "$isspec" != "" -a "$isspec" != "0" ] 
+         then
+            set `echo $isspec | tr ':' ' '`
+            CURR_ID_INIT=$2
+            machstr=$1
+         else 
+            machstr=$CURR_ID_INIT
+         fi
+         CURR_ID_INITMACH=$machstr
+         CURR_ID_INITIP=`getip $machstr`
+         if [ $? -ne 0 ]
+         then 
+            xx_error "gds_parse_dir_id: failed - can't get init dsa ip..."
+            return 0
+         fi
+      fi
+   else
+      CURR_ID_INIT=""; CURR_ID_INITIP=""; CURR_ID_INITMACH=""
+   fi
+   #
+   # port number for the cache for this id
+   #
+   CURR_ID_DUAPORT=${GDS_DUAPORTBASE}${CURR_ID}
+   #
+   # port number for the dsa for this id
+   #
+   CURR_ID_DSAPORT=${GDS_DSAPORTBASE}${CURR_ID}
+   #
+   # return okay if we got here
+   # 
+   return 1   
+}
+   
+
+
+#####################################################################
+#                                                                   #
+# gds_parse_config                                                  #
+#                                                                   #
+#    Finds the specification for this machine in the GDS_HOSTCONFIG #
+#    list, and assigns variables based on the specification.        #
+#                                                                   #
+#    Input : GDS_HOSTCONFIG                                         #
+#    Output: LOCROLE, LOCTYPE, LOCNAME, DIR_ID_SPEC                 #
+#    Return: 1 if all variables set, 0 if no spec found, 2 if other #
+#            error.                                                 #
+#                                                                   #
+#####################################################################
+gds_parse_config() 
+{
+#set -x
+   LOCNAME=
+   DIR_ID_SPECS=
+   #
+   # first determine if we are an initial DSA. First call in here is 
+   # a special case.
+   #
+   gds_is_initial_dsa
+   
+   #
+   # loop through the GDS_HOSTCONFIG list, looking for our name
+   #
+   foundit=0
+   error=0
+   errstr=""
+   errval=""
+   for i in $GDS_HOSTCONFIG
+   do
+      set `echo $i | tr ':' ' '`
+      currhost=`eval "echo \\$$1"`
+
+      if [ "$currhost" = "$LOCHOST" ]
+      then
+         foundit=1
+         #
+         # DSA name
+         #
+         case $2 in
+            name=same|name=none|name=*) 
+                   [ "$2" != "name=same" -a "$2" != "name=none" ] && \
+                             { LOCNAME=`echo $2 | sed -e s/name=//`; MACH_TO_DSA="$MACH_TO_DSA $LOCHOST:$LOCNAME"; } || \
+                             LOCNAME=$LOCHOST
+                   xx_log "$1 = $currhost (dsa name = $LOCNAME)"
+                         ;;
+                      *) error=1; errstr="name spec"; errval="($2)"
+                         break
+                         ;;
+         esac
+         if [ $error -eq 0 ]
+         then
+            # 
+            # loop through the dir id specs - if we are the initial DSA for
+            # any dir id and INIT is true, then only save that dir id spec,
+            # and the dir spec for dir id 1 (unless we are the initial for
+            # dir id 1).
+            #
+            # If we are the inital DSA for any dir id, and INIT is false,
+            # then DON'T save the dir id specs for dir id 1 or the dir id
+            # we are initial DSA for (the assumption is that these are 
+            # already set up).
+            # If we are not the initial DSA for any dir id, then
+            # save everything.
+            #
+            shift; shift
+            for j in $*
+            do
+               case $j in 
+                  dir=[0-9],*|dir=1[0-9],*|dir=2[0-9],*)
+                         thisspec=`echo $j | sed -e s/dir=//`
+                         set `echo $thisspec | tr ',' ' '`
+                         #
+                         # if this is an inital dir id for us
+                         #
+                         hasinit=""
+                         inisinit=`echo "$ISINIT" | grep " $1 "`
+                         if [ "$inisinit" != "" ]
+                         then
+                            hasinit=`echo $GDS_INITIALDSA | tr ' ' '\' | grep ",$1"`
+                         fi
+                         if [ $INIT -eq 1 ]
+                         then
+                            if [ "$hasinit" != "" -a $1 -ne 1 -a "$inisinit" = "" ]
+                            then
+                               if [ "$2" != "Cli" ]
+                               then
+                                  continue
+                               fi
+                            fi
+                         elif [ "$ISINIT" = "" ]
+                         then
+                            if [ $1 -eq 1 -o "$inisinit" != "" -o "$hasinit" = "" -o "$2" = "Cli" ] 
+                            then
+                               continue
+                            fi
+                         fi
+                         DIR_ID_SPECS="$DIR_ID_SPECS $thisspec"
+                         ;;
+                      *) error=1; errstr="dir id spec"; errval="($j)"
+                         break
+                         ;;
+               esac  ## case $j ##
+            done  ## for j in $* ##
+         fi ## error -eq 0 after name ##
+      else
+         #
+         # if this is not a spec that refers to us, just save the name
+         # of the dsa so that we can add it to the cache later.
+         # 
+         thisname=`echo $2 | sed -e s/name=//`
+         xx_log "$1 = $currhost (dsa name = $thisname)"
+         if [ "$thisname" = "none" ] 
+         then 
+            continue
+         elif [ "$thisname" = "same" ] 
+         then
+            OTHER_DSAS="$OTHER_DSAS $currhost" 
+         else        
+            OTHER_DSAS="$OTHER_DSAS $currhost"
+            MACH_TO_DSA="$MACH_TO_DSA $currhost:$thisname"
+         fi
+      fi ## currhost = LOCHOST ##
+   done ## for i in GDS_HOSTCONFIG ##
+   #
+   # any errors encountered ?
+   #
+   if [ $error -ne 0 ]
+   then
+      echo "gds_parse_config: failed - bad/missing $errstr $errval"
+      return 2 
+   elif [ $foundit -eq 0 ]
+   then
+      echo "gds_parse_config: no config information found for $LOCHOST"
+      return 0
+   else
+      return 1
+   fi
+
+}
+
+################################################################################
+#
+# Name:    main()                                                              
+#
+# Authors: Frank Ginac (OSF)
+#
+###############################################################################
+#set -x
+
+. $TET_ROOT/gds/ts/dcegdshd/gds.data
+
+# Initialize environment.
+gds_initialize $*
+
+if [ "$?" -eq 255 ] ; then
+	xx_error 'gds_initialize() returned 255, exiting...'
+	exit 1
+fi
+
+#Re-source the configuration file because some vars are typeset and 
+#remain local to gds_initialize() i.e mach_1, mach_2 (See sTest.gds)
+unset ALL_MACH
+unset GDS_HOSTCONFIG
+. $CONF_FILE
+
+# Verify that necessary environment variables have been initialized.
+if [ "$GDS_REQVARS" = "" ]
+then
+   xx_error "No variable list (GDS_REQVARS) defined in $CONF_FILE"
+   exit 1
+fi
+
+checkvars "$GDS_REQVARS"
+if [ "$?" -eq 255 ] ; then
+	xx_error 'checkvars() returned 255, exiting...'
+	exit 1
+fi
+
+# Determine local host IP addr.
+
+LOCHOSTIP=`gds_getip ${LOCHOST}`
+
+if [ "$?" -eq 255 ] ; then
+	xx_error 'gds_getip() returned 255, exiting...'
+	exit 1
+fi
+
+#
+# Get all the info on the GDS config for this machine
+#
+gds_parse_config
+if [ $? -ne 1 ]
+then
+   xx_error "CAN'T parse config info on $LOCHOST"
+   exit 1
+fi
+
+#
+# change directory to the ${DCELOCAL/var/adm/directory/gds/adm
+# directory.  We do this so that after we start GDS on this system, 
+# any core dumps of gds processes will end up in one place.
+#
+cd ${DCELOCAL}/var/adm/directory/gds/adm
+
+#
+# Loop through the directory id's config'ing them as specified.
+#
+# rm the spec file first
+#
+rm -f /tmp/$$.specs
+for dir_spec in $DIR_ID_SPECS
+do
+   #
+   # get all the info needed to config this dir id
+   #
+   gds_parse_dir_id_spec $dir_spec
+   if [ $? -ne 1 ]
+   then
+      xx_error "CAN'T parse config info for directory spec ($dir_spec) on $LOCHOST"
+      exit 1
+   fi
+
+   #
+   # De-activate and then deconfigure the directory service for the 
+   # directory id we are using
+   #
+   ${STDEXC}/gdskill $CURR_ID
+   rcheck $? 0 "${STDEXC}/gdskill $CURR_ID"
+
+   # One of three possible configurations is possible.  Host configuration
+   # is specified in the sTest file and assigned to the GDS_HOSTCONFIG 
+   # enviroment variable.  The three possible configurations are:
+   #
+   #		1) client-only
+   #		2) initial DSA
+   #		3) other DSA
+   #
+   #
+   # if a client only config
+   #
+   if [ "$CURR_ID_TYPE" = "Cli" ]
+   then
+      xx_log 'Creating client-only host...'
+      echo "SPEC $CURR_ID $CURR_ID_TYPE" >> /tmp/$$.specs     
+      client_anyerrors=""
+      gds_create_client_only
+      if [ "$client_anyerrors" != "" ]
+      then
+          xx_error "Error configuring client (dir $CURR_ID):"
+          xx_error "$client_anyerrors"
+          rm -f /tmp/$$.specs
+          rm -f /tmp/sh$$.*
+          exit 1
+      fi
+      gds_check_recov_dir_sys
+      if [ $? -ne 0 ]
+      then
+         xx_error "Unrecoverable Error configuring Directory Service!!"
+         rm -f /tmp/$$.specs
+         rm -f /tmp/sh$$.*
+         exit 1
+      fi
+      xx_log "Verified GDS state is correct."
+   else
+      cli_srv_type="other"
+      xx_log 'Creating client-server host...'
+      inisinit=`echo "$ISINIT" | grep " $CURR_ID "`
+      if [ "$inisinit" != "" ] 
+      then
+         cli_srv_type=initial
+         xx_log "Which happens to be the initial DSA for directory id $CURR_ID..."
+      else
+         xx_log "Which is not the initial DSA for directory id $CURR_ID..."
+      fi
+      xx_log " Directory id $CURR_ID..."
+      echo "SPEC $CURR_ID $CURR_ID_TYPE" >> /tmp/$$.specs           
+      gds_create_client_server $cli_srv_type
+
+      if [ -n "$cli_srv_anyerrors" ] 
+      then 
+         xx_error "Error configuring $cli_srv_type DSA (dir $CURR_ID):"
+         xx_error "$cli_srv_anyerrors"
+         rm -f /tmp/$$.specs
+         rm -f /tmp/sh$$.*
+         exit 1
+      fi
+
+      gds_check_recov_dir_sys
+
+      if [ $? -ne 0 ] 
+      then
+         xx_error "Unrecoverable Error configuring Directory Service (dir id $CURR_ID)!!"
+         rm -f /tmp/$$.specs
+         rm -f /tmp/sh$$.*
+         exit 1
+      fi
+      xx_log "Verified GDS state is correct (dir id $CURR_ID)."
+   fi
+done
+rm -f /tmp/$$.specs
+rm -f /tmp/sh$$.*
+xx_log "Completed gdsSetup on `date`"

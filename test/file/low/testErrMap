@@ -1,0 +1,263 @@
+#!/bin/sh 
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: testErrMap,v $
+# Revision 1.1.128.1  1996/10/17  18:30:39  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:55:25  damon]
+#
+# Revision 1.1.123.1  1994/02/04  20:47:21  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:25:30  devsrc]
+# 
+# Revision 1.1.121.1  1993/12/07  17:46:18  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  19:40:41  jaffe]
+# 
+# Revision 1.1.11.2  1993/07/19  19:45:10  zeliff
+# 	HP port of DFS
+# 	[1993/07/19  18:33:49  zeliff]
+# 
+# Revision 1.1.9.3  1993/07/16  22:51:00  kissel
+# 	Put HP RP work on the 1.0.3i branch.
+# 	[1993/06/21  15:13:23  kissel]
+# 
+# Revision 1.1.7.2  1993/06/04  18:37:40  kissel
+# 	Initial HPUX RP version.
+# 	[1993/06/03  22:47:35  kissel]
+# 
+# Revision 1.1.5.3  1993/02/05  21:37:06  maunsell_c
+# 	02/05/93	maunsell_c	having problems w/log msgs, should be put ;; in clean case
+# 	[1993/02/05  21:36:43  maunsell_c]
+# 
+# Revision 1.1.4.4  1993/01/11  18:36:18  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  17:19:46  htf]
+# 
+# Revision 1.1.4.3  1992/10/28  18:15:32  jaffe
+# 	Transarc delta: jess-ot5320-fix-fs-low-testhome 1.1
+# 	  Selected comments:
+# 	    The fs and low test shell scripts have the following if statement
+# 	    if [ "$TESTTOP" = "`pwd`" ]
+# 	    then
+# 	    UTIL_DIR=../util
+# 	    testhome=$TESTTOP
+# 	    else
+# 	    UTIL_DIR=$TESTTOP/util
+# 	    testhome=$TESTTOP/$testSuiteType
+# 	    fi
+# 	    The problem is that variable testSuiteType is not defined at this time.
+# 	    See above.
+# 	[1992/10/28  15:01:30  jaffe]
+# 
+# Revision 1.1.4.2  1992/08/28  18:41:51  jaffe
+# 	Transarc delta: rajesh-clean-low-tests 1.5
+# 	  Selected comments:
+# 	    To remove make and clean options from the low test suite. To change
+# 	    the scripts to use common shell functions. To create a file
+# 	    fs_functionsScript with the common shell functions in the util
+# 	    directory.
+# 	    To change the scripts to use common shell functions from
+# 	    util/fs_functionsScript instead of inline code.
+# 	    Modify scripts to follow coding standards, simplify the code, increase
+# 	    readability etc.
+# 	    No changes yet
+# 	    More of above.
+# 	    Modify the tests to give them a simpler logical structure, modularity,
+# 	    readability ( one command per line) and to change then to use the
+# 	    common function created earlier.
+# 	    See above.
+# 	    Modification of rtest1 and rtest2 to use the utility functions
+# 	    correctly.
+# 	[1992/08/28  12:37:41  jaffe]
+# 
+# Revision 1.1.2.3  1992/05/29  23:01:05  mason
+# 	Transarc delta: fred-3754-change-script-name 1.1
+# 	  Selected comments:
+# 	    To clean up a number of defects with the tests.  In addition to defect
+# 	    3754, the changes also fix defects 3750 and 3748.
+# 	    Fixed setting of TESTTOP variable.
+# 	[1992/05/29  13:18:26  mason]
+# 
+# Revision 1.1.2.2  1992/05/21  12:51:44  jaffe
+# 	Transarc delta: fred-remove-sys 1.1
+# 	  Selected comments:
+# 	    To remove dependency on the AFS sys command in the test scripts.
+# 	    To remove dependency on AFS sys command.
+# 	Transarc delta: rajesh-test-error-mapping 1.1
+# 	  Selected comments:
+# 	    Tests to check DFS error mapping.
+# 	    Driver for progErrMap.c
+# 	[1992/05/20  21:06:11  jaffe]
+# 
+# $EndLog$
+###############################################################################
+#    Copyright (C) 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This script runs a C program  to test mapping of errors EPERM, ENOENT,
+# EACCESS, EEXIST, ENOTDIR, EISDIR and ESPIPE
+# 
+# Usage is:   testErrMap [make|clean]
+#
+# Detailed on parameters:
+#
+###############################################################################
+
+TESTTOP=${TESTTOP:="`pwd`"}
+if [ "$TESTTOP" = "`pwd`" ]
+then
+    UTIL_DIR=../util
+    testhome=$TESTTOP
+else
+    UTIL_DIR=$TESTTOP/util
+    testhome=$TESTTOP/low
+fi
+
+. $UTIL_DIR/fs_FunctionsScript
+fs_InitSetup low
+
+func=void
+a=$1
+if [ $# -ge 1 ]
+then  
+    case $a in 
+      make|-make) if test $func != void
+                  then echo "$p: cannot do both $func and $a"; exit 2
+                  fi
+                  func=make
+                  ;;
+
+      clean|-clean) if test $func != void
+                    then echo "$p: cannot do both $func and $a"; exit 2
+                    fi
+                    func=clean
+		    ;;
+
+      run|-run) if test $func != void
+                then echo "$p: cannot do both $func and $a"; exit 2
+                fi
+                func=run
+                ;;
+
+      help|-help) echo "$p does testing for error mapping"
+                  echo "Usage:"
+                  echo "$p "
+                  echo "   [make|clean]"
+                  exit 2 
+		  ;;
+
+      *)  echo "Usage: $p [make|clean] "
+          exit 1
+          ;;
+   esac
+fi
+
+if [ $func = void ]
+then
+    func=run
+fi
+
+if test $func = make
+then
+     (echo "$p make" ; date ) | tee -a $lf
+     if test -n "$testhome"
+     then
+         cd $testhome
+         if test `pwd` != $d
+         then
+             cp $cp.c $d
+             if test -f $cp
+             then
+                 cp $cp $d
+             fi
+         fi
+         cd $d
+     fi
+     if test ! -f $cp.c
+     then
+         echo "$p: cannot find C program" | tee -a $lf; exit 2
+     fi
+
+     if test ! -f $cp
+     then
+        if echo $fs_sysName | grep -s '^rs'; then arg=_AIX
+        elif echo $fs_sysName | grep -s '^hp'; then arg=HP
+        elif echo $fs_sysName | grep -s '^pmax'; then arg=MIPS
+        elif echo $fs_sysName | grep -s '^next'; then arg=NEXT
+        elif echo $fs_sysName | grep -s '^rt'; then arg=RT
+        elif echo $fs_sysName | grep -s '^sun3'; then arg=SUN3
+        elif echo $fs_sysName | grep -s '^sun4'; then arg=SPARC
+        elif echo $fs_sysName | grep -s '^vax'; then arg=VAX
+        else echo "$p: don't recognize system type $fs_sysName" | tee -a $lf; ex
+it 2
+        fi
+        cc -g -D$arg $cp.c -o $cp; exit $?
+     else
+         exit 0
+     fi
+elif test $func = clean
+then
+    (echo "$p clean" ; date ) | tee -a $lf
+    rm -f $cp $p.*.out $p.[0-9.a-zA-Z]*
+    if test -n "$testhome"
+    then
+        cd $testhome
+        if test `pwd` != $d -a -f $cp.c
+        then
+            rm -f $d/$cp.c
+        fi
+        cd $d
+    fi
+    exit 0
+elif test $func = run
+then
+    fs_CheckBinaryExistence $cp
+else 
+    echo "$p: requires an argument" | tee -a $lf
+    exit 2
+fi
+
+###############################################################################
+(echo "$p (dir) starting in $d"; echo "Host `hostname` ($fs_sysName)"; date) |
+   tee -a $lf
+echo "parent process number $$" | tee -a $lf 
+
+fs_DetermineFSType
+if [ $fsType -ne 2 ] 
+then
+    (echo "This test should be run only in DFS") | tee -a $lf
+    exit 1
+fi
+
+echo "" | tee -a $lf
+
+echo "$p starting test" | tee -a $lf
+
+./$cp  > $p.out; rc=$?; cat $p.out | tee -a $lf 
+
+
+###############################################################################
+
+rm -rf $p.out $p.[0-9]*.t* $cp.[0-9]*.t*
+
+(echo ""; echo "$ty/$p returning $rc in $d"; date) | tee -a $lf
+
+#
+# Remove temporary file created by the test. (Previously done in -clean option)
+#
+(echo "$p clean" ; date ) | tee -a $lf
+rm -f $cp $p.*.out $p.[0-9.a-zA-Z]*
+
+exit $rc
+
+###############################################################################
+
+
+
+

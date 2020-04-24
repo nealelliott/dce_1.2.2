@@ -1,0 +1,437 @@
+#!/opt/dcelocal/bin/dcecp
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# @HP_COPYRIGHT@
+#
+# HISTORY
+# $Log: dced_acl_patcher,v $
+# Revision 1.1.2.2  1996/03/09  20:43:55  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:23:53  marty]
+#
+# Revision 1.1.2.1  1995/12/08  20:53:44  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/4  1995/09/29  22:39 UTC  tatsu_s
+# 	Submitted the fix for CHFts16512.
+# 
+# 	HP revision /main/HPDCE02/tatsu_s.dced_local.b0/5  1995/09/25  18:56 UTC  root
+# 	Really fixed -local option.
+# 
+# 	HP revision /main/HPDCE02/tatsu_s.dced_local.b0/4  1995/09/25  17:42 UTC  root
+# 	Fixed -local option.
+# 
+# 	HP revision /main/HPDCE02/tatsu_s.dced_local.b0/3  1995/09/25  17:28 UTC  root
+# 	Added -local.
+# 
+# 	HP revision /main/HPDCE02/tatsu_s.dced_local.b0/2  1995/09/25  16:23 UTC  tatsu_s
+# 	Fixed #if comment.
+# 
+# 	HP revision /main/HPDCE02/tatsu_s.dced_local.b0/1  1995/09/23  18:48 UTC  tatsu_s
+# 	Removed the control right.
+# 
+# 	HP revision /main/HPDCE02/3  1995/08/29  22:27 UTC  tatsu_s
+# 	Submitted yet another (probably not last) fix for CHFts15852/OT12494.
+# 
+# 	HP revision /main/HPDCE02/tatsu_s.psock_timeout.b0/1  1995/08/25  14:42 UTC  tatsu_s
+# 	Updated ACLs to match dced.
+# 
+# 	HP revision /main/HPDCE02/2  1995/07/27  20:55 UTC  tatsu_s
+# 	Submitted the fix for CHFts15852.
+# 
+# 	HP revision /main/HPDCE02/tatsu_s.local_rpc.b5/2  1995/07/26  17:54 UTC  tatsu_s
+# 	Disabled tracing.
+# 
+# 	HP revision /main/HPDCE02/tatsu_s.local_rpc.b5/1  1995/07/26  17:19 UTC  tatsu_s
+# 	Added append_acl().
+# 
+# 	HP revision /main/HPDCE02/1  1995/05/31  13:25 UTC  tatsu_s
+# 	Submitted the fix for OT12494/CHFts13959 .
+# 
+# 	HP revision /main/tatsu_s.dced_security.b0/2  1995/05/26  19:39 UTC  tatsu_s
+# 	Fixed the copyright.
+# 
+# 	HP revision /main/tatsu_s.dced_security.b0/1  1995/05/26  18:35 UTC  tatsu_s
+# 	Initial version.
+# 	[1995/12/08  20:49:07  root]
+# 
+# $EndLog$
+#
+#
+# Note:
+#   Due to inability for a machine principal to control ACLs for
+#   certain objects, not all objects get patched.
+#
+
+# trace variable result w presult
+proc presult {name element op} {
+    if {$element != ""} {
+	set name ${name}($element)
+    }
+    upvar $name x
+    puts "$x"
+}
+
+if {([string compare $_u $_h/self] != 0)} {
+    error "Host self credential required ($_u != $_h/self)"
+}
+
+set admin_group "subsys/dce/dced-admin"
+set user $_u
+
+set code [catch {group show $admin_group} r]
+if {$code != 0} {
+    append r ": $admin_group"
+    error $r
+}
+
+proc copy_acl {entry args} {
+    global errorInfo errorCode
+    global admin_group user
+    global result
+    global _local _c _h
+
+    set user_p "user $user *"
+    set admin_p "group $admin_group *"
+
+    set cur_acls {}
+    set cur_acl {}
+    set new_acl {}
+
+    set en0 [lindex $entry 0]
+    if {[string compare $_local "true"] == 0} {
+	regsub $_c/$_h/config/ $en0 "" en1
+	set en0 $en1
+	set scmd "acl show $en0 -local"
+	set mcmd "acl modify $en0 -local"
+    } else {
+	set scmd "acl show $en0"
+	set mcmd "acl modify $en0"
+    }
+    set alen [llength $args]
+
+    if {$alen == 1} {
+	append scmd " "
+	append mcmd " "
+	append scmd $args
+	append mcmd $args
+    } elseif {$alen > 1} {
+	append scmd " "
+	append mcmd " "
+	append scmd [join $args " "]
+	append mcmd [join $args " "]
+    }
+
+    set code [catch $scmd cur_acls]
+    if {$code != 0} {
+	return -code error -errorinfo $errorInfo \
+		-errorcode $errorCode $cur_acls
+    }
+
+    set iag [lsearch $cur_acls $admin_p]
+    if {$iag >= 0} {
+	set cur_acl [lindex $cur_acls $iag]
+    }
+    set i [lsearch $cur_acls $user_p]
+    if {$i >= 0} {
+	regsub $user_p [lindex $cur_acls $i] "group $admin_group " new_acl
+    } else {	
+	error "Host self principal ACL missing"
+    }
+
+    if {[string compare $cur_acl $new_acl] == 0} {
+	set result "$en0: $new_acl"
+#	puts $result
+	return -code ok $new_acl
+    }
+
+    if {$iag >= 0} {
+	append mcmd " "
+	append mcmd -change " {$new_acl}"
+    } else {
+	append mcmd " "
+	append mcmd -add " {$new_acl}"
+    }
+
+    set code [catch $mcmd r]
+    if {$code != 0} {
+	return -code error -errorinfo $errorInfo \
+		-errorcode $errorCode $r
+    }
+
+    set result "$en0: $new_acl"
+#    puts $result
+    return -code ok $new_acl
+}
+
+proc append_acl {entry args} {
+    global errorInfo errorCode
+    global admin_group
+    global result
+    global _local _c _h
+
+    set admin_p "group $admin_group *"
+
+    set cur_acls {}
+    set cur_acl {}
+
+    set en0 [lindex $entry 0]
+    set new_acl "group $admin_group "
+    append new_acl [lindex $entry 1]
+    if {[string compare $_local "true"] == 0} {
+	regsub $_c/$_h/config/ $en0 "" en1
+	set en0 $en1
+	set scmd "acl show $en0 -local"
+	set mcmd "acl modify $en0 -local"
+    } else {
+	set scmd "acl show $en0"
+	set mcmd "acl modify $en0"
+    }
+    set alen [llength $args]
+
+    if {$alen == 1} {
+	append scmd " "
+	append mcmd " "
+	append scmd $args
+	append mcmd $args
+    } elseif {$alen > 1} {
+	append scmd " "
+	append mcmd " "
+	append scmd [join $args " "]
+	append mcmd [join $args " "]
+    }
+
+    set code [catch $scmd cur_acls]
+    if {$code != 0} {
+	return -code error -errorinfo $errorInfo \
+		-errorcode $errorCode $cur_acls
+    }
+
+    set iag [lsearch $cur_acls $admin_p]
+    if {$iag >= 0} {
+	set cur_acl [lindex $cur_acls $iag]
+    }
+
+    if {[string compare $cur_acl $new_acl] == 0} {
+	set result "$en0: $new_acl"
+#	puts $result
+	return -code ok $new_acl
+    }
+
+    if {$iag >= 0} {
+	append mcmd " "
+	append mcmd -change " {$new_acl}"
+    } else {
+	append mcmd " "
+	append mcmd -add " {$new_acl}"
+    }
+
+    set code [catch $mcmd r]
+    if {$code != 0} {
+	return -code error -errorinfo $errorInfo \
+		-errorcode $errorCode $r
+    }
+
+    set result "$en0: $new_acl"
+#    puts $result
+    return -code ok $new_acl
+}
+
+proc remove_acl {entry args} {
+    global errorInfo errorCode
+    global admin_group
+    global result
+    global _local _c _h
+
+    set en0 [lindex $entry 0]
+    if {[string compare $_local "true"] == 0} {
+	regsub $_c/$_h/config/ $en0 "" en1
+	set en0 $en1
+	set mcmd "acl modify $en0 -local"
+    } else {
+	set mcmd "acl modify $en0"
+    }
+    set alen [llength $args]
+
+    if {$alen == 1} {
+	append mcmd " "
+	append mcmd $args
+    } elseif {$alen > 1} {
+	append mcmd " "
+	append mcmd [join $args " "]
+    }
+
+    append mcmd " "
+    append mcmd -remove " {group $admin_group}"
+
+    set code [catch $mcmd r]
+
+    set result "$en0: $r"
+    return -code ok $r
+}
+
+proc show_acl {entry args} {
+    global errorInfo errorCode
+    global result
+    global _local _c _h
+
+    set en0 [lindex $entry 0]
+    if {[string compare $_local "true"] == 0} {
+	regsub $_c/$_h/config/ $en0 "" en1
+	set en0 $en1
+	set mcmd "acl show $en0 -local"
+    } else {
+	set mcmd "acl show $en0"
+    }
+    set alen [llength $args]
+
+    if {$alen == 1} {
+	append mcmd " "
+	append mcmd $args
+    } elseif {$alen > 1} {
+	append mcmd " "
+	append mcmd [join $args " "]
+    }
+
+    set code [catch $mcmd r]
+##    if {$code != 0} {
+##	return -code error -errorinfo $errorInfo \
+##		-errorcode $errorCode $r
+##    }
+
+    puts "\n$mcmd:\n$r"
+
+    return -code ok $r
+}
+
+#
+
+set code [catch {set cmd} r]
+if {$code == 0} {
+} elseif [string match *dced_acl_remover $argv0] {
+    set cmd remove_acl
+} elseif [string match *dced_acl_dumper $argv0] {
+    set cmd show_acl
+} elseif [string match *dced_acl_opener $argv0] {
+    set cmd copy_acl
+} else {
+    set cmd append_acl
+}
+
+# top
+
+# $cmd "$_c/$_h/config -rws"
+
+# secval
+
+$cmd "$_c/$_h/config/secval -sux"
+
+# keytab
+
+$cmd "$_c/$_h/config/keytab -riI"
+$cmd "$_c/$_h/config/keytab a-depr" -io
+
+if {[string compare $_local "true"] == 0} {
+    set code [catch {keytab catalog -local} entries]
+} else {
+    set code [catch {keytab catalog} entries]
+}
+
+if {$code == 0} {
+    foreach ent $entries {
+	$cmd "$ent a-depr"
+    }
+}
+
+# hostdata
+
+if {[string match show_acl $cmd] || [string compare $_local "true"] == 0} {
+    $cmd "$_c/$_h/config/hostdata  -ri-"
+}
+$cmd "$_c/$_h/config/hostdata -dprw" -io
+
+if {[string compare $_local "true"] == 0} {
+    set code [catch {hostdata catalog -local} entries]
+} else {
+    set code [catch {hostdata catalog} entries]
+}
+if {$code == 0} {
+    foreach ent $entries {
+	if [string match */post_processors $ent] {
+	    if {[string match show_acl $cmd] || [string compare $_local "true"] == 0} {
+		$cmd "$ent --pr-"
+	    }
+	} elseif [string match */passwd_override $ent] {
+	    if {[string match show_acl $cmd] || [string compare $_local "true"] == 0} {
+		$cmd "$ent -----"
+	    }
+	} elseif [string match */group_override $ent] {
+	    if {[string match show_acl $cmd] || [string compare $_local "true"] == 0} {
+		$cmd "$ent -----"
+	    }
+	} elseif [string match */rc.dce $ent] {
+	    $cmd "$ent ---r-"
+	} elseif [string match */rc.dfs $ent] {
+	    $cmd "$ent ---r-"
+	} else {
+	    $cmd "$ent -dprw"
+	}
+    }
+}
+
+# srvrconf
+
+if {[string match show_acl $cmd] || [string compare $_local "true"] == 0} {
+    $cmd "$_c/$_h/config/srvrconf -ri-"
+    $cmd "$_c/$_h/config/srvrconf -d-rwx" -io
+}
+
+if {[string compare $_local "true"] == 0} {
+    set code [catch {server catalog -local} entries]
+} else {
+    set code [catch {server catalog} entries]
+}
+if {$code == 0} {
+    foreach ent $entries {
+	if {[string match show_acl $cmd] || [string compare $_local "true"] == 0} {
+	    $cmd "$ent -d-rwx"
+	}
+    }
+}
+
+# srvrexec
+
+if {[string match show_acl $cmd] || [string compare $_local "true"] == 0} {
+    $cmd "$_c/$_h/config/srvrexec -ri-"
+}
+$cmd "$_c/$_h/config/srvrexec -rws" -io
+
+if {[string compare $_local "true"] == 0} {
+    set code [catch {server catalog -executing -local} entries]
+} else {
+    set code [catch {server catalog -executing} entries]
+}
+if {$code == 0} {
+    foreach ent $entries {
+	$cmd "$ent -rws"
+    }
+}
+
+# xattrschema
+
+if {[string compare $_local "true"] != 0} {
+    $cmd "$_c/$_h/config/xattrschema -riI"
+    $cmd "$_c/$_h/config/xattrschema -rwd" -io
+
+    set code [catch {xattrschema catalog $_c/$_h/config/xattrschema} entries]
+    if {$code == 0} {
+	foreach ent $entries {
+	    $cmd "$ent -rwd"
+	}
+    }
+}

@@ -1,0 +1,344 @@
+
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* This scripte implements:
+*
+* Write to a specific offset and check the data.
+* Writes to a specific offset (intended to be out of the way with
+*        respect to others reading the file) by a stress or test host
+* Create random names at N {stress, test} hosts (not the name being
+*        tested)
+*
+
+* 
+* USAGE: ./file_test -l {HUBNAME} -I {this_script} ; For HUB
+*        ./file_test -c {HUBNAME} : For other spokes
+*
+
+* Include config file.
+include config
+
+chdir $testDir
+set loopTimes 10
+set numOfFiles 100
+
+*
+* This procedure stats a file.
+*
+set stat_Proc proc END_PROC
+  echo
+  echo Stat test file from spoke.
+
+  sync_join "begin_sync" $timeout
+
+  set fileName ( $testDir + "/" + $testFile )
+  open @fileName $O_RDWR 0777 fileId
+
+  verifyStatus false
+  loop x 1 1 $numOfFiles
+    set randomFileName ( @fileName+ (1..100) )
+    open @randomFileName ($O_CREAT|$O_RDWR) 0777 randomFileNameId
+    if ( @ITL_Status == 0 ) {
+      write @randomFileNameId @randomFileName
+      close @randomFileNameId
+    }
+  endloop
+  verifyStatus true
+  
+
+  sync_join "lookup_a_name" $timeout
+
+  set fileFound false
+  opendir $testDir dirPtr
+  readdir @dirPtr dirInfo
+  do 
+    if ( @dirInfo.d_name == $testFile ) {
+      set fileFound true
+    }
+    readdir @dirPtr dirInfo
+  while ( @CommandResult != 1 ) 
+  closedir @dirPtr
+  set fileFound true
+  if ( @fileFound != true ) {
+    echo FAILED: Can not find out the file by lookup.
+  }
+  sync_join "lookup_a_name_done" $timeout
+
+  sync_join "write_offset" $timeout
+
+  set write[1] 0
+  set write[2] 10
+  set write[3] 656536
+  set write[4] (65536+10)
+  set write[5] (2*65536)
+  set write[6] (9*65536-1)
+  set write[7] (10*65536+1)
+  set write[8] (10*65536+65536/2)
+  set write[9] (9*65536-100)
+  set write[10] (9*65536-4)
+  set write[11] (8*65536+4)
+  set write[12] (2*65536)
+  set write[13] (65536+10)
+  set write[14] 10
+  set write[15] 0
+
+  set syncName write
+  set junk string ""
+  loop x 1 1 15
+    set constChar string @x
+    set constent string (@constChar*@x)
+    set syncVar (@syncName+@x)
+    sync_join @syncVar $timeout
+
+    * Write differnt offset.
+    lseek @fileId $SEEK_SET ( @write[@x] + 100)
+    write @fileId @constent
+
+    set syncVarDone (@syncVar + "done")
+    sync_join @syncVarDone $timeout
+
+    lseek @fileId $SEEK_SET @write[@x]
+    if ( @x > 9 ) {
+      read @fileId ( 2 * @x ) junk
+    }
+    else {
+      read @fileId @x junk
+    }
+echo @junk
+    if ( @junk != @constent ) {
+      echo FAILED: read offset has wrong content.
+    }
+  endloop
+  sync_join "write_offset_done" $timeout
+
+  sync_join "write_interleave" $timeout
+  sync_join "write_interleave_done" $timeout
+  set read[1] 100
+  set read[2] 1000
+  set read[3] (656536+100)
+  set read[4] (65536+1000)
+  set read[5] (9*65536+1000)
+  set read[6] (10*65536-100)
+  set read[7] (9*65536-100)
+  set read[8] (8*65536)
+  set read[9] (65536+1000)
+  set read[10] (656536+100)
+  set read[11] 2000
+
+  set junk string ""
+  loop x 1 1 11
+    lseek @fileId $SEEK_SET @read[@x]
+    read @fileId 100 junk
+  endloop 
+
+  close @fileId
+  sync_join "finish_sync" $timeout
+
+  echo Done.
+  echo 
+END_PROC
+
+
+*
+* This procedure intends to be out of the way with respect to others
+* reading the file.
+*
+set writeOffset_Proc proc END_PROC
+  echo
+  echo Write specific offset to the test file.
+
+  sync_join "begin_sync" $timeout
+
+  set fileName ( $testDir + "/" + $testFile )
+  open @fileName $O_RDWR 0777 fileId
+
+  sync_join "lookup_a_name" $timeout
+  
+  verifyStatus false
+  loop x 1 1 $numOfFiles
+    set randomFileName ( @fileName+ (1..100) )
+    open @randomFileName ($O_CREAT|$O_RDWR) 0777 randomFileNameId
+    if ( @ITL_Status == 0 ) {
+      write @randomFileNameId @randomFileName
+      close @randomFileNameId
+    }
+  endloop
+  verifyStatus true
+
+  sync_join "lookup_a_name_done" $timeout
+
+  sync_join "write_offset" $timeout
+  set write[1] 0
+  set write[2] 10
+  set write[3] 656536
+  set write[4] (65536+10)
+  set write[5] (2*65536)
+  set write[6] (9*65536-1)
+  set write[7] (10*65536+1)
+  set write[8] (10*65536+65536/2)
+  set write[9] (9*65536-100)
+  set write[10] (9*65536-4)
+  set write[11] (8*65536+4)
+  set write[12] (2*65536)
+  set write[13] (65536+10)
+  set write[14] 10
+  set write[15] 0
+
+  set syncName write
+  set junk string ""
+  loop x 1 1 15
+
+    set constChar string @x
+    set constent string (@constChar*@x)
+    set syncVar (@syncName+@x)
+    sync_join @syncVar $timeout
+
+    lseek @fileId $SEEK_SET @write[@x]
+    write @fileId @constent
+
+    set syncVarDone (@syncVar + "done")
+    sync_join @syncVarDone $timeout
+
+    lseek @fileId $SEEK_SET ( @write[@x] + 100 )
+    if ( @x > 9 ) {
+      read @fileId ( 2 * @x ) junk
+    }
+    else {
+      read @fileId @x junk
+    }
+echo @junk
+    if ( @junk != @constent ) {
+      echo FAILED: read offset has wrong content.
+    }
+  endloop
+  sync_join "write_offset_done" $timeout
+
+  sync_join "write_interleave" $timeout
+
+  set read[1] 200
+  set read[2] 2000
+  set read[3] (656536+300)
+  set read[4] (65536+4000)
+  set read[5] (9*65536+2000)
+  set read[6] (10*65536+300)
+  set read[7] (9*65536-300)
+  set read[8] (7*65536)
+  set read[9] (65536+2000)
+  set read[10] (656536+300)
+  set read[11] 4000
+
+  set junk string "?"
+  loop x 1 1 11
+    set const string (@junk*100)
+    lseek @fileId $SEEK_SET @read[@x]
+    write @fileId @const
+  endloop 
+
+  sync_join "write_interleave_done" $timeout
+
+  close @fileId
+  sync_join "finish_sync" $timeout
+  echo Done write specific offset to the test file.
+  echo
+END_PROC
+
+
+****************************************************************************
+* Check spokes.
+if ( $ITL_nspokes < 2 ) {
+  echo FAILED: You need at least two spokes to run the test.
+  quit
+}
+
+loop loopVar 1 1 $loopTimes
+
+* Create a single file to be tested.
+open $testFile ($O_CREAT|$O_RDWR) 0777 fileId
+write $fileId "This is a junk"
+close $fileId
+
+* Dispatch procedures among spokes.
+!* Write specific offset to the test file.
+rexec_async $ITL_spoke[0] writeOffset_Proc result[0] asyncVar[0]
+
+loop x 1 1 ($ITL_nspokes-1)
+!* Test a single file by N test hosts.
+  rexec_async $ITL_spoke[$x] stat_Proc result[$x] asyncVar[$x]
+endLoop
+
+sync_create "begin_sync" $ITL_nspokes $timeout
+sync_release "begin_sync"
+
+sync_create "lookup_a_name" $ITL_nspokes $timeout
+sync_release "lookup_a_name"
+
+sync_create "lookup_a_name_done" $ITL_nspokes $timeout
+sync_release "lookup_a_name_done"
+
+sync_create "write_offset" $ITL_nspokes $timeout
+sync_release "write_offset"
+
+set syncName write
+loop x 1 1 15
+  set syncVar ($syncName+$x)
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar
+
+  set syncVarDone ($syncVar + "done")
+  sync_create $syncVarDone $ITL_nspokes $timeout
+  sync_release $syncVarDone
+endloop
+
+sync_create "write_offset_done" $ITL_nspokes $timeout
+sync_release "write_offset_done"
+
+sync_create "write_interleave" $ITL_nspokes $timeout
+sync_release "write_interleave"
+
+sync_create "write_interleave_done" $ITL_nspokes $timeout
+sync_release "write_interleave_done"
+
+sync_create "finish_sync" $ITL_nspokes $timeout
+sync_release "finish_sync"
+
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+* End stress loops.
+endloop
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+echo Done
+quit
+
+
+
+

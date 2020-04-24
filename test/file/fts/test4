@@ -1,0 +1,593 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+# Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS exporting Episode.
+# The script tests the fts create, delete, delfldbentry and zap subcommands.
+
+###############################################################################
+
+# Usage:                test4
+
+# Typically run via:    test4 >& test4.out
+# or via the fts/runtests script.
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode.
+# DFS server $SERVER_1 must export Episode aggregate $EPI_AGGRNAME_1.
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1, in order to run
+# the fts commands contained in this script.
+
+# Highest error number is: 92.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname|cut -f1 -d"." 2>/dev/null`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${EPI_AGGRNAME_1=epi1}
+: ${SERVER_1=$hn}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name=/.../$CELL_NAME}
+: ${dns_server_prefix=/.:/hosts/}
+
+av_arg="$AUTH_ARG $VERB_ARG"
+ca_arg="$CELL_ARG $AUTH_ARG"
+
+base_name=Fred.$$
+
+#
+# Source in code to analyze command results.  It handles verifying if
+# the tests are to work on LFS and UFS.
+#
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+###############################################################################
+
+echo ""
+date
+echo "RUNNING fts CREATE/DELETE COMMANDS on SERVER $SERVER_1 in CELL $CELL_NAME."
+echo "========================================================================"
+echo ""
+
+###############################################################################
+
+echo ""
+echo "Running fts create"
+    fts create $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E1 rc
+
+    fts create fubar_argument $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E2 rc
+
+    fts create $base_name.1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E3 rc
+
+    fts create $base_name.2 $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E4 rc
+
+    fts create $base_name.3 $EPI_AGGRNAME_1 $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E5 rc
+
+    fts create $base_name.4 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 -cell \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E6 rc
+
+    fts create $base_name.5 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E7 rc
+
+    fts create $base_name.6 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$dns_cell_name $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E8 rc
+
+    fts create -aggregate $EPI_AGGRNAME_1 -ftname $base_name.7 \
+	-server $dns_server_prefix$SERVER_1 -cell $dns_cell_name $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E9 rc
+
+    fts create -server $dns_server_prefix$SERVER_1 -cell $dns_cell_name \
+	-ftname $base_name.8 -aggregate $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E10 rc
+
+    fts create $base_name.9 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E11 rc
+
+    fts create $base_name.A $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E12 rc
+
+    fts create $base_name.B $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E13 rc
+
+    fts create $base_name.C $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E14 rc
+
+    fts create -server fubar_server -cell $dns_cell_name -ftname $base_name.D \
+	-aggregate $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E15 rc
+
+    fts create -server $dns_server_prefix$SERVER_1 -cell fubar_cell \
+	-ftname $base_name.E -aggregate $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E16 rc
+
+    fts create -server $dns_server_prefix$SERVER_1 -cell $dns_cell_name \
+	-ftname $base_name.F -aggregate fubar_aggr $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E17 rc
+
+echo ""
+echo "Running fts lsheader"
+    fts lsheader $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E18 rc
+
+echo ""
+echo "Running fts delete"
+    fts delete $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E19 rc
+
+    fts delete fubar_argument $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E20 rc
+
+    fts delete $base_name.0 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E21 rc
+
+    fts delete $base_name.5 $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E22 rc
+
+    fts delete $base_name.6 $EPI_AGGRNAME_1 $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E23 rc
+
+    fts delete $base_name.7 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	-cell  $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E24 rc
+
+    fts delete $base_name.8 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E25 rc
+
+    id=`fts lsfldb $base_name.9 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts delete $id $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $dns_cell_name \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E26 rc
+
+    fts delete $base_name.A $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$dns_cell_name $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E27 rc
+
+    id=`fts lsfldb $base_name.B $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts delete -cell $dns_cell_name -aggregate $EPI_AGGRNAME_1 \
+	-server $dns_server_prefix$SERVER_1 -fileset $id $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E28 rc
+
+    fts delete -cell fubar_cell -aggregate $EPI_AGGRNAME_1 \
+	-server $dns_server_prefix$SERVER_1 -fileset $base_name.C $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E29 rc
+
+    fts delete -cell $dns_cell_name -aggregate fubar_aggr \
+	-server $dns_server_prefix$SERVER_1 -fileset $base_name.D $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E30 rc
+
+    fts delete -cell $dns_cell_name -aggregate $EPI_AGGRNAME_1 \
+	-server fubar_server -fileset $base_name.E $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_LFS $p E31 rc
+
+echo ""
+echo "Running fts lsheader"
+    fts lsheader $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E32 rc
+
+
+echo ""
+echo "Running fts create"
+    fts create $base_name.8 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E33 rc
+
+    fts create $base_name.9 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E34 rc
+
+    fts create $base_name.10 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E35 rc
+
+    fts create $base_name.11 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E36 rc
+
+    fts create $base_name.12 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E37 rc
+
+    fts create $base_name.13 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E38 rc
+
+    fts create $base_name.20 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E39 rc
+
+    fts create $base_name.21 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E40 rc
+
+    fts create $base_name.22 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E41 rc
+
+    fts create $base_name.23 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E42 rc
+
+    fts create $base_name.24 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E43 rc
+
+    fts create $base_name.30 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E44 rc
+
+    fts create $base_name.31 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E45 rc
+
+    fts create $base_name.32 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E46 rc
+
+    fts create $base_name.33 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E47 rc
+
+    fts create $base_name.34 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E48 rc
+
+    fts create $base_name.35 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E49 rc
+
+    fts create $base_name.36 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E50 rc
+
+    fts create $base_name.37 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E51 rc
+
+    fts create $base_name.40 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E52 rc
+
+    fts create $base_name.41 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E53 rc
+
+    fts create $base_name.42 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E54 rc
+
+    fts create $base_name.43 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E55 rc
+
+    fts create $base_name.44 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E56 rc
+
+    fts create $base_name.45 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E57 rc
+
+    fts create $base_name.46 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+	$av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E58 rc
+
+
+echo ""
+echo "Running fts lsheader"
+    fts lsheader $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E59 rc
+
+
+echo ""
+echo "Running fts lsfldb"
+    fts lsfldb $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E60 rc
+
+
+echo ""
+echo "Running fts delfldbentry"
+    fts delfldbentry $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E61 rc
+
+    fts delfldbentry fubar_argument $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E62 rc
+
+    fts delfldbentry $EPI_AGGRNAME_1 $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E63 rc
+
+    fts delfldbentry $base_name.21 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E64 rc
+
+    fts delfldbentry -prefix $base_name.2 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E65 rc
+
+    fts delfldbentry -fileset $base_name.30 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E66 rc
+
+    id=`fts lsfldb $base_name.31 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts delfldbentry -fileset $id $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E67 rc
+
+    id=`fts lsfldb $base_name.32 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts delfldbentry -fileset $id -server $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E68 rc
+
+    fts delfldbentry -fileset $base_name.33 -aggregate $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E69 rc
+
+    id=`fts lsfldb $base_name.34 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts delfldbentry -fileset $id -aggregate $EPI_AGGRNAME_1 \
+	-server $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E70 rc
+
+    fts delfldbentry -fileset $base_name.35 -cell $dns_cell_name $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E71 rc
+
+    fts delfldbentry -fileset fubar_name -cell $dns_cell_name $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E72 rc
+
+    fts delfldbentry -aggregate fubar_aggr -server \
+	$dns_server_prefix$SERVER_1 -cell $dns_cell_name $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E73 rc
+
+    fts delfldbentry -aggregate $EPI_AGGRNAME_1 -server fubar_server \
+	-cell $dns_cell_name $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E74 rc
+
+    fts delfldbentry -aggregate $EPI_AGGRNAME_1 \
+	-server $dns_server_prefix$SERVER_1 -cell fubar_cell $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E75 rc
+
+    fts delfldbentry -server $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E76 rc
+
+    fts delfldbentry -prefix $base_name.3 -aggregate $EPI_AGGRNAME_1 \
+	-server $dns_server_prefix$SERVER_1 -cell $dns_cell_name $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E77 rc
+
+
+echo ""
+echo "Running fts lsfldb"
+    fts lsfldb $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E78 rc
+
+
+echo ""
+echo "Running fts zap"
+    fts zap $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E79 rc
+
+    fts zap fubar_argument $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E80 rc
+
+    id=`fts lsfldb $base_name.40 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts zap $id $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E81 rc
+
+    fts zap $EPI_AGGRNAME_1 $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E82 rc
+
+    id=`fts lsfldb $base_name.41 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts zap $dns_server_prefix$SERVER_1 $id $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E83 rc
+
+    id=`fts lsfldb $base_name.42 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts zap $id $EPI_AGGRNAME_1 $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E84 rc
+
+    fts zap $base_name.43 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E85 rc
+
+    id=`fts lsfldb $base_name.43 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts zap $id $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E86 rc
+
+    id=`fts lsfldb $base_name.44 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts zap -aggregate $EPI_AGGRNAME_1 -ftid $id \
+	-server $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E87 rc
+
+    id=`fts lsfldb $base_name.45 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts zap -aggregate fubar_aggr -ftid $id \
+	-server $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E88 rc
+
+    echo ""
+    fts zap -aggregate $EPI_AGGRNAME_1 -ftid fubar_name \
+	-server $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E89 rc
+
+    echo ""
+    id=`fts lsfldb $base_name.46 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts zap -aggregate $EPI_AGGRNAME_1 -ftid $id -server fubar_server $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E90 rc
+
+
+echo ""
+echo "Running fts lsheader"
+    fts lsheader -server $dns_server_prefix$SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E91 rc
+
+
+echo ""
+echo "Running fts lsfldb"
+    fts lsfldb $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_BOTH $p E92 rc
+
+# 
+# cleaning up the test from fldb and fileset registry.
+#
+
+    fts delete $base_name.5 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E92-2 rc
+
+    fts delete $base_name.6 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E92-3 rc
+
+    fts delete $base_name.7 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E92-4 rc
+
+    fts delete $base_name.8 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E92-5 rc
+
+
+    fts delete $base_name.9  $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E93-1 rc
+
+    fts delete $base_name.10 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E93-2 rc
+
+    fts delete $base_name.11 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E93-3 rc
+
+    fts delete $base_name.12 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E93-4 rc
+
+
+    fts delete $base_name.13 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E94-1 rc
+
+    fts delete $base_name.C $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E94-2 rc
+
+# The 20s and 30s were already deleted from FLDB, so zap
+    id=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 $ca_arg | sed -n "/$base_name.20/s/[^,]*,,\([^ ]*\) .*/\1/p"`
+    fts zap -aggregate $EPI_AGGRNAME_1 -ftid $id -server $SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E90-1 rc
+
+    id=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 $ca_arg | sed -n "/$base_name.21/s/[^,]*,,\([^ ]*\) .*/\1/p"`
+    fts zap -aggregate $EPI_AGGRNAME_1 -ftid $id -server $SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E90-2 rc
+
+    id=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 $ca_arg | sed -n "/$base_name.22/s/[^,]*,,\([^ ]*\) .*/\1/p"`
+    fts zap -aggregate $EPI_AGGRNAME_1 -ftid $id -server $SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E90-3 rc
+
+    id=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 $ca_arg | sed -n "/$base_name.23/s/[^,]*,,\([^ ]*\) .*/\1/p"`
+    fts zap -aggregate $EPI_AGGRNAME_1 -ftid $id -server $SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E90-4 rc
+
+    id=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 $ca_arg | sed -n "/$base_name.24/s/[^,]*,,\([^ ]*\) .*/\1/p"`
+    fts zap -aggregate $EPI_AGGRNAME_1 -ftid $id -server $SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E90-5 rc
+
+    id=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 $ca_arg | sed -n "/$base_name.30/s/[^,]*,,\([^ ]*\) .*/\1/p"`
+    fts zap -aggregate $EPI_AGGRNAME_1 -ftid $id -server $SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E90-6 rc
+
+    id=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 $ca_arg | sed -n "/$base_name.31/s/[^,]*,,\([^ ]*\) .*/\1/p"`
+    fts zap -aggregate $EPI_AGGRNAME_1 -ftid $id -server $SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E90-7 rc
+
+    id=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 $ca_arg | sed -n "/$base_name.32/s/[^,]*,,\([^ ]*\) .*/\1/p"`
+    fts zap -aggregate $EPI_AGGRNAME_1 -ftid $id -server $SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E90-8 rc
+
+    id=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 $ca_arg | sed -n "/$base_name.33/s/[^,]*,,\([^ ]*\) .*/\1/p"`
+    fts zap -aggregate $EPI_AGGRNAME_1 -ftid $id -server $SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E90-9 rc
+
+    id=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 $ca_arg | sed -n "/$base_name.34/s/[^,]*,,\([^ ]*\) .*/\1/p"`
+    fts zap -aggregate $EPI_AGGRNAME_1 -ftid $id -server $SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E90-10 rc
+
+    id=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 $ca_arg | sed -n "/$base_name.35/s/[^,]*,,\([^ ]*\) .*/\1/p"`
+    fts zap -aggregate $EPI_AGGRNAME_1 -ftid $id -server $SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E90-11 rc
+
+    id=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 $ca_arg | sed -n "/$base_name.36/s/[^,]*,,\([^ ]*\) .*/\1/p"`
+    fts zap -aggregate $EPI_AGGRNAME_1 -ftid $id -server $SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E90-12 rc
+
+    id=`fts lsheader $SERVER_1 $EPI_AGGRNAME_1 $ca_arg | sed -n "/$base_name.37/s/[^,]*,,\([^ ]*\) .*/\1/p"`
+    fts zap -aggregate $EPI_AGGRNAME_1 -ftid $id -server $SERVER_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E90-13 rc
+
+    fts delete $base_name.40 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E97-3 rc
+
+    fts delete $base_name.41 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E97-4 rc
+
+    fts delfldbentry -fileset $base_name.43 -cell $dns_cell_name $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E98-1 rc
+
+    fts delfldbentry -fileset $base_name.44 -cell $dns_cell_name $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E98-2 rc
+
+    fts delete $base_name.42 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E99-1 rc
+
+    fts delete $base_name.46 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg 
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E99-2 rc
+
+    fts delete $base_name.45 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_ZERO $DFS_WORKS_ON_LFS $p E99-3 rc
+
+    id=`fts lsfldb $base_name.21 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts zap $id $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E100 rc
+
+    id=`fts lsfldb $base_name.30 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts zap $id $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E101 rc
+
+    id=`fts lsfldb $base_name.31 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts zap $id $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E102 rc
+
+    id=`fts lsfldb $base_name.35 $ca_arg | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+    fts zap $id $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+    dfs_ftsCheckResult $? $DFS_PASS_EQ_NONZERO $DFS_WORKS_ON_BOTH $p E103 rc
+
+###############################################################################
+
+sync
+sync
+sleep 2
+
+echo ""
+echo "Done at `date`."
+echo ""
+if [ $rc -eq 0 ]
+then 
+    echo "$p PASSED"
+else 
+    echo "$p FAILED ($rc errors)"
+fi
+
+exit $rc
+
+###############################################################################

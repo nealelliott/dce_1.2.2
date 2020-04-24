@@ -1,0 +1,336 @@
+#!/bin/ksh 
+# @HP_COPYRIGHT@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dcecdsacl6,v $
+# Revision 1.1.8.2  1996/03/09  20:50:37  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:28:41  marty]
+#
+# Revision 1.1.8.1  1995/12/11  21:56:18  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:46 UTC  bell_d
+# 	Changes by others
+# 
+# 	HP revision /main/HPDCE01/bissen_systest/1  1994/03/18  19:30 UTC  bissen
+# 	Add CHSHOST for secondary_ch.st1
+# 
+# 	HP revision /main/HPDCE01/1  1994/01/25  15:06  bissen
+# 	merge kk and hpdce01
+# 	[1995/12/11  20:56:09  root]
+# 
+# Revision 1.1.2.2  1993/08/19  18:04:10  bissen
+# 	Initial kk branch
+# 	[1993/08/19  18:03:04  bissen]
+# 
+# $EndLog$
+
+# This test creates users and adminstrative principals to test a variety of cdscp
+# acl_edit cases, to include cds replication.  Primary and secondary clearinghouse
+# operation files are created for all available cell clearinghouses.  The cdsacl6.data
+# file can be edited to allow for non-default execution.
+
+# This test is written to use the Test Environment Toolkit (TET).  A sample execution
+# command line follows:
+
+# 	$ $TET_ROOT/bin/tcc -e cds dcecdsacl6
+
+# TET_ROOT is the path to the tet directory (i.e.  TET_ROOT=/usr/tet)
+# The option -e tells tcc what test suite (cds) and what test scenario (dcecdsacl6)
+# to execute.  Variables may be passed to the test with the -v option.  As an example:
+
+#	$ $TET_ROOT/bin/tcc -e -v RUN_TIME=5 cds dcecdsacl6
+# will run the test for 5 hours. ( The default is one loop of the test)
+set -x
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1"
+ic1="cdsacl_test"
+
+
+test_purp_list="cdsacl_test"
+
+
+
+startup()
+{
+    if [ -x /opt/dcelocal/bin/dce_login -a ! -x /usr/bin/dce_login_noexec ]
+    then
+            ln -s /opt/dcelocal/bin/dce_login /usr/bin/dce_login_noexec
+    fi
+
+    if [ -n "$RUN_TIME" ]
+    then
+	SECONDS=0	
+	SECONDS_TO_EXECUTE=`awk "BEGIN { printf (\"%d\", 3600 * $RUN_TIME); exit; }"`
+    fi
+
+
+    if [ -z "$CELLS" ]
+    then
+	CELLS=`/opt/dcelocal/bin/getcellname`
+	if [ -z "$CELLS" ]
+	then
+		tet_infoline "The cell list is null"
+		del_test_purp
+		return
+	fi
+    fi
+
+    tet_infoline "Using cell list: $CELLS" 
+    export CELLS
+
+    PID=$$
+    FAIL_STAT=0
+
+    # NOTE all administrative principals use the same password: "sta" 
+    # Defaults to st_admin1 as the test administrative principal
+    CONFIDENCE=${CONFIDENCE:-"medium"}
+    STATES=${STATES:-""}
+
+    export FAILURES=0
+    export CMD_F HOURS FAIL_STAT CONFIDENCE PID DEBUG  
+
+    if [ "$STNUM" -ne 0 -a "$ONE_STATE" = "false" ]
+    then
+  	N=0
+  	while [ "$N" -lt "$STNUM" ]
+  	do
+		N=`expr $N + 1`
+		STATES="$STATES st$N"
+  	done
+    else
+	if [ "$STNUM" -ne 0 -a "$ONE_STATE" = "true" ]  
+	then
+		STATES="$STATES st$STNUM"
+	fi
+    fi
+    if [ "$STNUM" -eq 0 ]
+    then
+	STATES="$STATES st1"
+	tet_infoline "Warning running just one state file, using STNUM default"
+    fi
+    tet_infoline "Executing clearinghouse states (suffix): $STATES"
+
+    for cell in $CELLS
+    do
+        CHS_LIST=`get_allch $cell`
+        for ST in $STATES
+        do
+	    FIRST=0
+	    for CHS in $CHS_LIST
+	    do
+	        if [ "$FIRST" = "0" ]
+	        then
+		    FIRST=1
+		    if [ -f primary_ch.${ST} ]
+		    then
+			    cp primary_ch.${ST} ${CHS}.${ST}
+		    fi
+	        else
+		    if [ -f secondary_ch.${ST} ]
+		    then
+		        cp secondary_ch.${ST} ${CHS}.${ST}
+		    fi
+	        fi
+	    done
+        done
+    done
+
+    export CHS=""
+
+    PRINC_NUM=0
+    for princ in $ADM_PRINCS
+    do
+	PRINC_NUM=`expr $PRINC_NUM + 1`
+	PRINC[$PRINC_NUM]=$princ
+	PW[$PRINC_NUM]="$ADM_PWS"
+    done
+
+    PWN=$PRINC_NUM
+
+    export PRINC_NUM PWN PRINC PW
+
+    #Setup the cdsname space
+
+    setup $CELLS
+    if [ "$?" -ne 0 ]
+    then
+	tet_infoline "setup() didn't work"
+	del_test_purp
+	return
+    fi
+
+    if [ "$DEBUG" -gt 0 ]
+    then
+	I=$PRINC_NUM
+	while [ $I -gt 0 ]
+	do
+		tet_infoline "principal: ${PRINC[$I]} password: ${PW[$I]}"
+		I=`expr $I - 1`
+	done
+    fi
+    export PS=0 TOTAL_FAILS=0 OPS_TOTAL=0 LOOPS  
+    export MATCH_STR="Clearinghouse Name = "
+
+    CDSSHOST=`hostname`
+    export CDSSHOST 
+
+    PRINC_COUNT=$PRINC_NUM
+    PRINC_NUM=1
+    export PRINC_COUNT PRINC_NUM
+} #end startup
+
+# Run the test
+cdsacl_test()
+{
+    LOOP=1
+    CURRENT_LOOP=1
+
+    while [ $LOOP -eq 1 ] 
+    do
+	tet_infoline "Starting iteration $CURRENT_LOOP"
+        for CELL in $CELLS
+        do
+            export CELL
+	    export CHS_LST=`get_allch $CELL`
+    	    for STATE in $STATES
+    	    do
+		tet_infoline "Running STATE Series: $STATE"
+		PRINC_NUM=1
+		while [ "$PRINC_NUM" -le "$PRINC_COUNT" ]
+      	        do
+        	    for CHS in $CHS_LIST
+        	    do
+          		if [ ! -f $CHS.$STATE ]
+          		then
+            		    continue
+          		fi
+
+                        CHSHOST=$(echo $CHS | \
+                        awk -F_ '{ if (NF > 2)
+                                        for (i=1;i<(NF);i++){
+                                                if ( i < NF-1 )
+                                                        printf("%s_",$i);
+                                                else
+                                                        {printf("%s\n",$i)};
+                                                }
+                                else {print $1}}'  )
+
+          	        export CHS CHSHOST
+          	        if [ "$DEBUG" -gt 0 ]
+          	        then
+          	            tet_infoline "Using $CELL/$CHS as clearinghouse for principal ${PRINC[$PRINC_NUM]} "
+            		    tet_infoline "Log Attempt: $CELL/${PRINC[$PRINC_NUM]} ${PW[$PRINC_NUM]}"
+          	        fi
+          	        export KRB5CCNAME=`dce_login_noexec $CELL/${PRINC[$PRINC_NUM]} ${PW[$PRINC_NUM]}`
+          	        if [ "$?" != "0" ]
+          	        then
+			    tet_infoline "-:) Failure: Unable to authenticate $CELL/${PRINC[$PRINC_NUM]}"
+            		    PRINC_NUM=`expr $PRINC_NUM + 1`
+            		    continue
+          	        fi
+          	        CDSACL_OUT="/tmp/cdsacl_out_$PID$PRINC_NUM"
+	  	        touch $CDSACL_OUT 
+          	        if [ "$CURRENT_LOOP" -eq 1 ]
+          	        then
+			    #indented to tab boundary
+            			cdscp <<-END 2>&1 > $CDSACL_OUT
+            	 		set cdscp confidence = $CONFIDENCE
+            			show dir $CELL
+				END
+            		    if [ -s "$CDSACL_OUT" ]
+            		    then
+              		        WHEN=`cat $CDSACL_OUT | egrep "AT"`
+              		        CH=`cat $CDSACL_OUT | egrep "${MATCH_STR}".*[a-z,A-Z]_ch |\
+								 sed 's/^ *Clearinghouse Name = //'`
+              		        if [ -n "$CH" ]
+              		        then
+          	        	    if [ "$DEBUG" -gt 0 ]
+          	        	    then
+                		        tet_infoline "${PRINC[$PRINC_NUM]} Loop $CURRENT_LOOP"
+					tet_infoline "$WHEN"
+				    fi
+              		        else
+                                    if [ "$DEBUG" -gt 0 ]
+                                    then
+                		    	tet_infoline "${PRINC[$PRINC_NUM]} Loop $CURRENT_LOOP,$CELL"
+					tet_infoline "$WHEN:"
+				        tet_infoline "	Failed cdscp show dir!"
+				    fi
+                		    continue
+              		        fi
+            		    fi
+          	        fi
+
+	  	        cmd_exc ${PRINC[$PRINC_NUM]} ${PW[$PRINC_NUM]} $CHS.$STATE  
+    
+	      # the user principal loop can only execute once 
+	      # for over all of the admin principals
+
+		        if [ $PRINC_NUM -eq $PRINC_COUNT ]
+	  	        then		
+	    		    tst_acl $CHS.$STATE $PRINC_NUM 		
+	  	        fi
+        	    done
+
+           	 # end Clearinghouse loop
+
+        	    if [ -f "/tmp/cdsacl_out_$PID$PRINC_NUM" ]
+        	    then
+	  	        rm "/tmp/cdsacl_out_$PID$PRINC_NUM"
+        	    fi
+        	    PRINC_NUM=`expr $PRINC_NUM + 1`
+      	        done 
+     	    # end principal id loop
+    	    done 
+    	    #end state loop
+        done
+        #end cell loop
+
+	CURRENT_LOOP=`expr $CURRENT_LOOP + 1`
+        if [ -n "RUN_TIME" ]
+	then
+	    if [ "$SECONDS" -ge "$SECONDS_TO_EXECUTE" ]
+	    then
+		LOOP=0
+	    fi
+	elif [ -n "LOOPS_TO_EXECUTE" ]
+	then
+	    if [ $CURRENT_LOOP -gt $LOOPS_TO_EXECUTE ]
+	    then
+		LOOP=0
+	    fi
+	else
+	    LOOP=0
+	fi 
+    done 
+    #main loop end
+
+    tet_infoline "Total failures: $TOTAL_FAILS/$OPS_TOTAL" 
+    if [ "$TOTAL_FAILS" -eq "0" ]
+    then
+	tet_infoline "CDSACL6 passed"
+	tet_result PASS
+    else
+	tet_infoline "CDSACL6 failed"
+	tet_result DCE_ERROR
+    fi
+}
+
+cleanup()
+{
+    # remove test specific accounts and change acls
+    setup -c $CELLS
+}
+
+. $TET_ROOT/profile.dcest
+. ./dcecdsacl6.data
+. ./dcecdsacl6.func
+. $TCM

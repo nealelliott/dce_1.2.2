@@ -1,0 +1,159 @@
+*
+* ID: $Id:
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* create.scr -- This script tests the create sys calls.
+*
+* Check creating char and block devices, and FIFOs.  Check mtime and
+*   atime fields on newly created objects.  
+* Check that stat reports special device infor for appropriate objects.
+*
+* There is no real I/O tested.
+*
+
+*
+* Privilege: login as root.
+*
+
+* Usage: file_test -I create.scr 
+*        file_test -I create.scr -D 
+*        or 
+*        file_test <create.scr
+*        or
+*     	 See file_test -help 
+*
+
+*  Terminology:
+*  PASSED -- no problem for the testings.
+*  FAILED -- failed when doing basic checks.
+*  XXXXXX -- means will be enhanced later.
+
+*  Errors: 3 
+
+
+***************************************************************************
+* This script test creations of object by mknod system calls.
+***************************************************************************
+
+*
+* Common settings.
+*
+include common1.env
+echo
+echo Running create.scr
+echo
+*************************************************************************
+!*                         BASIC CASES                                   *
+*************************************************************************
+
+umask 0
+chdir $testDir
+
+*
+!* Create a CHARACTER special file with faked major number.
+*
+
+* Get current time and compare to the atime and mtime.
+time currTime
+
+verifyStatus false
+mknod mydevc $S_IFCHR 0777 9
+if ( $CommandResult != 0 ) {
+  set errorMessage "FAILED: Create CHARACTER special file failed. --E1"
+  exec err_Process
+}
+
+stat mydevc var
+echo $var.st_atime
+echo $var.st_mtime
+echo $var.st_ctime
+
+if ( $var.st_atime < $currTime ) {
+  set errorMessage "FAILED: atime is not right."
+}
+if ( $var.st_mtime < $currTime ) {
+  set errorMessage "FAILED: mtime is not right."
+}
+
+*
+!* Create a BLOCK special file with faked major number.
+*
+
+time currTime
+
+mknod mydevb $S_IFBLK 0777 8
+if ( $CommandResult != 0 ) {
+  set errorMessage "FAILED: Create BLK special file failed. --E2"
+  exec err_Process
+}
+
+* Get current time and compare to the atime and mtime.
+stat mydevb var
+if ( $var.st_atime < $currTime ) {
+  set errorMessage "FAILED: atime is not right."
+}
+if ( $var.st_mtime < $currTime ) {
+  set errorMessage "FAILED: mtime is not right."
+}
+
+verifyStatus true
+
+
+*
+!* Create a FIFO special file with faked major number.
+*
+
+time currTime
+
+mknod mydevp $S_IFIFO 0777 0
+if ( $CommandResult != 0 ) {
+  set errorMessage "FAILED: Create FIFO special file failed. --E3"
+  exec err_Process
+}
+
+* Get current time and compare to the atime and mtime.
+stat mydevp var
+if ( $var.st_atime < $currTime ) {
+  set errorMessage "FAILED: atime is not right."
+}
+if ( $var.st_mtime < $currTime ) {
+  set errorMessage "FAILED: mtime is not right."
+}
+
+stat mydevp var
+
+
+*************************************************************************
+*                         CLEANING UP AND REPORT                        *
+*************************************************************************
+
+verifyStatus false
+remove mydevp
+remove mydevc
+remove mydevb
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+exec report_Proc "create.scr" $errorCounter
+echo
+quit
+

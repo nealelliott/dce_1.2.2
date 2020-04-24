@@ -1,0 +1,138 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+# 
+# HISTORY
+# $Log: tc_cm_slvinit,v $
+# Revision 1.1.2.2  1996/03/09  20:52:21  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:55  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:49  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  19:32 UTC  bell_d
+# 	Debugged version
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  20:21 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/03  14:43 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/03  14:33 UTC  gordon_l
+# 	Fixes for change_master/b
+# 	ecome_master
+# 	[1995/12/11  22:22:39  root]
+# 
+# $EndLog$
+
+
+if [ -z "${TC_CM_SLVINIT_DEFINED}" ] ; then
+
+TC_CM_SVLINIT_DEFINED=1
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#
+#  DESCRIPTION:
+#      This test case is part of the security replication system test.
+#      It tests if a change_master can be done successfully while a 
+#      slave is marked for initialization.
+#
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+tet_startup="tc_cm_slvinit_init"
+tet_cleanup="tc_cm_slvinit_cleanup"
+tet_testlist="tc_cm_slvinit"
+
+iclist="ic1"
+ic1="tc_cm_slvinit"
+
+tc_cm_slvinit_init()
+{
+    typeset st
+
+    tc_common_init ; st=$?
+    if [ $st -ne 0 ] ; then
+        tet_delete $ic1 "tc_cm_slvinit_init(): Initialization failed"
+        return 
+    fi
+    if [ $SLV_CNT -lt 2 ] ; then
+        tet_delete $ic1 "tc_cm_slvinit_init(): Test requires at least 2 slaves"
+        return 
+    fi
+}
+
+tc_cm_slvinit_cleanup()
+{
+    tc_common_cleanup
+}
+
+
+tc_cm_slvinit()
+{
+    typeset st
+
+    testdesc="Change master - while slave marked for initialization"
+    replog_testhdr "$testdesc"
+
+    slvhost_1=${SLV_HOSTNAMES[0]} ; slvnm_1=${SLV_NAMES[0]} 
+    slvhost_2=${SLV_HOSTNAMES[1]} ; slvnm_2=${SLV_NAMES[1]}
+
+ 
+    #  Queue an initrep for $slvnm_1 
+   
+    tc_common_q_initrep $slvhost_1 $slvnm_1 ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+    
+    sa_change_master $slvnm_2 ; st=$?   # Change master
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #   Verify that $slvnm_1 is still marked for initialization after
+    #   the change master has been done
+
+    sa_tst_slv_mrkinit $slvnm_1 ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_error "$slvnm_1 should be marked for initialization but is not"
+        replog_testresult "$testdesc" $st
+    fi
+    
+    secd_start $slvhost_1 $slvnm_1    # Restart secd 
+
+    #   The slave should be initialized correctly i.e. 
+    #   the "Number of outstanding updates" should become 0.
+
+    sa_wait_prop_complete $slvnm_1 ; st=$?
+    if [ $st -ne 0 ] ; then
+        replog_testresult "$testdesc" $st
+        return
+    fi
+
+    #    Verify that the new master is the only master on all replica lists.
+
+    replist_verify_master "${REP_NAMES[*]}" $MASTER_NAME ; st=$? 
+    replog_testresult "$testdesc" $st
+}
+
+. $TET_ROOT/profile.dcest 
+. ./profile
+. $PHOME/replog
+. $PHOME/tc_common
+. $PHOME/secd
+. $PHOME/slv
+. $TCM
+#. $TET_ROOT/lib/xpg3sh/tcm.sh
+
+fi

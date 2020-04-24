@@ -1,0 +1,66 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+# HISTORY
+# $Log: global_cleanup,v $
+# Revision 1.1.2.2  1996/03/09  20:51:58  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:39  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:10  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  22:22:22  root]
+# 
+# $EndLog$
+slv_global_cleanup()
+{
+    typeset r i lc
+
+    replog_init   # Must be the first one initialized
+    repdb_init
+    replist_init
+    rgy_init
+    sa_init
+
+    slv_tmpf1=/tmp/slv_tmpf1_$HOSTNM
+    slv_tmpf2=/tmp/slv_tmpf2_$HOSTNM
+    rm -f $slv_tmpf1 $slv_tmpf2  # Remove if left over from previous run
+    rm -rf $LOGS_DIR               # Remove if left over from previous run
+
+    slv_populate_db ; st=$?
+    repdb_config_print
+
+    replog_msg "Attempting to delete all security slaves in the cell"
+    i=0 ; lc=$SLV_CNT
+    while [ $i -lt $lc ] 
+    do
+        sa_delete ${SLV_NAMES[i]} ; st=$?
+        if [ $st -ne 0 ] ; then
+            rst=$st
+        fi
+        slv_v_del ${SLV_HOSTNAMES[i]} ${SLV_NAMES[i]} ; st=$?
+        if [ $st -ne 0 ] ; then
+            rst=$st
+        fi
+    done
+    replog_blank
+    if [ $rst -ne 0 ] ; then
+        replog_error "Error deleting all security slaves in the cell"
+        replog_blank
+        replog_msg   "Please check to make sure that there are no slaves"
+        replog_blank
+    else
+        replog_msg   "Successfully deleted all slaves in the cell"
+    fi
+    repdb_config_print
+    replog_global_cleanup
+    repdb_global_cleanup
+    replist_global_cleanup
+    rgy_global_cleanup
+    sa_global_cleanup
+    rm -f $slv_tmpf1 $slv_tmpf2
+}

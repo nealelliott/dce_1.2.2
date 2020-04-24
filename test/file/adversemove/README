@@ -1,0 +1,178 @@
+*
+* @OSF_COPYRIGHT@
+* COPYRIGHT NOTICE
+* Copyright (c) 1993 Open Software Foundation, Inc.
+* ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+* src directory for the full copyright text.
+*
+*
+* (C) Copyright 1993 Transarc Corporation.
+* All Rights Reserved.
+*
+*
+* HISTORY
+* $Log: README,v $
+* $EndLog$
+
+
+
+1. INTRODUCTION
+
+
+This note is to show you how to prepare and run a series of 10 automated
+test programs for testing fileset moves under adverse move situations.
+
+Running these test programs is very straightforward. All you have to do
+is 'fire and forget' and then come back to collect the test results. However,
+special attention may be needed when going through the checklist to make sure
+that you have everything set up properly before you run the test suite. 
+
+
+2. TEST SUITES
+
+The adverse-fileset-move test suite in this directory contains 
+
+	- 10 'itl' test scripts :
+
+		adverse_move1.itl, adverse_move1a.itl, adverse_move1b.itl,
+		adverse_move2.itl, adverse_move2a.itl,
+		adverse_move3.itl, adverse_move3a.itl, adverse_move3b.itl,
+		adverse_move4.itl, adverse_move4a.itl,
+
+	  	The test scenario is described in each ITL script.
+
+	- one configure file: 
+
+		adverse_move.config, 
+		
+		an ITL config script which is used to configure global 
+		variables referenced by	the above 10 ITL test scripts.
+		
+	- one setup file: 
+	
+		adverse_move.setup, 
+
+		an ITL setup script which is used to allow the itl tool to 
+		be able to execute test programs on specific machines. 
+	
+	- one test drivers, 
+
+		adversemove,
+
+		a Unix shell script which drives all 10 ITL test programs.
+
+
+
+3. UTILITIES
+
+In addition to the test suite mentioned above, you also need the bomb point
+utility (bomb) and itl tool (file_test). The bomb point utility is used
+by itl scripts to create an abnormal environment in which a fileset is moved
+where the itl test tool, file_test, is used to run these itl test scripts. 
+
+You can get the 'bomb utility' and an appropriate 'itl test tool' from
+
+integ/dfs-103/<build>/install/<machine>/opt/dce1.0/bin/bomb
+
+and
+
+integ/dfs-103/<build>/install/<machine>/opt/dce1.0/test/file/os_calls/file_test
+
+respectively
+
+
+
+4. CHECKLIST
+
+
+This section provides a list of things you have to do to get ready to run
+the test:
+
+a) Machine Requirement:
+   
+   - You need two machines to run the whole test suite. 
+
+   - Assign one machine as Primary and the other as Secondary. 
+     Throughout the tests, the fileset is moved from Primary to Secondary.
+
+
+b) Install executable programs:
+
+   - Make sure executable programs 'bomb' and 'file_test' are both installed 
+     in the /opt/dcelocal/bin tree of two machines.
+
+   - Turn on 'setuid' bit for 'bomb' by doing 
+
+	chmod 6555 /opt/dcelocal/bin/bomb
+
+
+c) Install test programs:
+
+   - Copy all test programs and setup files only to the working directory of
+     the Primary machine. 
+
+     NOTE: That any non-DFS tree can be used as a working directory. The 
+	   working directory is also used to store test results by the 
+	   ITL test tool and the test driver adversemove.
+
+           For example, if you decide to choose /tmp as a working directory, 
+	   then you should also use '/tmp' as the working directory defined
+  	   in setup file adverse_move.setup, adverse_move.config, and 
+	   test driver adversemove.
+
+
+d) Update the ITL setup file, adverse_move.setup:
+
+   - Assign Primary and Secondary machines for the test.
+     
+   NOTE: the ITL test tool, i.e., file_test, always uses the machine 
+         specified in the first line (that is the Primary in this case) 
+	 as a HUB. 
+
+e) Update the ITL config file, adverse_move.config:
+
+    - Assign the Primary machine name to HostName1 and Secondary machine name 
+      to HostName2. 
+
+    - Assign aggregate devices. Be sure you have one episode device (at least
+      15 MByte) on each machine.
+
+
+    The following code fragment gives an example of its use.
+
+	....	
+	set HostName1 string "gemini"
+	set HostName2 string "melkor"
+
+	set aggrDev1 string "/dev/epi1"
+	set aggrDev2 string "/dev/epi0"
+	....
+
+   where a)  gemini is used as Primary and melkor as Secondary,
+   	 b)  /dev/epi1 is on gemini and /dev/epi0 on melkor
+
+
+f) Update the test driver, an unix shell script, adversemove:
+
+   - Define a working directory.
+
+     Be sure the working directory used is the same one specified in 
+     adverse_move.setup.
+
+
+
+5. RUN THE TEST
+
+a) Log into the machine that is assigned as Primary.
+
+b) If you logined as rootl, then 'su' to yourself. 
+
+c) dce_login to the DCE/DFS system
+
+
+d) run the test by typing 
+
+   ./adversemove 
+
+e) When finished, check the results in the working directory. 
+    

@@ -1,0 +1,298 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: binding.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:27:47  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:14  marty]
+ *
+ * Revision 1.1.4.1  1995/12/08  17:31:02  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:54:50  root]
+ * 
+ * Revision 1.1.2.4  1993/03/09  18:34:58  rps
+ * 	Add name parms to site_bind_from_towerv
+ * 	[1993/03/08  23:28:21  rps]
+ * 
+ * Revision 1.1.2.3  1992/12/29  13:28:53  zeliff
+ * 	Embedding copyright notice
+ * 	[1992/12/28  20:48:03  zeliff]
+ * 
+ * Revision 1.1.2.2  1992/12/08  19:01:57  rps
+ * 	Add tower support.
+ * 	Fix api comments.
+ * 	[1992/12/03  01:25:02  rps]
+ * 
+ * Revision 1.1  1992/01/19  14:55:35  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+
+/*  binding.idl V=8 12/05/91 //littl/prgy/src/idl
+**
+** Copyright (c) Hewlett-Packard Company 1991
+** Unpublished work. All Rights Reserved.
+**
+*/
+/* User Registry - binding management - client agent
+ * 
+ */
+
+[local]
+
+interface sec_rgy_bind
+
+{
+    import "dce/rpcbase.idl";
+    import "dce/rgybase.idl";
+    import "dce/sec_login.idl";
+
+    /*
+     * Not all clients want or need explicit context management.  To
+     * accomodate such clients, a default context is maintained by the client
+     * agent.  The default context handle may be passed to any sec_rgy operation
+     * that accepts an [in] context handle paraeter.  The default context may be
+     * rebound by the client agent whenever the current default site becomes
+     * unavailable, or when an update is performed and the default context is
+     * bound to a readonly site. Explicit contexts are never automatically
+     * rebound. 
+     *
+     * There are two "flavors" of calls for binding context management.
+     * The "sec_rgy_site_bind..." flavor calls allow the caller to specify
+     * authentication info associated with the rgy context.  The valid
+     * values for the authn_level, authn_svc, and authz_svc parameters
+     * are the same as those specified by the OSF DCE RPC Functional
+     * Specification for the rpc_binding_set_auth_info call.  The
+     * caller may pass the default login context.
+     *
+     * Applications that don't need to explicitly control authentication
+     * info for a rgy context may use the "sec_rgy_site_open..." flavor calls.
+     * These calls construct authenticated contexts using default authentication
+     * values.  
+     *
+     * At DCE version 1, only authn_svc = rpc_c_authn_private, and
+     * authz_svc = rpc_c_authz_dce are supported.  These are the
+     * defaults applied by the "sec_rgy_site_open..." calls.  The
+     * default authn_level value is obtained from configuration info.
+     *
+     *  
+     */        
+
+    typedef enum {
+        sec_rgy_bind_auth_none, 
+        sec_rgy_bind_auth_dce
+    } sec_rgy_bind_auth_info_type_t;
+
+    typedef union switch (sec_rgy_bind_auth_info_type_t info_type) {
+
+        case sec_rgy_bind_auth_none:
+            ;                          /* don't authenticate handle */
+
+        case sec_rgy_bind_auth_dce:  
+            struct {
+                unsigned32          authn_level;
+                unsigned32          authn_svc;
+                unsigned32          authz_svc;
+                sec_login_handle_t  identity;
+            } dce_info;
+
+    } sec_rgy_bind_auth_info_t;
+
+
+    /*
+     * S E C _ R G Y _ C E L L _ B I N D 
+     *
+     * Bind to a security server for the specified cell.
+     *
+     * Error Status: 
+     * Unable to connect to requested site. 
+     */
+    void sec_rgy_cell_bind (
+        [in]    unsigned_char_t           *cell_name,
+        [in]    sec_rgy_bind_auth_info_t  *auth_info,
+        [out]   sec_rgy_handle_t          *context,
+        [out]   error_status_t            *status
+    );
+
+    /*
+     * S E C _ R G Y _ S I T E _ B I N D 
+     *
+     * Establish a connection.  site_name identifies the registry to use.  If
+     * site_name is NULL, or a zero-length string, a registry is selected by the
+     * client agent. 
+     *
+     * Error Status: 
+     * Unable to connect to requested site. 
+     */
+    void sec_rgy_site_bind (
+        [in]    unsigned_char_t           *site_name,
+        [in]    sec_rgy_bind_auth_info_t  *auth_info,
+        [out]   sec_rgy_handle_t          *context,
+        [out]   error_status_t            *status
+    );
+
+    /*
+     * S E C _ R G Y _ S I T E _ B I N D _ U P D A T E 
+     *
+     * Bind to an update site.
+     *
+     * Error Status: 
+     * no update site available  
+     */
+    void sec_rgy_site_bind_update (
+        [in]    unsigned_char_t           *site_name,
+        [in]    sec_rgy_bind_auth_info_t  *auth_info,
+        [out]   sec_rgy_handle_t          *context,
+        [out]   error_status_t            *status
+    );
+
+    /*
+     * S E C _ R G Y _ S I T E _ B I N D _ Q U E R Y 
+     *
+     * Bind to an arbitrary query site.
+     */
+   void sec_rgy_site_bind_query (
+        [in]    unsigned_char_t           *site_name,
+        [in]    sec_rgy_bind_auth_info_t  *auth_info,
+        [out]   sec_rgy_handle_t          *context,
+        [out]   error_status_t            *status
+    );
+
+
+    /*
+     * S E C _ R G Y _ S I T E _ B I N D _ F R O M _ T O W E R V
+     *
+     * Establish a connection.  towerv identifies the registry to use.
+     *
+     * Error Status:
+     * Unable to connect to requested site.
+     */
+    void sec_rgy_site_bind_from_towerv (
+        [in]    rpc_tower_vector_p_t      towerv,
+	[in]	unsigned_char_t		  *cell_name,
+	[in]	unsigned_char_t		  *site_name,
+        [in]    sec_rgy_bind_auth_info_t  *auth_info,
+        [out]   sec_rgy_handle_t          *context,
+        [out]   error_status_t            *status
+    );
+
+
+    /*
+     * S E C _ R G Y _ S I T E _ B I N D I N G _ G E T _ I N F O
+     *
+     * Return the site name and authentication info  associated with the
+     * context parameter.  If the context is the default context, the 
+     * info for the default binding is returned.  [out] string parameter
+     * storage must be freed by the caller.  Passing in a NULL value for
+     * any of the [out] values (except for the status) will prevent that 
+     * value from being returned.
+     */                                       
+ 
+    void sec_rgy_site_binding_get_info (
+        [in]    sec_rgy_handle_t          context,
+        [out]   unsigned_char_t           **cell_name,
+        [out]   unsigned_char_t           **server_name,
+        [out]   unsigned_char_t           **string_binding,
+        [out]   sec_rgy_bind_auth_info_t  *auth_info,
+        [out]   error_status_t            *status
+    );
+
+
+    /*
+     * S E C _ R G Y _ S I T E _ O P E N 
+     *
+     * Establish a connection.  site_name identifies the registry to use.  If the
+     * site_name is a string of length zero, a registry is selected by the
+     * client agent. 
+     *
+     * Error Status: 
+     * Unable to connect to requested site. 
+     */
+    void sec_rgy_site_open (
+        [in]        unsigned_char_t     *site_name,
+        [out]       sec_rgy_handle_t    *context,
+        [out]       error_status_t      *status
+    );
+
+    /*
+     * S E C _ R G Y _ S I T E _ O P E N _ U P D A T E 
+     *
+     * Bind to an update site.
+     *
+     * Error Status: 
+     * no update site available  
+     */
+    void sec_rgy_site_open_update (
+        [in]    unsigned_char_t     *site_name,
+        [out]   sec_rgy_handle_t    *context,
+        [out]   error_status_t      *status
+    );
+
+    /*
+     * S E C _ R G Y _ S I T E _ O P E N _ Q U E R Y 
+     *
+     * Bind to an arbitrary query site.
+     */
+   void sec_rgy_site_open_query (
+        [in]    unsigned_char_t     *site_name,
+        [out]   sec_rgy_handle_t    *context,
+        [out]   error_status_t      *status
+    );
+
+       
+    /*
+     * S E C _ R G Y _ S I T E _ G E T 
+     *
+     * Return the string representation of the site binding associated with the
+     * context parameter.  If the context is the default context, the default
+     * site binding is returned. 
+     */
+    void sec_rgy_site_get (
+        [in]    sec_rgy_handle_t    context,
+        [out]   unsigned_char_t     **site_name,
+        [out]   error_status_t      *status
+    );
+          
+
+    /*
+     * S E C _ R G Y _ S I T E _ C L O S E 
+     *
+     * Destroys the site binding associated with the context parameter. 
+     * Subsequent use of the context causes an error. 
+     */
+     void sec_rgy_site_close (
+        [in]    sec_rgy_handle_t    context,
+        [out]   error_status_t      *status
+    );
+
+
+    /*
+     * S E C _ R G Y _ S I T E _ I S _ R E A D O N L Y 
+     *
+     * returns true if the context's site is readonly, false otherwise 
+     */
+   boolean32 sec_rgy_site_is_readonly (
+        [in]    sec_rgy_handle_t    context
+    );
+
+    /*
+     * s e c _ r g y _ e n a b l e _ n s i
+     *
+     * enable/disable the use of NSI for security binding operations.
+     * returns the previous state of this flag (true=> use nsi; false=>
+     * skip NSI)
+     */
+    boolean32 sec_rgy_enable_nsi (
+        [in]    boolean32   flag
+    );
+
+}

@@ -1,0 +1,85 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: report_summary,v $
+# Revision 1.1.2.1  1996/10/16  14:08:53  arvind
+# 	OSF DCE 1.2.2 Drop 4.5
+# 	[1996/10/16  14:00:22  arvind]
+#
+# $EndLog$
+#
+#
+# report the number of pass/fail check items
+#
+ITEM_ID="GGAPI GGCMD GGACL"	# test item ID
+
+workdir="/tmp/`basename ${0}`-`id -u -n`-${$}"
+
+trap "cd `dirname ${workdir}`; rm -rf ${workdir}; exit" 0 1 2 3 15
+
+usage() {
+	cat << E_O_F
+usage: ${0} journal-directory [...]
+E_O_F
+}
+
+#
+# main procedure
+#
+
+# check argument
+if [ $# -lt 1 ]; then
+	usage
+	exit
+fi
+dirs="$*"
+
+# prepare for working directory
+mkdir -p ${workdir} || exit	# if fail, exit
+
+# analyze the journal file and count the number of check items
+for i in ${dirs}; do
+	journal="${i}/journal"
+	if [ ! -r ${journal} ]; then
+		echo "Cannot read file: ${journal}"
+		continue
+	fi
+	
+	for id in ${ITEM_ID}; do
+		passed=`grep "<<<[ 	]*${id}.*PASSED" ${journal} | wc -l`
+		failed=`grep "<<<[ 	]*${id}.*FAILED" ${journal} | wc -l`
+	
+		cat << E_O_F
+${id}	${passed}	${failed}
+E_O_F
+	done > ${workdir}/`basename ${i}`
+done
+
+# display the number of check items
+cd ${workdir} 
+for i in ${dirs}; do
+	awk '
+	BEGIN	{
+		printf("[%s]\n", FILENAME)
+		printf("%-12s:\t%6s\t%6s\t%6s\n", "CHECK ITEMS", "PASSED", "FAILED", "TOTAL")
+	}
+	{
+		printf("%-12s:\t%6d\t%6d\t%6d\n", $1, $2, $3, $2 + $3)
+		total_2 += $2
+		total_3 += $3
+	}
+	END	{
+		printf("%-12s:\t%6s\t%6s\t%6s\n", "------------", "------", "------", "------")
+		printf("%-12s:\t%6d\t%6d\t%6d\n", "TOTAL", total_2, total_3, total_2 + total_3)
+		printf("\n")
+	} ' `basename ${i}`
+done
+
+# done successfully
+exit

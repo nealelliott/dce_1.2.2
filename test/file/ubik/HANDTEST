@@ -1,0 +1,78 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# Copyright (C) 1995, 1993 Transarc Corporation
+# Licensed Materials - Property of Transarc
+# All rights reserved.
+# HISTORY
+# $Log: HANDTEST,v $
+# Revision 1.1.110.1  1996/10/17  18:37:04  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:58:11  damon]
+#
+# $EndLog$
+
+
+Instructions for configuring the ubik utst_ tests by hand:
+==========================================================
+
+1) Add the utst group entry in the namespace:
+
+	# rpccp add entry /.:/subsys/dce/dfs/utst
+
+	>>> entry added
+
+	# rpccp export -o `uuidgen` /.:/subsys/dce/dfs/utst
+
+	>>> objects exported
+
+2) Add each server which will run the utst_server into the
+   group:
+
+	# rpccp add member -m /.:/hosts/<hostname>/self /.:/subsys/dce/dfs/utst
+
+	>>> group member added
+
+3) Add the security group for utst into the registry and add each host running
+   the utst_server into the group:
+
+	# rgy_edit 
+	Current site is: registry server at /.../ds/subsys/dce/sec/master 
+	rgy_edit=> do g
+	Domain changed to: group
+	rgy_edit=> add subsys/dce/dfs-utst-servers
+	rgy_edit=> member subsys/dce/dfs-utst-servers -a hosts/<hostname>/dfs-server
+	rgy_edit=> quit
+	bye.
+
+4) Set up admin.utst identical to admin.fl on all machines running utst_server.
+
+5) Start the utst_server on each machine:
+
+	# utst_server -nsgroup /.:/subsys/dce/dfs/utst &
+
+6) To run the utst_client, issue:
+
+	# utst_client -nsgroup /.:/subsys/dce/dfs/utst -mget
+
+        Other options to utst_client are:
+
+          -trunc  to set the number to zero
+          -inc    to increment the stored number
+          -qget   to get the number from any server
+          -get    to get the number from the sync site
+	  -mget   to do get, inc, get, get, sleep 1 (repeatedly until ^C)
+	  -minc   to do get, inc, get, inc, sleep 1 (repeatedly until ^C)
+	  -incf   to do inc, sleep 1 (repeatedly until ^C)
+
+	These last 3 are stress tests.
+
+7) To see current ubik status, issue the following command on each
+   utst_server machine:
+
+	# udebug /.:/subsys/dce/dfs/utst -long
+

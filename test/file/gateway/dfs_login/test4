@@ -1,0 +1,366 @@
+# @HP_COPYRIGHT@
+# HISTORY
+# $Log: test4,v $
+NONERevision 1.1.6.1  1996/10/17  18:23:42  damon
+NONE	Submitting on behalf of Transarc
+NONE
+NONERevision 1.1.5.2  1996/10/17  16:52:04  damon
+NONE	Submitting on behalf of Transarc
+NONE
+# Revision /main/HPDCE02/3  1995/06/22  20:15 UTC  maunsell_c
+# 	mothra C&S fixes
+# 
+# Revision /main/HPDCE02/2  1995/02/14  22:43 UTC  maunsell_c
+# 	@sys @host changes for nfs/dfs gateway
+# 
+# Revision /main/HPDCE02/1  1994/11/07  20:45 UTC  maunsell_c
+# 	test fixes-enhances from last pull up from OSF
+# 
+#Revision 1.1.2.1  1994/08/22  16:16:30  maunsell_c
+#	new test
+#	verify file id as authenticated dfs_login and
+#	unauthenticated dfs_logout
+#	new tests, verify file id's when authenticated/non-authenticated access
+#
+#Revision 1.1.1.4  1994/08/22  16:08:37  maunsell_c
+#	new test
+#
+# $EndLog$
+#
+###############################################################################
+# This test is applicable to DFS/NFS exporter.
+# The script tests the dfs_login/dfs_logout funtion file operations as
+# authenticated and unauthenticated user
+# This test assumes the gateway server has a tester account in the registry
+# with principal id 12 and group id 12
+# there will also have to exist in the /etc/passwd file an entry for tester
+#
+###############################################################################
+#
+# if not run via the runtests script use          
+#         test4 >test4.log 2>&1
+# to log test data
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+rc=0
+ty=dfs_login
+: ${SERVER=`mount | grep "/\.\.\. on" | cut -d' ' -f3 | sed 's/:\/\.\.\.//'`}
+: ${testerowner="tester"}
+: ${testergroup="none"}
+
+
+echo ""
+echo "RUNNING dfs_login/dfs_logout COMMANDS on $hn for SERVER $SERVER."
+echo "========================================================================="
+date
+echo ""
+
+###############################################################################
+
+id=`whoami`
+if [[ $id != $testerowner ]]
+   then
+   echo "Must be unix id $testerowner to run this test"
+   echo "Test aborting...."
+   exit 1
+fi
+
+   echo ""
+   echo "dfs_login -h $SERVER tester -dce-"
+   dfs_login -h $SERVER tester -dce-
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E1)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "touch /:/testfile"
+   touch /:/testfile
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E2)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "check file owner/group id as authenticated user"
+   ls -o /:/testfile > out
+   owner=`cut -d' ' -f5 out`
+   ls -g /:/testfile > out
+   group=`cut -d' ' -f5 out`
+   
+   if [[ $owner != $testerowner ]] || [[ $group != $testergroup ]]
+      then
+      echo "failed ($rf) ($p: E3)"
+      rc=`expr $rc + 1`
+   fi 
+
+   rm -f out
+   echo ""
+   echo "cp /:/testfile /:/copyfile"
+   cp /:/testfile /:/copyfile
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E4)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "check file owner/group id as authenticated user"
+   ls -o /:/copyfile > out
+   owner=`cut -d' ' -f5 out`
+   ls -g /:/copyfile >out
+   group=`cut -d' ' -f5 out`
+
+   if [[ $owner != $testerowner ]] || [[ $group != $testergroup ]]
+      then
+      echo "failed ($rf) ($p: E5)"
+      rc=`expr $rc + 1`
+   fi
+
+   rm -f out
+
+   echo ""
+   echo "mv /:/testfile /:/movefile"
+   mv /:/testfile /:/movefile
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E6)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "check file owner/group id as authenticated user"
+   ls -o /:/movefile > out
+   owner=`cut -d' ' -f5 out`
+   ls -g /:/movefile > out
+   group=`cut -d' ' -f5 out`
+
+   if [[ $owner != $testerowner ]] || [[ $group != $testergroup ]]
+      then
+      echo "failed ($rf) ($p: E7)"
+      rc=`expr $rc + 1`
+   fi
+
+   rm -f out
+
+   echo ""
+   echo "rm -f /:/movefile /:/copyfile"
+   rm -f /:/movefile /:/copyfile
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E8)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "now get rid of dfs_login"
+   dfs_logout -h $SERVER tester
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E9)"
+      rc=`expr $rc + 1`
+   fi
+
+
+
+   echo ""
+   echo "touch /:/testfile"
+   touch /:/testfile
+   rf=$?
+
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E10)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "check file owner/group id as unauthenticated user"
+   ls -o /:/testfile > out
+   owner=`cut -d' ' -f5 out`
+   ls -g /:/testfile > out
+   group=`cut -d' ' -f5 out`
+
+   if [[ $owner = $testerowner ]] || [[ $group = $testergroup ]]
+      then
+      echo "worked ($rf) ($p: E11)"
+      rc=`expr $rc + 1`
+   fi
+
+   rm -f out
+   echo ""
+   echo "cp /:/testfile /:/copyfile"
+   cp /:/testfile /:/copyfile
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E12)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "check file owner/group id as unauthenticated user"
+   ls -o /:/copyfile > out
+   owner=`cut -d' ' -f5 out`
+   ls -g /:/copyfile >out
+   group=`cut -d' ' -f5 out`
+
+   if [[ $owner = $testerowner ]] || [ $group = $testergroup ]
+      then
+      echo "failed ($rf) ($p: E13)"
+      rc=`expr $rc + 1`
+   fi
+
+   rm -f out
+
+   echo ""
+   echo "mv /:/testfile /:/movefile"
+   mv /:/testfile /:/movefile
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E14)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "check file owner/group id as unauthenticated user"
+   ls -o /:/movefile > out
+   owner=`cut -d' ' -f5 out`
+   ls -g /:/movefile > out
+   group=`cut -d' ' -f5 out`
+
+   if [[ $owner = $testerowner ]] || [[ $group = $testergroup ]]
+      then
+      echo "failed ($rf) ($p: E15)"
+      rc=`expr $rc + 1`
+   fi
+
+   rm -f out
+
+   echo ""
+   echo "rm -f /:/movefile /:/copyfile"
+   rm -f /:/movefile /:/copyfile
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E16)"
+      rc=`expr $rc + 1`
+   fi
+
+
+   echo ""
+   echo "dfs_login -h $SERVER tester -dce-"
+   dfs_login -h $SERVER tester -dce-
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E17)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "mkdir -p /:/testdir"
+   mkdir -p /:/testdir
+   rf=$?
+   if test $rf -ne 0
+      then 
+      echo "failed ($rf) ($p: E18)"
+      rc=`expr $rc + 1`
+   fi
+
+
+   echo ""
+   echo "check dir owner/group id as authenticated user"
+   ls -od /:/testdir > out
+   owner=`cut -d' ' -f5 out`
+   ls -gd /:/testdir > out
+   group=`cut -d' ' -f5 out`
+
+   if [[ $owner != $testerowner ]] || [[ $group != $testergroup ]]
+      then
+      echo "failed ($rf) ($p: E19)"
+      rc=`expr $rc + 1`
+   fi
+
+
+   rm -f out
+   echo ""
+   echo "rmdir  /:/testdir"
+   rmdir /:/testdir
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E20)"
+      rc=`expr $rc + 1`
+   fi
+
+
+   echo ""
+   echo "now get rid of dfs_login"
+   dfs_logout -h $SERVER tester
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E21)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "mkdir -p /:/testdir2"
+   mkdir -p /:/testdir2
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E22)"
+      rc=`expr $rc + 1`
+   fi
+
+   echo ""
+   echo "check dir owner/group as unauthenticated user"
+   ls -od /:/testdir2 > out
+   owner=`cut -d' ' -f5 out`
+   ls -gd /:/testdir2 > out
+   group=`cut -d' ' -f5 out`
+   
+   if [[ $owner = $testerowner ]] || [[ $group = $testergroup ]]
+      then
+      echo "worked ($rf) ($p: E23)"
+      rc=`expr $rc + 1`
+   fi
+
+   rm -f out
+   
+   echo ""
+   echo "rmdir /:/testdir2"
+   rmdir /:/testdir2
+   rf=$?
+   if test $rf -ne 0
+      then
+      echo "failed ($rf) ($p: E24)"
+      rc=`expr $rc + 1`
+   fi
+   
+########################################
+
+echo ""
+echo "Done at `date`."
+echo ""
+if [ $rc -eq 0 ]
+   then
+   echo "$ty/$p PASSED"
+else 
+   echo "$ty/$p FAILED $rc errors"
+fi
+exit $rc

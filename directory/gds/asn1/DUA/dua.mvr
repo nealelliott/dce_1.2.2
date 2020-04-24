@@ -1,0 +1,398 @@
+-- 
+-- @OSF_COPYRIGHT@
+-- COPYRIGHT NOTICE
+-- Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+-- ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+-- src directory for the full copyright text.
+-- 
+-- HISTORY
+-- $Log: dua.mvr,v $
+-- Revision 1.1.10.2  1996/03/09  23:12:48  marty
+-- 	Update OSF copyright year
+-- 	[1996/03/09  22:29:57  marty]
+--
+-- Revision 1.1.10.1  1995/12/08  15:22:07  root
+-- 	Submit OSF/DCE 1.2.1
+-- 	[1995/12/08  14:53:05  root]
+-- 
+-- Revision 1.1.8.2  1994/07/06  15:53:37  marrek
+-- 	Add version string in July 1994 code drop.
+-- 	[1994/07/06  15:40:13  marrek]
+-- 
+-- Revision 1.1.8.1  1994/02/22  18:04:22  marrek
+-- 	Code drop for dce1.1.
+-- 	[1994/02/08  09:43:39  marrek]
+-- 
+-- Revision 1.1.6.2  1993/08/11  10:01:48  marrek
+-- 	July 1993 code drop.
+-- 	[1993/07/29  12:28:27  marrek]
+-- 
+-- Revision 1.1.4.5  1993/02/02  10:09:05  marrek
+-- 	Introduce dua_IA5string
+-- 	[1993/02/01  17:46:28  marrek]
+-- 
+-- Revision 1.1.4.4  1992/12/31  18:11:23  bbelch
+-- 	Embedding copyright notice
+-- 	[1992/12/31  13:08:15  bbelch]
+-- 
+-- Revision 1.1.4.3  1992/11/27  16:25:43  marrek
+-- 	November 1992 code drop
+-- 	[1992/11/17  13:14:34  marrek]
+-- 
+-- Revision 1.1.4.2  1992/09/28  11:51:42  marrek
+-- 	Insert DEFAULT for surname.
+-- 	[1992/09/28  11:50:54  marrek]
+-- 
+-- Revision 1.1.2.3  1992/07/01  16:51:58  melman
+-- 	GDS drop of 6/26/92
+-- 	[1992/07/01  16:20:18  melman]
+-- 
+-- Revision 1.1.2.2  1992/06/01  20:02:39  melman
+-- 	New GDS merged drop
+-- 	[1992/05/28  20:48:45  melman]
+-- 
+-- $EndLog$
+-- 
+-- $RCSfile: dua.mvr,v $ $Revision: 1.1.10.2 $ $Date: 1996/03/09 23:12:48 $
+-- 
+
+-- 	/****************************************************************************
+-- 	*                                                                           *
+-- 	*         COPYRIGHT  (C)  SIEMENS NIXDORF INFORMATIONSSYSTEME AG 1991       *
+-- 	*                                ALL RIGHTS RESERVED                        *
+-- 	*                                                                           *
+-- 	****************************************************************************/
+
+dua DEFINITIONS ::=
+BEGIN
+EXPORTS dua_oid_asn1, dua_Nstring, dua_Tstring, dua_string, dua_utc_time;
+
+dua_boolean (b: int)
+::= BOOLEAN (b)
+
+dua_int (i: int)
+::= INTEGER (i)
+
+dua_oid_asn1 (VAR val: asn1_oid)
+::= OBJECT ID (val.v, val.l)
+    ALLOCATE (val.v:UC)
+
+dua_bit_string (VAR val: dua_octet_string)
+::= BITS (val.contents, val.nb)
+    ALLOCATE (val.contents:UC)
+
+dua_octet_string (VAR val: dua_octet_string)
+::= OCTETS (val.contents, val.nb)
+    ALLOCATE (val.contents:UC)
+
+dua_string (val: string)
+::= PrintableChars (val)
+    ALLOCATE (val:char)
+
+dua_Nstring (val: string)
+::= NumericChars (val)
+    ALLOCATE (val:char)
+
+dua_IA5string (val: string)
+::= IA5Chars (val)
+    ALLOCATE (val:char)
+
+dua_Tstring (val: string)
+::= T61Chars (val)
+    ALLOCATE (val:char)
+
+dua_utc_time (val: dua_utc_time)
+::= [UNIVERSAL 23] IMPLICIT CHARS (val)
+    ALLOCATE (val:char)
+
+dua_psap (VAR psap: dua_psap)
+::= SEQUENCE {
+	[0] OCTETS (psap.psel.contents, psap.psel.nb)
+		ALLOCATE (psap.psel.contents: UC)
+		INITIAL (psap.psel_defined = TRUE)
+		DEFAULT (psap.psel_defined = FALSE),
+	[1] OCTETS (psap.ssel.contents, psap.ssel.nb)
+		ALLOCATE (psap.ssel.contents: UC)
+		INITIAL (psap.ssel_defined = TRUE)
+		DEFAULT (psap.ssel_defined = FALSE),
+	[2] OCTETS (psap.tsel.contents, psap.tsel.nb)
+		ALLOCATE (psap.tsel.contents: UC)
+		INITIAL (psap.tsel_defined = TRUE)
+		DEFAULT (psap.tsel_defined = FALSE),
+	[3] SET OF
+		OCTETS (psap.nsap[i].contents, psap.nsap[i].nb)
+		ALLOCATE (psap.nsap[i].contents: UC)
+	    INDEXED BY i UP TO psap.nb_nsap
+	    ALLOCATE (psap.nsap: octet_string)}
+
+
+DLSubmitPermission(VAR x: DLSubmitPermission) ::= CHOICE x.typ {
+	1: individual [0] IMPLICIT ORName(x.v.individual),
+	2: member_of_dl [1] IMPLICIT ORName(x.v.member_of_dl),
+	3: pattern_match [2] IMPLICIT ORNamePattern(x.v.pattern_match),
+	4: member_of_group [3] ANY(x.v.member_of_group.a_val.v, x.v.member_of_group.a_val.l) }
+
+ORNamePattern(VAR x: ORNamePattern) ::= ORName(x)
+
+ORAddress(VAR x: ORAddress) ::= SEQUENCE {
+	standard_attributes StandardAttributes(x.s_attrs),
+	domain_defined_attributes DomainDefinedAttributes(x.d_d_attrs[0])
+	ALLOCATE (x.d_d_attrs:D_D_Attrs)
+	DEFAULT (x.d_d_attrs = 0),
+	extension_attributes ExtensionAttributes(x.e_attrs[0])
+	ALLOCATE (x.e_attrs:E_Attrs)
+	DEFAULT (x.e_attrs = 0)}
+
+StandardAttributes(VAR x: S_Attrs) ::= SEQUENCE {
+	country_name CountryName(x.c_name[0])
+	ALLOCATE (x.c_name:str_NP_choice)
+	DEFAULT (x.c_name = 0),
+	administration_domain_name ADM_Name(x.a_d_name[0])
+	ALLOCATE (x.a_d_name:str_NP_choice)
+	DEFAULT (x.a_d_name = 0),
+	network_address [0] IMPLICIT dua_Nstring(x.n_addr)
+	DEFAULT (x.n_addr = 0),
+	terminal_identifier [1] IMPLICIT dua_string(x.t_id)
+	DEFAULT (x.t_id = 0),
+	private_domain_name [2] str_NP_choice(x.p_d_name[0])
+	ALLOCATE (x.p_d_name:str_NP_choice)
+	DEFAULT (x.p_d_name = 0),
+	organization_name [3] IMPLICIT dua_string(x.org_name)
+	DEFAULT (x.org_name = 0),
+	numeric_user_identifier [4] IMPLICIT dua_Nstring(x.u_id)
+	DEFAULT (x.u_id = 0),
+	personal_name [5] IMPLICIT PersonalName(x.p_name[0])
+	ALLOCATE (x.p_name:P_Name)
+	DEFAULT (x.p_name = 0),
+	organizational_unit_names [6] IMPLICIT OrganizationalUnitNames(x.o_u_names[0])
+	ALLOCATE (x.o_u_names:O_U_Names)
+	DEFAULT (x.o_u_names = 0)}
+
+str_NP_choice(VAR x: str_NP_choice) ::= CHOICE x.mode {
+	1: numeric dua_Nstring(x.str_val),
+	2: printable dua_string(x.str_val)}
+
+CountryName(VAR x: str_NP_choice) ::= [APPLICATION 1] str_NP_choice(x)
+
+ADM_Name(VAR x: str_NP_choice) ::= [APPLICATION 2] str_NP_choice (x)
+
+PersonalName(VAR x: P_Name) ::= SET {
+	surname [0] IMPLICIT dua_string(x.surname)
+	DEFAULT (x.surname = 0),
+	given_name [1] IMPLICIT dua_string(x.given_name)
+	DEFAULT (x.given_name = 0),
+	initials [2] IMPLICIT dua_string(x.initials)
+	DEFAULT (x.initials = 0),
+	generation_qualifier [3] IMPLICIT dua_string(x.g_qualifier)
+	DEFAULT (x.g_qualifier = 0)}
+
+OrganizationalUnitNames(VAR x: O_U_Names) ::= SEQUENCE OF 
+	dua_string(x.v[I_1])
+INDEXED BY I_1 UP TO x.n
+
+DomainDefinedAttributes(VAR x: D_D_Attrs) ::= SEQUENCE OF 
+	DomainDefinedAttribute(x.v[I_1])
+INDEXED BY I_1 UP TO x.n
+
+DomainDefinedAttribute(VAR x: D_D_Attr) ::= SEQUENCE {
+	type dua_string(x.type),
+	value dua_string(x.value)}
+
+ExtensionAttributes(VAR x: E_Attrs) ::= SET OF 
+	ExtensionAttribute(x.v[I_1])
+INDEXED BY I_1 UP TO x.n
+
+ExtensionAttribute(VAR x: E_Attr) ::= SEQUENCE {
+	extension_attribute_type [0] IMPLICIT INTEGER{
+		common_name(1),
+		teletex_common_name(2),
+		teletex_organization_name(3),
+		teletex_personal_name(4),
+		teletex_organizational_unit_names(5),
+		teletex_domain_defined_attributes(6),
+		pds_name(7),
+		physical_delivery_country_name(8),
+		postal_code(9),
+		physical_delivery_office_name(10),
+		physical_delivery_office_number(11),
+		extension_OR_address_components(12),
+		physical_delivery_personal_name(13),
+		physical_delivery_organization_name(14),
+		extension_physical_delivery_address_components(15),
+		unformatted_postal_address(16),
+		street_address(17),
+		post_office_box_address(18),
+		poste_restante_address(19),
+		unique_postal_name(20),
+		local_postal_attributes(21),
+		extended_network_address(22),
+		terminal_type(23)}(x.e_type),
+	extension_attribute_value [1] ANY(x.e_value.a_val.v,x.e_value.a_val.l)}
+
+TeletexPersonalName(VAR x: P_Name) ::= SET {
+	surname [0] IMPLICIT dua_Tstring(x.surname),
+	given_name [1] IMPLICIT dua_Tstring(x.given_name)
+	DEFAULT (x.given_name = 0),
+	initials [2] IMPLICIT dua_Tstring(x.initials)
+	DEFAULT (x.initials = 0),
+	generation_qualifier [3] IMPLICIT dua_Tstring(x.g_qualifier)
+	DEFAULT (x.g_qualifier = 0)}
+
+TeletexOrganizationUnitNames(VAR x: O_U_Names) ::= SEQUENCE OF 
+	dua_Tstring(x.v[I_1])
+INDEXED BY I_1 UP TO x.n
+
+TeletexDomainDefinedAttributes(VAR x: D_D_Attrs) ::= SEQUENCE OF 
+	TeletexDomainDefinedAttribute(x.v[I_1])
+INDEXED BY I_1 UP TO x.n
+
+TeletexDomainDefinedAttribute(VAR x: D_D_Attr) ::= SEQUENCE {
+	type dua_Tstring(x.type),
+	value dua_Tstring(x.value)}
+
+UnformattedPostalAddress(VAR x: UnformattedPostalAddress) ::= SET {
+	printable_address PostalAddress_Lines(x.p_address[0])
+	ALLOCATE (x.p_address:PostalAddress_Lines)
+	DEFAULT (x.p_address = 0),
+	teletex_string dua_Tstring(x.teletex_string)
+	DEFAULT (x.teletex_string = 0)}
+
+PDSParameter(VAR x: PDSParameter) ::= SET {
+	printable_string dua_string(x.printable)
+	DEFAULT (x.printable = 0),
+	teletex_string dua_Tstring(x.t61)
+	DEFAULT (x.t61 = 0)}
+
+ExtendedNetworkAddress(VAR x: ExtendedNetworkAddress) ::= CHOICE x.typ {
+	1: e163_4_address E163_4_address(x.v.e163_4_address[0])
+	ALLOCATE (x.v.e163_4_address:E163_4_address),
+	2: psap_address [0] IMPLICIT dua_psap(x.v.psap_address[0])
+	ALLOCATE (x.v.psap_address:dua_psap)}
+
+TerminalType(VAR x: int) ::= INTEGER{
+	telex(3),
+	teletex(4),
+	g3_facsimile(5),
+	g4_facsimile(6),
+	ia5_terminal(7),
+	videotex(8)}(x)
+
+ORName(VAR x: ORName) ::= [APPLICATION 0] IMPLICIT SEQUENCE {
+	COMPONENTS OF ORAddress(x.address),
+	directory_name [0] ANY(x.d_name.a_val.v, x.d_name.a_val.l)
+	DEFAULT (x.d_name.a_val.l = 0)}
+
+PostalAddress_Lines(VAR x: PostalAddress_Lines) ::= SEQUENCE OF 
+	dua_string(x.v[I_1])
+INDEXED BY I_1 UP TO x.n
+
+E163_4_address(VAR x: E163_4_address) ::= SEQUENCE {
+	number [0] IMPLICIT dua_Nstring(x.number),
+	sub_address [1] IMPLICIT dua_Nstring(x.sub_address)
+	DEFAULT (x.sub_address = 0)}
+
+guide(VAR search_att: guide) ::= SET {
+	[0] dua_oid_asn1 (search_att.obj)
+	     INITIAL (search_att.obj_defined = TRUE)
+	     DEFAULT (search_att.obj_defined = FALSE),
+	[1] criteria(search_att.crit)}
+
+criteria(VAR s_criteria: criteria) ::= CHOICE s_criteria.mode {
+	0: [0] crit_item(s_criteria.value.c_type[0])
+	     ALLOCATE (s_criteria.value.c_type:crit_item),
+	1: [1] crit_set(s_criteria.value.c_and_or[0])
+	     ALLOCATE (s_criteria.value.c_and_or:crit_set),
+	2: [2] crit_set(s_criteria.value.c_and_or[0])
+	     ALLOCATE (s_criteria.value.c_and_or:crit_set),
+	3: [3] criteria(s_criteria.value.c_not[0])
+	     ALLOCATE (s_criteria.value.c_not:criteria)}
+
+crit_set(VAR c_set: crit_set) ::= SET OF criteria(c_set.content[i])
+		INDEXED BY i UP TO c_set.nb_crit
+		ALLOCATE (c_set.content:criteria)
+
+crit_item(VAR s_crit_item: crit_item) ::= CHOICE s_crit_item.mode {
+	0: [0] dua_oid_asn1 (s_crit_item.value),
+	1: [1] dua_oid_asn1 (s_crit_item.value),
+	2: [2] dua_oid_asn1 (s_crit_item.value),
+	3: [3] dua_oid_asn1 (s_crit_item.value),
+	4: [4] dua_oid_asn1 (s_crit_item.value)}
+
+tlx_number(VAR tlx_Number: tlx_number) ::= SEQUENCE {
+	PrintableString (tlx_Number.t_number.contents,tlx_Number.t_number.nb),
+
+	PrintableString (tlx_Number.c_code.contents,tlx_Number.c_code.nb),
+
+	PrintableString (tlx_Number.answer.contents, tlx_Number.answer.nb)}
+
+teletex_id(VAR ttx_id: teletex_id) ::=  SEQUENCE {
+	PrintableString (ttx_id.terminal.contents, ttx_id.terminal.nb)
+		ALLOCATE (ttx_id.terminal.contents: UC),
+	SET { 
+		[0] T61String(ttx_id.graphic.contents, ttx_id.graphic.nb)
+			ALLOCATE (ttx_id.graphic.contents: UC)
+			DEFAULT (ttx_id.graphic.nb = OPTIONAL_UNDEF),
+		[1] T61String(ttx_id.control.contents, ttx_id.control.nb)
+			ALLOCATE (ttx_id.control.contents: UC)
+			DEFAULT (ttx_id.control.nb = OPTIONAL_UNDEF),
+		[2] OCTETS(ttx_id.page.contents, ttx_id.page.nb)
+			ALLOCATE (ttx_id.page.contents: UC)
+			DEFAULT (ttx_id.page.nb  = OPTIONAL_UNDEF),
+		[3] T61String(ttx_id.misc.contents, ttx_id.misc.nb)
+			ALLOCATE (ttx_id.misc.contents: UC)
+			DEFAULT (ttx_id.misc.nb = OPTIONAL_UNDEF),
+		[4] OCTETS(ttx_id.private.contents, ttx_id.private.nb)
+			ALLOCATE (ttx_id.private.contents: UC)
+			DEFAULT (ttx_id.private.nb = OPTIONAL_UNDEF) }
+
+	DEFAULT (ttx_id.graphic.nb = OPTIONAL_UNDEF;
+		 ttx_id.control.nb = OPTIONAL_UNDEF;
+		 ttx_id.page.nb  = OPTIONAL_UNDEF;
+		 ttx_id.misc.nb = OPTIONAL_UNDEF;
+		 ttx_id.private.nb = OPTIONAL_UNDEF)
+
+      }
+
+faxNumber(VAR fax_nr: faxNumber) ::= SEQUENCE {
+	PrintableString(fax_nr.tel_nr.contents,fax_nr.tel_nr.nb)
+		ALLOCATE (fax_nr.tel_nr.contents: UC),
+	FLAGS {
+		TWO_DIM  (8),
+		FINE_RES (9),
+		UNLIMITED  (20),
+		B4_LENGTH (21),
+		A3_WIDTH (22),
+		B4_WIDTH  (23),
+		UNCOMPRESSED  (30)}
+		( fax_nr.G3_par, 31)
+		 DEFAULT (fax_nr.G3_par = OPTIONAL_UNDEF)}
+
+str_PT_choice(VAR x: str_PT_choice) ::= CHOICE x.mode {
+	2: dua_string(x.str_val),
+	3: dua_Tstring(x.str_val)}
+
+t61_pr_seq(VAR t_p_seq: t61_pr_seq) ::= SEQUENCE OF
+	str_PT_choice(t_p_seq.v[i])
+	    INDEXED BY i UP TO t_p_seq.nb
+	    ALLOCATE (t_p_seq.v:str_PT_choice)
+
+t61_seq(VAR t_seq: t61_seq) ::= SEQUENCE OF
+	T61String(t_seq.t61_item[i].contents,
+					    t_seq.t61_item[i].nb)
+		ALLOCATE (t_seq.t61_item[i].contents: UC)
+	    INDEXED BY i UP TO t_seq.nb_item
+	    ALLOCATE (t_seq.t61_item: dua_octet_string)
+
+print_seq(VAR p_seq: print_seq) ::= SEQUENCE OF
+	PrintableString(p_seq.print_item[i].contents,
+					    p_seq.print_item[i].nb)
+		ALLOCATE (p_seq.print_item[i].contents: UC)
+	    INDEXED BY i UP TO p_seq.nb_item
+	    ALLOCATE (p_seq.print_item: dua_octet_string)
+
+int_seq(VAR i_seq: int_seq) ::= SEQUENCE OF 
+	INTEGER(i_seq.int_item[i])
+	    INDEXED BY i UP TO i_seq.nb_item
+	    ALLOCATE (i_seq.int_item: int)
+
+END

@@ -1,0 +1,108 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ * 
+ */
+/*
+ * HISTORY
+ * $Log: string_conv.idl,v $
+ * Revision 1.1.4.2  1996/03/11  02:48:09  marty
+ * 	Update OSF copyright years
+ * 	[1996/03/10  20:09:03  marty]
+ *
+ * Revision 1.1.4.1  1995/12/11  22:46:07  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/11  22:21:54  root]
+ * 
+ * Revision 1.1.2.2  1994/10/06  20:46:58  agd
+ * 	expand copyright
+ * 	[1994/10/06  14:33:02  agd]
+ * 
+ * Revision 1.1.2.1  1994/09/19  18:15:19  bhaim
+ * 	multidelegate test
+ * 	[1994/09/19  17:50:02  bhaim]
+ * 
+ * $EndLog$
+ */
+/*
+ ***************************************************************************
+ * This .idl file declares an interface for string conversion and a single
+ * remote procedure.  The interface defines a fixed-length string type that
+ * is passed by reference to the remote procedure, modified, and passed
+ * back.
+ ***************************************************************************
+ */
+/*
+ * (c) Copyright 1992, 1993 Hewlett-Packard Co.
+ */
+
+/* 
+ * Define the interface for this application.  This interface specification
+ * defines pointers to be reference-style by default for efficiency.  For a
+ * description of reference and full pointers, refer to the DCE Application
+ * Development Guide, section 17.14.7.1, Pointer Attributes.  The pointers
+ * used in this application conform to the restrictions of reference
+ * pointers so they are used because they are faster and easier to use.
+ * 
+ * NOTE: The RPC runtime uses the UUID below to identify this interface.  If
+ * you leverage this code, BE SURE TO CHANGE THE UUID!  (Use "uuidgen").
+ */
+
+[uuid(090AE024-7DD4-11CB-841F-08000920E4CC),
+pointer_default(ref),
+version(1.0)]
+interface string_conv
+{
+   /* Define the server number for this idl.  We will compare the user
+    * supplied number with this number to determine if we are in the
+    * correct function.
+    */
+   const unsigned long  conv_1_interface_number = 1;
+
+   /*
+    * The constant max_conv_string_len determines the longest string that
+    * can be passed in the remote procedure call.  For some applications
+    * having a restriction like this is OK; for others it is not, and
+    * variable length strings should be used instead.  See the lookup
+    * sample application for a demonstration of variable strings.
+    */
+   const unsigned long  max_conv_string_len = 80;
+    
+   /*
+    * Define the data type to be used to hold the string data.  Reference
+    * pointers are used for efficiency, so the array size cannot change on
+    * return from the remote procedure, and multiple string_t pointers in a
+    * remote procedure call may not point to the same data.  For this
+    * application these restrictions are not a problem.
+    */
+   typedef [string] char  string_ref_t[max_conv_string_len];
+
+   /*
+    * Define the procedure to convert a string to uppercase.  The
+    * string_convert_uppercase procedure takes a handle, since the explicit
+    * binding method is used to locate a server.  The other argument is a
+    * string data type used both for input and output.  This emulates a C
+    * "call by reference": upon return from the procedure call the pointer
+    * now points to different data, but the pointer address is still the
+    * same.  (The client stub unmarshals the data it receives from the
+    * server into the same space).
+    * 
+    * The string_convert_uppercase function is declared to be idempotent
+    * for efficiency reasons.  The idempotent attribute tells the IDL
+    * compiler that if the function is called multiple times with the same
+    * arguments it will have the same effect.  This means a call to an
+    * idempotent function can be resent without adverse side effects; this
+    * allows the RPC protocol to be more efficient, at least when using a
+    * datagram transport.
+    */
+   [idempotent] void string_convert_uppercase
+   (
+   [in]	handle_t          h,		/* Use explicit binding */
+   [in,out] string_ref_t  conv_string,	/* The string to convert */
+   [in] string_ref_t      num_serv,	/* Number of servers to use for delegation */
+   [out] error_status_t	  *auth_status	/* [jdl 14 Feb 1994] */
+   );
+}

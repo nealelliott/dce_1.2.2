@@ -1,0 +1,196 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: runtests,v $
+# Revision 1.1.135.1  1996/10/17  18:16:34  damon
+# 	Submitting on behalf of Transarc
+# 	[1996/10/17  16:49:16  damon]
+#
+# Revision 1.1.130.1  1994/02/04  20:39:19  devsrc
+# 	Merged from 1.0.3a to 1.1
+# 	[1994/02/04  15:21:59  devsrc]
+# 
+# Revision 1.1.128.1  1993/12/07  17:40:51  jaffe
+# 	1.0.3a update from Transarc
+# 	[1993/12/03  18:34:47  jaffe]
+# 
+# Revision 1.1.4.4  1993/01/11  17:37:33  htf
+# 	Embedded copyright notice
+# 	[1993/01/11  16:53:56  htf]
+# 
+# Revision 1.1.4.3  1992/11/04  18:35:38  jaffe
+# 	Transarc delta: comer-ot5803-fix-erronenous-bosserver-return-code-test 1.1
+# 	  Selected comments:
+# 	    Added test to the bos test suite for bos uninstall.
+# 	    Added test13
+# 	[1992/11/04  17:32:07  jaffe]
+# 
+# Revision 1.1.4.2  1992/10/28  15:46:24  jaffe
+# 	Transarc delta: comer-ot4849-misc-bos-command-test-cleanup 1.3
+# 	  Selected comments:
+# 	    Miscellaneous clean-up of the bos command test suite.
+# 	    Removed the call to test7, which exercized the now-gone 'bos exec'
+# 	    functionality.
+# 	    More cleanup of the bos test suite
+# 	    Change Makefiles to install files into the export tree.  This should
+# 	    later be changed to install into the install tree as soon as we decide
+# 	    on the correct tree layout.  In the meantime, put the files under
+# 	    export/<machine>/test/bos.
+# 	[1992/10/27  16:43:57  jaffe]
+# 
+# Revision 1.1.2.2  1992/05/21  12:33:37  jaffe
+# 	Created this delta to merge Phil Hirsch's final DFS test code changes with
+# 	the test code that the OSF had.  Hopefully, this means we and the OSF
+# 	should be looking at the same test code.
+# 	Changes to facilitate merge of local DFS test code with the OSF's.
+# 
+# 	$TALog: runtests,v $
+# 	Revision 4.10  1994/11/01  22:20:46  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r4.9 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	Revision 4.9  1993/11/15  22:54:03  andi
+# 	[merge of changes from 4.6 to 4.8 into 4.7]
+# 
+# Revision 4.8  1993/11/11  15:06:34  comer
+# 	Clean up a couple of small problems with the bos tests.
+# 
+# 	Attempts to use ksh command substitution in a sh script.
+# 	[from r4.6 by delta comer-db4664-fix-minor-bos-test-problems, r1.1]
+# 
+# Revision 4.7  1993/08/24  15:17:45  bwl
+# 	More changes for HP port.  Milestone:  got the low tests built;
+# 	can run cthon on DFS.  (But not on glued UFS.)
+# 
+# 	Changes for HP port.
+# 	[from r4.6 by delta bwl-o-db3961-port-103-to-HP, r1.11]
+# 
+# Revision 4.6  1993/01/14  17:32:24  jaffe
+# 	revdrop of latest OSF copyright changes to these files
+# 	[from r4.5 by delta osf-revdrop-01-12-92, r1.1]
+# 
+# 	[1992/05/20  17:06:00  jaffe]
+# 
+# $EndLog$
+#
+
+###############################################################################
+#    Copyright (C) 1991, 1992 Transarc Corporation - All rights reserved      #
+###############################################################################
+
+# This is a driver script, which runs bos/tests/test*. The tests there are
+# applicable to DFS running bosserver. All bos subcommands are exercised by
+# this test suite.
+
+###############################################################################
+
+# Usage:                runtests
+
+# Typically run via:    runtests
+
+# A test log is produced; the default name is ./bos.runtests.log.
+
+###############################################################################
+
+# Test environment:
+# This test requires that DFS and bosserver be up and running on $SERVER_1.
+
+# Privilege required:
+# You must be logged in as local root, and authenticated to DCE as someone
+# in admin.bos on $SERVER_1.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+rc=0
+ty=bos
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${CELL_ARG=""}
+: ${SERVER_1=$hn}
+: ${TESTTOP=`pwd`}
+: ${VERB_ARG=""}
+
+: ${bin_dir=/opt/dcelocal/bin}
+: ${dns_cell_name=/.../$CELL_NAME}
+: ${dns_server_prefix=/.:/hosts/}
+: ${export_root=/.../$CELL_NAME/fs}
+: ${testhome=$TESTTOP/$ty}
+
+PATH=":"$bin_dir":"$PATH
+
+: ${lf=$ty.$p.log}
+
+export AUTH_ARG CELL_NAME CELL_ARG SERVER_1 TESTTOP VERB_ARG
+export bin_dir dns_cell_name dns_server_prefix export_root testhome
+export PATH lf
+
+###############################################################################
+
+(
+echo ""
+echo "$ty/$p running on $hn at `date`"
+echo "   in cell $CELL_NAME."
+echo "Server is $SERVER_1; auth arg is $AUTH_ARG."
+) | tee -a $lf
+
+if test "$CELL_NAME" = ""
+   then echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting." |
+           tee -a $lf
+        exit 2
+   fi
+
+###############################################################################
+
+outfile=/tmp/$ty.$p.$$
+rm -rf $outfile
+rm -rf core core.* /opt/dcelocal/var/dfs/adm/core.*
+coreflag=FALSE
+
+for f in 1 2 3 4 5 6 8 9 10 11 12 13
+    do
+    test=test$f
+    (echo ""; echo "Running $test.") | tee -a $lf
+    sync; sync
+    $testhome/tests/$test > $outfile 2>&1; rf=$?; rc=`expr $rc + $rf`
+    sync; sync
+    cat $outfile | tee -a $lf
+    (echo ""; echo "$test returned $rf.") | tee -a $lf
+    sync; sync
+    rm -f $outfile
+    if test -f core
+       then coreflag=TRUE; mv core core.$f; ls -l core.$f | tee -a $lf
+       fi
+    sync; sync
+    done
+
+if test $coreflag = TRUE
+   then (echo ""; ls -l core.* 2>&1) | tee -a $lf
+        rm -rf core.*
+   fi
+
+echo ""; ls -l /opt/dcelocal/var/dfs/adm/core.*
+
+rm -rf $outfile $ty.test[1-9]*.out
+
+###############################################################################
+
+(echo ""; echo "Tests complete at `date`."; echo "") | tee -a $lf
+if test $rc -eq 0
+   then echo "$ty/$p PASSED" | tee -a $lf
+   else echo "$ty/$p FAILED ($rc total errors)" | tee -a $lf
+   fi
+
+exit $rc
+
+###############################################################################

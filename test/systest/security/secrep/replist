@@ -1,0 +1,353 @@
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# 
+#!/bin/ksh
+#
+# HISTORY
+# $Log: replist,v $
+# Revision 1.1.2.2  1996/03/09  20:52:01  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:41  marty]
+#
+# Revision 1.1.2.1  1995/12/11  22:47:16  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/30  18:58 UTC  bell_d
+# 	Debugged version
+# 
+# 	 	HP revision /main/HPDCE02/1  1994/08/03  19:54 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/05/02  19:54 UTC  gordon_l
+# 	Fixes for change_master/become_master
+# 
+# 	HP revision /main/gordon_branch/1  1994/05/02  19:35 UTC  gordon_l
+# 	Fixes for change_master/becom
+# 	e_master
+# 	[1995/12/11  22:22:24  root]
+# 
+# Revision 1.1.2.2  1993/08/02  17:40:14  sekhar
+# 	Replication system test. Initial version
+# 	[1993/08/02  17:29:43  sekhar]
+# 
+# $EndLog$
+#
+
+if [ -z "${REPLIST_DEFINED}" ] ; then
+REPLIST_DEFINED=1
+
+. $PHOME/profile
+. $PHOME/replog
+. $PHOME/sa
+. $PHOME/repdb
+. $PHOME/secd
+
+#-----------------------------------------------------------------------
+#  replist_read : reads the replica list of a specified replica
+#
+#  IN : arg1 .... Name of the replica whose replica list 
+#                 is to be read. If null then replica list
+#                 of whatever repilca sec_admin binds to is returned.
+#
+#  OUT: RL_MASTERS      Array of master replicas 
+#       RL_SLVS         Array of slave replicas
+#       RL_SLVS_MRKDEL  Array of slaves marked for deletion.
+#-----------------------------------------------------------------------
+
+replist_read()
+{
+    typeset st
+
+    replog_msg "Reading replica list of replica $1"
+    sa_lrep $1 ; st=$? 
+    if [ $st -ne 0 ] ; then
+        replog_abort "replist_read" "sa_lrep"
+        secd_print_state_all
+    else
+        set -A RL_SLVS_MRKDEL  `grep "(marked for deletion)" $SA_OUTF \
+                             | awk '{print $1}'`
+
+        set -A RL_MASTERS `grep "(master)" $SA_OUTF | awk '{print $1}'`
+
+        set -A RL_SLVS `sed -e /Default/D -e /^$/D -e /\(master\)/D \
+                            -e /\("marked for deletion"\)/D           \
+                        $SA_OUTF`
+    fi
+    return $st
+}
+
+#-----------------------------------------------------------------------
+#  replist_verify_master -  Verfies that the specified replica is the 
+#                           ONLY master on the list of replicas specified
+#                           in arg1 (all of these replicas are assumed to
+#                           be reachable i.e. sec_admin can bind to them).
+#
+#  IN : arg1 - List of replicas to be checked.
+#       arg2 - Name of the replica to verified.
+#
+#  RETURNS : 0 if the replica name is the only master
+#            1 otherwise 
+#
+#-----------------------------------------------------------------------
+
+replist_verify_master()
+{
+    typeset st i j fail rl rl_list
+
+    set -A rl_list $1
+
+    replog_msg "Attempting to verify that $2 is the only master on replica lists:"
+    replist_print "${rl_list[*]}"
+ 
+    fail=0
+    let IL=IL+1
+    for rl in ${rl_list[*]}
+    do 
+        replist_read $rl ; st=$?
+        if [ $st -ne 0 ] ; then
+            replog_error "Unable to read the replica list for $rl"
+            fail=1
+            continue
+        fi
+
+        if [ ${#RL_MASTERS[*]} -eq 0 ] ; then
+            replog_error "No master found on the replica list of $rl"
+            fail=1
+            continue
+        fi
+
+        if [ ${#RL_MASTERS[*]} -gt 1 ] ; then
+            replog_error "Two masters found on the replica list of $rl"
+            fail=1
+            continue
+        fi
+         
+        if [ ${RL_MASTERS[0]} != $2 ] ; then
+            replog_error "${RL_MASTERS[0]} is the master on replica list of $rl"
+            fail=1
+            continue
+        else
+            replog_msg   "$2 is the  master on replica list of $rl"
+        fi
+        replog_blank
+    done
+    let IL=IL-1
+    if [ $fail -eq 0 ] ; then
+        replog_msg "Successfully verified $2 is the master on replica lists:"
+        replist_print "${rl_list[*]}"
+    else
+        replog_error "Failed to verify $2 is the master on replica lists:"
+        replist_print "${rl_list[*]}"
+    fi
+    return $fail
+}
+
+#-----------------------------------------------------------------------
+#  replist_tst_slv_mrkdel :
+#
+#      Checks if the replica is "marked for deletion" on the specified replica list.
+#
+#  IN :     arg1 .... Replica whose replica list is to be checked.
+#           arg2 .... Replica to be checked if "marked for deletion"
+#
+#  RETURNS : 0 if the replica is marked for deletion
+#            1 if the replica is not marked for deletion.              
+#-----------------------------------------------------------------------
+
+replist_tst_slv_mrkdel()
+{
+    typeset st i
+
+    replog_msg "Checking if replica $2 is $STR_RL_MRKDEL on replica list of $1"
+
+    let IL=IL+1 ; replist_read $1 ; st=$? ; let IL=IL-1
+    if [ $st -ne 0 ] ; then
+        replog_abort "replist_tst_slv_mrkdel()"  "replist_read()"
+        return 1
+    fi
+
+    for i in ${RL_SLVS_MRKDEL[*]}
+    do
+        if [ $i = $2 ] ; then
+            replog_msg "Replica $2 is $STR_RL_MRKDEL on replica list of $1"
+            return 0
+        fi    
+    done
+    replog_msg "Replica $2 is NOT $STR_RL_MRKDEL on replica list of $1"
+    return 1
+}
+
+replist_wait_slv_mrkdel()
+{
+    typeset i st
+
+    i=1 ; st=0
+    while [ $i -le $REPLIST_SLV_MRKDEL_LOOP_CNT ]
+    do 
+        replist_tst_slv_mrkdel $1 $2 ; st=$?
+        if [ $st -ne 0 ] ; then
+            replog_msg "Sleeping $REPLIST_SLV_MRKDEL_LOOP_INT secs and retrying"
+            sleep $REPLIST_SLV_MRKDEL_LOOP_INT
+        else
+            break 
+        fi
+        i=`expr $i + 1`
+    done
+    return $st
+}
+
+#  Currently only used to wait for a slave to be removed the 
+#  replica list of the master.
+
+replist_wait_slvdel()
+{
+    typeset st i sleep_flag
+
+    replog_msg "Waiting until $2 is deleted from repilca list of $1"
+
+    i=1 ; st=0 ; sleep_flag=1
+    while [[ $i -le $REPLIST_SLVDEL_LOOP_CNT && $sleep_flag -eq 1 ]]
+    do 
+        sleep_flag=0
+        let IL=IL+1 ; replist_read $1 ; st=$? ; let IL=IL-1
+        if [ $st -ne 0 ] ; then
+            replog_abort "replist_wait_slvdel()" "replist_read()"
+            return 1
+        fi
+        for j in ${RL_SLVS_MRKDEL[*]} ${RL_SLVS[*]}
+        do
+            if [ $j = $2 ] ; then
+                replog_msg "sleeping $REPLIST_SLVDEL_LOOP_INT secs and retrying"
+                sleep $REPLIST_SLVDEL_LOOP_INT
+                sleep_flag=1
+                break
+            fi
+        done
+        i=`expr $i + 1`
+    done
+}
+
+#-----------------------------------------------------------------------
+#  replist_tst_mbr : checks for the existance/non-existance
+#                    of a replica on a replica list
+#
+#  IN  : arg1 ...... Array of replica lists to be checked
+#        arg2 ...... replica name whose existence/or nonexistance is
+#                    to be checked.
+#        arg3 ...... $REP_EXISTS   - check for existence of the replica
+#                    $REP_NOTEXIST - check for non-existance of the replica
+#
+#  RETURNS :   0 on success ; 1 on failure
+#-----------------------------------------------------------------------
+
+replist_tst_mbr()
+{
+    typeset i found st fail rl rl_list
+
+    st=0 ; fail=0
+    replog_blank
+    if [ $3 = $REP_EXISTS ] ; then
+        replog_msg "Attempting to check if $2 is on the"
+        replog_msg "replica lists : $1"
+    else
+        replog_msg "Attempting to check $2 not on the"
+        replog_msg "replica lists : $1"
+    fi
+    replog_blank ; let IL=IL+1
+
+    set -A rl_list $1
+
+    for rl in ${rl_list[*]}
+    do
+        found=0
+        replist_read $rl ; st=$?
+        if [ $st -ne 0 ] ; then
+            replog_abort "replist_tst_mbr" "replist_read"
+            let IL=IL-1 ; return $st
+        fi
+
+        replog_debug "Replica list of $1"
+#        replist_print "${RL_SLVS[*]} ${RL_MASTERS[*]}"
+
+        for i in ${RL_SLVS[*]} ${RL_MASTERS[*]}
+        do
+            if [ $i = $2 ] ; then
+                found=1
+                break
+            fi
+        done
+
+        if [ $found -eq 1 ] ; then
+            replog_msg "$2 on $1's replist"
+        else
+            replog_msg "$2 not on $1's replist"
+        fi
+        replog_blank
+
+        if [[    $3 = $REP_EXISTS   && $found -eq 0 && $fail -eq 0 \
+              || $3 = $REP_NOTEXIST && $found -eq 1 && $fail -eq 0 ]] ; then
+            fail=1   #  Set return status
+        fi
+    done
+    let IL=IL-1
+    if [ $3 = $REP_EXISTS ] ; then
+        if [ $fail -eq 0 ] ; then
+            replog_msg "Successfully verified $2 on "
+            replog_msg "replica lists : $1"
+        else
+            replog_error "$2 NOT on all replica lists : $1"
+        fi
+    else
+        if [ $fail -eq 0 ] ; then
+           replog_msg "Successfully verified $2 not on"
+           replog_msg "replica lists : $1"
+        else
+           replog_error "$2 exists on some replica lists : $1"
+        fi
+    fi
+    return $fail
+}
+
+#-----------------------------------------------------------------------
+#  replist_print : Prints the specified replica list
+#
+#  IN : arg1 ..... Array containing the replica names to be printed.
+#-----------------------------------------------------------------------
+
+replist_print()
+{
+    typeset i
+
+    let IL=IL+1  
+    for i in $1
+    do 
+        replog_msg "$i"
+    done
+    let IL=IL-1
+    replog_blank
+}
+
+
+replist_cleanup()
+{
+    rm -f $replist_tmpf
+}
+
+replist_init()
+{
+    replist_tmpf=/tmp/replist_tmpf_$HOSTNM
+    rm -f $replist_tmpf
+}
+
+#  Only called by slv_global_cleanup
+
+replist_global_cleanup()
+{
+    rm -f $replist_tmpf
+}
+
+fi

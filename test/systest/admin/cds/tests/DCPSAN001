@@ -1,0 +1,305 @@
+#!/opt/dcelocal/bin/dcecp
+#
+# FILE_NAME: DCPSAN001
+#
+# COMPONENT NAME: dcecp -> CDS system administration test
+#
+# USAGE: DCPSAN001
+#
+# DESCRIPTION:
+#
+#    The purposes of this dcecp scripts are:
+#
+#    1. To implement the steps necessary to preserve a clearinghouse 
+#	accross operating system software upgrades on a system running
+#	a CDS Server.
+#
+#    2. To test that the DCE, and in particulat the CDS server, executes
+#	successfully after the clearinghouse files have been restored.
+#
+#    The steps to backup and restore a CDS clearinghose which are implemented 
+#    here are documented in DCE Administration Guide.
+#
+# PREREQUISITES and SETUP:
+#
+#     The following requirements are necessary prior to running this
+#     script.
+#
+#     1. Login as root.
+#
+#     2. Install and configure DCE. 
+#
+#     3. Configure the hostmachine (where this script is to run) as a 
+#        CDS server.
+#
+#     4. Edit the variables defined in the file datafile_ch.tcl 
+#	 to agree with your environment.
+#
+#     5. Source the file profile.dcest.
+#
+# DESCRIPTION:
+#  
+#  First phase: Backup-
+#
+#    1. Source the files datafile_ch.tcl and procedures.tcl.
+#    2. Initialize logs.
+#    3. Verify that root is running this script.
+#    4. Get the name of the CDS servers running on the cell.
+#    5. For general information, get a list of the CDS clients
+#       configured in the cell. 
+#       NOTE: A potential enhancement is to test that the DCE
+#       clients continue to operate while the backup and restore
+#       operations are in progress.
+#    6. Create test directories and objects in the namespace. 
+#    7. Disable cdsd
+#    8. Backup the following CDS files:
+#	
+#	$DCELOCAL/etc/cds_attributes
+#	$DCELOCAL/var/directory/cds/cds_files
+#	$DCELOCAL/var/directory/cds/*_ch.checkpoint.nnnnnnnnnn
+#	$DCELOCAL/var/directory/cds/*_ch.tlognnnnnnnnnn
+#	$DCELOCAL/var/directory/cds/*_ch.version
+#	$DCELOCAL/var/adm/directory/cds/cds_cache.version
+#	$DCELOCAL/var/adm/directory/cds/cds_cache.nnnnnnnnnnn
+#
+#    9. Delete entries created in step 6. and add new ones.
+#
+#  Second phase: Restore -
+#
+#   10. Disable cdsd.
+#   11. Restore cheringhouse files.
+#   12. Restart cdsd
+#   13. Test for the existance of the directories and objects
+#       created in step 6.
+#   14. Clean up and exit 
+#
+#################################################################################
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Source the datafile.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+# Don't forget to source profile.dcest before running this script!!
+# STROOT=/dcetest/dcelocal/tests/systest
+
+if {([catch {set STROOT $env(STROOT)}]) ||
+    ([string length $env(STROOT)] == 0)} {
+    puts stderr "$argv0: STROOT is not defined."
+    puts stderr "$argv0: You probably forgot to source profile.dcest."
+    exit
+}
+source $STROOT/admin/cds/tests/datafile_ch.tcl
+source $STROOT/admin/cds/tests/procedures.tcl
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Initialize the log files. If there is an error initializing the log files,
+#	then the default file is stdout.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling initlogs."
+initlogs
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Check that user root is running this script. 
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling user_root."
+
+echo_msg "-log---: Calling procedure user_root" $testlog
+
+if {[user_root] == 1} {
+   echo_msg "-log---:" $testlog
+   echo_msg "-log---: You have insufficient rights to execute this test." $testlog
+   echo_msg "-log---: Before running this script again, log in as root." $testlog
+   exit_proc EXIT_ON_ERROR
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Check that the host machine has been configured as a CDS server.	
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling getcdsserver."
+echo_msg "-log---: Calling getcdsserver" $testlog
+echo_msg "-log---: Verifying that $HOSTNAME is configured as a CDS server." $testlog
+
+if { [getcdsserver $HOSTNAME] } {
+	echo_msg "-log---:" $testlog
+	echo_msg "-log---: $HOSTNAME is not a CDS server. " $testlog
+	echo_msg "-log---: This test executes only on hosts that have been configured" $testlog
+	echo_msg "-log---: as CDS servers." $testlog
+	exit_proc EXIT_ON_ERROR
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Get a list of the CDS clients configured in the cell and find out 
+#	how many of them are CDS servers.  
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Finding the cdsds configured in the cell."
+
+echo_msg "-log---: Getting a list of CDS clients configured in the cell." $testlog
+echo_msg "-log---: Calling procedure getcdsclients." $testlog
+set CDSCLIENTS [getcdsclients]
+set ADDITIONALSERVERS [list_cell_cdsds $CDSCLIENTS $HOSTNAME]
+
+if { $ADDITIONALSERVERS == 0 } {
+	echo_msg "-log---:" $testlog
+	echo_msg "-log---:  Only one CDS server was configured in this cell." $testlog
+} else {
+	echo_msg "-log---:"  $testlog
+        echo_msg "-log---: More that one CDS server were configured on this cell." $testlog
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Login as cell_admin and create test entries in the namespace
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling run_cmd to login as cell_admin."
+
+echo_msg "-log---: Calling procedure run_cmd to login as cell_admin." $testlog
+
+if {[run_cmd {login $CELLADMIN -password $ADMIN_PW}] != 0 } {
+    echo_msg "-log---:" $testlog
+    echo_msg "-log---: Failed to log in as $CELLADMIN" $testlog
+    echo_msg "-log---: Program exiting on error." $testlog
+    exit_proc EXIT_ON_ERROR
+}   
+
+# Make test entries in the name space.
+
+puts "Calling init_name_space."
+init_name_space
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Disable the CDS server (cdsd) in preparation to backup CH files.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling disable_cdsd."
+echo_msg "-log---: Calling procedure disable_cdsd to stop cdsd." $testlog
+
+if {[disable_cdsd $HOSTNAME] == 0 } {
+    echo_msg "-log---:" $testlog
+    echo_msg "-log---: The CDS server has been disabled temporarily." $testlog
+} else {
+    echo_msg "-log---:"  $testlog
+    echo_msg "-log---: Failed to disable the CDS server." $testlog
+    echo_msg "-log---: Exiting on error." $testlog
+    exit_proc  EXIT_ON_ERROR
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Backup the clearinghouse files.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling backup_ch."
+echo_msg "-log---: Calling backup_ch to back up the clearinghouse." $testlog
+
+if {[backup_ch] == 0} {
+   echo_msg "-log---:" $testlog
+   echo_msg "-log---: The clearinghouse has been backed up succesfully." $testlog
+} else {
+   echo_msg "-log---:" $testlog
+   echo_msg "-log---: Failed to backup the clearinghouse successfully." $testlog
+   echo_msg "-log---: Restarting the CDS daemon cdsd and exiting." $testlog
+   puts "Calling restart_cdsd after backup_ch failed."
+   if {[restart_cdsd] == 1} {
+       echo_msg "-log---: Failed to start cdsd, it needs to be started by hand." $testlog
+   }
+   exit_proc EXIT_ON_ERROR
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Restart cdsd - modify the entries backed up and add new ones.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling restart_cdsd."
+echo_msg "-log---: Calling procedure restart_cdsd to start cdsd." $testlog
+
+if {[restart_cdsd] == 1 } {
+    echo_msg "-log---:" $testlog
+    echo_msg "-log---: Failed to start cdsd." $testlog
+    echo_msg "-log---: cdsd needs to be started by hand." $testlog
+    echo_msg "-log---: Exiting on error." $testlog
+    exit_proc EXIT_ON_ERROR
+}
+
+puts "Calling modify_name_space."
+echo_msg "-log---: Calling procedure modify_name_space." $testlog
+
+if {[modify_name_space] == 0 } {
+    echo_msg "-log---:" $testlog
+    echo_msg "-log---: The namespace was modified." $testlog
+}
+
+puts "Calling access_name_space."
+
+echo_msg "-log---: Calling procedure access_name_space." $testlog
+
+if {[access_name_space] == 0 } {
+    echo_msg "-log---: " $testlog
+    echo_msg "-log---: The call to access_name_space should have failed." $testlog
+} else {
+    echo_msg "-log---:" $testlog
+    echo_msg "-log---: The call to access_name_space failed as expected." $testlog
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Disable the CDS server - cdsd - in preparation to restore the CH files.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling disable_cdsd."
+
+echo_msg "-log---: Calling procedure disable_cdsd." $testlog
+
+if {[disable_cdsd $HOSTNAME] == 0 } {
+    echo_msg "-log---:" $testlog
+    echo_msg "-log---: The CDS server has been disabled temporarily." $testlog
+} else {
+    echo_msg "-log---:"  $testlog
+    echo_msg "-log---: Failed to disable the CDS server. " $testlog
+    exit_proc EXIT_ON_ERROR
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# 	Restore the CDS and clearinghouse files.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling restore_ch."
+
+echo_msg "-log---: Calling procedure restore_ch." $testlog
+
+if {[restore_ch] == 0} {
+    echo_msg "-log---:" $testlog
+    echo_msg "-log---: The clearinghouse files have been successfully restored." $testlog
+} else {
+    echo_msg "-log---:" $testlog
+    echo_msg "-log---: Failed to restore the clearinghouse files. " $testlog
+    echo_msg "-log---: Exiting on error." $testlog
+    exit_proc EXIT_ON_ERROR
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#	Restarting the CDS server (cdsd) on the local host.
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+puts "Calling restart_cdsd."
+echo_msg "-log---: Calling procedure restart_cdsd." $testlog
+
+if {[restart_cdsd] == 1 } {
+    echo_msg "-log---:" $testlog
+    echo_msg "-log---: Failed to start cdsd." $testlog
+    echo_msg "-log---: Exiting on error." $testlog
+    exit_proc EXIT_ON_ERROR
+}
+
+puts "Calling access_name_space."
+echo_msg "-log---: Calling procedure access_name_space." $testlog
+
+if {[access_name_space] == 0 } {
+    echo_msg "-log---:"
+    echo_msg "-log---: Directories and objectes restored were accessed successfully." $testlog
+}
+
+set EXIT_ON_ERROR 0
+exit_proc EXIT_ON_ERROR
+

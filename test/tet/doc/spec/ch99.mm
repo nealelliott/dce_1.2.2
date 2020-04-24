@@ -1,0 +1,3 @@
+'\"	SCCS: @(#) TET SPECIFICATION		Rel 4.5 (06/23/92)
+'\"
+.TC 2 1 7 0

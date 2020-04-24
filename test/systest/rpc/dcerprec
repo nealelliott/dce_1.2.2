@@ -1,0 +1,355 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dcerprec,v $
+# Revision 1.1.6.2  1996/03/09  20:51:03  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:29:00  marty]
+#
+# Revision 1.1.6.1  1995/12/11  22:00:59  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  14:48 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/2  1994/04/12  15:45 UTC  truitt
+# 
+# 	HP revision /main/truitt_junk/2  1994/04/12  15:33 UTC  truitt
+# 	clean up reference to profile
+# 
+# 	HP revision /main/truitt_junk/1  1994/03/29  18:37 UTC  truitt
+# 	Update test to latest tet version
+# 	[1995/12/11  21:42:27  root]
+# 
+# 	updated from DTM tree
+# 	[1993/09/01  19:02:07  giza]
+# 
+# 	Initial King Kong branch
+# 	[1993/07/09  12:39:32  root]
+# 
+# Revision 1.1.3.4  1993/05/17  14:27:02  bissen
+# 	incorporated iteration looping and single loop
+# 	[1993/05/17  14:26:38  bissen]
+# 
+# Revision 1.1.3.3  1993/04/23  14:42:37  giza
+# 	add time loop
+# 	[1993/04/22  23:50:19  giza]
+# 
+# Revision 1.1.3.2  1993/03/31  12:49:56  mgm
+# 	Initial GAMERA branch
+# 
+# Revision 1.1.2.5  1992/12/18  19:28:05  mgm
+# 	Changed killproc to killproc2 to avoid getting
+# 	mismatch failures - Must send kill -2 to get server
+# 	unregistered from rpc.
+# 	[1992/12/18  19:27:48  mgm]
+# 
+# Revision 1.1.2.4  1992/12/09  14:55:15  mgm
+# 	Fixed cleanup().
+# 	[1992/12/09  14:54:53  mgm]
+# 
+# Revision 1.1.2.3  1992/11/20  12:28:29  mgm
+# 	Updated misc.
+# 	[1992/11/20  12:25:59  mgm]
+# 
+# Revision 1.1.2.2  1992/11/03  22:28:50  mgm
+# 	Ported to TET
+# 	[1992/11/03  22:26:20  mgm]
+# 
+# $EndLog$
+# 
+#
+# (c) Copyright 1990, 1991, 1992 OPEN SOFTWARE FOUNDATION, INC. 
+# ALL RIGHTS RESERVED 
+#
+#
+#   (C) COPYRIGHT International Business Machines Corp. 1991
+#   All Rights Reserved
+#
+#   TEST_NAME: dcerpre1
+#
+#   TESTCASE OVERVIEW:
+#
+#	dcerpst0 is designed to test the ability of the RPC library to
+#       handle heavy stress loads.  The test is two sections:  a server side
+#	and a client side.
+#
+#       The client reads a file local and remotely and compares the buffers
+#       to verify that the identical information was read both locally and 
+#       remotely.  
+#
+#       The server offsets into the file the required amount of bytes and
+#       reads the required amount of bytes from that point and passes this 
+#       buffer back to the client.
+#
+#   DESCRIPTION:
+#	This is the driver for the dcerpst0 test case.  It starts the server
+#       on the machine the testcase is run on.  The process id is saved for
+#       termination of the server later.  It then starts a client process on
+#       the machines listed in the $HOSTLIST variable and waits until all the
+#	client processes are complete.  These clients write to a file whether
+#       or not any errors occured.  This file is checked for errors.  If any
+#	are found, the return code for this test is set to 1.  Otherwise, it
+#	remains 0.  The server is terminated with a kill -9 signal and this
+#	test returns with the above return code.
+#
+#	Note:  The stress levels of this test are low
+#
+# 
+# This test uses the following files:
+# 	dcerprec
+# 	rec.functions
+# 	str_server
+# 	str_client
+# 	rec_server
+# 	rec_client
+#
+#   REQUIREMENTS:
+#      Threads, rpc, cds, security
+#
+#   RESTRICTIONS:
+#      None
+#
+#   USAGE:
+#	TET
+#
+#  CHANGE HISTORY
+#       11/10/90        Gerald Cantor   Initial design.
+#       11/29/90        Gerald Cantor   Completed coding.
+#       09/10/91        Gerald Cantor   Line 119:  added su.dce.
+#       10/19/91        Gerald Cantor   Provided check for null client
+#                                       client principal.
+#       01/30/92        Gerald Cantor   Updated prologs.
+#  	09/02/92	Rick O'Brien	Ported to TET.
+#
+###########################################################################
+debug=0
+(( $debug )) && set -x
+
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1 ic2"
+ic1="rec"
+ic2="str"
+testlist="$ic1 $ic2"
+
+startup ()
+{
+    (( $debug )) && set -x
+    #===============================================================================
+    # INITIALIZE VARIABLES
+
+    case `uname -s` in
+        AIX   ) RSHELL=rsh
+                ;;
+
+        OSF1  ) RSHELL=rsh
+                ;;
+    
+        SUNOS ) RSHELL=rsh
+                ;;
+
+        HP-UX ) RSHELL=remsh
+                ;;
+
+        *     ) tet_result UNINITIATED
+                del_test_purp $testlist
+                return
+                ;;
+    esac
+
+    export  LOCAL_HOST=$(hostname)
+    export  TCDIR="/tmp"
+    export  CELL_NAME=$( basename $(getcellname) )
+    export  CLT_PRINC_NAME="cell_admin"
+    export  CLT_PRINC_PASS="-dce-"
+    export  CLIENT_WRAPPER="rec.clientwrapper"
+    export  integer PROCESSES=1                 #Start one client process per machine
+    export  integer FILE_SIZE=1000  	        #Create a minimum 1000 byte file
+    export  integer BUFFER_SIZE=100		#Read 100 bytes at a time
+    export  PROTOCOL="ncadg_ip_udp"		#Listen with datagram protocol
+    export  integer MAX_CALLS=10		#Create 10 listener threads
+    export  ENTRY_SYNTAX="3"		        #Use rpc_c_syntax_dce for namespace
+					        #ex[im]porting
+    export  integer SVR_AUTHN_SVC=1		#Use dce_private authentication service
+	                        		#for server
+    export  integer CLT_AUTHN_SVC=1		#Use dce_private authentication service
+				        	#for client
+    export  integer CLT_AUTHN_LVL=0		#Use default authentication level for
+					        #client
+    export  integer CLT_AUTHZ_SVC=2      	#Use dce_authorization service for 
+					        #client
+    export  BIG_FILE="big_file"
+
+
+    #export RPC_DEBUG=0-3.7,23,24,27,28,29.100
+    #export RPC_SUPPORTED_PROTSEQS=ncadg_ip_udp
+
+    #
+    # Build BIG_FILE
+    #
+    integer SIZE=0
+
+    tet_infoline "Info: $0: Creating big_file to be at least $FILE_SIZE bytes"
+
+    ping_hosts
+
+    [[ -f $STTMPDIR/$BIG_FILE ]] && rm $STTMPDIR/$BIG_FILE
+
+    until (( $SIZE > $FILE_SIZE ))
+    do
+        cat /etc/motd >> $STTMPDIR/$BIG_FILE
+        SIZE=`ls -l $STTMPDIR/$BIG_FILE | awk '{print $5}'`
+    done
+
+    tet_infoline "Info: $0: $STTMPDIR/$BIG_FILE created" 
+
+}
+
+#
+# Let's do it!
+#
+rpc_rec ()
+{
+    (( $debug )) && set -x
+    integer test_fail=0 CURRENT_LOOP=0 LOOP=0 SECONDS_TO_EXECUTE=0
+
+    export ENTRY_NAME="/.../$CELL_NAME/my_server_$SERVER_FILE"
+    export SERVER_PARMS="-N -S $ENTRY_NAME"
+    export CLIENT_PARMS="-n -S $ENTRY_NAME"
+
+    LOOP=1
+    CURRENT_LOOP=1
+    if [ -n "$RUNNING_TIME" ]
+    then
+        SECONDS_TO_EXECUTE=`awk "BEGIN { printf (\"%d\", 3600 * $RUNNING_TIME); exit; }"`
+    fi
+    SECONDS=0
+    while (( $LOOP ))
+    do
+	tet_infoline "Info: $0: Starting iteration $CURRENT_LOOP"
+
+	(( $CURRENT_LOOP == 1 )) && test_fail=0
+
+	exec 8<$TET_ROOT/systest/client_names_$CELL_NAME
+	while read -u8 RHOST
+	do
+	    [[ ! -d $STTMPDIR/$RHOST ]] && mkdir $STTMPDIR/$RHOST
+	done
+	exec 8<&-
+
+	start_server
+       	(( $? )) && {
+	    tet_infoline "Error: $0: start_server failed in iteration $CURRENT_LOOP"
+       	    tet_result DCE_FAIL
+	}
+
+	start_clients
+       	(( $? )) && {
+       	    tet_infoline "Error: $0: Invocation $CURRENT_LOOP failed in start_clients"
+	    test_fail=1
+        }
+
+	wait_for_clients
+       	(( $? )) && {
+       	     tet_infoline "Error: $0: Invocation $CURRENT_LOOP failed wait_for_clients"
+       	     test_fail=1
+        }
+
+	check_results
+       	(( $? )) && {
+       	     tet_infoline "Error: $0: Invocation $CURRENT_LOOP failed in check_results"
+       	     test_fail=1
+	}
+
+	killproc2 $SERVER_FILE
+
+	exec 8<$TET_ROOT/systest/client_names_$CELL_NAME
+	while read -u8 RHOST
+	do
+	    rm -rf $STTMPDIR/$RHOST
+	done
+	exec 8<&-
+
+        CURRENT_LOOP=CURRENT_LOOP+1
+
+        if [ -n "$LOOPS_TO_EXECUTE" ]
+        then
+            (( $CURRENT_LOOP > $LOOPS_TO_EXECUTE )) && LOOP=0
+        elif [ -n "$RUNNING_TIME" ]
+        then
+            (( $SECONDS > $SECONDS_TO_EXECUTE )) && LOOP=0
+        else
+            LOOP=0
+        fi
+    done
+
+    if (( $test_fail ))
+    then
+        tet_infoline "tet_result = FAIL"
+        tet_result FAIL
+    else
+        tet_infoline "tet_result = PASS"
+        tet_result PASS
+    fi
+
+
+}
+
+
+#===============================================================================
+#   TEST PURPOSE OVERVIEW: str
+#
+#
+str()
+{
+    (( $debug )) && set -x
+    export SERVER_FILE="str_server"
+    export CLIENT_FILE="str_client"
+
+    rpc_rec
+}
+
+
+#===============================================================================
+#   TEST PURPOSE OVERVIEW: rec
+#
+rec()
+{
+    (( $debug )) && set -x
+    export SERVER_FILE="rec_server"
+    export CLIENT_FILE="rec_client"
+
+    rpc_rec
+}
+
+	
+cleanup ()
+{
+    (( $debug )) && set -x
+    killproc2 str_server
+    killproc2 rec_server
+    sleep 10
+
+    exec 8<$TET_ROOT/systest/client_names_$CELL_NAME
+    while read -u8 RHOST
+    do
+	rm -rf $STTMPDIR/$RHOST
+	$RSHELL $RHOST "rm -f $STTMPDIR/$BIG_FILE $STTMPDIR/rec_client $STTMPDIR/str_client."
+    done
+    exec 8<&-
+}
+
+
+#===============================================================================
+# tcc will fail if these files don't exist and get sourced
+# so there is no need to check that this happens
+
+. $TET_ROOT/profile.dcest
+. $TET_ROOT/systest/rpc/ts/dcerprec/rec.functions
+. $TCM

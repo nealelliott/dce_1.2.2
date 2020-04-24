@@ -1,0 +1,183 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+ * src directory for the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: cover_union.idl,v $
+ * Revision 1.1.4.2  1996/03/11  02:12:40  marty
+ * 	Update OSF copyright years
+ * 	[1996/03/10  19:52:47  marty]
+ *
+ * Revision 1.1.4.1  1995/12/11  20:03:19  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/11  19:30:33  root]
+ * 
+ * Revision 1.1.2.2  1993/01/07  19:55:22  bbelch
+ * 	Embedding copyright notice
+ * 	[1993/01/06  13:32:53  bbelch]
+ * 
+ * Revision 1.1  1992/01/19  03:32:29  devrcs
+ * 	Initial revision
+ * 
+ * $EndLog$
+ */
+/*
+*/
+[pointer_default(ptr), uuid(39bd1000-6f24-11c9-935d-08002b0ecef1)]
+interface cover_union
+/*
+ * Test to fill in some of the coverage gaps around unions.
+ */
+{
+const long NUM_ELEM     = 10;
+const long HALF_ELEM    =  5;
+const long NUM_LETTERS  =   26;
+
+typedef enum {RED, GREEN, BLUE} color_t;
+typedef char array_t[NUM_LETTERS];
+typedef struct
+{
+    float f;
+    long  l;
+} struct_t;
+
+typedef union switch(char sw)
+{
+case 'l':   long l;
+case 's':   short s;
+case 'c':   char c;
+} basic_union_t;
+
+typedef union switch(color_t sw)
+{
+case RED:   char c;
+case GREEN: basic_union_t u;
+case BLUE:  float f;
+} fixed_union_t;
+
+typedef union switch(boolean sw)
+{
+case TRUE:  struct
+            {
+                long l;
+                [length_is(l)] basic_union_t au[NUM_ELEM];
+            } svu;
+case FALSE: ;   /* Empty arm */
+} i_v_union_t;
+
+typedef union switch(short sw)
+{
+case 1:     struct
+            {
+                [length_is(l)] long al[NUM_ELEM];
+                long l;
+            } svl;
+default:    struct
+            {
+                long l;
+                [length_is(l)] long *apl[NUM_ELEM];
+            } svp;
+} o_v_union_t;
+
+typedef union switch(unsigned long sw)
+{
+case 1:     struct
+            {
+                long l;
+                [length_is(l)] array_t aa[NUM_ELEM];
+            } sva;
+default:
+            struct
+            {
+                [length_is(l)] struct_t as[NUM_ELEM];
+                long l;
+            } svs;
+} io_v_union_t;
+
+long fixed_op
+(
+    [in] handle_t h,
+    [in,out] fixed_union_t *u       /* in,out union with union arm */
+);
+
+long vary_op
+(
+    [in] handle_t h,
+    [in] i_v_union_t *iu,           /* in union with struct arm ct. */
+                                    /*  varying array of union      */
+    [in,out] io_v_union_t *iou,     /* in,out union with struct arms ct.   */
+                                    /*  varying arrays of array and struct */
+    [out] o_v_union_t *ou           /* out union with struct arms ct.      */
+                                    /*  varying arrays of long and pointer */
+);
+
+/* Test extended 09-Apr-1991 by Rico to test interactions of inline/ool. */
+
+typedef struct
+{
+    short sh;
+} ool_struct_t;
+
+typedef struct
+{
+    char c;
+    ool_struct_t os;
+    long l;
+} il_ool_struct_t;
+
+typedef union switch(long sw)
+{
+case 0:     il_ool_struct_t ios;
+case 1:     ool_struct_t os;
+} il_union_t;
+
+long il_ool_op
+(
+    [in] handle_t h,
+    [in,out] il_union_t *u  /* in,out union with inline/ool and ool arms */
+);
+
+typedef struct end_ool_t {
+    char c;
+    ool_struct_t os1;
+    long l;
+    ool_struct_t os2;
+} end_ool_t;
+
+typedef struct end_il_t {
+    char c;
+    ool_struct_t os1;
+    long l;
+    ool_struct_t os2;
+    long ll;
+} end_il_t;
+
+typedef union switch(long swi)
+{
+    case 0: end_ool_t eo;
+    case 1: end_il_t ei;
+} end_union_t;
+
+typedef union switch(long swo)
+{
+    case 0: char c;
+    case 1: end_union_t eu;
+} outer_union_t;
+
+long end_op
+(
+    [in] handle_t h,
+    [in,out] outer_union_t *p_ou
+);
+
+long end_arr_op
+(
+    [in] handle_t h,
+    [in,out] outer_union_t ou_a[3]
+);
+
+}

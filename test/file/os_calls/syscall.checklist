@@ -1,0 +1,1099 @@
+For your refrence, I am sending you the syscall checklist with marks
+for each checkpoint. You should be advised that DONE means we have
+the script but may not be fully tested.
+
+--Jess
+
+***********************************************************************
+
+-------------------------------------------------------------------
+                SCHEDULE
+-------------------------------------------------------------------
+
+1. Key
+
+DONE: Finished at this time.
+DIST: Require distributed ITL.
+DEFE: Defered.
+DISS: Need to be disscussed.
+POSI: POSIX concerns.
+WEEK#: Scheduled to be finished in that week.
+      WEEK1: NOV. 2, 1992
+_DONE: In the way out.
+
+2. Note
+
+-- ITL may need to be enhanced in both syscall interface and RPC interface
+during the development of following test cases, which may postpone the
+schedule.
+
+-- Some extra weeks may be needed to polish or say to maintain the
+scripts which have been done, in case of interface changes and/or of any
+correction.
+
+-- The schedule will follow the syscall checklist and mark each check
+point with proper key mentioned above.
+
+
+3. Concepts for the syscall test:
+
+HUB
+The HUB program directs the SPOKES in a number of test case scenario.
+
+SPOKE (DFS client and Local path)
+Now, hosts running the spoke program are divided into two catagories:
+the one(s) that can run DFS tests and those that access the same data,
+but can't run DFS tests.  The latter includes those processes
+accessing the data via the local path on the server, which can
+generate token conflicts, for example, but which can not actually
+stress the cache manager code, since it doesn't *execute* the CM vnode
+operations.  I'll call these two sets of spoke processes the "DFS
+client" process(es) and the "local path" process(es), respectively.
+There may be several of each.  Some tests run on only some client
+hosts, while running concurrent stress tests on local path and other
+client hosts.
+
+TEST HOST
+I'll call the hosts running the tests the "test" hosts,
+
+STRESS HOST
+A mix of local path and DFS client hosts, are called the "stress" hosts.
+
+-----------------------------------------------------------------------------
+
+
+[_DONE] * stat of a single file by N test hosts
+
+[_DONE] * stat of a single file by N stress hosts
+
+[_DONE] * writes to a specific offset (intended to be out of the way with
+        respect to others reading the file) by a stress or test host
+
+[_DONE] * chmod/utimes calls to a specific file by stress or a test host
+
+[_DONE] * lookup of a name by N stress or test host
+
+[_DONE] * create random names at N {stress, test} hosts (not the name being
+        tested)
+
+[_DONE] * create/delete specific name at N stress or test hosts (same as being
+        tested)
+
+[NOT DONE]      * stat N files as N different users on N test hosts
+
+[NOT DONE]  N processes locking and unlocking a byte range on a N hosts; perhaps        locking random byte ranges?  For both stress and test processes.       s
+[DONE] * read 1 byte of a file (to start prefetch) on N stress/test hosts
+
+[DONE] * access test calls at N test hosts
+
+The tests are included in create-write and create-stat scripts.
+--------------------------------------------------------------
+
+Probably we should just have the set of sites involved in a test be a
+parameter, so that we don't have to duplicate so much of the code for
+application to both "stress" and "test" hosts.
+
+Here are the detailed checklists for the various system calls.  The
+tests are divided into three catagories: basic tests, tests requiring
+complex fileset setups (fileset tests), and tests requiring simulated
+crashes and network partitions (crash tests).  All tests are done at a
+test host, unless otherwise specified.
+
+>>> Basic Tests
+
+> Open system call
+
+[DONE] * Open file for writing.
+
+[DONE] * Open file for reading.
+
+[DONE] * Open file for write+truncate.
+
+[DONE] * Open file for read+truncate.
+
+[DONE] * Do all of the above for directories instead of files.
+
+[DONE] * Try opening virtual directory in one success mode (read) and one
+        failure mode (write).
+
+[DONE] * Check that missing read rights prevents dir open.
+
+[DONE] * Check that mtime changes for successful O_TRUNC opens.
+
+[DONE] * Check that mtime and atime don't change on failing opens (POSIX fail
+        condition).
+
+*********
+  Fred has been working on followins.
+  ----------------------------------
+
+[DONE] * Check that file is accessible for write+fsync after deleting file
+        via stress host. [DISS]
+
+[DONE] * Check that file is accessible for write+fsync after deleting file
+        via same test host.
+
+[DONE] * Try to delete a file with multiple open tokens by getting multiple
+        tokens (optimistic grant will provide multiple open tokens).  So, do
+        lock hollowing operation, where CM gets a range lock, and releases the
+        middle, and then the local path gets a lock in the middle of the
+        range.  At this point, CM has a three tokens, two lock tokens for the
+        appropriate byte ranges, and the fundamental token.  Then, have the
+        local path process exit, and have the client close the file and unlink
+        the file.  This will run through a non-standard branch of
+        ReturnOpenToken.
+
+*********
+
+[DONE]  * Yet another branch can be run through by unlinking an open file.
+
+> Close system call.
+
+[DONE] * Check that space gets reclaimed after closing a file that was open
+        on a test host when a file was deleted (via remote host is fine; the
+        statfs call should tell how much space is available).
+
+[DONE] * Check that file locks are released when a file is closed.  Check one
+        case where test host locks file, remote stress host tries and waits
+        for lock, and then test host closes the file.
+
+[DONE] * Also check where two tests processes on the same test host run, one
+        locking a file, the other waiting for the lock, and then the first
+        closing the file (and releasing the lock).
+
+[DONE] * Do above file lock tests for both files and directories, and for
+        files, in separate test cases for files opened for read, for write,
+        for read/trunc, and for write/trunc.
+
+[DONE]  * cm_SyncDCache: Test opening a file for write, but not making any
+        updates before closing the file.
+
+[DONE]  * Test opening a non-zero length file,
+        truncating it with ftruncate, and closing it.
+
+Covered by close.dist.scr scripts.
+---------------------------------
+
+> Write system call.
+
+[_DONE] * Check O_APPEND mode works, and is atomic with respect to other
+        O_APPEND writes.  Test both two test processes writing a lot of data
+        (over 64K) O_APPEND, and one test process and one stress process
+        writing data in O_APPEND mode.  Basic algorithm: do lots of the
+        O_APPEND writes, then read the data and ensure that no data mixing
+        occurred.
+
+[DONE]  * Check that DFS client obeys file size "ulimit" limit.  Check that if
+        a write fails due to ulimit, that no data has been written to the
+        file, nor has the mtime changed.
+
+[DONE]  * Check that mtime changes if any data is written to the file.
+
+[DONE]  * Check that writes work on 64K boundaries.
+
+[DONE]  * Check that writes work properly within 64K boundaries.
+
+[DONE]  * Check that writes work spanning 64K boundaries.
+
+[DONE]  * Check that writes of sizes > 64K work.
+
+[_DONE] * Repeat checks while other processes on the stress hosts are reading
+        the data.
+
+[_DONE] * Check doing writes of all sizes described above that extend the
+        file, as well as the same updates made in the parts of the file that
+        already exist.
+
+[DONE]  * Check that some writes write the last byte in a chunk, so as to run
+        through the async storeback code.
+
+[_DONE] * Check two different test processes on the same test host writing
+        different blocks in the same chunks, while stress hosts are writing
+        yet other reserved blocks in the same chunks.  Have test process, when
+        all is done, go back and verify that all is well.  Ditto for a stress
+        host.  Note that idea is that each test host has its own subset of the
+        data blocks for its own use, and that the stress hosts have their own,
+        although the stress hosts can do I/O to the same blocks as other
+        stress hosts (we don't care what the data is written by the stress
+        host).
+
+[DONE]  * Write lots of data; enough to fill the cache, to exercise the cache
+        flushing code.  Do it by writing lots of little files, and also do it
+        by writing one big file (generating lots of big chunks).
+
+[DONE]  * Do re-write test, where a multiple chunk file is opened, written,
+        and before it is closed, it is entirely rewritten.  Rewrite stumbles
+        over chunks being stored.  Do this test in three modes.  First, write
+        a byte at the end of the file (so the file length doesn't change).
+        Then write data repeatedly over the first N chunks.
+
+[DONE]  * Second, write and ftruncate over and over (but with no close until
+        the very end).
+
+[DONE]  * Third, write a lot of data and do a chmod, then rewrite, over and
+        over a few times; yields a busy scache entry.
+
+The tests is covered by read.write and write.read scripts.
+----------------------------------------------------------
+
+> Read system call.
+
+[DONE]  * Check read calls aligned on chunk boundaries and also within chunk
+        boundaries.
+
+[DONE]  * Check read calls that span chunk boundaries.
+
+[DONE]  * Check read calls that overlap prefetched chunks (by flushing a file,
+        reading a byte from a chunk, and then reading data from the end of the
+        first chunk and overlapping the second chunk).
+
+[DONE]  * Check read calls within prefetched chunk (by flushing a file,
+        reading a byte from a chunk, and then reading data from the second
+        chunk).
+
+[DONE]  * Check reading from a file that isn't being fetched, too.  Check by
+        doing a read for 64K and then read data from the chunk that was just
+        read.
+
+[_DONE] * Check writing the middle bytes of a chunk from a stress host while
+        running above tests, modified to ignore changes in the middle (or
+        modified to understand what's happening in the middle, so that it can
+        also function as a data consistency checker).  For example, write an
+        ever increasing counter in the middle, modifying chunk 0, chunk 1,
+        etc, over and over.  Note that DFS client should never see older data
+        in the middle after seeing newer data.
+
+[DONE]  * Create chunk with part missing (by writing some data at 20K and some
+        data at 80K, say).  Then check the following cases: read spanning the
+        end of the data written in the first chunk and the region in chunk 0
+        that was never written; read data completely contained within the
+        first 20K; read data strictly past the part written in the 1st 20K;
+        read spanning the end of the first chunk and overlapping the beginning
+        of the second chunk, and finally spanning the 1st chunk's 0 region;
+        read start at the second chunk's 0 region and finally encountering the
+        second chunk's non-zero region.
+
+[DISS]  * Run above bullet's checks, only with read calls that pass EOF.
+
+[_DONE] * Run above bullet's checks while both chunks are being fetched (use
+        flush pioctl to get stuff out of the cache, and then ask another test
+        process to read the first byte in each chunk).  Note that prefetch of
+        chunk N is instigated by reading from *anywhere* in chunk N+1.
+
+[DONE]  * GetDOnLine via rdwr.  Run through so many chunks that the dcp entry
+        gets swapped out (50) but not so many that we discard the data from
+        the cache.  Then, when we re-read the chunk from disk we will execute
+        special code in cm_GetDOnLine to put the chunk back online based on
+        its f.tokenID field.  Probably best bet is to create 50-100 files
+        with a byte in them, and then go back and re-read a large file that
+        should mostly be in the cache.  The dcp entries will have been swapped
+        out, so we'll execute this code.
+
+[DONE] * Check reading data that should be in the cache, but without being
+        online.  Flush the status cache entry alone, and then open the file
+        for reading, and read it.  Separately test this for read-only files,
+        too.
+
+The tests is covered by read.write and write.read scripts.
+----------------------------------------------------------
+
+> Stat system call.
+
+[DONE]  * Check virtual CDS directory (vdir) and non-vdir cases.
+
+[_DONE] * Check basic cache data consistency: update from stress process, and
+        ensure that test process sees the new information.
+
+[_DONE] * Also, make update (of, say, mode bits) via stress process, and then
+        make piles of *other* status (e.g. utimes) also via stress processes,
+        *while* the DFS client test process is stating the file, ensuring that
+        the first update is successful.  Since other updates are happening
+        concurrently, DFS client will encounter more race conditions, but it
+        knows what it expects to see in the mode bits.
+
+[_DONE] * Check updates to all status info: utimes, chmod, chown, chgrp,
+        truncate (both growing and shrinking), where the update is made via
+        a stress process, and checked via the test processes.
+
+The tests is covered by stat.cache.data scripts.
+------------------------------------------------
+
+> Setattr checks (utimes, chmod, chown, ftruncate, chgrp).
+
+[POSI]  * Try all individually via test processes.
+
+[POSI]  * Check access restrictions for all, and ensure that failing calls
+        make no changes to the file status or data.
+
+[POSI] * Note that chmod and chown tests require not being cell_admin (so
+        that they fail).
+
+[_DONE] * Check that failing chmod, chown, chgrp do not discard updated file
+        time that hasn't been sync'd back yet (due to writes done on a
+        still-open file descriptor to the same file).  Do this by writing some
+        data to a file via a test process, then issue the failing chmod (or
+        whatever) via a test process, and then check that the file's status is
+        what is expected (the mtime change still exists) by stating the file
+        via both a test process and a stress process.
+
+[_DONE] * Do status updates via test process while other processes are reading
+        and/or stat-ing the same file via a test process on the same cache
+        manager.
+
+[_DONE] * Also, do status updates while other processes are reading/stat-ing
+        the same file via other stress processes.
+
+[DONE]  * When checking utimes call, check both a time value of tv_sec=0,
+        tv_usec=-1 (means use client's current time) as well as an explicit
+        time reference, since separate code paths are involved in the cache
+        manager. [PROB]
+
+[_DONE] * Check updates to all status info: utimes, chmod, chown, chgrp,
+        truncate (both growing and shrinking), where the update is made via a
+        test process, and checked via a stress process.
+
+> Access system call.
+
+[SKIP]  * No ACL tests, since we're assuming that the explicit ACL tests
+        handle ACL-specific work.
+
+[_DONE] * Ensure that modifications made to the file's mode bits via a stress
+        process affect the test's view of the file's effective access.  Check
+        explicitly for all 8 combinations of rwx, for both files and
+        directories.  Check that access works on vdirs; should report r-x
+        mode, I suppose.
+
+The tests are covered by setattr.access.dist script.
+----------------------------------------------------
+
+> Name lookup via stat or open or access (author's choice).
+
+[_DONE] * Test basic name resolution, both after flushing the directory, and
+        also without intervening flushes. [DISS]
+
+[_DONE] * Test name resolution after flushing dirctory, with N concurrent test
+        processes on the same DFS client, all resolving the same name.
+
+[_DONE] * Test resolution when N different stress processes on N/2 different
+        machines are concurrently updating many entries in the same directory,
+        all with different names.  During this stress test, ask certain test
+        processes to check that some names are in the proper state, i.e. open
+        then and read some data from them, or verify that the name doesn't
+        exist if the file's been deleted.  This is one test that should be
+        more interesting if more than one machine is involved.
+
+The tests are covered partially by rename.dist scripts.
+------------------------------------------------------
+
+[_DONE] *Test lookups within vdirs (successful as well as failing).
+
+[DONE]  * Test @sys variable usage.
+
+[DONE]  * Test @host variable usage.
+
+[POSI]  * Test that lack of "x" access prevents lookup from proceeding through
+        a directory.
+
+[DONE]  * Test ".." in a volume root works, as well as ".." between DFS and
+        the vdir space, and between the vdir region and its UFS mount point.
+
+[DONE]  * Check crossing mount points into a fileset's root directory.
+
+[DEFER] * Check that stat reports setuid bits and special device info for
+        appropriate objects, if sgidok enabled or if specok enabled,
+        respectively.  They are independent parameters, so check that all four
+        possibilities work. [PIOCTL]
+
+
+[_DONE] * Check that looking up a name that's being created and unlinked
+        repeatedly by test processes running on the same client result in
+        correct behavior (try this several hundred times, I suppose) as seen
+        by a test process running on the same client.
+
+[_DONE] * Check that looking up a name that's being created and unlinked
+        repeatedly by stress processes running on different clients result in
+        correct behavior (try this several hundred times, I suppose) as seen
+        by a test process running on some DFS client.
+
+Covered by create.unlink script.
+--------------------------------
+
+[_DONE] * If have read-only filesets enabled as part of the test environment,
+        can try this same thing with a release in between, that is, create new
+        mentry, release fileset, delete entry, release fileset; concurrently
+        another process is stat'ing the data in the local path and doing
+        "checkfileset" pioctl calls.
+
+Covered by fileset.dist.scr
+---------------------------
+
+> Create file system call.
+
+[_DONE] * Test O_EXCL mode by ensuring that files created by either a stress
+        process or via a test process prevent a test process from creating a
+        file with the same name.  Try this twice, once running at high
+        concurrency (all calls executing concurrently, including the test
+        process that creates the name with O_EXCL), and once with concurrency
+        at the creation, but then waiting for the first create to return
+        before issuing the test create.
+
+[_DONE] * Create files via from test process on client, while concurrently
+        stating file during and after create from other processes on the test
+        host.  Note that all stats issued after the create completes should
+        succeed.  Test checks race condition where create finds vnode for
+        just-created file already in cache.
+
+Note that can't count on open/excl working or returning EEXIST, since
+the act of creating and opening the file isn't atomic, and so the file
+can be deleted before it gets "open protection."
+
+[DONE]  * Check creating char and block devices, and FIFOs.  Check mtime and
+        atime fields on newly created objects.  Creating FIFOs should fail
+        cleanly in DFS, since we don't support FIFIOs today. [PROB]
+
+[_DONE] * Create file from test process, while other test processes on the
+        same client lookup the new name, and while other stress processes try
+        to use the name and then update the file status.  Triggers race
+        conditions between token granting and revocation.  Once back from
+        create, have test client change the file's data (and leave the file
+        open), and then verify that stress processes see the change
+        immediately.  Finally, close and delete the file after others have
+        verified its data.  Note that this tests that the token is really at
+        the test client, since its revocation triggers the storeback of the
+        newly written data.
+
+Covered by create.dist.scr
+--------------------------
+
+> Unlink system call.
+
+[DONE]  * Test basic unlink call, verifying name gone from both listing and
+        name cache.
+
+[_DONE] * Ensure that unlink of a file opened by stress process(es) works,
+        removes the name from the dir, but doesn't free up the space.
+
+[DONE]  * Try also unlink from test client with same test client having file
+        open (runs through "cm_ReturnOpenToken" in that case).
+
+[_DONE] * Try also unlink from stress process with test client having file
+        open.  Tests code in xvnode layer.
+
+[_DONE] * Test race conditions where name simultaneously deleted by stress
+        process and test process.  Post condition should be that name is gone
+        according to test process.  Also another post condition should be that
+        a create with the new name should work by a test process.
+
+[DONE]  * Try unlink with target hard-linked to another name, and ensure that
+        the updated status is fine (same mtime, new ctime, link count
+        decrements by 1).
+
+[DONE]  * Try unlink with target recently stat-ed, and try unlink with target
+        recently flushed (different code path in basic vnode operations).
+
+[_DONE] * Test what happens when normal test process unlink tests are run, but
+        other names are being modified concurrently via the stress path in the
+        same directory, increasing dirVnode->dirRevokes.
+
+[_DONE] * Test what happens in above if other names being modified by the test
+        path in the same directory.
+
+[_DONE] * Try obscure paths through cm_TryToSmush.  Do unlink of file via the
+        cache manager, while other test processes stat the file.
+
+Covered by unlink.dist scripts
+------------------------------
+
+> Hard link system call.
+
+[_DONE] * Test stress links running concurrently with test links, over a set
+        of names.  For each name, hard link should be atomic, with one process
+        creating the name, and the other getting the error EEXIST.  It is a
+        good idea to create a *set* of names with one call to the test/stress
+        processes from the hub, so as to increase the likelihood of real
+        concurrency between the link calls.  Test that name exists in both the
+        name cache and the dir listing cache (readdir and lookups both work).
+        Check stated properties (link count and ctime increase, mtime stays
+        the same) of resulting link to ensure we linked to the right object.
+
+[_DONE] * Test race conditions, such as name already created both by stress
+        processes and by test processes first, via either link or create.
+
+[_DONE] * Test what happens when normal client test processes are run, but
+        other names are being modified concurrently via the stress path in the
+        same directory.
+
+[_DONE] * Test what happens in above if other names being modified by the test
+        path in the same directory.
+
+Covered by hardlink.dist.scr
+----------------------------
+
+> Rename system call.
+
+[_DONE] * Operation should be atomic at the server, even though client may not
+        see atomicity if rename is happening during stat or open calls.  So,
+        have a bunch of test processes do renames: a1-->b, a2-->b, a3-->b,
+        a4-->b, etc., and ensure that exactly one of the renames succeeds,
+        (exactly one must succeed to fit the -1 --> no changes POSIX rule),
+        and that the file "b" is accessible and contains the right info for
+        one of the files, and that of the files has disappeared.  Check both
+        dir listing cache and name lookup cache.
+
+[DONE]  * Do basic tests for same dir and different dirs cases.
+
+[DONE]  * Do basic tests with target existing and not existing.
+
+[DONE]  * Check that rename of "." and ".." as source or target fails.
+
+[DONE]  * Check that ".." of moved object changes when moving directory
+        between two directories.
+
+[DONE]  * Check that link count of target goes down if it exists and has a
+        hard link from another file.  Check that if target is open and has
+        link count of 0, the file still exists *after* the rename (try write
+        and fsync'ing file to ensure that things are still fine, or perhaps
+        use fchmod, or perhaps try both). [BUGS]
+
+[_DONE] * Check basic race conditions.  Have both test and stress processes
+        referencing old and new names.  Issue rename, and then verify via test
+        process that old name gone from dir listing and name cache, and new
+        name present in dir listing and name cache.
+
+[_DONE] * Same test as above, except that test and stress process are
+        *creating and deleting* names *other* than the old and new names.
+        Generates many revokes on dir handling the rename.  Check same
+        conditions as above test.
+
+Covered by rename.dist.scr
+--------------------------
+
+> Makedir system call.
+
+[_DONE] * Check basic race conditions for new entries.  Have both test and
+        stress processes referencing new name, then issue mkdir call.  Ensure
+        name present in cache and dir listing.
+
+[_DONE] * Same as above, only with test and stress processes changing the dir,
+        *creating and deleting* other names in the same directory.
+
+[DONE]  * Check for invalid names ("." and "..").
+
+> Rmdir system call.
+
+[_DONE] * Check dir name race conditions for entry removal: test process
+        busily referencing name when rmdir issued.  Test for name gone when
+        done.
+
+[_DONE] * Check dir name race condition also by having test and stress
+        processes changing the dir, playing with names other than the one
+        being removed from the directory.
+
+[DONE]  * Check for proper behavior on "." and ".." entries. [DISS]
+
+[_DONE] * Check "wdir" semantics for rmdir'd directory: "." and ".." entries
+        should be gone.  Do rmdir in separate process (with a different wdir,
+        since you can't rmdir current working directory), and then ensure that
+        readdir reports no entries at all in the directory ("." and ".."
+        should be gone).
+
+[_DONE] * Also check that rmdir via from a stress process does proper '.' and
+        '..' removal as seen from a test process on another client.
+
+Covered by mkrm.dir.dist.scr script.
+------------------------------------
+
+> The readdir call.  An awesomely complicated call.
+
+[_DONE] * All of these tests should be performed twice, once with the
+        directory modifications being made by a test process, and once with
+        the directory modifications being made by a stress process.
+
+[_DONE] * Check what happens when an entire chunk of directory listing becomes
+        empty.  Create a directory with many names, say 3 chunks worth of
+        stuff.  Have a test process read midway through one of the chunks, and
+        then have a {test,stress} process delete enough names to remove all of
+        the names in the entire middle chunk of the listing (with a little
+        slop removing some names from the end of the first chunk and the start
+        of the third).  Then proceed with the readdir by the first test
+        process, checking that the names seen are exactly those that should be
+        left in the dir listing.
+
+[_DONE] * Check what happens when dir entries are deleted during an
+        enumeration in careful lockstep by a {test,stress} process.  Create
+        lots of entries in a directory, remove some entries (randomly?) while
+        the main test process is reading.  The entry removal is driven
+        synchronously, so that at any time, the hub program knows whether a
+        particular name should have been found by the readdir program, since
+        it knows whether the name is still in the directory.  Of course, there
+        is some buffering done by readdir(3), and once a name is in a buffer,
+        it won't disappear due to an unlink.  The name should be gone by the
+        time a second scan is done, however.
+
+[_DONE]* Check what happens when dir entries are deleted during an
+        enumeration randomly with all sorts of race conditions.  Again, with a
+        multi-chunk directory, have several {test/stress} processes remove a
+        chosen set of names asynchronously with a test that does a readdir of
+        the directory during the scan.  About half of the names should be
+        removed, with each name removed by only one of the stress/test
+        processes.  There should be at least two "test" processes doing the
+        readdir simultaneously, too.  The postcondition should be that the
+        readdir calls should find all of the names that weren't unlinked,
+        although it is OK for them to find names that were unlinked.  Once the
+        entire test is run, the test processes shouldn't find any names that
+        were deleted, in a final readdir scan.
+
+[DONE] * Scancheck operation: try verification both via entire dir scans, and
+        via seekdir and telldir operations.  The former is straightforward,
+        and the latter is done by doing telldir operations every 10 or 20
+        names during the create, and then during the verification, choosing a
+        random place to seek, and then verifying that we see the right names
+        in the right order as we scan from that point forward.  Scan one or
+        two of these ranges at a time.  Generate a single random key when
+        starting a test, and print out the key when dumping error information
+        into the output log.  Be sure to check cookie positions in both the
+        first and second chunks, since the LookupCookie algorithm is special
+        for the first chunk in a file. [NEED-MORE-WORK]
+
+[_DONE] * Need to ensure that readdir operations work properly with small
+        (about 1K), medium (10K), large (100K (> 64K)) and very large (>256K
+        (>>64K)) size blocks of name space cleared out.  Approach should be to
+        create a big directory, and hollow out 1K of names, and do a
+        scanche        ck, then hollow out a bigger hole, and again do a scanc
+heck,
+        etc, until we've created a very big hole and done a scancheck
+        operation.  Scancheck is defined above.
+
+[_DONE] * Check what happens if we do a telldir, remove a lot of entries,
+        close the dir and flush the cache entry (data and staus) for the dir.
+        Can we do a scancheck even after a dir flush?
+
+[DEFE]  * Similarly, try the same test, but only flushing the stat cache (by
+        brute force stat'ing lots of files), not the data cache. [PIOCTL]
+
+[DEFE]  * Similarly, try the same test, only flushing the data cache, but not
+        the stat cache (by stressing the data cache while the dir vnode is
+        open). [PIOCTL]
+
+[DEFE] * Check large getdents calls, varying size of the output buffer from
+        512 bytes up to the entire dir size (at least 128K) by factors of 2.
+        [DISS]
+
+Covered by readdir1 and readdir2 scripts.
+-----------------------------------------
+
+> Symlink system call.
+
+[_DONE] * Check basic race conditions for new entries.  Have both test and
+        stress processes referencing new name, then issue mkdir call.  Ensure
+        name present in cache and dir listing.
+
+[_DONE] * Same as above, only with test and stress processes changing the dir,
+        *creating and deleting* other names in the same directory.
+
+[DONE] * Ensure that we get EEXIST when name already exists.
+
+[DONE] * Ensure funny symlink semantics provided for symlinks whose first
+        character is '#', '%' or '!' (these are mount points, and the mode
+        bits should be 644 for symlinks starting with these characters).
+
+[_DONE] * Test concurrent cache loading.  Have one test process create the
+        symlink and flush it from the cache.  Then have several test processes
+        concurrently reference the symlink, some via readlink calls, and some
+        via referencing the symlink itself via open calls (where the kernel's
+        name evaluation code will interpret the link).
+
+Covered by symlink.dist.scr script.
+-----------------------------------
+
+> Readlink system call.
+
+[DONE] * Test basic readlink, with data in the cache or not (use flush pioctl
+        to remove from cache).
+
+[_DONE] * Test simultaneous deletion and readlink, to ensure error paths are
+        fine.  Run two tests, one where delete comes from a stress process,
+        and one where it comes from another test process on the same client.
+        Need lots of iterations of this code to ensure that test has
+        encountered the desired race conditions.  Probably best is to create
+        *lots* of symlinks at the start, and then concurrently delete the
+        entries while other processes are doing the readlinks.  Hopefully will
+        generate *some* collisions.
+
+[DONE] * Test protection semantics: under what circumstances can one do a
+        readlink (I think under *any* circumstances where the source name can
+        be evaluated), but need to check what bits actually apply to symlinks.
+
+Covered by readlink.dist.scr script.
+------------------------------------
+
+> Fsync system call.
+
+[_DONE] * Test under normal circumstances (some data written to file, server
+        disk not full).
+
+[_DONE] * Test with full server disk.
+
+[_DONE] * Test with no modifications to the file at all.
+
+Covered by fsync.dist.scr script.
+---------------------------------
+
+> Test executing programs from DFS.
+
+[DONE] Make sure executables work.
+
+[DONE] Make sure executables can be overwritten properly with direct
+        copies when no one is executing the code, and ensure that the running
+        the new program works, and runs the new code, and not the old code.
+
+access.scr (basic).
+
+
+> NFS tests.
+
+[DISS]  * Test NFS exportation of publicly accessible (for read and write)
+        files.  This tests the NFS VOPX_AFSFID macro.
+
+[DISS]  * Test NFS writing, since NFS doesn't open/close files before doing
+        transfers.
+
+> Concurrent status merging.
+
+[_DONE] * Make a number of status updates via the stress processes, while
+        simultaneously having several concurrent test threads stating the
+        file.  Ensure that the last stat done by a test thread starts after
+        the end of the last update made via a stress process, so that it, at
+        least, should see the final status.  Then compare this final test
+        status with what is expected.  Also compare it with the value seen by
+        the stress processes.
+
+[_DONE] * ACL cache: Make changes to the access info for a file via a stress
+        process.  Then, have a number of test processes on the same client
+        stat the file, all authenticated as the same pag.  Then, redo the
+        test, only with all of the stats being done by *different* pags.
+
+[_DONE] * Next, rerun same tests, only with chmods being done by the stress
+        processes concurrently with the stats being done by both the same PAG
+        and by different PAGs.  Issue final access via test process, and
+        ensure that it reports the right answer.
+
+NOT FULLY COMPLETED should be in merge.status.dist.scr.
+-------------------------------------------------------
+
+> Quota control.
+
+[NOT DONE] Check that quota can be read and written via the appropriate syscall.
+> Run ACL tests.
+
+> Test aclent recycling.
+
+[DISS] change login context repeatedly, and then reference a lot of files
+        with access calls, checking that the file access is correct.  Also,
+        periodically retest file access to already-checked files to ensure
+        that old acl entries haven't been damaged.
+
+> Test system 5 locking using asynchronous grant.
+
+[_DONE] * Have stress process hold lock and sleep.  Test process then tries to
+        get lock in "wait" mode.  Test case where client really waits.
+
+[_DONE] * Also test race condition case where client tries the lock in "wait"
+        mode, and then the client gets refused, but 30 ms later, client
+        succeeds when queueing the async grant request, so that the async
+        grant request actually wins.  This would require the stress process to
+        get and release the lock with a few 10s of milliseconds between the
+        obtain and the release, repeatedly, while the test process tries
+        repeatedly to get the lock, and releases it when it gets it.
+
+[_DONE] * Test that the wait for an async grant lock is interruptable.  Do
+        this by trying to get a lock, and then having a timer signal go off
+        instead.
+
+Covered by sys5lock.async.scr
+----------------------------
+
+> Background daemon requests.
+
+[_DONE] * Test overloading bkg daemon pool by having lots of processes (lots
+        == at least 20) all read the first byte of a separate 2 chunk file (at
+        least 70K bytes) all at once.  This will trigger lots of prefetches of
+        the second chunk of those files.
+
+[_DONE] * Check background store path by writing a file with at least two
+        chunks (easy).
+
+[_DONE] * Check prefetch by path pioctl.  Also try it with a non-existent
+        file, and also with a file not in DFS, as well as the base case of a
+        file that *does* exist.
+
+Covered by daemon.dist.scr script.
+----------------------------------
+
+> Multi-cell testing.
+
+TBD
+
+> Async write-back.
+
+[DONE] * Generate some status updates to send asynchronously to the server:
+        For example, read a file that is at least an hour old, but do not
+        update it (generates an async update of atime), and verify that after
+        flushing that the atime has changed.
+
+[DONE] * Also, update a file via write (not ftrunc or an O_TRUNC open), and
+        sleep 30 seconds before closing the file (will cause async write
+        daemon to have enough time).
+
+[DONE] * Also, do same thing, only ftruncate the file after writing a byte to
+        it, so that there's no modified data, but there's still a modified
+        mtime field.  Again, wait 30 seconds to allow async daemon to do the
+        storeback of the updated status.
+
+write.back.scr
+--------------
+
+> Connection tests.
+
+[_DEFE] * Test concurrent re-establisment of a connection, by authenticating
+        as a new user, and then having a bunch of threads all simultaneously
+        accessing DFS at once.  Must fork to create lots of other processes to
+        simultaneously access the server. [DISS]
+
+Covered by connection.dist.scr.
+-------------------------------
+
+> Do runs with small caches.
+
+[DONE] * Run tests with 2 chunk caches (cm setca 128 (K)).
+
+> Truncate tests.
+
+[_DONE] * Test growing a file using ftruncate; make sure new bytes are all
+        zero.  Test growing past end of next chunk.
+
+[_DONE] * Test shrinking a file with ftruncate.  Shrink to multiple of 64K, to
+        submultiple (e.g. 8K), to 200 bytes, and finally to 0 bytes long.
+
+[_DONE] * Do tests while having other test processes on the same client
+        writing data to the beginning of the file.  Also, try tests with other
+        processes on the same test client writing to the beginning of the
+        chunk, but not in the area being truncated.  Try same operations while
+        utimes'ing the file from the test client.  Try generating same
+        conflicts, only via revokes using write and utimes syscalls executed
+        by a stress process.
+
+Covered by truncate.dist.scr script.
+------------------------------------
+
+
+> Name hash tests.
+
+[_DONE] * Test name hash table code.  Test repeatedly opening or stat'ing
+        files that don't exist.  Test flushing a dir, and then having N
+        processes stat a file that *does* exist.  Do this while idle, but also
+        do this while stress processes are doing chmod or utimes calls on the
+        parent directory simultaneously.
+
+[_DONE] * Test flushing name cache w/o flushing stat cache, by looking up many
+        many names that don't exist, all in the same directory that does
+        exist.
+
+Covered by name.hash.dist.scr.
+------------------------------
+
+> Sys V locking tests.
+
+[_DONE] * Test locking with length of 0x7fffffff.
+
+[_DONE] * Test blocking and non-blocking.
+
+[_DONE] * Test two processes on the same client, as well as stress processes.
+
+[_DONE] * Test stress process path getting lock first, as well as DFS client
+        test process getting lock first, in both blocking and immediate
+        failing modes.
+
+[_DONE] * Test hollowing out the lock region in middle, left edge and right
+        edge.  Hollowing out a lock means grabbing the entire lock range, then
+        having a stress process grab a lock conflicting in some area, either
+        the middle, the left edge, or the right edge of the original lock's
+        range.
+
+[_DONE] * Test two processes sharing a lock token.  Process A locks 0-300,
+        then releases 100-300.  Process A then locks 0-100, B locks 200-300,
+        and then stress path locks 150-170.
+
+[_DONE] * Test interruptability of lock requests. [DISS]
+
+[DONE]  * Test releasing locks by closing the file descriptor.
+
+[_DONE] * Test F_GETLK on both the remote and local paths.
+
+Covered by sys5lock.scr.
+-------------------------
+
+> Diskless.
+
+[not _DONE] * Run I/O (rdwr) and directory consistency tests diskless. [DISS]
+
+should be covered by diskless.dist.scr script.
+----------------------------------------------
+
+
+> Pioctl tests.
+
+[WEEK5] * Basic cm_pioctl machinery tests, using PGetFid call.
+
+[WEEK5] * Test prefetch call separately. [DISS]
+
+[WEEK5] * Test pioctl with path in UFS instead of DFS.  Or with path
+        representing non-existent file. [DISS]
+
+Not done yet but all pioctl function calls are ready to use.
+Need some discussions.
+------------------------------------------------------------
+
+> GetWD tests.
+
+[_DONE] * Issue occasional getwd calls to ensure that working dir computation
+        doesn't fail after a while.
+
+[_DONE] * Flush a *file* (not the dir) and then stat the file, from N
+        different test processes on the same client, at once.  Tests some race
+        conditions in cm_GetSCache.
+
+[_DONE] * Flush the root of the cell (the DFS root, not the /... mount point),
+        and then do a getwd.  Do this many times.  Do this with several
+        concurrent processes.
+
+Covered by getwd.dist.scr script.
+---------------------------------
+
+> Misc tests.
+
+[_DONE] * Try to get cm_GetAccessBits to run through several iterations.  Have
+        one test process do a lot of access calls, on a non-publicly readable
+        file, while several stress processes do a lot of updates to the file,
+        for example, chmods.
+
+[DEFE] * Test cellular mount points (naming cells, which can be tested using
+        the local cell).  Test '#', '%' mount points, preferably with a RO
+        fileset, but test it anyway.  Test all combinations (cellular syntax X
+        mount point type).  Also, test references that name non-existent
+        cells, and that name cells that exist, but that name filesets that
+        don't exist.
+
+[DEFE] * Try mountpoints by fileset ID instead of name.  Try all three
+        syntaxes: "low", "high.low" and "high,,low".
+
+[_DONE] * Have some tests that keep files open while the files are the target
+        of renames, unlinks, and rmdirs, to test code that determines whether
+        to call TryToSmush.  All involved are "test" processes.
+
+Covered by misc1 and misc2 scripts.
+-----------------------------------
+
+[DEFE] * Run tests for at least 5 hours so as to test token lifetime
+        expiration code.  That is, probably best for at least one test to open
+        a file and not close it again for > 5 hours.
+
+[_DONE] * Test running after a "cm checkfilesets" call, which will force
+        re-evaluation of the vdir mount point info.
+
+Partially covered by fsync.dist.scr.
+------------------------------------
+
+> VDIR tests
+
+[_DONE] * Try testing more than one cell, including doing pwds.  Or, if more
+        than one cell is too hard to setup, create lots of funny cds
+        directories, and cd to them.  Goal is to test vdir readdir code with
+        more than one entry.
+
+[_DONE] * Try looking up "." and ".." in a vdir.
+
+Covered by vdir.dist.scr script.
+--------------------------------
+
+> Auth call tests
+
+[WEEK6] * Try setgroups syscall to make sure that PAG isn't discarded [DISS]
+
+[WEEK6] * Test setpag syscall and getpag syscall. [DISS]
+
+Have not done it yet.
+----------------------
+
+>>> Fileset tests
+
+> Single-cell testing.
+
+[DEFE] * Ensure that cell aliases work, by creating symlinks?  Or whatever we
+        do in the DNS world to get two names for the same local cell (ask
+        CFE).
+
+[DEFE] * Test busy fileset occurrences.  The code path is different for busy
+        *replicated* data, so need to test that, too.  Requires a replicated
+        fileset.
+
+[DEFE] * Test path where a new version of a fileset doesn't make it to the
+        sole remaining replica.  Make sure we don't use an old server, or see
+        old data.
+
+[DEFE] * Test accesses to replicated data (forces async daemon to probe file
+        servers holding replicated filesets).
+
+[DEFE] * Test path where files are open for long time from a replicated
+        fileset.  Long time is keepAliveTime.
+
+[DEFE] * Test simulated rep server failures. [DISS]
+
+[DEFE] * Create an FLDB entry for a non-existent fileset ID, and then
+        reference the item, and ensure that ENODEV comes back.
+
+[DEFE] * Test replication when a file changes on the server and the fileset
+        that just changed is being referenced heavily via the read-only path.
+
+[DEFE] * Test bind GDA alias for a cell, making sure that it creates a real
+        symlink in the virtual directory space.
+
+[DEFE] * Try running a system with lots of volume (more than 64), running lots
+        of stress tests.
+
+>>> Crash and other multi-machine tests
+
+[DEFE] * Test flserver problems.  Need periodic counter for injecting errors
+        into the flserver calls, making it look like the flserver is down for
+        certain calls.  Then, run some tests with a flaky flserver.  Need some
+        way of marking what errors are expected from various tests during this
+        phase, so that we can tell what errors we really expect.
+
+[DEFE] * Test normal RPC problems.  Need periodic counter for injecting file
+        server errors.  Again, need way of telling what should be happening
+        during this time.  Should be a number of calls outstanding when
+        failure occurs, to test code that waits for last call to complete
+        before stomping on the RPC binding.
+
+[DEFE] * Should also be able to inject fake REP and FLServer failures.
+
+[DEFE] * Write core file by crashing a process; tests write path w/o
+        open/close pair.
+
+[DEFE] * Test cm_Analyze. Test ticket expiration by running some tests with
+        ticket expiring in the middle.  Test rpc_s_wrong_boot_time path by
+        rebooting server while client running.  Test stale host path by
+        pausing a client while running the server for another 10 minutes or
+        so.  Test protection failures.  Test writing to a read-only fileset
+        clone.  Test reference to a file having a token on a just-rebooted
+        system (TKM_ERROR_TRYAGAIN).  Test talking to a just-rebooted server.
+        Test fileset busy.  Test fileset non-existent (ENODEV) by creating a
+        fileset entry for a non-existent or non-exported fileset.
+
+[DEFE] * Run some experiments with 2 servers, to test cm_SortServers in a
+        non-trivial case. [DISS]
+
+[DEFE] * Try unmounting DFS before a reboot, make sure reboot doesn't visibly
+        damage disk.  System should be busy during unmount.
+
+

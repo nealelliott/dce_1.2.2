@@ -1,0 +1,445 @@
+#!/bin/sh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# @HP_DCE_VERSION@
+# @(#)Module: rc.dce $Revision: 1.1.25.1 $ $Date: 1996/10/03 17:59:54 $
+#
+# HISTORY
+# $Log: rc.dce,v $
+# Revision 1.1.25.1  1996/10/03  17:59:54  arvind
+# 	OSF DCE 1.2.2 Drop 4
+# 	[1996/10/03  17:25:17  arvind]
+#
+# Revision /main/DCE_1.2.2/1  1996/09/09  21:18 UTC  arvind
+# 	PKSS drop from DEC (DCE1.2.2)
+# 	[1996/08/30  15:38 UTC  arvind  /main/arvind_pkss/1]
+# 
+# Revision 1.1.23.4  1996/03/09  23:10:26  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:28:19  marty]
+# 
+# Revision 1.1.23.3  1996/02/07  17:48:03  parul
+# 	DCE 1.2.1 final drop from HP
+# 	[1996/02/07  16:13:51  parul]
+# 
+# 	DCE 1.2.1 final drop from HP
+# 
+# Revision 1.1.18.1  1994/10/19  17:52:41  rsalz
+# 	Submitting to unintegrated tree to ensure that it's there.
+# 	[1994/10/19  17:39:54  rsalz]
+# 
+# Revision 1.1.16.10  1994/10/19  17:37:50  rsalz
+# 	Fix semantic error introduced by 1.1.16.9 (OT CR 11548)
+# 	[1994/10/19  15:12:56  rsalz]
+# 
+# Revision 1.1.16.9  1994/10/18  19:45:39  tom
+# 	Fix typo in 11548 submit.
+# 	[1994/10/18  19:43:06  tom]
+# 
+# Revision 1.1.16.8  1994/10/17  19:30:45  sommerfeld
+# 	OT11548: fix hole in local preauth protocol
+# 	[1994/10/17  19:27:26  sommerfeld]
+# 
+# Revision 1.1.16.7  1994/08/24  16:29:07  baum
+# 	dced secval is now startable from config
+# 	[1994/08/24  16:25:06  baum]
+# 
+# Revision 1.1.16.6  1994/08/08  14:23:26  mdf
+# 	Hewlett Packard Security Code Drop
+# 	[1994/08/04  19:57:02  mdf]
+# 
+# Revision 1.1.16.5  1994/06/01  15:58:51  rsalz
+# 	Add dced support (OT CR 9768).
+# 	[1994/06/01  13:27:12  rsalz]
+# 
+# Revision 1.1.16.4  1994/05/18  19:57:21  tom
+# 	Bug 10628 - No longer need to use RC_DTS file.
+# 	Bug 10627 - Time providers now put themselves into the background.
+# 	[1994/05/18  19:56:42  tom]
+# 
+# Revision 1.1.16.3  1994/03/30  15:33:46  tom
+# 	Bug 9527 - Move FIRST_BOOT stuff here from dce_com_env.
+# 	[1994/03/30  15:26:57  tom]
+# 
+# Revision 1.1.16.2  1994/03/15  23:14:59  zeliff
+# 	Changed order in which auditd starts.
+# 	[1994/03/15  22:21:00  zeliff]
+# 
+# 	OT9625: added auditd
+# 	[1994/03/09  21:07:15  zeliff]
+# 
+# Revision 1.1.16.1  1994/01/05  13:45:35  zeliff
+# 	OT9067 - restart GDS
+# 	[1994/01/04  20:33:55  zeliff]
+# 
+# Revision 1.1.14.1  1993/10/14  20:20:53  tom
+# 	Bug 9112 - On HP-UX, kill llbd before starting rpcd.
+# 	[1993/10/14  20:13:38  tom]
+# 
+# Revision 1.1.10.4  1993/07/20  22:46:44  tom
+# 	Remove machine dependant settings, they are in dce_com_env.
+# 	Put back 1.0.2 check for KRB5CCNAME.
+# 	[1993/07/20  22:32:14  tom]
+# 
+# Revision 1.1.10.3  1993/07/19  19:27:28  zeliff
+# 	HP port of DFS
+# 	[1993/07/19  18:21:01  zeliff]
+# 
+# Revision 1.1.12.4  1993/07/16  18:59:38  kissel
+# 	Sync'd with GAMERA rc.dce added call for RC_DFS
+# 	[1993/06/23  18:31:14  jake]
+# 
+# Revision 1.1.6.10  1993/05/25  17:53:32  truitt
+# 	Source dce_com_utils in order to pick up log_msg function.
+# 	This is used to report rc.dce activity to the config log file.
+# 	[1993/05/25  17:53:11  truitt]
+# 
+# Revision 1.1.6.9  1993/05/25  13:51:59  truitt
+# 	Add new version control string.
+# 	[1993/05/25  13:51:42  truitt]
+# 
+# Revision 1.1.6.8  1993/05/24  16:16:48  truitt
+# 	1. removed the wait_for_machine_id stuff that was present after the
+# 	   sec_clientd startup.  There is a function in dce_config which
+# 	   modifies the local rc.dce file to include this whenever sec_clientd
+# 	   is started.  If this is present in the default version of rc.dce,
+# 	   and a user does a 'start' before a 'config' in menu0, dce_config
+# 	   will hang.
+# 	2. Made sure all daemonrunning calls begin with a comment in front,
+# 	   signifying no daemons have been configured.
+# 	[1993/05/24  16:16:27  truitt]
+# 
+# Revision 1.1.6.7  1993/05/13  19:34:31  jake
+# 	Added FIRST_BOOT check
+# 	[1993/05/13  19:33:17  jake]
+# 
+# Revision 1.1.6.5  1993/05/11  15:35:22  truitt
+# 	Add parameters to time providers for proper execution.
+# 	[1993/05/11  15:35:03  truitt]
+# 
+# Revision 1.1.6.4  1993/05/06  15:41:13  jake
+# 	Added entries for dts_null_provider and dts_ntp_provider
+# 	[1993/05/06  15:40:54  jake]
+# 
+# Revision 1.1.6.3  1993/04/27  22:46:09  jake
+# 	Added dtstimed note, and removed "sh " notation
+# 	[1993/04/27  22:45:48  jake]
+# 
+# Revision 1.1.6.2  1993/04/21  20:26:47  mgm
+# 	Initial GAMERA branch
+# 
+# Revision 1.1.5.6  1993/04/21  14:16:30  root
+# 	    Loading drop DCE1_0_2B23
+# 
+# Revision 1.1.4.7  1993/03/19  19:03:44  tom
+# 	Bug 7547:
+# 	 - Do one ps, and check the result mutiple times (faster!).
+# 	 - Pick default language (and ps options) in a easier to port way.
+# 	 - Protect the user from starting DCE while in a dce_login shell.
+# 	[1993/03/19  19:02:29  tom]
+# 
+# Revision 1.1.4.6  1993/02/01  20:25:27  hinman
+# 	[hinman@sni] - Final merge before bsubmit
+# 	[1993/01/31  15:56:59  hinman]
+# 
+# Revision 1.1.4.5  1993/01/14  22:48:56  tom
+# 	Bug 4840 - Do not set BIND_PE_SITE before starting dtsd.
+# 	[1993/01/14  22:09:49  tom]
+# 	Revision 1.1.5.2  1993/01/11  16:07:54  hinman
+# 	[hinman] - Check in merged SNI version
+# 
+# Revision 1.1.4.4  1993/01/12  23:10:15  tom
+# 	Bug 6151 - Try to protect the user from running without LANG set.
+# 	[1993/01/12  23:09:43  tom]
+# 
+# Revision 1.1.4.3  1993/01/05  18:10:47  tom
+# 	Bug 6398 - Use find/xargs to remove cred files.
+# 	[1993/01/05  16:24:04  tom]
+# 
+# Revision 1.1.4.2  1992/12/06  03:06:25  zeliff
+# 	Embedding copyrights
+# 	[1992/12/05  22:57:43  zeliff]
+# 
+# Revision 1.1.2.8  1992/06/18  18:22:35  rsalz
+# 	Remove sleep before starting DCE; not needed with fix to OT3549.
+# 	[1992/06/18  17:23:10  rsalz]
+# 
+# Revision 1.1.2.7  1992/06/15  21:38:14  melman
+# 	Handle new location of DCE credentials
+# 	[1992/06/15  21:37:29  melman]
+# 
+# Revision 1.1.2.6  1992/06/09  00:06:13  rsarbo
+# 	daemons now invoked with full pathname.
+# 	[1992/06/09  00:05:50  rsarbo]
+# 
+# Revision 1.1.2.5  1992/06/05  21:05:44  rsarbo
+# 	OT3186 -  daemonrunning now passes switches for debugging purposes.
+# 	[1992/06/05  21:05:11  rsarbo]
+# 
+# Revision 1.1.2.4  1992/05/14  01:36:23  rsalz
+# 	Sleep before calling rc.dts to give dtsd time to startup.
+# 	[1992/05/13  22:06:56  rsalz]
+# 
+# Revision 1.1.2.3  1992/05/01  21:42:56  rsarbo
+# 	Corrected bad pathname so rpc*.dat files are successfully removed
+# 	when starting DCE.
+# 	[1992/05/01  18:46:50  rsarbo]
+# 
+# Revision 1.1.2.2  1992/01/22  23:01:02  melman
+# 	Adding changes from defect_fixes archive.
+# 	[1992/01/22  22:15:27  melman]
+# 
+# $EndLog$
+#
+# (C) COPYRIGHT International Business Machines Corp. 1985, 1991
+# All Rights Reserved
+
+# save the (possible) boot parameter
+boot=$1
+
+if [ "$SOURCE_COM_UTILS" != "1" ]
+then
+	if [ ! -r /etc/dce_com_utils ]
+	then
+		echo "/etc/dce_com_utils not available for execution"
+		echo "Check dce installation"
+		exit 1
+	fi
+	. /etc/dce_com_utils
+fi
+
+if [ "$SOURCE_CONFIG_ENV" != "1" ]
+then
+	if [ ! -r /etc/dce_config_env ]
+	then
+		echo "/etc/dce_config_env not available for execution"
+		echo "Check dce installation"
+		exit 1
+	fi
+	. /etc/dce_config_env
+fi
+
+# If the parameter boot is passed to rc.dce, then we set the variable
+# exit_on_err to "y" so that when the function err_exit is called
+# the user will not be prompted.  The boot parameter should be passed 
+# to this script when running rc.dce from /etc/rc.
+
+if [ "$boot" = "boot" ]
+then
+	exit_on_err=y
+	export exit_on_err
+	do_checks=n
+	export do_checks
+fi
+
+# usage:  check_server_time()
+#  
+#   check_server_time is called prior to starting DCE daemons
+#   during system startup as an attempt to synchronize the host system
+#   clock with the master security server to better enable the
+#   startup of DCE services after a powerfail or abnormal shutdown.
+#   check_server_time tries to locate the security server by reading the 
+#   pe_site file which contains the IP address of the security server
+#   and replicas. If the pe_site file is non-existent, then check_server_time
+#   returns 1 to the calling program. If the host IP address matches any 
+#   addresses in the pe_site file, then synchroniztion is not required and
+#   the program exits. If time on the host falls between tol_sec_max and
+#   tol_sec_min (see dce_config_env for these definitions) of the server,
+#   then time synchronization is attempted. Time sychronization will NOT occur
+#   if the cell name of the host does not match the cell name entry in the
+#   pe_site file.
+#
+#
+# inputs:  none
+# outputs: none
+# return: 0 = success   -- time on host synchronized.
+#         1 = failure   -- time on host needed synchronization but error occured,
+#                          or could not find pe_site file. 
+#         2 = no action -- time on host within specified tolerance, no synchronization.
+#
+check_server_time()
+{
+    DCELOCAL=/opt/dcelocal
+    PE_SITE=etc/security/pe_site
+    IP_ADDRS=/tmp/ip_addrs
+    SYNC_CLOCKS=y
+    export SYNC_CLOCKS
+
+    # Time to wait for a server to respond in seconds.
+    # This is the initial value, subsequent values increase exponentially.
+    T_WAIT=60
+
+    # Number of times to loop thru IP_ADDRS list.
+    N_LOOP=3
+
+    host=`hostname`
+    host_ip=`$DCELOCAL/bin/getip $host`
+    host_cell_name=`$DCELOCAL/bin/getcellname`
+
+    # Do we have a pe_site file
+    if [ ! -f $DCELOCAL/$PE_SITE ]
+    then
+        return 1
+    fi
+
+    # Build a list of IP addresses (IP_ADDRS) from the pe_site file. 
+    cat -s $DCELOCAL/$PE_SITE | awk -F: '{print $1, $2}' | cut -d[ -f1 | awk '{ print $1 ":" $3}'  > $IP_ADDRS
+
+
+    # Try each entry in the IP_ADDRS list twice, waiting T_WAIT seconds between tries.
+    # If no response try next IP_ADDRS entry. Loop thru IP_ADDRS list N_LOOP times.
+    # If IP_ADDRS entry matches host IP, then return. T_WAIT is backed off exponentially.
+    t_next=$T_WAIT
+    while [ $N_LOOP != "0" ]
+    do
+       for i in `cat -s $IP_ADDRS`
+       do
+       server_cell_name=`echo $i | awk -F : '{print $1}'`
+       server_ip=`echo $i | awk -F : '{print $2}'`
+       if [ "$host_cell_name" = "$server_cell_name" ]
+       then
+           if [ "$server_ip" != "$host_ip" ]
+           then
+               TIME_SERVER=$server_ip
+               export TIME_SERVER
+               checktime -b
+               if [ $? -ne 0 ]
+               then 
+	           T_SLEEP=$t_next
+	           echo "Waiting $T_SLEEP seconds for server $server_ip to respond"
+                   sleep $T_SLEEP
+               else
+                   return 0
+               fi
+           else
+               return 2
+           fi
+           t_next=`expr $t_next \* 2`
+       fi
+       done
+       N_LOOP=`expr $N_LOOP - 1`
+    done
+    return 1
+}
+
+# Setting of FIRST_BOOT variable
+: ${BOOT_TIME:="$DCELOCAL/etc/boot_time"}
+touch $BOOT_TIME
+first_boot=`who -b | cut -c25-36`
+if [ "$first_boot" != "`cat $BOOT_TIME`" ]
+then
+        FIRST_BOOT=1
+        echo "$first_boot" > $BOOT_TIME
+else
+        FIRST_BOOT=0
+fi
+export FIRST_BOOT
+
+activate_secval()
+{
+	# Need string binding, must wait for dced to create it.
+	binding_file="${DCELOCAL}/var/security/sec_clientd.binding"
+	count=0
+	until [ -s $binding_file -o "$count" -gt 75 ]
+	do
+		sleep 5
+		count=`expr $count + 5`
+	done
+	if [ ! -s $binding_file ]; then
+		err_exit "rc.dce: dced could not create $binding_file"
+		exit 1
+	fi
+
+	dced_binding=`head -1 $binding_file`
+	dcecp -c secval activate {$dced_binding} > /dev/null 2>&1
+}
+
+
+# Try to help the user
+if [ -n "$KRB5CCNAME" ]
+then
+	log_msg ERROR "KRB5CCNAME environment variable set."
+        log_msg ERROR "Possibly in an invalid dce_login shell, exit before starting DCE."
+exit 1
+fi
+
+
+# put ps in to a file and use that instead of 1 ps per daemon
+PSFILE=/tmp/rc.dce.$$
+ps $PSARGS > $PSFILE
+
+# Start DCE
+log_msg DEBUG "Starting DCE daemons in rc.dce"
+
+# The DCE Configuration script uncomments the appropriate
+# daemons when the machine is configured.
+
+if [ "$FIRST_BOOT" = "1" ]
+then
+	# Remove rpcd or dced endpoint database
+	if [ -f $DCELOCAL/var/rpc/rpc*.dat ]; then
+		rm -f $DCELOCAL/var/rpc/rpc*.dat
+	fi
+        if [ -f $DCELOCAL/var/dced/*.db ]; then
+                rm -f $DCELOCAL/var/dced/Ep.db $DCELOCAL/var/dced/Srvrexec.db
+                rm -f $DCELOCAL/var/dced/Llb.db
+        fi
+	# Remove the cred files
+	if [ -d $DCELOCAL/var/security/creds/. ]; then
+		find $DCELOCAL/var/security/creds/. -type f -print | xargs rm -f
+	fi
+fi
+
+daemon_slayer llbd
+
+# Create the preauth directory so that dced can start properly.
+PREAUTH=$DCELOCAL/var/security/preauth
+rm -rf $PREAUTH
+mkdir $PREAUTH || { err_exit "Can't mkdir $PREAUTH" ; exit 1; }
+chown 0 $PREAUTH || { err_exit "Can't chown $PREAUTH" ; exit 1;}
+chgrp 0 $PREAUTH || { err_exit "Can't chgrp $PREAUTH" ; exit 1;}
+chmod 0711 $PREAUTH || { err_exit "Can't chmod $PREAUTH" ; exit 1;}
+
+# Possible ways to invoke dced:
+#
+# dced: Do endpoint & secval (dcecp -c secval activate must be uncommented)
+
+# Check the time on the security, synchronize if necessary
+check_server_time 
+if [ $? -eq 1 ]
+then
+    err_exit "Cannot synchronize time with security server -- possible reasons:\n \
+1. Cannot locate $DCELOCAL/$PE_SITE file.\n \
+2. Security server ($server_ip) is a in foreign cell.\n \
+3. Time skew between $host ($host_ip) and security server ($server_ip) exceeds $tol_sec_max seconds."
+    exit 1
+fi
+
+
+# Start the daemons now
+#daemonrunning $DCELOCAL/bin/dced
+#daemonrunning $DCELOCAL/bin/secd
+#activate_secval
+#daemonrunning $DCELOCAL/bin/cdsadv
+#daemonrunning $DCELOCAL/bin/cdsd
+#daemonrunning $DCELOCAL/bin/auditd
+#daemonrunning $DCELOCAL/bin/gdad
+#daemonrunning $DCELOCAL/bin/dtsd
+#daemonrunning $DCELOCAL/bin/dtstimed
+#daemonrunning $DCELOCAL/bin/dts_null_provider -p 60 -i 100 
+#daemonrunning $DCELOCAL/bin/dts_ntp_provider -h -p 600 -i 30 
+#daemonrunning $DCELOCAL/bin/pwd_strengthd
+#daemonrunning $DCELOCAL/bin/pkssd
+
+if [ -f "$RC_DFS" ]; then
+	$RC_DFS
+fi
+
+rm -f $PSFILE
+
+log_msg DEBUG "Finished DCE daemons in rc.dce"

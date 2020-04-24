@@ -1,0 +1,191 @@
+*
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* Note: Run this scripts solely from both dfs (XXXXXX and local path).
+*
+
+* 
+* USAGE: ./file_test -l /.:/dfs_test/a    (for hub)
+*        ./file_test -c /.:/dfs_test/a    (for two spokes)
+*
+
+*
+* daemon.dist.scr.
+*    This script implements the followings.
+*
+
+*
+* Test overloading bkg daemon pool by having lots of processes (lots
+* == at least 20) all read the first byte of a separate 2 chunk file (at
+* least 70K bytes) all at once.  This will trigger lots of prefetches of
+* the second chunk of those files.
+* 
+*
+* Check background store path by writing a file with at least two
+* chunks (easy).
+*
+* Check prefetch by path pioctl.  Also try it with a non-existent
+* file, and also with a file not in DFS, as well as the base case of a
+* file that *does* exist.
+
+* Note: Since all stress should apply to the bkg daemon in on client
+*       so the test spokes should be open solely from one machine.
+
+!* Include config file.
+include config
+
+set loopTimes 10
+
+
+
+***********************************************************************
+echo
+* Check if there are enogh spokes ITL_nspokes should >= 20 XXXXXX.
+if ( $ITL_nspokes < 3 ) {
+  echo WARNING!!! To run the test you have to have 3 spokes.
+  quit
+}
+
+chdir $testDir
+
+* Stress number of times.
+loop z 1 1 $loopTimes
+
+!* Despath tests among spokes.
+loop loopVar 0 1 ($ITL_nspokes-1)
+
+  set writeFile ("storefile" + $loopVar)
+  set fileName ( $testFile + $loopVar )
+  open $fileName ($O_CREAT|$O_RDWR) 0777 fileId[$loopVar]
+  loop x 1 1 2 
+    write $fileId[$loopVar] $NUMVEC64K
+  endloop
+  close $fileId[$loopVar]
+  flush_file $fileName
+
+* 
+* The procedure will read file to triger the prefetches.
+*
+set stress_Proc proc END_PROC
+
+  echo
+  echo Stress process (read file).
+
+  umask 0
+
+  set dataFile vecnum64k
+  set numvecData vector 0x0
+  open @dataFile $O_RDONLY 0777 dataFid
+  read @dataFid $CONST64K numvecData
+  close @dataFid
+
+  chdir $testDir
+  sync_join "prefetch" $timeout
+
+  open $fileName @O_RDONLY 0777 fileId
+  read @fileId 1 junk
+  if ( @junk != "0x00" ) {
+    echo FAILED: The first byte is wrong in the first chunk read.
+  }
+
+  sync_join "background_store" $timeout
+
+  open $writeFile (@O_CREAT|@O_WRONLY) 0777 writeId
+  write @writeId @numvecData
+  write @writeId @numvecData
+
+  sync_join "prefetch_by_pioctl" $timeout
+
+  close @writeId
+
+  lseek @fileId @SEEK_SET $CONST64K
+  
+  read @fileId 1 junk
+  if ( @junk != "0x00" ) {
+    echo FAILED: The first byte is wrong in the second chunk read.
+  }
+  close @fileId
+
+  flush_file $fileName
+
+  verifyStatus false
+  prefetch_file nonexist
+  verifyStatus true
+
+  prefetch_file $fileName
+  if ( @ITL_Status != 0 ) {
+    if ( @ITL_Status != @EWOULDBLOCK && $ITL_Status != @EAGAIN ) {
+      echo FAILED: Prefetch does not work for us in the test.
+    }
+    else {
+      echo Return the expected ERRNO.
+    }
+  }
+
+  sync_join "finish_sync" $timeout
+  chdir $currentDir
+
+  echo End test test .
+  echo
+END_PROC
+
+rexec_async $ITL_spoke[$loopVar] stress_Proc result[$loopVar] fsyncId[$loopVar]
+
+endloop
+
+sync_create "prefetch" $ITL_nspokes  $timeout
+sync_release "prefetch"
+
+sync_create "background_store" $ITL_nspokes  $timeout
+sync_release "background_store"
+
+sync_create "prefetch_by_pioctl" $ITL_nspokes  $timeout
+sync_release "prefetch_by_pioctl"
+
+sync_create "finish_sync" $ITL_nspokes  $timeout
+sync_release "finish_sync"
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $fsyncId[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+loop loopVar 0 1 ($ITL_nspokes-1)
+  set writeFile ("storefile" + $loopVar)
+  set fileName ( $testFile + $loopVar )
+  remove $writeFile
+  remove $fileName
+endloop
+
+endloop
+
+echo
+
+chdir $currentDir
+exec clearDir_Proc $testDir
+
+echo Hub done.

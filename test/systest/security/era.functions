@@ -1,0 +1,638 @@
+#!/bin/ksh
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: era.functions,v $
+# Revision 1.1.4.2  1996/03/11  02:48:19  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:09:10  marty]
+#
+# Revision 1.1.4.1  1995/12/11  22:46:19  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  22:21:59  root]
+# 
+# Revision 1.1.2.4  1994/10/05  21:00:45  hester
+# 	final updates for eraobj001 acl test
+# 	[1994/10/05  20:58:25  hester]
+# 
+# Revision 1.1.2.3  1994/09/24  17:28:50  hester
+# 	use new xattrs flag, get proper error msg
+# 	[1994/09/23  20:07:50  hester]
+# 
+# Revision 1.1.2.2  1994/08/25  21:09:42  hester
+# 	updates to xattrschema and latest dcecp functionality
+# 	[1994/08/25  20:13:28  hester]
+# 
+# Revision 1.1.2.1  1994/07/22  17:30:50  hester
+# 	fixed schema create cmd
+# 	[1994/07/20  21:42:38  hester]
+# 
+# 	minor cleanup of syntax, etc.
+# 	[1994/06/30  16:19:54  hester]
+# 
+# 	updated dcecp show cmds to use verify_existence
+# 	[1994/06/28  19:36:28  hester]
+# 
+# 	first rev for ERA tests
+# 	[1994/06/28  18:57:52  hester]
+# 
+# $EndLog$
+
+#======================================
+#
+#   Contains the following functions 
+#   to support ERA in security tests:
+#
+# add_schema 
+# add_neg_schema 
+# delete_schema 
+# del_neg_schema 
+# change_schema
+# change_neg_schema
+# add_attr 
+# delete_attr 
+# add_neg_attr 
+# del_neg_attr 
+# change_attr
+#
+# Not sure we need this as originally planned:  view_attr
+
+#===============================================================================
+# Function:	add_schema attr_name attr_encoding aclmgr_set 
+#			   unique_flag multi_instanced reserved_flag 
+#			   apply_defaults intercell_action trig_type 
+#			   comment 
+# Purpose:	Execute dcecp command to add a schema entry to the registry.
+#===============================================================================
+add_schema() {
+
+	# ASSUMPTION: The current schema entry is not in the registry.  
+	
+	tet_infoline "Attempting to add schema entry ${1} to registry"
+# call dcecp 'schema create' operation which takes list of names of 
+#  schema entries to be created
+
+
+   DCECP_CMD="xattrschema create ${1} -encoding ${2} -unique ${3} \
+        -multivalued ${4} -reserved ${5} -applydefs ${6} -intercell ${7} \
+        -trigtype ${8} -annotation ${9} -aclmgr ${10}"
+
+   dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+   if [ "$?" != 0 ]
+   then
+	tet_infoline "ERROR: dcecp ${DCECP_CMD} failed in add_schema"
+	cat ${DCECP_OUTPUT}
+	file_to_journal ${DCECP_OUTPUT}
+	fail=1
+        return 1
+   fi
+
+   DCECP_CMD="xattrschema show ${1}"
+   dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+   if [ "$?" != 0 ]
+   then
+	tet_infoline "ERROR: dcecp ${DCECP_CMD} failed in add_schema"
+	cat ${DCECP_OUTPUT}
+	file_to_journal ${DCECP_OUTPUT}
+	fail=1
+        return 1
+   fi
+
+
+   cat ${DCECP_OUTPUT} | verify_existence "\{encoding ${2}\}"  > /dev/null
+   if [ "$?" != 0 ]
+   then
+        tet_infoline "ERROR: ${DCECP_CMD} failed in add_schema"
+        cat ${DCECP_OUTPUT}
+	file_to_journal ${DCECP_OUTPUT}
+        fail=1
+   else
+   	tet_infoline "Schema ${1} has been ADDED to the registry."
+   fi
+
+} # End of function add_schema
+
+#===============================================================================
+# Function:	add_neg_schema attr_name attr_encoding aclmgr_set 
+#			   unique_flag multi_instanced reserved_flag 
+#			   apply_defaults intercell_action trig_type 
+#			   comment 
+# Purpose:	Attempt to add a schema entry to the registry with insufficient
+#		permissions to do the operation.
+#===============================================================================
+add_neg_schema() {
+
+        # ASSUMPTION: Schema doesn't already exist in database
+         
+        tet_infoline "Attempting to add schema ${1} without permission"
+
+   DCECP_CMD="xattrschema create ${1} -encoding ${2} -unique ${3} \
+        -multivalued ${4} -reserved ${5} -applydefs ${6} -intercell ${7} \
+        -trigtype ${8} -annotation ${9} -aclmgr ${10}"
+
+   dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+
+   cat ${DCECP_OUTPUT} | verify_existence "Error: unauthorized to perform this operation"  > /dev/null
+   if [ "$?" != 0 ]
+   then
+        tet_infoline "ERROR: dcecp ${DCECP_CMD} succeeded unexpectedly in add_neg_schema"
+        cat ${DCECP_OUTPUT}
+	file_to_journal ${DCECP_OUTPUT}
+        fail=1
+   else
+	tet_infoline "dcecp ${DCECP_CMD} failed as expected"
+   fi
+
+}
+
+
+#===============================================================================
+# Function:     delete_schema <name_of_schema>
+# Purpose:	Execute dcecp command to delete a schema entry from the registry.
+#===============================================================================
+delete_schema() {
+
+        # ASSUMPTION: The current schema is in the registry.  This
+         
+        tet_infoline "Attempting to delete schema ${1} from registry"
+	DCECP_CMD="xattrschema delete ${1}"
+	dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+
+	if [ "$?" != 0 ]
+        then
+		tet_infoline "ERROR: dcecp ${DCECP_CMD} failed in delete_schema"
+		cat ${DCECP_OUTPUT}
+		file_to_journal ${DCECP_OUTPUT}
+		fail=1
+                return 1
+        fi
+
+   	DCECP_CMD="xattrschema show ${1}"
+   	dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+	
+   	cat ${DCECP_OUTPUT} | verify_existence "schema entry not found"  > /dev/null
+   	if [ "$?" != 0 ]
+   	then
+        	tet_infoline "ERROR: Schema ${1} was not deleted from registry as expected in delete_schema"
+        	cat ${DCECP_OUTPUT}
+		file_to_journal ${DCECP_OUTPUT}
+        	fail=1
+   	else
+   		tet_infoline "Schema ${1} has been successfully DELETED from the registry."
+   	fi
+
+} # End of function delete_schema
+
+
+#===============================================================================
+# Function:     del_neg_schema <name_of_schema>
+# Purpose:	Attempt to delete a schema entry from the registry without 
+#		permission.
+#===============================================================================
+del_neg_schema() {
+
+        # ASSUMPTION: The current schema is in the registry.  This
+         
+        tet_infoline "Attempting to delete schema ${1} from registry without permissions"
+	DCECP_CMD="xattrschema delete ${1}"
+	dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+
+        cat ${DCECP_OUTPUT} | verify_existence "Error: unauthorized to perform this operation" > /dev/null
+        if [ "$?" != 0 ]; then
+            tet_infoline "ERROR: dcecp ${DCECP_CMD} succeeded unexpectedly in del_neg_schema"
+            cat ${DCECP_OUTPUT}
+	    file_to_journal ${DCECP_OUTPUT}
+            fail=1
+        else
+            tet_infoline "dcecp ${DCECP_CMD} failed as expected in del_neg_schema"
+        fi
+
+}
+
+#===============================================================================
+# Function:	change_schema attr_name field_name field_value
+# Purpose:	Execute dcecp command to modify a schema entry in the registry.
+#===============================================================================
+change_schema() {
+
+	# ASSUMPTION: The current schema entry is in the registry.  
+	 
+	tet_infoline "Attempting to change schema entry ${1} in registry"
+
+   DCECP_CMD="xattrschema modify ${1} -change {${2} ${3}}"
+   dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+
+   if [ "$?" != 0 ]
+   then
+	tet_infoline "ERROR: dcecp ${DCECP_CMD} failed in change_schema"
+	cat ${DCECP_OUTPUT}
+	file_to_journal ${DCECP_OUTPUT}
+	fail=1
+        return 1
+   fi
+
+   cat ${DCECP_OUTPUT} | verify_existence "Error: this operation not implemented"  > /dev/null
+   if [ "$?" != 0 ]
+   then
+        tet_infoline "ERROR: dcecp ${DCECP_CMD} succeeded unexpectedly in change_schema"
+	tet_infoline "The operation was previously not implemented"
+        cat ${DCECP_OUTPUT}
+	file_to_journal ${DCECP_OUTPUT}
+        fail=1
+   else
+        tet_infoline "dcecp ${DCECP_CMD} failed as expected because the operation is not implemented"
+   fi
+
+   # DCECP_CMD="xattrschema show ${1}"
+   # dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+
+#    cat ${DCECP_OUTPUT} | verify_existence "\{${2} \{${3}\}\}"  > /dev/null
+#    if [ "$?" != 0 ]
+#    then
+#         tet_infoline "ERROR: dcecp ${DCECP_CMD} failed in change_schema"
+#         cat ${DCECP_OUTPUT}
+# 	file_to_journal ${DCECP_OUTPUT}
+#         fail=1
+#    else
+#    	tet_infoline "Schema ${1} has been successfully MODIFIED in the registry."
+#    fi
+
+} # End of function change_schema
+
+#===============================================================================
+# Function:	change_neg_schema attr_name field_name field_value
+# Purpose:	Attempt to modify a schema entry in the registry without 
+#		permission.
+#===============================================================================
+change_neg_schema() {
+
+	# ASSUMPTION: The current schema entry is in the registry.  
+	 
+	tet_infoline "Attempting to change schema entry ${1} in registry without permission"
+
+   DCECP_CMD="xattrschema modify ${1} -change {${2} ${3}}"
+   dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+
+   cat ${DCECP_OUTPUT} | verify_existence "Error: this operation not implemented"  > /dev/null
+   if [ "$?" != 0 ]
+   then
+        tet_infoline "ERROR: dcecp ${DCECP_CMD} succeeded unexpectedly in change_neg_schema"
+        cat ${DCECP_OUTPUT}
+	file_to_journal ${DCECP_OUTPUT}
+        fail=1
+   else
+        tet_infoline "dcecp ${DCECP_CMD} failed as expected"
+   fi
+
+
+} # End of function change_neg_schema
+
+#===============================================================================
+# Function:	add_attr obj_type obj_name attr_name attr_val
+# Purpose:	Adds attributes to a principal, group, organization or policy
+#		in the registry.
+#===============================================================================
+add_attr() {
+	# obj_type determines what type of object we're operating on
+	# (principal, group, organization, registry) and is used to 
+	# determine dcecp command 
+
+	# ASSUMPTION: attrs don't already exist in database	
+	
+	# attr_name comes in fully qualified (eg w/ /.:/sec/xattrschema)
+	# but only need actual attr name for this commd
+	ATTR_NAME=${3##*/}
+	 
+	tet_infoline "Attempting to add attr ${ATTR_NAME} with val ${4} to ${1} ${2}"
+
+#NOTE added for debug:
+echo "dcecp -c xattr show /.:/sec/xattrschema/${ATTR_NAME}" > ${DCECP_OUTPUT}
+dcecp -c xattr show /.:/sec/xattrschema/${ATTR_NAME} >> ${DCECP_OUTPUT}
+echo "dcecp -c acl show /.:/sec/xattrschema" >> ${DCECP_OUTPUT}
+dcecp -c acl show /.:/sec/xattrschema >> ${DCECP_OUTPUT}
+echo "dcecp -c acl check /.:/sec/xattrschema" > ${DCECP_OUTPUT}
+dcecp -c acl check /.:/sec/xattrschema >> ${DCECP_OUTPUT}
+
+OBJ=$1
+if [ ${1} = "organization" ]; then
+   OBJ=org
+fi
+echo "dcecp -c acl show /.:/sec/${OBJ}" >> ${DCECP_OUTPUT}
+dcecp -c acl show /.:/sec/${OBJ} >> ${DCECP_OUTPUT}
+echo "dcecp -c acl check /.:/sec/${OBJ}" >> ${DCECP_OUTPUT}
+dcecp -c acl check /.:/sec/${OBJ} >> ${DCECP_OUTPUT}
+echo "dcecp -c acl show /.:/sec/${OBJ}/${2}" >> ${DCECP_OUTPUT}
+dcecp -c acl show /.:/sec/${OBJ}/${2} >> ${DCECP_OUTPUT}
+echo "dcecp -c acl check /.:/sec/${OBJ}/${2}" >> ${DCECP_OUTPUT}
+dcecp -c acl check /.:/sec/${OBJ}/${2} >> ${DCECP_OUTPUT}
+
+file_to_journal ${DCECP_OUTPUT}
+#end NOTE
+
+	DCECP_CMD="${1} modify ${2} -add {${ATTR_NAME} ${4}}"
+	dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+	if [ "$?" != 0 ]
+        then
+		tet_infoline "ERROR: dcecp ${DCECP_CMD} failed in add_attr"
+		fail=1
+		cat ${DCECP_OUTPUT}
+		file_to_journal ${DCECP_OUTPUT}
+                return 1
+        fi
+
+   	DCECP_CMD="${1} show ${2} -xattrs"
+   	dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+
+   	cat ${DCECP_OUTPUT} | verify_existence "${4}"  > /dev/null
+   	if [ "$?" != 0 ]
+   	then
+        	tet_infoline "ERROR: Attribute ${ATTR_NAME} was not added to registry as expected in add_attr"
+        	cat ${DCECP_OUTPUT}
+		file_to_journal ${DCECP_OUTPUT}
+        	fail=1
+   	else
+   		tet_infoline "Attribute ${ATTR_NAME} has been ADDED to ${1} ${2} in the registry in add_attr."
+   	fi
+
+} # End of function add_attr
+
+#===============================================================================
+# Function:	add_neg_attr obj_type obj_name attr_name attr_val
+# Purpose:	Attempts to add attribute to a principal, group, organization 
+#		or policy in the registry with SOME, but insufficient privileges.
+#===============================================================================
+add_neg_attr() {
+	# obj_type determines what type of object we're operating on
+	# (principal, group, organization, registry) and is used to 
+	# determine dcecp command 
+
+	# ASSUMPTION: attrs don't already exist in database	
+
+	# attr_name comes in fully qualified (eg w/ /.:/sec/xattrschema)
+	# but only need actual attr name for this commd
+	ATTR_NAME=${3##*/}
+	 
+	tet_infoline "Attempting to add attr ${ATTR_NAME} to ${1} object ${2} without permission"
+
+	DCECP_CMD="${1} modify ${2} -add {${ATTR_NAME} ${4}}"
+	dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+
+   	cat ${DCECP_OUTPUT} | verify_existence "Error: User is not authorized to update record" > /dev/null
+   	if [ "$?" != 0 ]
+   	then
+		cat ${DCECP_OUTPUT} | verify_existence "Error: unauthorized to perform this operation" > /dev/null
+   		if [ "$?" != 0 ]
+		then
+        		tet_infoline "ERROR: dcecp ${DCECP_CMD} succeeded unexpectedly in add_neg_attr"
+        		cat ${DCECP_OUTPUT}
+			file_to_journal ${DCECP_OUTPUT}
+        		fail=1
+   		else
+        		tet_infoline "dcecp ${DCECP_CMD} failed as expected"
+		fi
+   	else
+        	tet_infoline "dcecp ${DCECP_CMD} failed as expected"
+   	fi
+
+} # End of function add_neg_attr
+
+#===============================================================================
+# Function:	delete_attr obj_type obj_name attr_name attr_val
+# Purpose:	Deletes attribute from a principal, group, organization or policy
+#		in the registry.
+#===============================================================================
+delete_attr() {
+
+	# obj_type determines what type of object we're operating on
+	# (principal, group, organization, registry) and is used to 
+	# determine dcecp command 
+
+	# ASSUMPTION: attrs already exist in database	
+	 
+	# attr_name comes in fully qualified (eg w/ /.:/sec/xattrschema)
+	# but only need actual attr name for this commd
+	ATTR_NAME=${3##*/}
+	 
+	tet_infoline "Attempting to delete attr ${ATTR_NAME} from ${1} object ${2}"
+
+#NOTE added for debug:
+echo "dcecp -c xattr show /.:/sec/xattrschema/${ATTR_NAME}" > ${DCECP_OUTPUT}
+dcecp -c xattr show /.:/sec/xattrschema/${ATTR_NAME} >> ${DCECP_OUTPUT}
+echo "dcecp -c acl show /.:/sec/xattrschema" >> ${DCECP_OUTPUT}
+dcecp -c acl show /.:/sec/xattrschema >> ${DCECP_OUTPUT}
+
+OBJ=$1
+if [ ${1} = "organization" ]; then
+   OBJ=org
+fi
+echo "dcecp -c acl check /.:/sec/${OBJ}" >> ${DCECP_OUTPUT}
+dcecp -c acl check /.:/sec/${OBJ} >> ${DCECP_OUTPUT}
+echo "dcecp -c acl show /.:/sec/${OBJ}" >> ${DCECP_OUTPUT}
+dcecp -c acl show /.:/sec/${OBJ} >> ${DCECP_OUTPUT}
+echo "dcecp -c acl show /.:/sec/${OBJ}/${2}" >> ${DCECP_OUTPUT}
+dcecp -c acl show /.:/sec/${OBJ}/${2} >> ${DCECP_OUTPUT}
+echo "dcecp -c acl check /.:/sec/${OBJ}/${2}" >> ${DCECP_OUTPUT}
+dcecp -c acl check /.:/sec/${OBJ}/${2} >> ${DCECP_OUTPUT}
+
+file_to_journal ${DCECP_OUTPUT}
+#end NOTE
+
+	DCECP_CMD="${1} modify ${2} -remove ${ATTR_NAME}"
+	dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+	if [ "$?" != 0 ]
+        then
+		tet_infoline "ERROR: dcecp ${DCECP_CMD} failed in delete_attr"
+		fail=1
+		cat ${DCECP_OUTPUT}
+		file_to_journal ${DCECP_OUTPUT}
+                return 1
+        fi
+
+	DCECP_CMD="${1} show ${2} -xattrs"
+   	dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+
+   	cat ${DCECP_OUTPUT} | verify_existence "${ATTR_NAME}"> /dev/null
+   	if [ "$?" = 0 ]
+   	then
+        	tet_infoline "ERROR: Attribute ${ATTR_NAME} was not deleted from registry as expectedin delete_attr"
+        	cat ${DCECP_OUTPUT}
+		file_to_journal ${DCECP_OUTPUT}
+        	fail=1
+   	else
+   		tet_infoline "Attribute ${ATTR_NAME} has been DELETED from the registry."
+   	fi
+
+} # End of function delete_attr
+
+#===============================================================================
+# Function:	del_neg_attr obj_type obj_name attr_name attr_val
+# Purpose:	Attempts to delete attributes from a principal, group, organization 
+#		or policy in the registry with SOME, but insufficient permissions.
+#===============================================================================
+del_neg_attr() {
+	# obj_type determines what type of object we're operating on
+	# (principal, group, organization, registry) and is used to 
+	# determine dcecp command 
+
+	# ASSUMPTION: attr already exist in database	
+	 
+	# attr_name comes in fully qualified (eg w/ /.:/sec/xattrschema)
+	# but only need actual attr name for this commd
+	ATTR_NAME=${3##*/}
+	 
+	tet_infoline "Attempting to delete attr ${ATTR_NAME} from ${1} object ${2} with insufficient permissions"
+
+	DCECP_CMD="${1} modify ${2} -remove {${ATTR_NAME} ${4}}"
+	dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+
+	cat ${DCECP_OUTPUT} | verify_existence "Error: User is not authorized to update record" > /dev/null
+   	if [ "$?" != 0 ]; then
+	    cat ${DCECP_OUTPUT} | verify_existence "Error: unauthorized to perform this operation" > /dev/null
+   	    if [ "$?" != 0 ]; then
+            	tet_infoline "ERROR: dcecp ${DCECP_CMD} succeeded unexpectedly in del_neg_attr"
+            	cat ${DCECP_OUTPUT}
+	    	file_to_journal ${DCECP_OUTPUT}
+            	fail=1
+   	    else
+            	tet_infoline "dcecp ${DCECP_CMD} failed as expected in del_neg_attr"
+   	    fi
+   	else
+            tet_infoline "dcecp ${DCECP_CMD} failed as expected in del_neg_attr"
+   	fi
+
+} # End of function del_neg_attr
+
+#===============================================================================
+# Function:	change_attr obj_type obj_name attr_name attr_val
+# Purpose:	Change attribute from a principal, group, organization or policy
+#		in the registry.
+#===============================================================================
+change_attr() {
+	# obj_type determines what type of object we're operating on
+	# (principal, group, organization, registry) and is used to 
+	# determine dcecp command 
+
+	# ASSUMPTION: attrs already exist in database	
+	 
+	# attr_name comes in fully qualified (eg w/ /.:/sec/xattrschema)
+	# but only need actual attr name for this commd
+	ATTR_NAME=${3##*/}
+
+	tet_infoline "Attempting to change attr ${ATTR_NAME} on ${1} object ${2} to ${4}"
+
+#NOTE added for debug:
+echo "dcecp -c xattr show /.:/sec/xattrschema/${ATTR_NAME}" > ${DCECP_OUTPUT}
+dcecp -c xattr show /.:/sec/xattrschema/${ATTR_NAME} >> ${DCECP_OUTPUT}
+echo "dcecp -c acl show /.:/sec/xattrschema" >> ${DCECP_OUTPUT}
+dcecp -c acl show /.:/sec/xattrschema >> ${DCECP_OUTPUT}
+
+OBJ=$1
+if [ ${1} = "organization" ]; then
+   OBJ=org
+fi
+echo "dcecp -c acl show /.:/sec/${OBJ}" >> ${DCECP_OUTPUT}
+dcecp -c acl show /.:/sec/${OBJ} >> ${DCECP_OUTPUT}
+echo "dcecp -c acl check /.:/sec/${OBJ}" >> ${DCECP_OUTPUT}
+dcecp -c acl check /.:/sec/${OBJ} >> ${DCECP_OUTPUT}
+echo "dcecp -c acl show /.:/sec/${OBJ}/${2}" >> ${DCECP_OUTPUT}
+dcecp -c acl show /.:/sec/${OBJ}/${2} >> ${DCECP_OUTPUT}
+echo "dcecp -c acl check /.:/sec/${OBJ}/${2}" >> ${DCECP_OUTPUT}
+dcecp -c acl check /.:/sec/${OBJ}/${2} >> ${DCECP_OUTPUT}
+
+file_to_journal ${DCECP_OUTPUT}
+#end NOTE
+
+	DCECP_CMD="${1} modify ${2} -change {${ATTR_NAME} ${4}}"
+	dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+	if [ "$?" != 0 ]
+        then
+		tet_infoline "ERROR: dcecp ${DCECP_CMD} failed in change_attr"
+		cat ${DCECP_OUTPUT}
+		file_to_journal ${DCECP_OUTPUT}
+		fail=1
+                return 1
+        fi
+
+	DCECP_CMD="${1} show ${2} -xattrs"
+   	dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+
+   	cat ${DCECP_OUTPUT} | verify_existence "\{${ATTR_NAME} ${4}\}"  > /dev/null
+   if [ "$?" != 0 ]
+   then
+        tet_infoline "ERROR: Attribute ${ATTR_NAME} was not changed in registry as expected in change_attr"
+        cat ${DCECP_OUTPUT}
+		file_to_journal ${DCECP_OUTPUT}
+        fail=1
+   else
+   	tet_infoline "Attribute ${ATTR_NAME} has been CHANGED to ${4} in the registry."
+   fi
+
+} # End of function change_attr
+
+#===============================================================================
+# Function:	change_neg_attr obj_type obj_name attr_name attr_val
+# Purpose:	Attempt to change attribute on a principal, group, organization 
+#		in the registry without permissions.
+#===============================================================================
+change_neg_attr() {
+	# obj_type determines what type of object we're operating on
+	# (principal, group, organization, registry) and is used to 
+	# determine dcecp command 
+
+	# ASSUMPTION: attr already exists in database	
+	 
+	# attr_name comes in fully qualified (eg w/ /.:/sec/xattrschema)
+	# but only need actual attr name for this commd
+	ATTR_NAME=${3##*/}
+
+	tet_infoline "Attempting to change attr ${ATTR_NAME} from ${1} object ${2} without permission"
+
+	DCECP_CMD="${1} modify ${2} -change {${ATTR_NAME} ${4}}"
+	dcecp -c ${DCECP_CMD} > ${DCECP_OUTPUT} 2>&1
+
+	cat ${DCECP_OUTPUT} | verify_existence "Error: unauthorized to perform this operation" > /dev/null
+   	if [ "$?" != 0 ]
+   	then
+		cat ${DCECP_OUTPUT} | verify_existence "Error: User is not authorized to update record" > /dev/null
+   		if [ "$?" != 0 ]; then
+        	   tet_infoline "ERROR: dcecp ${DCECP_CMD} succeeded unexpectedly in change_neg_attr"
+        	   cat ${DCECP_OUTPUT}
+		   file_to_journal ${DCECP_OUTPUT}
+        	   fail=1
+   		else
+        	   tet_infoline "dcecp ${DCECP_CMD} failed as expected"
+   		fi
+   	else
+        	tet_infoline "dcecp ${DCECP_CMD} failed as expected"
+   	fi
+
+} # End of function change_neg_attr
+
+#===============================================================================
+# Function:	update_attr_val 
+# Purpose:	Switches values of orig/new attribute val vars
+#===============================================================================
+update_attr_val() {
+
+        TEMP=$ATTR_ORIG_VAL
+        ATTR_ORIG_VAL=$ATTR_NEW_VAL
+        ATTR_NEW_VAL=$TEMP
+}
+
+#===============================================================================
+# Function:	file_to_journal filename
+# Purpose:	output contents of specified file to tet journal
+#===============================================================================
+file_to_journal() {
+
+	    tet_infoline "Output of previous command:"
+            cat ${1} |
+            while read line ; do
+                tet_infoline "${line}"
+            done
+}

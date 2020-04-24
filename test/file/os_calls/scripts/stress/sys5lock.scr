@@ -1,0 +1,695 @@
+
+*
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* sys5lock.scr --
+*    This script implements system v lockings in a distrubuted maner.
+*
+
+* 
+* USAGE: ./file_test -l /.:/dfs_test/a    (for hub)
+*        ./file_test -c /.:/dfs_test/a    (for spokes)
+* Note: 
+*      1. Before running the script you have to create a cds directory
+*         /.:/dfs_test/a or whataver object in the naming space.
+*      2. It is really upto the tester (user) who can make different
+*         testing scenarios by start hub and spokes from different
+*         places (from a DFS or from LOCAL path, or form another machine).
+*      3. There are one hub and two spokes involved in the test.
+*         They could be under same client (at least two of them) or
+*         they could be running from at most two machines.  
+*      4. Check with Mike Kazar's syscall checklist "system v locking".
+*      5. The two spokes must be on the same machine.
+*      6. You can run the test in a combinations of local and DFS, which
+*         will give you wider range of test.
+*
+
+*
+* Testing schema:
+* This scripts will test shared lock, exclusive lock combining with
+* all possible range locks. There will be at least two clients in
+* the test, each will join a synch variable to get the job done.
+*
+
+*
+* Scenario 1: (lock entire file)
+*
+* proc1: set lock on entire file.
+* proc2: set lock on entire file too.
+*        it should fail.
+* proc1: release the lock by closing file id.
+* proc2: get the lock.
+* proc1: try the same trick.
+*        it should fail.
+* proc1: sleep on the lock.
+* hub:   issue the signal to wake up proc1.
+* proc1: wake up with returned error code EINTR.
+* All :  close file ids.
+* 
+
+* 
+* Scenario 2: (range locks including the overlap locks)
+*
+* proc1: set lock on range 0-300.
+* proc2: try get lock on range 0-100.
+*        should fail.
+* proc1: release lock on 100-200.
+* proc2: try to lock 50-150.
+*        should fail.
+*        then try to lock 100-200.
+* stress: try to lock 50-250.
+*         should fail.
+* proc1: release lock 200-300.
+* stress: get lock 200-300.
+
+*  
+* Scenario 3:
+*
+* This is not the real thing but it will be implemented by 
+* the above scenarios. For example, the getlk will be used
+* in various cases and during the testing both blocking 
+* and no-blocking will be tried on different process. 
+*
+
+*
+* Scenario 4:
+*
+* Test releasing locks by closing the file.
+* It will tested in earlier phases.
+*
+
+*
+* Scenario 5:
+* Test interruptabilty.
+*
+!* Include config file.
+include config
+
+* 
+* This procedure plays proc1 in the scenario. It tries to open, lock, 
+* unlock, and close a file.
+*
+set lockEntireFile_Proc1 proc END_PROC
+  echo
+  echo Locking test P1
+  echo PID = @ITL_ProcessId
+  echo 
+
+  set signalHandler proc ENDSIG_PROC
+    echo lockEntireFile_Proc1 signal proc activated.
+  ENDSIG_PROC
+
+  open $file64k @O_WRONLY 0777 fileId
+
+  if ( $ITL_SystemType == solaris || $ITL_SystemType == aix ) {
+    sigaction @SIGALRM signalHandler 0
+  }
+  else {
+    sigaction @SIGALRM signalHandler @SV_INTERRUPT
+  }
+  sync_join "lock_entire_file" $timeout
+  echo **** Locking entire file test. ****
+
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+  echo P1 Gets the lock on whole file.
+
+  sync_join "p1_get_lock" $timeout
+  echo P1 sync at p1_get_lock.
+
+  sync_join "p1_ready_to_release_lock" $timeout
+  
+* Sleep some time (10s) so that we can see P2 will be blocked
+  sleep 10000
+
+  sync_join "p1_release_lock" $timeout
+  echo P1 release lock by closing file.
+  close @fileId
+  open $file64k @O_WRONLY 0777 fileId
+
+  sync_join "p2_get_lock" $timeout
+  verifyStatus false
+  fcntl @fileId @F_SETLK setExclusiveLock
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: P1 gets the lock...
+  }
+  echo P1 can not get the lock.
+
+* The timer will wake up the this sleeping procedure.
+  alarm $wakeUpTimer
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLKW setExclusiveLock
+  if ( @ITL_Status != @EINTR ) {
+    echo FAILED: The return status of interrupted fcntl call is not right. --P1
+  }
+  else {
+    echo P1 received timeout signal and wake up.
+  }
+
+* Test F_GETLK command.
+  set setExclusiveLock fs_flock @F_RDLCK @SEEK_SET 1 2
+  fcntl @fileId @F_GETLK setExclusiveLock
+  if ( @setExclusiveLock.l_type != @F_WRLCK ) {
+    echo FAILED: F_GETLK gets wrong lock type. --P1
+  }
+  if ( @setExclusiveLock.l_whence != @SEEK_SET ) {
+    echo FAILED: F_GETLK gets wrong lock_whence. --P1
+  }
+  if ( @setExclusiveLock.l_start != 0 ) {
+    echo FAILED: F_GETLK gets wrong lock_start. --P1
+  }
+  if ( @setExclusiveLock.l_len != 0 ) {
+    echo FAILED: F_GETLK gets wrong lock_length. -- P1
+  }
+  verifyStatus true
+
+  sync_join "p2_release_lock" $timeout
+  echo P1 sync at p2_release_lock.
+
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLKW setExclusiveLock
+  echo P1 gets the lock because P2 release the lock.
+
+  sync_join "p1_get_lock_again" $timeout
+
+  sync_join "finish_lock_entire_file" $timeout
+  close @fileId
+
+* Test READ lock on the whole file.
+  open $file64k @O_RDONLY 0777 fileId
+
+  sync_join "read_lock"  $timeout
+
+  set setExclusiveLock fs_flock @F_RDLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+
+  sync_join "read_lock_done"  $timeout
+  sync_join "read_lock_check"  $timeout
+
+  set setExclusiveLock fs_flock @F_UNLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+  
+  sync_join "read_lock_check_done"  $timeout
+
+  close @fileId
+
+  echo End procedure P1.
+  echo
+
+END_PROC
+
+* 
+* This procedure plays the proc2 in the scenario. It tries to open, 
+* lock, unlock, and close a file.
+*
+set lockEntireFile_Proc2 proc END_PROC
+  echo
+  echo Locking test P2
+  echo PID = @ITL_ProcessId
+  echo 
+
+  open $file64k @O_WRONLY 0777 fileId
+
+  sync_join "lock_entire_file"  $timeout
+  echo **** Locking entire file test. ****
+
+  sync_join "p1_get_lock" $timeout
+  echo P2 sync at p1_get_lock.
+
+  verifyStatus false
+
+* Test F_GETLK command.
+  set setExclusiveLock fs_flock @F_RDLCK @SEEK_SET 1 2
+  fcntl @fileId @F_GETLK setExclusiveLock
+  if ( @setExclusiveLock.l_type != @F_WRLCK ) {
+    echo FAILED: F_GETLK gets wrong lock type. --P2
+  }
+  if ( @setExclusiveLock.l_whence != @SEEK_SET ) {
+    echo FAILED: F_GETLK gets wrong lock_whence. --P2
+  }
+  if ( @setExclusiveLock.l_start != 0 ) {
+    echo FAILED: F_GETLK gets wrong lock_start. --P2
+  }
+  if ( @setExclusiveLock.l_len != 0 ) {
+    echo FAILED: F_GETLK gets wrong lock_length.
+  }
+
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: P2 gets the lock.
+  }
+  echo P2 is blocked becuase P1 holds the lock.
+
+  sync_join "p1_ready_to_release_lock" $timeout
+
+  verifyStatus true
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLKW setExclusiveLock
+  echo P2 get lock because P1 releases lock by closing file.
+
+  sync_join "p2_get_lock" $timeout
+  
+  sync_join "p2_release_lock" $timeout
+  echo P2 sync at p2_release_lock.
+
+  set setExclusiveLock fs_flock @F_UNLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+
+  sync_join "p1_get_lock_again" $timeout
+
+  sync_join "finish_lock_entire_file"  $timeout
+  close @fileId
+
+* Test READ lock on the whole file.
+  open $file64k @O_RDONLY 0777 fileId
+
+  sync_join "read_lock"  $timeout
+
+  sync_join "read_lock_done"  $timeout
+
+  set setExclusiveLock fs_flock @F_RDLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+  if ( @ITL_Status != 0 ) {
+    echo FAILED: The lock shold be a shared lock (could not get it).
+  }
+
+  sync_join "read_lock_check"  $timeout
+
+  set setExclusiveLock fs_flock @F_UNLCK @SEEK_SET 0 0
+  fcntl @fileId @F_SETLK setExclusiveLock
+  
+  sync_join "read_lock_check_done"  $timeout
+
+  close @fileId
+
+  echo End procedure P2.
+  echo
+
+END_PROC
+
+* 
+* This procedure plays proc1 in the scenario. 
+*
+set lockRangeFile_Proc1 proc END_PROC
+
+  echo
+  echo Range locking test P1
+
+  open $file64k @O_WRONLY 0777 fileId
+
+  sync_join "lock_range_test" $timeout
+  echo **** Locking range test. ****
+
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 300
+  fcntl @fileId @F_SETLK setExclusiveLock
+  echo P1 Gets the lock 0-300.
+
+  sync_join "p1_get_lock_0-300" $timeout
+
+  sync_join "p1_release_lock-100-200" $timeout
+  echo P1 sync at p1 release lock 100-200
+
+  set setExclusiveLock fs_flock @F_UNLCK @SEEK_SET 100 100
+  fcntl @fileId @F_SETLK setExclusiveLock
+
+  sync_join "p1_release_lock-200-300" $timeout
+  echo P1 sync at p1 release lock 200-300
+
+  set setExclusiveLock fs_flock @F_UNLCK @SEEK_SET 200 100
+  fcntl @fileId @F_SETLK setExclusiveLock
+
+  sync_join "finish_lock_range_test" $timeout
+  close @fileId
+  echo End range lock procedure P1.
+  echo
+
+END_PROC
+
+* 
+* This procedure plays proc2 in the scenario. 
+*
+set lockRangeFile_Proc2 proc END_PROC
+
+  echo
+  echo Range locking test P2
+
+  open $file64k @O_WRONLY 0777 fileId
+
+  set rangeHandler proc ENDSIG_PROC
+    echo Range lock test signal handler activated.
+  ENDSIG_PROC
+  
+  if ( $ITL_SystemType == solaris || $ITL_SystemType == aix ) {
+    sigaction @SIGALRM rangeHandler 0
+  }
+  else {
+    sigaction @SIGALRM rangeHandler @SV_INTERRUPT
+  }
+
+  sync_join "lock_range_test" $timeout
+  echo **** Locking range test. ****
+
+  sync_join "p1_get_lock_0-300" $timeout
+
+* Test F_GETLK command.
+  verifyStatus false
+  set setExclusiveLock fs_flock @F_RDLCK @SEEK_SET 0 0
+  fcntl @fileId @F_GETLK setExclusiveLock
+  if ( @setExclusiveLock.l_type != @F_WRLCK ) {
+    echo FAILED: F_GETLK gets wrong lock type. --P2
+  }
+  if ( @setExclusiveLock.l_whence != @SEEK_SET ) {
+    echo FAILED: F_GETLK gets wrong lock_whence. --P2
+  }
+  if ( @setExclusiveLock.l_start != 0 ) {
+    echo FAILED: F_GETLK gets wrong lock_start. --P2
+  }
+  if ( @setExclusiveLock.l_len != 300 ) {
+    echo FAILED: F_GETLK gets wrong lock_length. --P2
+  }
+
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 100 
+  fcntl @fileId @F_SETLK setExclusiveLock
+  if ( @ITL_Status == 0 ) {
+     echo FAILED: P2 should be blocked because P1 has the lock.
+  }
+  echo P2 blocked from range 0-100.
+
+  alarm $wakeUpTimer
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 100 100
+  fcntl @fileId @F_SETLKW setExclusiveLock
+  if ( @ITL_Status != @EINTR ) {
+    if ( @ITL_Status == 0 ) {
+      echo FAILED: P2 should be blocked.
+    }
+    else {
+      echo FAILED: The return code should be EINTR.
+    }
+  }
+  else {
+    echo P2 wake up by catching a signal.
+  }
+  verifyStatus true
+
+  sync_join "p1_release_lock-100-200" $timeout
+  echo P2 sync at p1 release lock 100-200
+
+  sync_join "p1_release_lock-200-300" $timeout
+  echo P2 sync at p1 release lock 200-300
+
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 100 100
+  fcntl @fileId @F_SETLK setExclusiveLock
+  echo P2 gets the lock 100-200
+
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 200 100
+  fcntl @fileId @F_SETLKW setExclusiveLock
+  echo P2 gets the lock 200-300
+
+  sync_join "finish_lock_range_test" $timeout
+  close @fileId
+  echo End range lock procedure P2.
+  echo
+
+END_PROC
+
+*
+* Hollowing lock test is testing the lock token exchange from the 
+* entire file lock token to byte range lock tokens.
+*
+
+set HollowingFile_Proc1 proc END_PROC
+
+  echo
+  echo Begin holowing lock test.
+
+  stat $file64k var
+  set leftPoint (@var.st_size/3)
+  set rightPoint ( @var.st_size - @leftPoint )
+
+* Lock entire file
+
+  open $file64k @O_WRONLY 0777 fileId
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 0 
+  fcntl @fileId @F_SETLK setExclusiveLock
+
+  sync_join "hollow_lock_test" $timeout
+  echo **** Hollow out locking test. ****
+
+* Test release lock in middle range
+
+  sync_join "release_middle_range" $timeout
+
+  set setExclusiveLock fs_flock @F_UNLCK @SEEK_SET @leftPoint @leftPoint
+  fcntl @fileId @F_SETLK setExclusiveLock
+
+  sync_join "release_middle_range_done" $timeout
+
+  sync_join "finish_hollow_lock_test" $timeout
+  echo End hollowing lock test.
+  echo
+  
+END_PROC
+
+set HollowingFile_Proc2 proc END_PROC
+
+  echo
+  echo Begin holowing lock test.
+
+  open $file64k @O_WRONLY 0777 fileId
+
+  sync_join "hollow_lock_test" $timeout
+  echo **** Hollow out locking test. ****
+
+  stat $file64k var
+  set leftPoint (@var.st_size/3)
+  set rightPoint ( @var.st_size - @leftPoint )
+
+* Test middle range
+  verifyStatus false
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET @leftPoint @leftPoint 
+  fcntl @fileId @F_SETLK setExclusiveLock
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: Should not have the lock on the middle of the file.
+  }
+
+* Test left edge
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET 0 @leftPoint
+  fcntl @fileId @F_SETLK setExclusiveLock
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: Should not have the lock on the left edge of the file.
+  }
+
+* Test right edge
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET @rightPoint @leftPoint
+  fcntl @fileId @F_SETLK setExclusiveLock
+  if ( @ITL_Status == 0 ) {
+    echo FAILED: Should not have the lock on the right edge of the file.
+  }
+
+  verifyStatus true
+
+* Test release lock in middle range
+
+  sync_join "release_middle_range" $timeout
+  sync_join "release_middle_range_done" $timeout
+
+  set setExclusiveLock fs_flock @F_WRLCK @SEEK_SET @leftPoint @leftPoint 
+  fcntl @fileId @F_SETLK setExclusiveLock
+
+  sync_join "finish_hollow_lock_test" $timeout
+  echo End hollowing lock test.
+  echo
+  
+END_PROC
+
+***********************************************************************
+!* Set up for the HUB.
+open $file64k $O_RDWR 0777 fId
+* Set lock variable variable by type fs_flock.
+
+!* Check if there are two spokes.
+if ( $ITL_nspokes != 2 ) {
+  error Warning!! Need exact 2 test spokes to run this test.
+  quit
+}
+
+!* Test locking with length of 0x7fffffff.
+set getLock fs_flock $F_WRLCK $SEEK_SET 0 0x7fffffff
+fcntl $fId $F_SETLK getLock
+
+set getLock fs_flock $F_UNLCK $SEEK_SET 0 0x7fffffff
+fcntl $fId $F_SETLK getLock
+
+!* Dispatching the tasks amoung spokes.
+!* Test the lock interruptability and blocking and non-blocking 
+!* release lock by closing file.
+
+rexec_async $ITL_spoke[0] lockEntireFile_Proc1 result[0] p1AsyncId
+rexec_async $ITL_spoke[1] lockEntireFile_Proc2 result[1] p2AsyncId
+
+sync_create "lock_entire_file" 2  $timeout
+sync_release "lock_entire_file" 
+
+sync_create "p1_get_lock" 2  $timeout
+sync_release "p1_get_lock"
+
+!* Try to confirm after lockEntireFile_Proc1 getting the lock.
+set getLock fs_flock $F_RDLCK $SEEK_SET 1 2
+fcntl $fId $F_GETLK getLock
+if ( $getLock.l_type != $F_WRLCK ) {
+  echo FAILED: F_GETLK gets wrong lock type [$getLock.l_type] HUB.
+}
+if ( $getLock.l_whence != $SEEK_SET ) {
+  echo FAILED: F_GETLK gets wrong lock whence [$getLock.l_whence] HUB.
+}
+if ( $getLock.l_start != 0 ) {
+  echo FAILED: F_GETLK gets wrong lock start [$getLock.l_start] HUB.
+}
+if ( $getLock.l_len != 0 ) {
+  echo FAILED: F_GETLK gets wrong lock length [$getLock.l_len] HUB.
+}
+
+!* Confirmation done.
+sync_create "p1_ready_to_release_lock" 2  $timeout
+sync_release "p1_ready_to_release_lock"
+
+sync_create "p1_release_lock" 1  $timeout
+sync_release "p1_release_lock"
+
+sync_create "p2_get_lock" 2  $timeout
+sync_release "p2_get_lock"
+
+sync_create "p2_release_lock" 2  $timeout 
+sync_release "p2_release_lock"
+
+sync_create "p1_get_lock_again" 2  $timeout
+sync_release "p1_get_lock_again"
+
+sync_create "finish_lock_entire_file" 2  $timeout
+sync_release "finish_lock_entire_file" 
+
+!* Test READ lock on the whole file.
+sync_create "read_lock" 2  $timeout
+sync_release "read_lock" 
+
+sync_create "read_lock_done" 2  $timeout
+sync_release "read_lock_done" 
+
+sync_create "read_lock_check" 2  $timeout
+sync_release "read_lock_check" 
+
+sync_create "read_lock_check_done" 2  $timeout
+sync_release "read_lock_check_done" 
+
+close $fId
+
+async_join $p1AsyncId $timeout
+if ( $result[0] != 0 ) {
+  echo Spoke1 has a failure for whole file lock testing.
+}
+async_join $p2AsyncId $timeout
+if ( $result[1] != 0 ) {
+  echo Spoke2 has a failure for whole file lock testing.
+}
+
+!* Test range lock cases.
+open $file64k $O_RDWR 0777 fId
+rexec_async $ITL_spoke[0] lockRangeFile_Proc1 result[0] p1AsyncId
+rexec_async $ITL_spoke[1] lockRangeFile_Proc2 result[1] p2AsyncId
+
+sync_create "lock_range_test" 2  $timeout
+sync_release "lock_range_test" 
+
+sync_create "p1_get_lock_0-300" 2 $timeout
+sync_release "p1_get_lock_0-300" 
+
+sync_create "p1_release_lock-100-200" 2 $timeout
+sync_release "p1_release_lock-100-200"
+
+sync_create "p1_release_lock-200-300"  2 $timeout
+sync_release "p1_release_lock-200-300" 
+
+verifyStatus false
+set getLock fs_flock $F_WRLCK $SEEK_SET 50 49
+fcntl $fId $F_SETLK getLock
+if ( $ITL_Status == 0 ) {
+  echo FAILED: Hub get the lock (50-99).
+}
+set getLock fs_flock $F_WRLCK $SEEK_SET 50 200
+fcntl $fId $F_SETLK getLock
+if ( $ITL_Status == 0 ) {
+  echo FAILED: Hub get the lock (50-250).
+}
+set getLock fs_flock $F_WRLCK $SEEK_SET 200 100
+fcntl $fId $F_SETLK getLock
+if ( $ITL_Status == 0 ) {
+  echo FAILED: Hub get the lock (200-300).
+}
+verifyStatus true
+
+sync_create "finish_lock_range_test" 2  $timeout
+sync_release "finish_lock_range_test" 
+
+close $fId
+
+async_join $p1AsyncId $timeout
+if ( $result[0] != 0 ) {
+  echo Spoke1 has a failure for range lock testing.
+}
+async_join $p2AsyncId $timeout
+if ( $result[1] != 0 ) {
+  echo Spoke2 has a failure for range lock testing.
+}
+
+!* Hollowing lock test.
+rexec_async $ITL_spoke[0] HollowingFile_Proc1 result[0] p1AsyncId
+rexec_async $ITL_spoke[1] HollowingFile_Proc2 result[1] p2AsyncId
+  
+sync_create "hollow_lock_test" 2  $timeout
+sync_release "hollow_lock_test" 
+
+sync_create "release_middle_range" 2  $timeout
+sync_release "release_middle_range" 
+
+sync_create "release_middle_range_done" 2  $timeout
+sync_release "release_middle_range_done" 
+
+sync_create "finish_hollow_lock_test" 2  $timeout
+sync_release "finish_hollow_lock_test"
+
+async_join $p1AsyncId $timeout
+if ( $result[0] != 0 ) {
+  echo Spoke1 has a failure for hollowing lock testing.
+}
+async_join $p2AsyncId $timeout
+if ( $result[1] != 0 ) {
+  echo Spoke2 has a failure for hollowing lock testing.
+}
+echo Hub done.
+
+
+
+
+
+
+

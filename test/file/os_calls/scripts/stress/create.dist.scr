@@ -1,0 +1,440 @@
+
+* ID: $Id: 
+*
+* ORIGINS: Transarc Corp.
+*
+* (C) COPYRIGHT Transarc Corp. 1992
+* All Rights Reserved
+* Licensed Materials - Property of Transarc
+*
+* US Government Users Restricted Rights - Use, duplication or
+* disclosure restricted by GSA ADP Schedule Contract with Transarc Corp
+*
+
+*
+* @OSF_COPYRIGHT
+*
+* HISTORY
+* $Log$
+* $EndLog$
+*
+
+*
+* Test O_EXCL mode by ensuring that files created by either a stress
+* process or via a test process prevent a test process from creating a
+* file with the same name.  Try this twice, once running at high
+* concurrency (all calls executing concurrently, including the test
+* process that creates the name with O_EXCL), and once with concurrency
+* at the creation, but then waiting for the first create to return
+* before issuing the test create.
+*
+* Create files via from test process on client, while concurrently
+* stating file during and after create from other processes on the test
+* host.  Note that all stats issued after the create completes should
+* succeed.  Test checks race condition where create finds vnode for
+* just-created file already in cache.
+*
+* Create file from test process, while other test processes on the
+* same client lookup the new name, and while other stress processes try
+* to use the name and then update the file status.  Triggers race
+* conditions between token granting and revocation.  Once back from
+* create, have test client change the file's data (and leave the file
+* open), and then verify that stress processes see the change
+* immediately.  Finally, close and delete the file after others have
+* verified its data.  Note that this tests that the token is really at
+* the test client, since its revocation triggers the storeback of the
+* newly written data.
+*
+
+
+*
+* Note: Try this test on both single machin cell and multi-machine cell.
+*
+* 
+* USAGE: ./file_test -l {HUBNAME} -I {this_script} ; For HUB
+*        ./file_test -c {HUBNAME} : For other spokes
+*
+
+* Include config file.
+include config
+umask 0
+
+* Set the var loopTimes larger to have longer and more stress test.
+* There will be more get token and revoke token around.
+set loopTimes 10
+
+*
+* This procedure tests concurrent file creation (test1).
+*
+set test1_Proc proc END_PROC
+  echo
+  echo Create file with O_EXCL (test 1).
+
+  getwd workDir
+  chdir $testDir
+  umask 0
+
+  sync_join "create_files" $timeout
+  
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    open @fileName (@O_CREAT|@O_EXCL) 0777 fileId[@x]
+    close @fileId[@x]
+  endloop
+
+  sync_join "file_created" $timeout
+  sync_join "remove" $timeout
+  sync_join "remove_done" $timeout
+
+  sync_join "concurrent" $timeout
+
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    open @fileName (@O_CREAT|@O_EXCL) 0777 fileId[@x]
+    if ( @ITL_Status != 0 ) {
+      if ( @ITL_Status != @EEXIST ) {
+        echo FAILED: create file with O_EXCL.
+      }
+    }
+    else {
+      close @fileId[@x]
+    }
+  endloop
+  verifyStatus true
+
+  sync_join "concurrent_done" $timeout
+  
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    stat @fileName statVar[@x]
+  endloop 
+
+  sync_join "triger_race_condition" $timeout
+
+* This guy trys to update file data and leaves it open.
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    open @fileName @O_RDWR 0777 fileId[@x]
+    write @fileId[@x] @fileName
+
+    set syncVar ( "update" + @x )
+    sync_join @syncVar $timeout
+  endloop
+  
+  sync_join "triger_race_condition_done" $timeout
+
+  sync_join "delete_file" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x ) 
+    close @fileId[@x]
+    remove @fileName
+  endloop
+
+  sync_join "delete_file_done" $timeout
+
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo Test1 process done.
+  echo 
+END_PROC
+
+
+*
+* This procedure tests file creation. (test 2).
+*
+
+set test2_Proc proc END_PROC
+
+  echo
+  echo Create file with O_EXCL (test2).
+
+  getwd workDir
+  chdir $testDir
+  umask 0
+
+  sync_join "create_files" $timeout
+
+  sync_join "file_created" $timeout
+
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x ) 
+    open @fileName (@O_CREAT|@O_EXCL) 0777 fileId
+    if ( @ITL_Status == 0 ) {
+      echo FAILED: create file with O_EXCL passed when file already exists.
+    }
+  endloop
+  verifyStatus true
+
+  sync_join "remove" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x ) 
+    remove @fileName
+  endloop
+
+  sync_join "remove_done" $timeout
+
+  sync_join "concurrent" $timeout
+
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    open @fileName (@O_CREAT|@O_EXCL) 0777 fileId[@x]
+    if ( @ITL_Status != 0 ) {
+      if ( @ITL_Status != @EEXIST ) {
+        echo FAILED: create file with O_EXCL.
+      }
+    }
+    else {
+      close @fileId[@x]
+    }
+  endloop
+  verifyStatus true
+
+  sync_join "concurrent_done" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x ) 
+    stat @fileName statVar[@x]
+  endloop
+  
+  sync_join "triger_race_condition" $timeout
+
+* Hope this guy will have the token granted which means we have another
+* process's token revoked.
+
+  set junk string ""
+  loop x 1 1 $loopTimes
+
+    set fileName ( $testFile + @x )
+
+    chmod @fileName 0777
+
+    set syncVar ( "update" + @x )
+    sync_join @syncVar $timeout
+
+    set len #@fileName
+    open @fileName @O_RDWR 0777 fileId[@x]
+    read @fileId[@x] @len junk 
+    if ( @junk != @fileName ) {
+      echo FAILED: Wrong file data detected.
+    }
+  endloop
+
+
+  sync_join "triger_race_condition_done" $timeout
+
+  
+  sync_join "delete_file" $timeout
+
+  loop x 1 1 $loopTimes
+    close @fileId[@x]
+  endloop
+
+  sync_join "delete_file_done" $timeout
+
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    stat @fileName statVar[@x]
+    if ( @ITL_Status == 0 ) {
+      echo FAILED: file has not been deleted.
+    }
+  endloop
+  verifyStatus true
+  
+  sync_join "finish_sync" $timeout
+  chdir @workDir
+
+  echo test2 done.
+  echo
+END_PROC
+
+*
+* This procedure checks file status before and after file creation.
+*
+set stat_Proc proc END_PROC
+
+  echo
+  echo Concurent stat file.
+
+  getwd workDir
+  chdir $testDir
+  umask 0
+
+  sync_join "create_files" $timeout
+
+  sync_join "file_created" $timeout
+  
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x ) 
+    stat @fileName statVar[@x]
+  endloop
+
+  sync_join "remove" $timeout
+  sync_join "remove_done" $timeout
+
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    stat @fileName statVar[@x]
+    if ( @ITL_Status == 0 ) {
+      echo FAILED: file has been removed.
+    }
+  endloop
+  verifyStatus true
+
+  sync_join "concurrent" $timeout
+
+* Hard to check anything here because the stat here is to increase the
+* possible race condition or use the vnode that is just created.
+
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    stat @fileName statVar[@x]
+  endloop
+  verifyStatus true
+
+  sync_join "concurrent_done" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    stat @fileName statVar[@x]
+  endloop
+  
+  sync_join "triger_race_condition" $timeout
+
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    stat @fileName statVar[@x]
+    if ( ( @statVar[@x].st_mode & 0777 ) != 0777  ) {
+      set t   ( @statVar[@x].st_mode & 0777 )
+      echo @t 0777
+      echo FAILED: file @fileName's mod is wrong.
+    }
+
+    set syncVar ( "update" + @x )
+    sync_join @syncVar $timeout
+
+    stat @fileName statVar[@x]
+    if ( ! ( @statVar[@x].st_mode & 0777 ) ) {
+      echo FAILED: file @fileName's mod has wrong bits.
+    }
+  endloop
+  
+  sync_join "triger_race_condition_done" $timeout
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    stat @fileName statVar[@x]
+    if ( ! ( @statVar[@x].st_mode & 0777 ) ) {
+      echo FAILED: wrong mod bits.
+    }
+  endloop
+
+  sync_join "delete_file" $timeout
+  sync_join "delete_file_done" $timeout
+
+  verifyStatus false
+  loop x 1 1 $loopTimes
+    set fileName ( $testFile + @x )
+    stat @fileName statVar[@x]
+    if ( @ITL_Status == 0 ) {
+      echo FAILED: file has been deleted.
+    }
+  endloop 
+  verifyStatus true
+
+  
+  sync_join "finish_sync" $timeout
+
+  chdir @workDir
+
+  echo stat file done.
+  echo
+
+END_PROC
+
+
+
+****************************************************************************
+* Check spokes.
+if ( $ITL_nspokes < 3 ) {
+  echo FAILED: You need at least three spokes to run the test.
+  quit
+}
+
+loop loopVar 1 1 $loopTimes
+
+!* Dispatch procedures among spokes.
+rexec_async $ITL_spoke[0] test1_Proc result[0] asyncVar[0]
+rexec_async $ITL_spoke[1] test2_Proc result[1] asyncVar[1]
+
+loop x 2 1 ($ITL_nspokes-1)
+  rexec_async $ITL_spoke[$x] stat_Proc result[$x] asyncVar[$x]
+endLoop
+
+sync_create "create_files" $ITL_nspokes $timeout
+sync_release "create_files"
+
+sync_create "file_created" $ITL_nspokes $timeout
+sync_release "file_created"
+
+sync_create "remove" $ITL_nspokes $timeout
+sync_release "remove"
+
+sync_create "remove_done" $ITL_nspokes $timeout
+sync_release "remove_done"
+
+sync_create "concurrent" $ITL_nspokes $timeout
+sync_release "concurrent"
+
+sync_create "concurrent_done" $ITL_nspokes $timeout
+sync_release "concurrent_done"
+
+sync_create "triger_race_condition" $ITL_nspokes $timeout
+sync_release "triger_race_condition"
+
+loop x 1 1 $loopTimes
+  set syncVar ( "update" + $x )
+  sync_create $syncVar $ITL_nspokes $timeout
+  sync_release $syncVar
+endloop
+
+sync_create "triger_race_condition_done" $ITL_nspokes $timeout
+sync_release "triger_race_condition_done"
+
+sync_create "delete_file" $ITL_nspokes $timeout
+sync_release "delete_file"
+
+sync_create "delete_file_done" $ITL_nspokes $timeout
+sync_release "delete_file_done"
+
+sync_create "finish_sync" $ITL_nspokes $timeout
+sync_release "finish_sync"
+
+
+loop x 0 1 ($ITL_nspokes-1)
+  async_join $asyncVar[$x] $timeout
+endloop
+
+loop x 0 1 ($ITL_nspokes-1)
+  if ( $result[$x] != 0 ) {
+    echo Spoke $x has a failure.
+  }
+endloop
+
+exec clearDir_Proc $testDir
+mkdir $testDir 0777
+
+endloop
+
+chdir $currentDir
+
+echo HUB done.
+

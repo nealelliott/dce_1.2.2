@@ -1,0 +1,301 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1994 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# This test simulates a one-byte update error we found caused by
+# the transaction being marked as UNDO rather than REDO because there
+# was no start record in the log.
+# 
+# It was created by analyzing the output of readlog to develop a reproducible
+# example of the defect to verify that it was, in fact, fixed.
+#
+# See also OT 3721 for more information
+#
+# HISTORY
+# $Log: one-byte-batch-end.test,v $
+# Revision 1.1.9.1  1996/10/02  17:25:22  damon
+# 	Newest DFS from Transarc
+# 	[1996/10/01  18:32:38  damon]
+#
+# Revision 1.1.4.1  1994/06/09  14:01:16  annie
+# 	fixed copyright in src/file
+# 	[1994/06/08  21:36:31  annie]
+# 
+# Revision 1.1.2.4  1993/01/19  15:29:34  cjd
+# 	embedded copyright notice
+# 	[1993/01/19  13:50:10  cjd]
+# 
+# Revision 1.1.2.3  1992/09/15  20:31:00  jaffe
+# 	sync with Transarc
+# 	[92/09/15            jaffe]
+# 
+# Revision 1.1.2.2  1992/09/15  18:15:47  jaffe
+# 	Transarc delta: mason-ot3721-start-tran-not-required 1.6
+# 	   Selected comments:
+# 	     When a transaction has an end record, it should always be redone; I'm
+# 	     sure I've previously made this fix (long, long ago in a world far, far
+# 	     away).  This requires changing MarkCommitted in recovery and getting the
+# 	     regression test suite built again.  This is a CHECKPOINT only.
+# 	     Checkpoint first system which shows signs of really working.
+# 	     This checkpoint notes the first place where the regression test suite
+# 	     works again.  Additional work is required to verify that the original
+# 	     bug (as found by OTA) is really gone.
+# 	     This is another checkpoint.  I'm working on building the regression test.
+# 	     This is the new regression test.
+# 	     Make changes in readlog so it is easier to use.
+# 	     Oops.  Calling wrong log record printer. [tony, not ted]
+# 
+# 	$TALog: one-byte-batch-end.test,v $
+# 	Revision 1.3  1994/11/01  21:27:40  cfe
+# 	Bring over the changes that the OSF made in going from their DCE 1.0.3
+# 	release to their DCE 1.1 release.
+# 	[from r1.2 by delta cfe-db6109-merge-1.0.3-to-1.1-diffs, r1.1]
+# 
+# 	Revision 1.1  1992/08/06  20:39:52  mason
+# 	This is another checkpoint.  I'm working on building the regression test.
+# 
+# 	This is the new regression test.
+# 	[added by delta mason-ot3721-start-tran-not-required, revision 1.4]
+# 
+# $EndLog$
+#
+# $Header: /u0/rcs_trees/dce/rcs/file/episode/logbuf/one-byte-batch-end.test,v 1.1.9.1 1996/10/02 17:25:22 damon Exp $
+#
+# The aggregate has FILLIN data blocks.  The log has FILLIN blocks.
+#
+set logsize 86300 13
+
+opendata /tmp/dev-one 8192
+createlog /tmp/dev-two 1024	# use a small log
+openlog /tmp/dev-two 1024
+
+# initialize the meta-data pages touched by the script.
+pageset 0xAA 9889 9889
+pageset 0xAA 32381 32381
+pageset 0xAA 48885 48885
+pageset 0xAA 59420 59420
+pageset 0xAA 59422 59422
+pageset 0xAA 59425 59425
+pageset 0xAA 59428 59428
+pageset 0xAA 59445 59445
+pageset 0xAA 60279 60279
+pageset 0xAA 75950 75950
+
+start 1		# 1376721
+start 2	 	# 1376768
+start 3		# 1376769
+start 4		# 1376770
+start 5		# 1376771
+start 6		# 1376831
+start 7		# 1376976
+start 8		# 1377033
+start 9		# 1377055
+
+merge 1 2
+merge 1 3
+merge 1 4
+merge 1 5
+merge 1 6
+merge 1 7
+merge 1 8
+merge 1 9
+
+# this is reference 5 for transaction 3 with hash value 255320917
+data2 3 170 59445 7150 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff ffffffffffffffffffffffffffff000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+# this is reference 6 for transaction 3 with hash value 255320917
+data2 3 8 59445 7072 0000000000000000 000000000013f454
+# this is reference 7 for transaction 3 with hash value 255320917
+data2 3 4 9889 152 000050b4 000050b5
+# this is reference 8 for transaction 3 with hash value 255320917
+data2 3 8 9889 160 2a19a7282a19a728 2a19a7282a19a728
+# this is reference 9 for transaction 3 with hash value 255320917
+data2 3 108 59445 7212 000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 00000000000181a4000050b50000000000000000000000002a19a728000311ba2a19a728000311ba2a19a728000311ba000012e30000000b00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+# this is reference 1 for transaction 4 with hash value 262766709
+data2 4 1 28422 94 30 2d
+# this is reference 2 for transaction 4 with hash value 262766709
+data2 4 15 28422 1504 b937c268000001ee000050ae310100 b937c268000001ee000050ae00d100
+# this is reference 3 for transaction 4 with hash value 262766709
+data2 4 15 28422 1536 76e694c1000001f6000050af2d0101 b937c268000001f6000050af2d0100
+# this is reference 4 for transaction 4 with hash value 262766709
+data2 4 8 9889 144 000000000013f454 000000000013f455
+# this is reference 5 for transaction 4 with hash value 262766709
+data2 4 8 9889 160 2a19a7282a19a728 2a19a7282a19a728
+# this is reference 6 for transaction 4 with hash value 262766709
+data2 4 8 59420 5560 000000000013f450 000000000013f455
+# this is reference 7 for transaction 4 with hash value 262766709
+data2 4 28 59420 5720 000010812a19a7280000af922a19a7280000af922a19795d0008bb51 000010822a19a728000337de2a19a728000337de2a19795d0008bb51
+# this is reference 8 for transaction 4 with hash value 262766709
+data2 4 2 59445 5956 0001 0000
+# this is reference 9 for transaction 4 with hash value 262766709
+data2 4 4 9889 392 00000015 00000016
+# this is reference 10 for transaction 4 with hash value 262766709
+data2 4 8 9889 160 2a19a7282a19a728 2a19a7282a19a728
+# this is reference 11 for transaction 4 with hash value 262766709
+data2 4 8 9889 144 000000000013f455 000000000013f456
+# this is reference 12 for transaction 4 with hash value 262766709
+data2 4 8 9889 160 2a19a7282a19a728 2a19a7282a19a728
+# this is reference 13 for transaction 4 with hash value 262766709
+data2 4 8 59445 5812 000000000013f1a7 000000000013f456
+# this is reference 14 for transaction 4 with hash value 262766709
+data2 4 16 59445 5984 2a19a711000ce73f2a19a711000ce73f 2a19a728000337df2a19a711000ce73f
+# this is reference 1 for transaction 5 with hash value 97579172
+data2 5 4 9889 392 00000016 00000015
+# this is reference 2 for transaction 5 with hash value 97579172
+data2 5 8 9889 160 2a19a7282a19a728 2a19a7282a19a728
+# this is reference 3 for transaction 5 with hash value 97579172
+data2 5 4 59445 5808 b4002f6c b4000000
+# this is reference 4 for transaction 5 with hash value 97579172
+data2 5 4 59445 5808 b4000000 00000000
+# this is reference 1 for transaction 1 with hash value 262766709
+data2 1 1 48885 135 2f 00
+# this is reference 2 for transaction 1 with hash value 262766709
+data2 1 1 48885 4 30 2f
+# this is reference 3 for transaction 1 with hash value 262766709
+data2 1 15 48885 1504 76e694c1000001f9000050b1000101 b937c268000001f9000050b100d100
+# this is reference 4 for transaction 1 with hash value 262766709
+data2 1 8 9889 144 000000000013f4ad 000000000013f4ae
+# this is reference 5 for transaction 1 with hash value 262766709
+data2 1 8 9889 160 2a19a7282a19a728 2a19a7282a19a728
+# this is reference 9 for transaction 2 with hash value 255320917
+data2 2 1 32781 5 8b 8c
+# this is reference 10 for transaction 2 with hash value 255320917
+data2 2 1 32781 4 8b 8c
+# this is reference 11 for transaction 2 with hash value 255320917
+data2 2 64 32781 4448 b937c2680000000000000000007500000000000000000000000000000000000048000751801a0000540307ff4182ffa05403077b4082ff8063e300004bffb3a9 76e694c1000001ee000050b46f0101746d70622e5a4755447731000000000000b937c26800000000000000000074000000000000000000000000000000000000
+# this is reference 10 for transaction 3 with hash value 255320917
+data2 3 1 75950 4 2f 30
+# this is reference 11 for transaction 3 with hash value 255320917
+data2 3 64 75950 1504 b937c268000001f6000050a600d1006e6f746578697374323030303800000000b937c268000001ed0000506100d0006e6f746578697374333030303900000000 76e694c1000001fb000050b50001016e6f746578697374373030313200000000b937c268000001ed0000506100d0006e6f746578697374333030303900000000
+# this is reference 12 for transaction 3 with hash value 255320917
+data2 3 1 75950 152 00 2f
+# this is reference 13 for transaction 3 with hash value 255320917
+data2 3 8 9889 144 000000000013f4be 000000000013f4bf
+# this is reference 14 for transaction 3 with hash value 255320917
+data2 3 8 9889 160 2a19a7282a19a728 2a19a7292a19a729
+# this is reference 1 for transaction 6 with hash value 262766709
+data2 6 1 60279 159 30 00
+# this is reference 2 for transaction 6 with hash value 262766709
+data2 6 15 60279 1504 b937c268000001f7000050aa310100 b937c268000001f7000050aa00d100
+# this is reference 3 for transaction 6 with hash value 262766709
+data2 6 15 60279 1536 76e694c1000001f8000050b0000101 b937c268000001f8000050b0000100
+# this is reference 4 for transaction 6 with hash value 262766709
+data2 6 8 9889 144 000000000013f4bf 000000000013f4c0
+# this is reference 5 for transaction 6 with hash value 262766709
+data2 6 8 9889 160 2a19a7292a19a729 2a19a7292a19a729
+# this is reference 6 for transaction 1 with hash value 262766709
+data2 1 8 59428 4552 000000000013f1b6 000000000013f4ae
+# this is reference 7 for transaction 1 with hash value 262766709
+data2 1 28 59428 4712 000013bf2a19a712000599f82a19a712000599f82a197957000dcc5c 000013c02a19a729000848de2a19a729000848de2a197957000dcc5c
+# this is reference 8 for transaction 1 with hash value 262766709
+data2 1 2 59445 6712 0001 0000
+# this is reference 12 for transaction 2 with hash value 255320917
+data2 2 8 59420 32 0000000000001180 00000000000011a0
+# this is reference 6 for transaction 6 with hash value 262766709
+data2 6 8 59425 7324 000000000013f1b4 000000000013f4c0
+# this is reference 7 for transaction 6 with hash value 262766709
+data2 6 28 59425 7484 000017112a19a711000e3ec32a19a711000e3ec32a19796d0003d074 000017122a19a729000b69ea2a19a729000b69ea2a19796d0003d074
+# this is reference 8 for transaction 6 with hash value 262766709
+data2 6 2 59445 6460 0001 0000
+# this is reference 9 for transaction 1 with hash value 262766709
+data2 1 4 9889 392 00000015 00000016
+# this is reference 10 for transaction 1 with hash value 262766709
+data2 1 8 9889 160 2a19a72a2a19a72a 2a19a72a2a19a72a
+# this is reference 11 for transaction 1 with hash value 262766709
+data2 1 8 9889 144 000000000013f4e3 000000000013f4e4
+# this is reference 12 for transaction 1 with hash value 262766709
+data2 1 8 9889 160 2a19a72a2a19a72a 2a19a72a2a19a72a
+# this is reference 13 for transaction 1 with hash value 262766709
+data2 1 8 59445 6568 000000000013f453 000000000013f4e4
+# this is reference 14 for transaction 1 with hash value 262766709
+data2 1 16 59445 6740 2a19a728000147fa2a19a711000d33c8 2a19a72a0003d0722a19a711000d33c8
+# this is reference 1 for transaction 7 with hash value 97579172
+data2 7 4 9889 392 00000016 00000015
+# this is reference 2 for transaction 7 with hash value 97579172
+data2 7 8 9889 160 2a19a72a2a19a72a 2a19a72a2a19a72a
+# this is reference 3 for transaction 7 with hash value 97579172
+data2 7 4 59445 6564 b4002f6c b4000000
+# this is reference 4 for transaction 7 with hash value 97579172
+data2 7 4 59445 6564 b4000000 00000000
+# this is reference 13 for transaction 2 with hash value 255320917
+data2 2 1 32781 151 6f 8b
+# this is reference 14 for transaction 2 with hash value 255320917
+data2 2 8 9889 144 000000000013f4f8 000000000013f4f9
+# this is reference 15 for transaction 2 with hash value 255320917
+data2 2 8 9889 160 2a19a72a2a19a72a 2a19a72a2a19a72a
+# this is reference 16 for transaction 2 with hash value 255320917
+data2 2 8 59420 16 000000000013f1c3 000000000013f4f9
+# this is reference 17 for transaction 2 with hash value 255320917
+data2 2 28 59420 176 00000de12a19a71200054e072a19a71200054e072a197d3300067f17 00000de22a19a72a00059a3a2a19a72a00059a3a2a197d3300067f17
+# this is reference 1 for transaction 8 with hash value 262766709
+data2 8 1 32781 151 8b 6f
+# this is reference 2 for transaction 8 with hash value 262766709
+data2 8 1 32781 4 8c 8b
+# this is reference 3 for transaction 8 with hash value 262766709
+data2 8 15 32781 4448 76e694c1000001ee000050b46f0101 b937c268000001ee000050b4007500
+# this is reference 4 for transaction 8 with hash value 262766709
+data2 8 8 9889 144 000000000013f51d 000000000013f51e
+# this is reference 5 for transaction 8 with hash value 262766709
+data2 8 8 9889 160 2a19a72a2a19a72a 2a19a72a2a19a72a
+# this is reference 6 for transaction 8 with hash value 262766709
+data2 8 8 59420 16 000000000013f4f9 000000000013f51e
+# this is reference 7 for transaction 8 with hash value 262766709
+data2 8 28 59420 176 00000de22a19a72a00059a3a2a19a72a00059a3a2a197d3300067f17 00000de32a19a72a00059a3b2a19a72a00059a3b2a197d3300067f17
+# this is reference 8 for transaction 8 with hash value 262766709
+data2 8 2 59445 3940 0001 0000
+# this is reference 9 for transaction 8 with hash value 262766709
+data2 8 4 9889 392 00000015 00000016
+# this is reference 10 for transaction 8 with hash value 262766709
+data2 8 8 9889 160 2a19a72a2a19a72a 2a19a72a2a19a72a
+# this is reference 11 for transaction 8 with hash value 262766709
+data2 8 8 9889 144 000000000013f51e 000000000013f51f
+# this is reference 12 for transaction 8 with hash value 262766709
+data2 8 8 9889 160 2a19a72a2a19a72a 2a19a72a2a19a72a
+# this is reference 13 for transaction 8 with hash value 262766709
+data2 8 8 59445 3796 000000000013f453 000000000013f51f
+# this is reference 14 for transaction 8 with hash value 262766709
+data2 8 16 59445 3968 2a19a728000311b92a19a728000311b9 2a19a72a00059a3c2a19a728000311b9
+# this is reference 9 for transaction 6 with hash value 262766709
+data2 6 4 9889 392 00000016 00000017
+# this is reference 10 for transaction 6 with hash value 262766709
+data2 6 8 9889 160 2a19a72a2a19a72a 2a19a72a2a19a72a
+# this is reference 11 for transaction 6 with hash value 262766709
+data2 6 8 9889 144 000000000013f533 000000000013f534
+# this is reference 12 for transaction 6 with hash value 262766709
+data2 6 8 9889 160 2a19a72a2a19a72a 2a19a72a2a19a72a
+# this is reference 13 for transaction 6 with hash value 262766709
+data2 6 8 59445 6316 000000000013f1ad 000000000013f534
+# this is reference 14 for transaction 6 with hash value 262766709
+data2 6 16 59445 6488 2a19a711000d33c32a19a711000d33c3 2a19a72a0007d66f2a19a711000d33c3
+# this is reference 1 for transaction 9 with hash value 97579172
+data2 9 4 9889 392 00000017 00000016
+# this is reference 2 for transaction 9 with hash value 97579172
+data2 9 8 9889 160 2a19a72a2a19a72a 2a19a72a2a19a72a
+# this is reference 3 for transaction 9 with hash value 97579172
+data2 9 4 59445 6312 b4002f6c b4000000
+# this is reference 15 for transaction 3 with hash value 255320917
+data2 3 8 59422 2788 000000000013f0ef 000000000013f4bf
+# this is reference 16 for transaction 3 with hash value 255320917
+data2 3 28 59422 2948 000013c02a19a7100009a0242a19a7100009a0242a19794c000527d2 000013c12a19a72a000a12ac2a19a72a000a12ac2a19794c000527d2
+# this is reference 4 for transaction 9 with hash value 97579172
+data2 9 4 59445 6312 b4000000 00000000
+# this is reference 18 for transaction 2 with hash value 255320917
+bend 3
+# this is reference 19 for transaction 2 with hash value 255320917
+bend 4
+# this is reference 20 for transaction 2 with hash value 255320917
+bend 5
+# this is reference 21 for transaction 2 with hash value 255320917
+bend 1
+# this is reference 22 for transaction 2 with hash value 255320917
+bend 7
+# this is reference 23 for transaction 2 with hash value 255320917
+bend 8
+# this is reference 24 for transaction 2 with hash value 255320917
+bend 6
+# this is reference 25 for transaction 2 with hash value 255320917
+bend 9
+# this is reference 26 for transaction 2 with hash value 255320917
+end 2 

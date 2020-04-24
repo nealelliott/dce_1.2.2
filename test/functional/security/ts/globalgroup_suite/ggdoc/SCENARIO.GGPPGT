@@ -1,0 +1,655 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+#
+# HISTORY
+# $Log: SCENARIO.GGPPGT,v $
+BINRevision 1.1.2.1  1996/10/16  14:07:52  arvind
+BIN	OSF DCE 1.2.2 Drop 4.5
+BIN
+# $EndLog$
+#
+
+Details for propagation testing
+
+    Verify the propagation of GlobalGroup operation to the replica servers
+    in the cell.  Details are in ATTACH 1.
+
+    In this section, the trigger of propagating the registry database is
+    typing commands manually.
+    It is difficult to replace above method to convenient scripts.
+    Nevertheless we can execute verifying part by scripts.
+
+    Basic test plan of this term is:
+    - verify if global principal member operations items are propagated
+      to the slave replicas
+    - verify if global principal members are re-created on the slave replicas
+
+
+
+------------------------------ ATTACH 1 ------------------------------
+
+GLOBALGROUP TEST SCENARIO (propagation testing)
+
+1. Prerequisites
+
+    Propagation tests require two cells consisting of three nodes at
+    minimum.  One cell must have a master and a slave replica server, and
+    the other cell must have a master replica server.
+
+	cL	local cell (cell on the local host).
+		This cell will have a master and a slave replica server.
+	cR	remote cell (cell on the remote host)
+
+
+2. Test Scenario
+2.1 Setting up test condition
+
+    Create a group and an account into the local cell like bellow;
+
+	dcecp> group create gG
+	dcecp> principal create pL
+	dcecp> account create pL -group none -organization none
+
+	- gG means a group object which will include foreign principals
+	- pL means a principal object which belongs to the local cell
+
+    Create an account into the remote cell like bellow;
+
+	dcecp> principal create pR
+	dcecp> account create pR -group none -organization none
+
+	- pR means a principal object which belongs to the remote cell
+
+    After this operation, enable the cells to show each name space using
+    "dcecp cdscache create", and connect to remote cell using
+    "dcecp registry connect".
+
+    NOTICE:
+	In each scenario, the timings when the slave replica server should
+	be configured are different from each other.
+	So we don't configure the slave replica server at this time.
+
+
+2.2 Details for testing
+
+    Here are scenario diagrams for propagation testing.
+    In the diagrams below, `GG operation' means to modify registry database
+    by adding or removing global principals as a group member.
+
+    [scenario 1]
+			master		slave
+			(running)	(running)
+			  |		  |
+	   GG operation ->*		  |
+			  |		  |
+			  |		  |-> membership list are NOT updated
+			  |-------------->|
+			  |   propagate	  |-> membership list are UPDATED
+			  |		  |
+
+    [scenario 2]
+			master		slave
+			(running)	(stopped)
+			  |
+	   GG operation ->*
+			  |		  *<- start slave replica server 
+			  |		  |-> membership list are NOT updated
+			  |-------------->|
+			  |   propagate	  |-> membership list are UPDATED
+			  |		  |
+
+    [scenario 3]
+			master		slave
+			(running)	(not configured)
+			  |
+	   GG operation ->*
+			  |		  *<- configure slave replica server
+			  |		  |-> membership list are NOT updated
+			  |-------------->|
+			  |   propagate	  |-> membership list are UPDATED
+			  |		  |
+
+    [scenario 4]
+			master		slave
+			(running)	(stopped)
+			  |
+	   GG operation ->*
+			  |		  *<- start slave replica server 
+			  |		  |-> membership list are NOT updated
+			  |		  *<- dcecp registry -synchronize
+			  |-------------->|
+			  | reinitialize  |-> membership list are UPDATED
+			  |		  |
+			  |		  *<- dcecp registry -synchronize
+			  |-------------->|
+			  | reinitialize  |-> membership list are UPDATED
+			  |		  |
+
+    [scenario 5]
+			master		slave
+			(running)	(stopped)
+			  |
+	   GG operation ->*
+			  |		  *<- start slave replica server 
+			  |		  |-> membership list are NOT updated
+			  |		  *<- sec_admin initrep
+			  |-------------->|
+			  | reinitialize  |-> membership list are UPDATED
+			  |		  |
+			  |		  *<- sec_admin initrep
+			  |-------------->|
+			  | reinitialize  |-> membership list are UPDATED
+			  |		  |
+
+    [scenario 6]
+			master		slave
+			(running)	(stopped)
+			  |
+	   GG operation ->*
+			  |		  *<- start slave replica server 
+			  |		  |-> membership list are NOT updated
+ dcecp -c registry stop ->*		  |
+					  |
+   secd -restore_master ->*		  |
+			  |-------------->|
+			  | reinitialize  |-> membership list are UPDATED
+			  |		  |
+ dcecp -c registry stop ->*		  |
+					  |
+   secd -restore_master ->*		  |
+			  |-------------->|
+			  | reinitialize  |-> membership list are UPDATED
+			  |		  |
+
+
+2.2.1 automatic propagation while the slave replica server is running [scenario 1]
+
+    Modify Database by adding or removing global principals, then verify
+    if global principal member operations items are propagated to the slave
+    replica in the same cell correctly and automatically.
+    In this test scenario, the slave replica server must be running when the
+    GlobalGroup operation is executed.
+
+(1) configure and run the slave replica server in the cell cL
+
+	dce_config
+
+(2) login to the cell cL as a cell_admin
+
+	dce_login cell_admin
+
+(3) bind to the slave replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	dcecp>
+
+(4) add the principals, /.../cR/pR and pL, as members of the group gG
+
+	dcecp -c group add gG -member /.../cR/pR pL
+
+(5) bind to the master replica server, and verify that group gG has members above
+
+	dcecp> set _s(sec) /.:/sec/master
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(6) bind to the slave replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	dcecp>
+
+(7) after a while, bind to the slave replica server, and verify that group gG has members seen in (5) above
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(8) remove the principals, /.../cR/pR and pL, from the membership list of the group gG
+
+	dcecp -c group remove gG -member /.../cR/pR pL
+
+(9) bind to the master replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/master
+	dcecp> group list gG
+	dcecp>
+
+(10) bind to the slave replica server, and verify that group gG has members seen in (8) above
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(11) after a while, bind to the slave replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	dcecp>
+
+
+2.2.2 automatic propagation after starting the slave replica server [scenario 2]
+
+    Modify Database by adding or removing global principals, then verify
+    if global principal member operations items are propagated to the slave
+    replica in the same cell correctly when the replica get started.
+    In this test scenario, the slave replica server must be stopped when the
+    GlobalGroup operation is executed.
+
+(1) configure the slave replica server in the cell cL
+
+	dce_config
+
+(2) login to the cell cL as a cell_admin
+
+	dce_login cell_admin
+
+(3) STOP the slave replica server in the cell cL
+
+	dcecp> registry stop /.:/sec/<hostname of slave replica server>
+
+(4) add the principals, /.../cR/pR and pL, as members of the group gG
+
+	dcecp -c group add gG -member /.../cR/pR pL
+
+(5) bind to the master replica server, and verify that group gG has members above
+
+	dcecp> set _s(sec) /.:/sec/master
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(6) START the slave replica server in the cell cL on the slave replica node
+
+	secd
+
+(7) bind to the slave replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	dcecp>
+
+(8) after a while, bind to the slave replica server, and verify that group gG has members seen in (5) above
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(9) STOP the slave replica server in the cell cL
+
+	dcecp> registry stop /.:/sec/<hostname of slave replica server>
+
+(10) remove the principals, /.../cR/pR and pL, from the membership list of the group gG
+
+	dcecp -c group remove gG -member /.../cR/pR pL
+
+(11) bind to the master replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/master
+	dcecp> group list gG
+	dcecp>
+
+(12) START the slave replica server in the cell cL on the slave replica node
+
+	secd
+
+(13) bind to the slave replica server, and verify that group gG has members seen in (7) above
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(14) after a while, bind to the slave replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	dcecp>
+
+
+2.2.3 automatic propagation after configuring a new slave replica server [scenario 3]
+
+    Modify Database by adding or removing global principals, then verify
+    if global principal member operations items are propagated to the slave
+    replica in the same cell correctly after configuring a new slave replica.
+    In this test scenario, the slave replica server must NOT be configured
+    when the GlobalGroup operation is executed.
+
+(1) login to the cell cL as a cell_admin
+
+	dce_login cell_admin
+
+(2) add the principals, /.../cR/pR and pL, as members of the group gG
+
+	dcecp -c group add gG -member /.../cR/pR pL
+
+(3) bind to the master replica server, and verify that group gG has members above
+
+	dcecp> set _s(sec) /.:/sec/master
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(4) configure and run the slave replica server in the cell cL
+
+	dce_config
+
+(5) bind to the slave replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	dcecp>
+
+(6) after a while, bind to the slave replica server, and verify that group gG has members seen in (3) above
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(7) unconfigure the slave replica server in the cell cL
+
+	dce_config
+
+(8) remove the principals, /.../cR/pR and pL, from the membership list of the group gG
+
+	dcecp -c group remove gG -member /.../cR/pR pL
+
+(9) bind to the master replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/master
+	dcecp> group list gG
+	dcecp>
+
+(10) configure and run the slave replica server in the cell cL
+
+	dce_config
+
+(11) bind to the slave replica server, and verify that group gG has members seen in (6) above
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(12) after a while, bind to the slave replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	dcecp>
+
+
+2.2.4 reinitialize the slave replica with `dcecp registry synchronize' command [scenario 4]
+
+    Use `dcecp registry synchronize' command to reinitialize the slave replica
+    server, after modifying the registry database by adding or removing
+    global principals.
+    Then verify if the global principal members are re-created on
+    the slave replica correctly.
+
+(1) configure the slave replica server in the cell cL
+
+	dce_config
+
+(2) login to the cell cL as a cell_admin
+
+	dce_login cell_admin
+
+(3) STOP the slave replica server in the cell cL
+
+	dcecp> registry stop /.:/sec/<hostname of slave replica server>
+
+(4) add the principals, /.../cR/pR and pL, as members of the group gG
+
+	dcecp -c group add gG -member /.../cR/pR pL
+
+(5) bind to the master replica server, and verify that group gG has members above
+
+	dcecp> set _s(sec) /.:/sec/master
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(6) START the slave replica server in the cell cL on the slave replica node
+
+	secd
+
+(7) bind to the slave replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	dcecp>
+
+(8) reinitialize the registry database using `dcecp registry synchronize' command
+
+	dcecp> registry synchronize /.:/sec/<hostname of slave replica server>
+
+(9) bind to the slave replica server, and verify that group gG has members seen in (5) above
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(10) remove the principals, /.../cR/pR and pL, from the membership list of the group gG
+
+	dcecp -c group remove gG -member /.../cR/pR pL
+
+(11) bind to the master replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/master
+	dcecp> group list gG
+	dcecp>
+
+(12) bind to the slave replica server, and verify that group gG has members seen in (9) above
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(13) reinitialize the registry database using `dcecp registry synchronize' command
+
+	dcecp> registry synchronize /.:/sec/<hostname of slave replica server>
+
+(14) bind to the slave replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	dcecp>
+
+
+2.2.5 reinitialize the slave replica with `sec_admin initrep' command [scenario 5]
+
+    Use `sec_admin initrep' command to reinitialize the slave replica
+    server, after modifying the registry database by adding or removing
+    global principals.
+    Then verify if the global principal members are re-created on
+    the slave replica correctly.
+
+(1) configure the slave replica server in the cell cL
+
+	dce_config
+
+(2) login to the cell cL as a cell_admin
+
+	dce_login cell_admin
+
+(3) STOP the slave replica server in the cell cL
+
+	dcecp> registry stop /.:/sec/<hostname of slave replica server>
+
+(4) add the principals, /.../cR/pR and pL, as members of the group gG
+
+	dcecp -c group add gG -member /.../cR/pR pL
+
+(5) bind to the master replica server, and verify that group gG has members above
+
+	dcecp> set _s(sec) /.:/sec/master
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(6) START the slave replica server in the cell cL on the slave replica node
+
+	secd
+
+(7) bind to the slave replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	dcecp>
+
+(8) reinitialize the registry database using `sec_admin initrep' command
+
+	sec_admin> initrep /.:/sec/<hostname of slave replica server>
+
+(9) bind to the slave replica server, and verify that group gG has members seen in (5) above
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(10) remove the principals, /.../cR/pR and pL, from the membership list of the group gG
+
+	dcecp -c group remove gG -member /.../cR/pR pL
+
+(11) bind to the master replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/master
+	dcecp> group list gG
+	dcecp>
+
+(12) bind to the slave replica server, and verify that group gG has members seen in (9) above
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(13) reinitialize the registry database using `sec_admin initrep' command
+
+	sec_admin> initrep /.:/sec/<hostname of slave replica server>
+
+(14) bind to the slave replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	dcecp>
+
+
+2.2.6 reinitialize the slave replica with `secd -restore_master' command [scenario 6]
+
+    Use `secd -restore_master' command to reinitialize the slave replica
+    server, after modifying the registry database by adding or removing
+    global principals.
+    Then verify if the global principal members are re-created on
+    the slave replica correctly.
+
+(1) configure the slave replica server in the cell cL
+
+	dce_config
+
+(2) login to the cell cL as a cell_admin
+
+	dce_login cell_admin
+
+(3) STOP the slave replica server in the cell cL
+
+	dcecp> registry stop /.:/sec/<hostname of slave replica server>
+
+(4) add the principals, /.../cR/pR and pL, as members of the group gG
+
+	dcecp -c group add gG -member /.../cR/pR pL
+
+(5) bind to the master replica server, and verify that group gG has members above
+
+	dcecp> set _s(sec) /.:/sec/master
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(6) START the slave replica server in the cell cL on the slave replica node
+
+	secd
+
+(7) bind to the slave replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	dcecp>
+
+(8) stop the master replica server using `dcecp registry stop' command
+
+	dcecp> registry stop /.:/sec/master
+
+(9) reinitialize the registry database using `secd -restore_master' command on the master replica server host
+
+	secd -restore_master
+
+(10) bind to the slave replica server, and verify that group gG has members seen in (5) above
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(11) remove the principals, /.../cR/pR and pL, from the membership list of the group gG
+
+	dcecp -c group remove gG -member /.../cR/pR pL
+
+(12) bind to the master replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/master
+	dcecp> group list gG
+	dcecp>
+
+(13) bind to the slave replica server, and verify that group gG has members seen in (10) above
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	/.../cR/pR
+	/.../cL/pL
+	dcecp>
+
+(14) stop the master replica server using `dcecp registry stop' command
+
+	dcecp> registry stop /.:/sec/master
+
+(15) reinitialize the registry database using `secd -restore_master' command on the master replica server host
+
+	secd -restore_master
+
+(16) bind to the slave replica server, and verify that group gG has no members
+
+	dcecp> set _s(sec) /.:/sec/<hostname of slave replica server>
+	dcecp> group list gG
+	dcecp>
+

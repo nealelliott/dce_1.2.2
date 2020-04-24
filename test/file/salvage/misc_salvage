@@ -1,0 +1,102 @@
+#!/bin/sh
+
+# /* Copyright (C) 1995 Transarc Corporation - All rights reserved. */
+# $Header: /afs/tr/project/fs/dev/dfs-dev/src/test/file/salvage/RCS/misc_salvage,v 1.6 1995/07/20 15:13:36 ota Exp $
+
+: ${SALVAGE:=salvage}			# allow caller to override
+: ${BASH:=bash}
+: ${SLV_TEST_AGGRS:=/afs/transarc.com/usr/ota/de/salvage-data}
+: ${SLV_TEST_OUTPUT:=/afs/transarc.com/usr/ota/de/salvage-data/salvage-output}
+: ${SLV_TEST_STAGE:=/tmp/salvage-data}
+
+rc=0					# initialize exit code
+
+outpath=$SLV_TEST_OUTPUT
+badaggr=$SLV_TEST_STAGE/misc_salvage.aggr
+scratch_out=/tmp/misc_salvage.$$
+
+# Tests for db6603
+aggr=epi-blake
+zcat $SLV_TEST_AGGRS/$aggr.Z | scp - $badaggr
+name=last-verify
+rm -f $outpath/$aggr.$name.O
+
+# make the lastVerify code bad
+$BASH $badaggr 0x10048 1 -W32 13
+$SALVAGE -recover $badaggr 2>&1 >> $outpath/$aggr.$name.O
+status=$?
+if [ $status != 13 ]
+  then rc=1
+fi
+$BASH $badaggr 0x10048 1 -W32 0
+
+(echo ""; echo "##########"; echo "") >> $outpath/$aggr.$name.O
+
+# set the lastVerify date into the past
+$BASH $badaggr 0x10044 1 -W32 666666666
+$SALVAGE -verify $badaggr 2>&1 | tee $scratch_out >> $outpath/$aggr.$name.O
+status=$?
+if [ $status != 0 ]
+  then rc=1
+fi
+egrep -s "since Fri Feb 1. ..:11:06 1991" $scratch_out || rc=1
+$BASH $badaggr 0x10044 1 -W32 0
+
+(echo ""; echo "##########"; echo "") >> $outpath/$aggr.$name.O
+
+# check upgrade path from minor version 3 to 4
+$BASH $badaggr 0x10040 1 -W32 3
+$SALVAGE -verify $badaggr 2>&1 | tee $scratch_out >> $outpath/$aggr.$name.O
+status=$?
+if [ $status != 0 ]
+  then rc=1
+fi
+egrep -s "Disk format minor version .3. is old. current is 4" \
+  $scratch_out || rc=1
+(echo ""; echo "##########"; echo "") >> $outpath/$aggr.$name.O
+$SALVAGE -recover -verify $badaggr 2>&1 | tee $scratch_out \
+  >> $outpath/$aggr.$name.O
+status=$?
+if [ $status != 0 ]
+  then rc=1
+fi
+egrep -s "Disk format minor version .3. is old. current is 4" \
+  $scratch_out || rc=1
+(echo ""; echo "##########"; echo "") >> $outpath/$aggr.$name.O
+$SALVAGE $badaggr 2>&1 >> $outpath/$aggr.$name.O
+status=$?
+if [ $status != 3 ]
+  then rc=1
+fi
+
+aggr=epi0.kdeadlock.vm.0604
+zcat $SLV_TEST_AGGRS/$aggr.Z | scp - $badaggr
+
+# trash the magic number of the second bitmap page [db6440]
+name=bad-2nd-bitmap-page
+$BASH $badaggr 59383812 1 -W32 0
+$SALVAGE -verify $badaggr > $outpath/$aggr.$name.verify.O 2>&1
+status=$?
+if [ $status != 1 ]
+  then rc=1
+fi
+# restore aggr
+$BASH $badaggr 59383812 1 -W32 0x5b7674d7
+
+name=short-aggr
+perl -e "truncate ('$badaggr', 100000000);"
+$SALVAGE -verify $badaggr > $outpath/$aggr.$name.verify.O 2>&1
+status=$?
+if [ $status != 1 ]
+  then rc=1
+fi
+$SALVAGE -force -salvage $badaggr > $outpath/$aggr.$name.salvage.O 2>&1
+status=$?
+if [ $status != 3 ]
+  then rc=1
+fi
+
+rm $badaggr
+rm $scratch_out
+if [ $rc != 0 ]; then echo Some miscellaneous salvage tests failed; fi
+exit $rc

@@ -1,0 +1,115 @@
+#
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+# 
+# HISTORY
+# $Log: Makefile.tp,v $
+# Revision 1.1.6.2  1996/03/09  23:31:44  marty
+# 	Update OSF copyright year
+# 	[1996/03/09  22:46:52  marty]
+#
+# Revision 1.1.6.1  1995/12/08  18:13:09  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/3  1995/08/21  13:05 UTC  pare
+# 	Merge changes
+# 
+# 	HP revision /main/HPDCE02/pare_MOTHRA/3  1995/08/18  12:29 UTC  pare
+# 	Fix for CHFts16117 -- incorrect idl path
+# 
+# 	HP revision /main/HPDCE02/2  1995/07/28  19:35 UTC  pare
+# 	Merge changes
+# 
+# 	HP revision /main/HPDCE02/pare_MOTHRA/2  1995/07/27  20:25 UTC  pare
+# 	Add -Wl,-Bimmediate
+# 
+# 	HP revision /main/HPDCE02/pare_MOTHRA/1  1995/07/27  19:13 UTC  pare
+# 	Fix for CHFts15885 -- add dts_provider_util.o
+# 
+# 	HP revision /main/HPDCE02/1  1994/06/29  20:55 UTC  pare
+# 	Merge hpdce02 (DCE 1.1 beta) and HPDCE01 into HPDCE02
+# 	[1995/12/08  17:25:23  root]
+# 
+# Revision 1.1.4.1  1994/05/18  19:49:09  tom
+# 	Bug 10627 - Update to include all provider and new utils source file.
+# 	[1994/05/16  21:35:06  tom]
+# 
+# 	HP revision /main/HPDCE01/1  1994/02/01  14:19  pare
+# 	merge kk and hpdce01
+# 
+# Revision 1.1.3.4  1993/09/17  16:56:35  pare
+# 	DCE1_0_3b03 Merge
+# 	[1993/09/17  16:55:33  pare]
+# 
+# Revision 1.1.4.3  1993/09/15  17:48:08  root
+# 	    Loading drop DCE1_0_3b03
+# 	Revision 1.1.3.3  1993/08/25  18:39:50  pare
+# 	dts_ntp_provider, dts_null_provider and dts_spectracom_provider are
+# 	supported products and therefore are not exported to ../usr/examples/dts.
+# 	Remove the above targets from this makefile.
+# 	[1993/08/25  18:38:33  pare]
+# 
+# Revision 1.1.3.2  1993/07/22  18:07:43  pare
+# 	Customized for building examples on HP-UX
+# 	[1993/07/22  18:06:34  pare]
+# 
+# 	add file header and Embedding copyright notice
+# 	[1992/12/30  19:01:03  htf]
+# 
+# Revision 1.1.1.10  1993/05/04  22:39:36  mgm
+# 	    Loading drop DCE1_0_2FNL
+# 
+# $EndLog$
+#
+# Build for time-providers 
+# 
+
+#DEBUG     = -g
+INCENV     = -I. -I/usr/include/reentrant
+ANSI_FLAGS = -Aa -D_HPUX_SOURCE
+HP_FLAGS   = -D_REENTRANT 
+CFLAGS     = ${DEBUG} ${ANSI_FLAGS} ${HP_FLAGS} ${INCENV}
+LDFLAGS    = ${DEBUG} -Wl,-Bimmediate 
+LIBS       = -ldce -lc_r
+IDLFLAGS   = -keep c_source ${FLAGS} ${INCENV}
+IDL        = idl
+
+
+PROGRAMS   =  dts_acts_provider \
+	      dts_traconex_provider \
+	      dts_hopf_provider \
+	      dts_rcr_provider 
+
+server_OFILES = dts_acts_provider.o \
+		dts_traconex_provider.o \
+	        dts_hopf_provider.o \
+	        dts_rcr_provider.o \
+	        dts_provider_util.o 
+
+IDLGEN     = dtsprovider.h dtsprovider_*stub.c dtsprovider_*stub.o
+
+all:		objects $(PROGRAMS)
+objects:	$(server_OFILES)
+
+server_OFILES : dtsprovider.h
+
+clean:
+	rm -f ${server_OFILES} ${PROGRAMS} ${IDLGEN}
+
+dts_traconex_provider:	dts_traconex_provider.o dtsprovider_sstub.o dts_provider_util.o
+	$(CC) ${LDFLAGS} -o $@ $? $(LIBS)
+dts_hopf_provider:	dts_hopf_provider.o dtsprovider_sstub.o dts_provider_util.o
+	$(CC) ${LDFLAGS} -o $@ $? $(LIBS)
+dts_rcr_provider:	dts_rcr_provider.o dtsprovider_sstub.o dts_provider_util.o
+	$(CC) ${LDFLAGS} -o $@ $? $(LIBS)
+dts_acts_provider:	dts_acts_provider.o dtsprovider_sstub.o dts_provider_util.o
+	$(CC) ${LDFLAGS} -o $@ $? $(LIBS)
+
+
+dtsprovider.h : dtsprovider_sstub.c dtsprovider_cstub.c
+
+dtsprovider_sstub.c dtsprovider.h: /usr/include/dce/dtsprovider.idl
+	$(IDL) /usr/include/dce/dtsprovider.idl $(IDLFLAGS)

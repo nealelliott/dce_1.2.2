@@ -1,0 +1,388 @@
+#!/bin/ksh
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+# the full copyright text.
+# 
+# HISTORY
+# $Log: dcerpidl,v $
+# Revision 1.1.6.2  1996/03/09  20:51:01  marty
+# 	Add OSF copyright
+# 	[1996/03/09  20:28:58  marty]
+#
+# Revision 1.1.6.1  1995/12/11  22:00:54  root
+# 	Submit OSF/DCE 1.2.1
+# 
+# 	HP revision /main/HPDCE02/jrr_1.2_mothra/1  1995/11/29  18:46 UTC  bell_d
+# 	Merge in latest version fixed for heterogenous cell operation - rshell and copy test instead of rcp test.  Also
+# 	standardize set of timing variable.
+# 
+# 	HP revision /main/HPDCE02/1  1994/08/03  14:53 UTC  bissen
+# 	merge from HPDCE01
+# 
+# 	HP revision /main/HPDCE01/1  1994/03/25  16:34 UTC  bissen
+# 	merge changes
+# 
+# 	HP revision /main/bissen_systest/1  1994/03/25  16:33 UTC  bissen
+# 	add TESTNAME for remote host to get own binaries
+# 	[1995/12/11  21:40:54  root]
+# 
+# 	Initial King Kong branch
+# 	[1993/07/09  12:37:02  root]
+# 
+# Revision 1.1.3.4  1993/05/17  14:31:50  bissen
+# 	incorporated single and multiple loops
+# 	[1993/05/17  14:30:19  bissen]
+# 
+# Revision 1.1.3.3  1993/04/23  14:42:33  giza
+# 	add time looping
+# 	[1993/04/22  23:38:57  giza]
+# 
+# Revision 1.1.3.2  1993/03/31  12:48:39  mgm
+# 	Initial GAMERA branch
+# 
+# Revision 1.1.2.3  1992/12/09  14:50:41  mgm
+# 	Fixed cleanup()
+# 	[1992/12/09  14:50:19  mgm]
+# 
+# Revision 1.1.2.2  1992/11/03  22:05:15  mgm
+# 	bsubmit'd new dcerpidl for TET
+# 	[1992/11/03  22:03:40  mgm]
+# 
+# $EndLog$
+#
+#   TEST_NAME: dcerpidl
+# This test runs a selected number of dce idl tests.  The idea is to run
+# these between machines that have different endian representations.
+# 
+# However, please note, these programs are only being compiled thru ODE and
+# are not being compiled on the fly.
+# 
+# NOTE: THESE TESTS ONLY RUN ON SIMILAR HP-UX MACHINES
+# 
+# This test uses the following files:
+# 	dcerpidl
+# 	pipe_server
+# 	pipe_client
+# 	repas_server
+# 	repas_client
+# 	scal_server
+# 	scal_client
+# 	union_server
+# 	union_client
+# 	xmitas_server
+# 	xmitas_client
+#
+#   REQUIREMENTS:
+#      RPC.
+#
+#   RESTRICTIONS:
+#      None
+#
+#   USAGE:
+#	TET
+#
+#  CHANGE HISTORY
+#  	09/02/92	Rick O'Brien	Ported to TET.
+#
+###########################################################################
+
+tet_startup="startup"
+tet_cleanup="cleanup"
+iclist="ic1 ic2 ic3 ic4 ic5"
+ic1="id1"
+ic2="id2"
+ic3="id3"
+ic4="id4"
+ic5="id5"
+testlist="$ic1 $ic2 $ic3 $ic4 $ic5"
+
+startup ()
+{
+
+#===============================================================================
+# INITIALIZE VARIABLES
+#export MACHINES=""			# Can overide command line arg here!
+
+export TESTNAME="dcerpidl"
+export TESTDIR="/tet/rpc/ts"
+export PROTO="ncadg_ip_udp"             #Use datagram protocol string
+export MAXCALLS="10"                    #Create 10 listener threads
+
+
+export SERVER_PARMS="-P $PROTO -C $MAXCALLS"
+#===============================================================================
+	
+	ping_hosts
+}
+
+remove_testfile()
+{
+
+    for HOST in $HOSTLIST;do
+	if [ "$HOST" = `hostname` ];then
+	    rm -f $STTMPDIR/$CLIENT_FILE $STTMPDIR/$SERVER_FILE
+	else
+	    $RSH_COMM $HOST "rm -f $STTMPDIR/$CLIENT_FILE $STTMPDIR/$SERVER_FILE"
+	fi
+    done
+
+}
+
+rpc_idl ()
+{
+	tet_infoline "Running $testname "
+	LOOP=1
+        test_fail=0
+	CURRENT_LOOP=1
+	if [ -n "$RUNNING_TIME" ]
+	then
+	  RUN_TIME=$RUNNING_TIME
+	fi
+	if [ -n "$RUN_TIME" ]
+	then
+		SECONDS_TO_EXECUTE=`awk "BEGIN { printf (\"%d\", 3600 * $RUN_TIME); exit; }"`
+	fi
+	SECONDS=0
+	while [ $LOOP -eq 1 ]
+	do
+                tet_infoline "Starting iteration $CURRENT_LOOP"
+
+
+		start_server
+       		if [ $? -ne 0 ]
+       		then
+			tet_infoline "start_server failed in loop $CURRENT_LOOP"
+			tet_result FAIL
+       		        return
+       		fi
+
+		start_clients dcerpidl
+	        if [ $? -ne 0 ]
+        	then
+                        tet_infoline "invocation $CURRENT_LOOP failed start_clients"
+			test_fail=1
+	        fi
+	
+	
+		wait_for_clients
+	        if [ $? -ne 0 ]
+	        then
+                        tet_infoline "invocation $CURRENT_LOOP failed wait_for_clients"
+			test_fail=1
+	        fi
+
+
+		check_results
+		if [ $? -ne 0 ]
+		then
+                        tet_infoline "invocation $CURRENT_LOOP failed check_results"
+			test_fail=1
+		fi
+		
+		killproc $SERVER_FILE
+		rm -f $STTMPDIR/$CLIENT_FILE.*
+
+                CURRENT_LOOP=`expr $CURRENT_LOOP + 1`
+
+                if [ -n "$LOOPS_TO_EXECUTE" ]
+                then
+                        if [ $CURRENT_LOOP -gt $LOOPS_TO_EXECUTE ]
+                        then
+                                LOOP=0
+                        fi
+                elif [ -n "$RUN_TIME" ]
+                then
+                        if [ "$SECONDS" -ge "$SECONDS_TO_EXECUTE" ]
+                        then
+                                LOOP=0
+                        fi
+                else
+                        LOOP=0
+                fi
+
+	done
+        num_loops=`expr $CURRENT_LOOP - 1`
+        measure="minutes"
+        minutes=`expr $SECONDS / 60`
+        if [ $minutes -lt 2 ]
+        then
+          minutes=$SECONDS
+          measure="seconds"
+        fi
+        tet_infoline "$testname test ran for $num_loops loops/iterations in $minutes $measure"
+
+	if [ $test_fail -eq 0 ]
+	then
+		tet_result PASS
+	else
+		tet_result FAIL
+	fi
+}
+
+
+#===============================================================================
+#   TEST PURPOSE OVERVIEW: id1
+#
+#	dcerpid1 is designed to test the transmit_as attribute of IDL.
+#       This attribute allows the application writer to transmit complex
+#       data types via RPC.
+#
+#       The client create a random number of integers and contructs a linked
+#       list with them.  The client then transmits this list to the server
+#       process.  Since linked lists qualify as a complex data structure,
+#       the list has to be converted into a transmittable type.  The list
+#	is converted into an array of integers and transmitted to the server.
+#
+#       The server receives the list as a linked list (not an array.  the
+#       array was converted back to a linked list prior to the manager
+#       routine receiving of the data structure).  The server simply adds 
+#       all the number in the linked list and returns that value to the client.
+#       The client then verifies that the sum computed at the server matches
+#       the sum computed locally.
+#
+#   FILES: dcerpidl (this file)
+#	Sources
+#	   xmitas.idl
+#	   xmitas_server.c
+#	   xmitas_mgr.c
+#	   xmitas_client.c
+#	   xmitas_aux.c
+#	   xmitas_util.h
+#	   xmitas_util.c
+#	   util_xmit.c
+#
+#
+id1()
+{
+export SERVER_FILE="xmitas_server"
+export CLIENT_FILE="xmitas_client"
+
+export PORT=6312 			#Obtain port 6312 from RPC
+export CLIENT_PARMS="-P $PROTO -X $PORT"
+export testname=dcerpidl1
+	rpc_idl
+	remove_testfile
+}
+
+
+#===============================================================================
+#   TEST PURPOSE OVERVIEW: id2
+#	dcerpid2 is designed to test the use of an Attribute Configuration 
+#       Files (ACF) when building an RPC client/server model.  The test is
+#       two sections:  a server side and a client side.
+#
+#       The client simply assigns values to a structure that will be passed
+#       to the server.  This structure contains information about creating
+#       a file and what to write to the file.  The rpc calls are made and
+#       the status of each call is print out for the user to see.  Binding
+#	is facilitated using implicit handles.
+#
+#       The server receives the above mentioned structure.  This structure
+#       contains the name of the file to open/create, what to write to the 
+#       file and the modes and permissions to apply to the file.  The file 
+#       is opened using the information above, the contents are written to
+#       the file, the contents are read from the file and then the file is
+#       executed. 
+#
+id2()
+{
+export SERVER_FILE="pipe_server"
+export CLIENT_FILE="pipe_client"
+export PORT=35002
+export CLIENT_PARMS="-P $PROTO -X $PORT"
+export testname=dcerpidl2
+	rpc_idl
+	remove_testfile
+}
+
+
+#===============================================================================
+#   TEST PURPOSE OVERVIEW: id3
+#	dcerpid3 is designed to test the transmission of various data types
+#       between hosts.  The idea is to run this test between machines with
+#       different endian types.
+#
+#       See C code for complete description of the various data types passed.
+#
+id3()
+{
+export SERVER_FILE="scal_server"
+export CLIENT_FILE="scal_client"
+export PORT=6678
+export CLIENT_PARMS="-P $PROTO -X $PORT"
+export testname=dcerpidl3
+
+	rpc_idl
+	remove_testfile
+}
+
+
+#===============================================================================
+#   TEST PURPOSE OVERVIEW: id4
+#	dcerpid4 is designed to test the union transmission capabilities
+#       of RPC.
+#
+#       Check the C code prologs for details of the function.
+#
+id4()
+{
+export SERVER_FILE="union_server"
+export CLIENT_FILE="union_client"
+export PORT=9009
+export CLIENT_PARMS="-P $PROTO -X $PORT"
+export testname=dcerpidl4
+
+	rpc_idl
+	remove_testfile
+}
+
+
+#===============================================================================
+#   TEST PURPOSE OVERVIEW: id5
+#	dcerpid5 is designed to test the repas_as attribute of IDL.
+#
+#	Check C code prologs for details on the function of the test.
+#
+id5()
+{
+export SERVER_FILE="repas_server"
+export CLIENT_FILE="repas_client"
+export PORT=6098
+export CLIENT_PARMS="-P $PROTO -X $PORT"
+export testname=dcerpidl5
+
+	rpc_idl
+	remove_testfile
+}
+
+
+	
+cleanup ()
+{
+	killproc pipe_server
+	killproc repas_server
+	killproc scal_server
+	killproc union_server
+	killproc xmitas_server
+	sleep 10
+	rm -f $STTMPDIR/pipe_client.* 
+	rm -f $STTMPDIR/repas_client.* 
+	rm -f $STTMPDIR/scal_client.* 
+	rm -f $STTMPDIR/union_client.* 
+	rm -f $STTMPDIR/xmitas_client.*
+	if [ -f ./core ];then
+	   if [ ! -d $STTMPDIR/rpc ];then
+	      mkdir $STTMPDIR/rpc
+           fi
+	   mv ./core $STTMPDIR/rpc/core$$
+	fi
+}
+
+# tcc will fail if these files don't exist and get sourced
+# so there is no need to check that this happens
+
+. $TET_ROOT/profile.dcest
+. $TET_ROOT/rpc/ts/common_functions
+. $TCM

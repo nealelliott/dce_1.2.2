@@ -1,0 +1,819 @@
+<HTML>
+<HEAD>
+<TITLE>Detail Design: Administrative Interface</TITLE>
+</HEAD>
+<!-- $Header: /project/dce/mos/release/mos-961203/doc/webpages/dd/RCS/dd-adm.html,v 1.23 1996/11/08 21:18:09 bowe Exp $ -->
+<BODY>
+<H1 ALIGN=CENTER>Detail Design: Administrative Interface</H1>
+<P ALIGN=CENTER>
+<EM>12-Sept-96</EM>
+</P>
+
+Dcecp is the interface that users and administrators use to operate 
+with the queuing system. We supply the new code and updated main code in
+our release, so that licensees can re-make dcecp with the new queuing
+support. 
+<P>
+
+<H2>Access Control Lists</H2>
+
+All operations are guarded with DCE access control lists (ACLs). As long as
+one has the right permissions, he can use the following dcecp commands to
+perform on queues and messages.
+<P>
+
+<H3>Permissions for a queue manager's ACL</H3>
+
+The following permission bits are supported for the Q-mgr's ACL manager
+interface: 
+<P>
+<CENTER>
+<TABLE>
+<TR> <TD>i <TD> queue creation
+<TR> <TD>m <TD> queue manager server management (enable and disable server, etc)
+<TR> <TD>r <TD>	read queue manager attributes and status
+<TR> <TD>c <TD> control (change ACL)
+<TR> <TD>t <TD>	test
+</TABLE>
+</CENTER>
+
+<H3>Permissions for a queue's ACL</H3>
+
+The following permission bits are supported for queue operations:
+<P>
+<CENTER>
+<TABLE>       
+<TR> <TD>D <TD>	delete queue
+<TR> <TD>M <TD>	manage queue
+	(enable/disable queue, modify attr., move, etc.)
+<TR> <TD>R <TD>	read queue attributes
+<TR> <TD>e <TD>	enqueue an element (message)
+<TR> <TD>d <TD>	dequeue an element (message)
+<TR> <TD>r <TD>	read message attributes
+<TR> <TD>p <TD> purge/delete an element (without reading data)
+<TR> <TD>c <TD> control (change ACL)
+<TR> <TD>t <TD>	test
+</TABLE>
+</CENTER>
+<P>
+The upper case permission bits apply to the "queue" as a container, while
+the lower case permission bits apply to all messages in the queue.
+<P>
+
+<H2>Variables</H2>
+
+<H3>Default Queue Manager</H3>
+
+When a user does not explicitly specify a queue manager for certain
+operations that require a queue manager's name, it is assumed that he
+wants to use the default queue manager.
+<P>
+A default queue manager can be specified by the following ways:
+<P>
+1. by environment variable MOS_DFLT_QUEMGR_NAME
+<BR>
+2. by a per-host specification that is statically configured
+<BR>
+3. by a cell wide specification that is statically configured
+<P>
+This also specifies the order for searching a default queue manager.
+<P>
+With dcecp, we also allow the user to set a variable to
+specify a default queue manager: <CODE>mos_default_qmgr</CODE>.
+<P>
+For any operations that require a queue manager and the command is
+missing the queue manager specification, this variable is checked
+first to see if it has been set. If so, the queue manager specified
+there is used. Otherwise the above search happens.
+<P>
+<H3>Security Group</H3>
+
+In order to perform mutual authentication between the user and the
+queue manager, we require that the security group name that the queue
+manager belongs to be given. To simply the command typing, we define
+a variable: <CODE>mos_qmgr_group</CODE>.
+<P>
+When a command is missing the group specification, "queue" commands
+will first check whether this variable is set. If so, this group is
+used. If this variable is not set either, the command will use one
+way authentication to talk to the queue manager: it has to trust CDS
+(if used), as well as the server contacted.
+<P>
+
+<H3>Message Encoded Body</H3>
+
+When showing a message body, the encoded body (binary) cannot be
+shown correctly on screen. Instead, we save it to a 
+variable <CODE>mos_encoded_msg</CODE> in hexadecimal format.
+
+
+<H2>Operations</H2>
+
+<H3>Queue Creation</H3>
+
+<PRE>
+queue create <VAR>queue</VAR>
+		[-attribute <VAR>attribute_list</VAR>]
+		[ [-qmaxlength <VAR>queue_max_length</VAR>]
+		  [-msgmaxsize <VAR>message_max_size</VAR>]
+		  [-persistent <CODE>msgpersistence|persistent|volatile</CODE>]
+		  [-enqueue <CODE>yes|no</CODE>] 
+		  [-dequeue <CODE>yes|no</CODE>]
+		  [-annotation <VAR>string</VAR>]
+		  [-timeout <VAR>empty_idle_timeout</VAR>] ]
+                [-group <VAR>sec_group_name</VAR>]
+</PRE>
+
+This command creates a new queue with the given name.
+<P>
+If the queue name is "", a queue will be created on the default queue manager,
+and the default queue manager will assign a name for the queue.
+<P>
+
+If the name is a relative name, the queue will be created on the default
+queue manager with the given relative name. The complete name for the queue 
+(used later to reference this queue) is a junction name with the queue
+manager's name followed by the relative name.
+<P>
+
+If the name is a fully qualified name, it is assumed that a junction
+name is given and the name will be resolved into two parts. The first
+part is taken as the queue manager's name, the second part as the
+relative name for the new queue. If the second part is missing, a new
+queue will be created on the queue manager with a queue manager
+assigned name.
+<P>
+
+In any case, if the named queue exists, an error will return. 
+<P>
+When a queue is first created, both enqueue and dequeue operations are
+enabled. The creator can disable either one operation.
+<P>
+A queue has a persistency attribute. An "persistent" queue
+saves all messages. A "volatile" queue never saves any
+messages, sending a persistent message to such a queue will result in
+an error. A "msgpersistence" queue saves only the persistent
+messages.  This is the default behavior if not set.
+<P>
+A queue has an attribute which controls how long the queue should be kept
+alive when there is nothing in it before it should be deleted by the queue 
+manager. The default is 24 hours.
+<P>
+The fully qualified name of the newly created queue will be retuned.
+<P>
+<DL>
+<DT>Permission required:<DD> "i" bit on the Q-mgr acl
+<P>
+
+<DT>Options:<DD>
+<P>
+<DT>-attribute <VAR>attribute_list</VAR><DD>
+		specify the attributes in a list of {name value} pair(s).
+<P>
+<DT>-qmaxlength <VAR>queue_max_length</VAR><DD>
+		specify the queue maximum length in term of number of messages that
+		the queue can keep. "0" means an unlimited queue.
+<P>
+<DT>-msgmaxsize <VAR>message_max_size</VAR><DD>
+		specify the maximum message size in term of number of 
+		bytes. "0" means unlimited.
+<P>
+<DT>-persistent <VAR>msgpersistence|persistent|volatile</VAR><DD>
+		specify the queue persistency. The valid values are:
+<UL>
+<LI>msgpersistence. Message persistence dictates. The queue saves persistent messages only.
+<LI>persistent. The queue always saves messages.
+<LI>volatile. The queue never saves any message. Sending a persistent message
+to such a queue will result in an error.
+</UL>
+<P>
+<DT>-enqueue <CODE>yes|no</CODE><DD>
+		specify whether enqueue operation is enabled or disabled.
+		The default is to enable it.
+<P>
+<DT>-dequeue <CODE>yes|no</CODE><DD>
+		specify whether dequeue operation is enabled or disabled.
+		The default is to enable it.
+<P>
+<DT>-annotation <VAR>string</VAR><DD>
+		specify a string for the queue annotation.
+<P>
+<DT>-timeout <VAR>empty_queue_idle_timeout</VAR><DD>
+		specify how long the queue should be kept when it is empty
+		before it will be deleted by the queue manager. The default
+		is 24 hours.
+<BR>
+		The format should be in the relative utc format. Specify
+		"0" for forever (never expire). To specify 22 hours and 30
+		minutes, enter "+0-22:30:00.000".
+<P>
+<DT>-group <VAR>sec_group_name</VAR><DD>
+     specify the security group name which the queue manager belongs to. 
+<P>
+<DT>Variables used:<DD>
+<P>
+<DT><CODE>mos_default_qmgr</CODE><DD>
+specify the default queue manager.
+<DT><CODE>mos_qmgr_group</CODE><DD>
+specify the sec group name for the queue manager.
+</DL>
+
+<H3>Queue Listing</H3>
+
+<PRE>
+queue catalog <VAR>q-mgr</VAR>
+	[-simplename]
+	[-group <VAR>sec_group_name</VAR>]
+</PRE>
+
+This command lists all queues on the named queue manager. If the
+queue manager is empty, this command will list queues on the default
+queue manager.
+<P>
+By default, this command returns queue names in their fully qualified 
+format (starting with the queue manager's name). If "-simplename" is
+specified, this command returns just the relative simple names for
+the queues.
+<P>
+<DL>
+<DT>Permission required:<DD> "s" bit on the Q-mgr acl
+<P>
+<DT>Option:<DD>
+<P>
+<DT>-simplename<DD>
+    specify that only the relative simple names should be returned.
+<P>
+<DT>-group <VAR>sec_group_name</VAR><DD>
+     specify the security group name which the qmgr belongs to. 
+<P>
+<DT>Variables used:<DD>
+<P>
+<DT><CODE>mos_default_qmgr</CODE><DD>
+specify the default queue manager.
+<DT><CODE>mos_qmgr_group</CODE><DD>
+specify the sec group name for the queue manager.
+</DL>
+
+
+<H3>Queue Deletion</H3>
+
+<PRE>
+queue delete <VAR>queue</VAR> [-force]
+                  [-group <VAR>sec_group_name</VAR>]
+</PRE>
+
+This command causes the named queue to be deleted. If the queue is not
+empty and the [-force] option is specified, all the outstanding messages
+are removed first. If the [-force] is not present, an error is
+returned. 
+<P>
+The queue name has to be a fully qualified name.
+<P>
+<DL>
+<DT>Permission required:<DD> "D" bit on the queue.
+<P>
+<DT>	Options:<DD>
+<P>
+<DT>	-force<DD>
+		remove all outstanding messages first.
+<P>
+<DT>-group <VAR>sec_group_name</VAR><DD>
+     specify the security group name which the qmgr belongs to. 
+<P>
+<DT>Variables used:<DD>
+<P>
+<DT><CODE>mos_qmgr_group</CODE><DD>
+specify the sec group name for the queue manager.
+</DL>
+
+<H3>Queue/Message Show</H3>
+
+<PRE>
+queue show <VAR>queue</VAR>
+		[ [-mid <VAR>message_id</VAR>]
+		  [-body]
+		  [-all] ]
+		[-group <VAR>sec_group_name</VAR>]
+</PRE>
+
+If "-mid" is not present, this command shows the queue's attributes.
+<P>
+When "-mid" is present, it shows the message. If neither "-body" nor
+"-all" is present, this command shows the message attributes. If
+"-body" is present, this command shows the message body, it saves the
+message encoded body into a variable <CODE>mos_encoded_msg</CODE> in
+hexadecimal format. If "-all" is present, it shows both the message
+attributes and the message body.
+<P>
+For queue attributes, its current length, not to be confused with its
+maximum length, 
+its creation time, and its last activity time, are to be displayed as
+read-only attributes. 
+<P>
+The queue name has to be a fully qualified name.
+<P>
+<DL>
+<DT>Permission required:<DD> "R" bit on the queue acl for a queue's attributes.  
+<BR>
+                     "r" bit on the queue acl for a message's attributes.
+<BR>
+		     "d" bit on the queue acl for a message's body.
+<P>
+<DT>Options for message showing:<DD>
+<P>
+<DT>-mid <VAR>message_id</VAR><DD>
+     specify the message.
+<P>
+<DT>-body<DD>
+     specify that the message body should be shown. 
+<P>
+<DT>-all<DD>
+     specify that both the message attributes and body are to be
+shown.
+<P>
+<DT>Option for all:<DD>
+<P>
+<DT>-group <VAR>sec_group_name</VAR><DD>
+     specify the security group name which the qmgr belongs to. 
+<P>
+<DT>Variables used:<DD>
+<P>
+<DT><CODE>mos_qmgr_group</CODE><DD>
+specify the sec group name for the queue manager.
+<DT><CODE>mos_encoded_msg</CODE><DD>
+the variable holding the encoded message body in hexadecimal format.
+</DL>
+
+
+
+<H3>Queue Attribute Modification</H3>
+
+<PRE>
+queue modify <VAR>queue</VAR> 
+	[-attribute <VAR>attribute_list</VAR>]
+	[[-qmaxlength <VAR>new_queue_max_length</VAR>] 
+	 [-msgmaxsize <VAR>new_message_max_size</VAR>]
+	 [-persistent <CODE>msgpersistence|persistent|volatile</CODE>]
+	 [-enqueue <CODE>yes|no</CODE>] 
+	 [-dequeue <CODE>yes|no</CODE>]
+	 [-annotation <VAR>string</VAR>]
+         [-alias <VAR>list of {cds_link relative_name}</VAR>]
+	 [-timeout <VAR>empty_idl_timeout</VAR>]]
+         [-group <VAR>sec_group_name</VAR>]
+</PRE>
+
+This command modifies a queue's attribute(s).
+<P>
+The queue name has to be a fully qualified name.
+<P>
+
+<DL>
+<DT>Permission required:<DD> "M" bit on the queue acl for a queue
+<P>
+<DT>	Option:<DD>
+<P>
+<DT>	-attribute <VAR>attribute_list</VAR><DD>
+		a list of {attribute_name attribute_value}
+<P>
+<DT>-qmaxlength <VAR>new_queue_max_length</VAR><DD>
+		specify the new queue maximum length in term of number of messages that
+		the queue can keep. "0" means an unlimited queue.
+<P>
+<DT>-msgmaxsize <VAR>new_message_max_size</VAR><DD>
+	specify the new maximum message size. "0" means unlimited.
+<P>
+<DT>-persistent <CODE>msgpersistence|persistent|volatile</CODE><DD>
+		specify the new queue persistency. The valid values are:
+<UL>
+<LI>msgpersistence. Message persistence dictates. The queue saves persistent messages only.
+<LI>persistent. The queue always saves messages.
+<LI>volatile. The queue never saves any message. Sending a persistent message
+to such a queue will result in an error.
+</UL>
+<P>
+<DT>-enqueue <CODE>yes|no</CODE><DD>
+		specify whether to enable or disable enqueue operation.
+<P>
+<DT>-dequeue <CODE>yes|no</CODE><DD>
+		specify whether to enable or disable dequeue operation.
+<P>
+<DT>-annotation <VAR>string</VAR><DD>
+		specify a new annotation for the queue.
+<P>
+<DT>-alias <VAR>a list of {cds_link relative_name}</VAR><DD>
+     specify a new set of alias(es) for this queue. An alias is composed of two
+     parts, a cds link part which is to be pointed to the queue manager name,
+     and a relative name part. If the link exists already, it will check to
+     make sure that it does point to the queue manager. if the link does not
+     exist, the link will be created to point to the queue manager. The link
+     part can be empty (""). To add or delete one alias, one needs to
+     get the current alias set, add or delete, then use this command
+     to reset the alias set.
+<P>
+<DT>-timeout <VAR>empty_queue_idle_timeout</VAR><DD>
+		specify how long the queue should be kept when it is empty
+		before it will be deleted by the queue manager. "0" means 
+		forever.
+<BR>
+                The format should be in the relative utc format. 
+                To specify 22 hours and 30
+                minutes, enter "+0-22:30:00.000".
+<P>
+<DT>-group <VAR>sec_group_name</VAR><DD>
+     specify the security group name which the qmgr belongs to. 
+<P>
+<DT>Variables used:<DD>
+<P>
+<DT><CODE>mos_qmgr_group</CODE><DD>
+specify the sec group name for the queue manager.
+</DL>
+
+<H3>Queue Rename</H3>
+
+<PRE>
+queue rename <VAR>queue</VAR> 
+		-to <VAR>new_relative_name</VAR> 
+		[-referral]
+                [-group <VAR>sec_group_name</VAR>]
+</PRE>
+This command renames a queue. The queue will stay with the same queue
+manager. In other words, only the relative name of the queue is renamed.
+<P>
+If the option specifies that a referral should 
+be maintained in the original Q-mgr, it will keep the old queue 
+name and its new name.
+<P>
+The queue name has to be a fully qualified name. The new name has to
+a relative name.
+<P>
+<DL>
+<DT>Permission required:<DD> "M" bits on the source queue acl
+<P>
+<DT>	Option:<DD>
+<P>
+<DT>	-to <VAR>new_relative_name</VAR><DD>
+	specify the new name for the queue (relative name)
+<P>
+<DT>	-referral<DD>
+	specify to keep the referral
+<P>
+<DT>-group <VAR>sec_group_name</VAR><DD>
+     specify the security group name which the qmgr belongs to. 
+<P>
+<DT>Variables used:<DD>
+<P>
+<DT><CODE>mos_qmgr_group</CODE><DD>
+specify the sec group name for the queue manager.
+</DL>
+
+<H3>Queue Move and Message Relocation</H3>
+
+<PRE>
+queue move <VAR>queue</VAR> 
+		[ -to <VAR>new_queue</VAR> 
+		  [-referral] ]
+		[ -mid <VAR>message_id</VAR>
+		  -to <VAR>destination_queue</VAR> ]
+                [-oldgroup <VAR>sec_group_name_for_old_queue</VAR>]
+                [-newgroup <VAR>sec_group_name_for_new_queue</VAR>]
+</PRE>
+
+If "-mid" is absent, this command causes the named queue to be moved
+to a new queue manager, with the given new name. If "-mid" is
+present, this command causes the specified message to be relocated
+from the source queue to a new queue.
+
+<P>
+In the queue move case, a new queue will be created first with the
+same queue attributes as the original one. Refer to queue 
+creation page for more information regarding queue name convention.
+If the new queue name is empty, a new queue will be created on the
+default queue manager with a queue manager generated name. If the new
+queue name is a relative name, a new queue will be created on the
+default queue manager with this name. If the new queue name is a
+fully qualified name, it is taken as a junction name, and will be
+resolved into two parts: the resolved part is used to find the queue
+manager, and the second part is used as the new queue's relative
+name. In the case when the second part is empty, a new queue will be
+created on the given queue manager with a queue manager generated
+name. 
+<P>
+Once the new queue is created, every message on the original message will be
+moved to the new queue.
+<P>
+If the option specifies that a referral should 
+be maintained in the original Q-mgr, it will keep the old queue 
+name and its new name.
+If no referral is asked, the old queue will be deleted.
+<P>
+The source queue name has to be a fully qualified name.
+<P>
+In the case for message relocation, the destination queue should
+exist already, and is given with its fully qualified name. The
+specified message will be moved from the source queue to the
+destination queue.
+<DL>
+<DT>Permission required for queue move:<DD> "D" and "M" bits on the source queue acl
+<BR>
+		     "i" bit on the destination Q-mgr acl
+<P>
+<DT>Permission required for message relocate:<DD> "d" bit on the source queue acl
+<BR>
+                     "e" bit on the destination queue acl
+<P>
+<DT>	Options for queue move:<DD>
+<P>
+<DT>	-to <VAR>new_queue</VAR><DD>
+	specify the new queue name
+<P>
+<DT>	-referral<DD>
+	specify keep the referral
+<P>
+<DT>Options for message relocation:<DD>
+<P>
+<DT> -mid <VAR>message_id</VAR><DD>
+	specify the message to be moved
+<P>
+<DT> -to <VAR>destination_queue</VAR><DD>
+	specify the destination queue
+<P>
+<DT>Options for both:<DD>
+<P>
+<DT>-oldgroup <VAR>sec_group_name_for_old_queue</VAR><DD>
+     specify the security group name which the source queue manager belongs to. 
+<P>
+<DT>-newgroup <VAR>sec_group_name_for_new_queue</VAR><DD>
+     specify the security group name which the new queue manager belongs to. 
+<P>
+<DT>Variables used:<DD>
+<P>
+<DT><CODE>mos_default_qmgr</CODE><DD>
+specify the default queue manager.
+<DT><CODE>mos_qmgr_group</CODE><DD>
+specify the sec group name for the queue manager.
+</DL>
+
+<H3>Listing Messages On A Queue</H3>
+
+<PRE>
+queue list <VAR>queue</VAR>
+	[-attribute <VAR>attribute_list</VAR>]
+	[-ttrmsg]
+	[[-mid <VAR>message_id</VAR>]
+	 [-msgtype <VAR>message_type</VAR>]
+	 [-datatype <VAR>data_type</VAR>] 
+	 [-sender <VAR>principal_name</VAR>]
+	 [-plevel <VAR>protection_level</VAR>]
+	 [-priority <VAR>priority</VAR>]
+         [-poperator <VAR>priority_operation</VAR>]]
+        [-group <VAR>sec_group_name</VAR>]
+</PRE>
+
+This command returns a list of message id's of the messages from the queue 
+that match the given selection filters.
+<P>
+If "-ttrmsg" is not specified, only the normal available messages
+are searched for matching messages. If "-ttrmsg" is specified, only
+the ttr messages (messages whose available time has not arrived yet) are 
+searched. 
+<P>
+If a specific message id is specified, all other options are ignored except
+for the "-ttrmsg". This can be used to check whether a particular message
+is in the queue.
+<P>
+When no specific option is given, the commands returns all messages' ids.
+<P>
+The queue name has to be a fully qualified name.
+<P>
+<DL>
+<DT>Permission required:<DD> "r" bit on the queue acl for normal messages
+<BR>
+			   "M" bit on the queue acl for ttr messages
+<P>
+<DT>	Option:<DD>
+<P>
+<DT>	-attribute <VAR>attribute_list</VAR><DD>
+		a list of {attribute_name attribute_value}
+<P>
+<DT>-ttrmsg<DD>
+	specify that ttr messages are to be searched.
+<P>
+<DT>	-mid <VAR>message_id</VAR><DD>
+		return the specified message. All other options have no effect.
+<P>
+<DT>	-msgtype <VAR>message_type</VAR><DD>
+		name the message type. Valid values are:
+<UL>
+<LI>data. Normal data messages.
+<LI>notice. Notice messages.
+</UL>
+<P>
+<DT>	-datatype <VAR>data_type</VAR><DD>
+		name the data type (a uuid)
+<P>
+<DT>	-sender <VAR>principal_name</VAR><DD>
+		name the sender in its principal name
+<P>
+<DT>	-priority <VAR>priority</VAR><DD>
+		specify the priority for search
+<P>
+<DT>-poperator <VAR>priority_operation</VAR><DD>
+     specify the priority operation. The possible values are:
+     <UL>
+       <LI>equal. Match the message with the priority equal to the specified
+	    priority.
+       <LI>not. Match the message with the priority not equal to the
+	    specified priority.
+       <LI>less. Match the message with the priority less than the
+	    specified priority.
+       <LI>greater. Match the message with the priority greater than the
+	    specified priority.
+       <LI>less_equal. Match the message with the priority less than or
+	    equal to the specified priority.
+       <LI>greater_equal. Match the message with the priority greater
+	    than or equal to the specified priority.
+     </UL>
+<P>
+<DT>-plevel <VAR>protection_level</VAR><DD>
+        specify the end-to-end protection level. The valid values are:
+<UL>
+<LI>none: no protection. Unauthenticated operation.
+<LI>authn: Authenticated operation.
+<LI>integrity: Authenticated operation with data integrity.
+<LI>privacy: Authenticated operation with privacy.
+</UL>
+<P>
+<DT>-group <VAR>sec_group_name</VAR><DD>
+     specify the security group name which the qmgr belongs to. 
+<P>
+<DT>Variables used:<DD>
+<P>
+<DT><CODE>mos_qmgr_group</CODE><DD>
+specify the sec group name for the queue manager.
+</DL>
+
+
+<H3>Enqueue a Message</H3>
+
+<PRE>
+queue add <VAR>queue</VAR> 
+	[-attribute <VAR>attribute_lists</VAR>]
+	[[-priority <VAR>priority</VAR>]
+	 [-msgtype <VAR>message_type</VAR>]
+	 [-datatype <VAR>data_type</VAR>]
+	 [-notice <VAR>{notice_type notice_type ...}</VAR>] 
+	 [-reply <VAR>reply_queue</VAR>]
+	 [-replygroup <VAR>reply_group</VAR>]
+	 [-persistent] 
+	 [-expire <VAR>expiration_time</VAR>]
+	 [-ttr <VAR>receive_time</VAR>]
+	 [-waitmode <VAR>wait_mode</VAR>]
+	 [-plevel <VAR>protection_level</VAR>]
+	 [-body <VAR>"message body"</VAR>]]
+	[-group <VAR>sec_group</VAR>]
+</PRE>
+
+This command creates a new message with the specified attributes. The
+message will then be enqueued into the given queue.
+<P>
+
+When there is a data type specified, the message body part will be treated
+as an encoded buffer in hexadecimal format, no further encoding will be
+performed. If there is no data type specified, it is assumed to be a text
+string. 
+<P>
+
+This is useful when used to take a message returned from "queue show
+-mid -all" operation and enqueue it to another queue.
+<P>
+The queue name has to be a fully qualified name.
+<P>
+
+<DL>
+<DT>Permission required:<DD> "e" bit on the queue acl
+<P>
+<DT>Options:<DD>
+<P>
+
+<DT>-attribute <VAR>attribute_list</VAR><DD>
+		a list of {attribute_name attribute_value}
+<P>
+<DT>-priority <VAR>priority</VAR><DD>
+		specify the message priority
+<P>
+<DT>-msgtype <VAR>message_type</VAR><DD>
+		specify the message type. Valid values are:
+<UL>
+<LI>data. Normal data messages.
+<LI>notice. Notice messages.
+</UL>
+<P>
+<DT>-datatype <VAR>data_type</VAR><DD>
+		specify the data type in uuid.
+<P>
+<DT>-notice <VAR>notice_type</VAR><DD>
+		specify the notice(s) required. The possible values are:
+<UL>
+<LI>none. No notice is sent back to the sender.
+<LI>enqueued. A notice is sent back when the message is queued.
+<LI>dequeued. A notice is sent back when the message is received.
+</UL>
+<P>
+<DT>-reply <VAR>reply_queue</VAR><DD>
+		specify the reply queue where the notice is sent to.
+<P>
+<DT>-replygroup <VAR>reply_group</VAR><DD>
+		specify the reply queue's security group name. If this one
+		is not specified, dcecp will try to use the one specified
+		by the variable <VAR>mos_qmgr_group</VAR>.
+<P>
+<DT>-persistent<DD>
+	specify that this is a persistent message
+<P>
+<DT>-expire <VAR>expiration_time</VAR><DD>
+	specify the expiration time in either relative or absolute utc
+format. For example, to specify 10 hours and 30 minutes from now, enter
+"+0-10:30:00.000". To specify 1997/4/5 11:30am, enter
+"1997-04-05-11:30:00.000".
+<P>
+<DT>-ttr <VAR>receive_time</VAR><DD>
+	specify the future receive time (time to receive) in either 
+relative or absolute utc
+format. For example, to specify 10 hours and 30 minutes from now, enter
+"+0-10:30:00.000". To specify 1997/4/5 11:30am, enter
+"1997-04-05-11:30:00.000".
+<P>	
+<DT>-waitmode <VAR>wait_mode</VAR><DD>
+	specify the wait mode. The valid values are:
+<UL>
+<LI>none. don't wait if the queue is full
+<LI>enqueued. wait until the message is enqueued; if the queue is full, wait
+<LI>dequeued. wait until the message is dequeued
+</UL>
+<P>
+<DT>-plevel <VAR>protection_level</VAR><DD>
+	specify the end-to-end protection level. The valid values are:
+<UL>
+<LI>none. no protection. Unauthenticated operation.
+<LI>authn. Authenticated operation.
+<LI>integrity. Authenticated operation with data integrity.
+<LI>privacy. Authenticated operation with privacy.
+</UL>
+<P>
+<DT>-body <VAR>"message body"</VAR><DD>
+	specify the message body.
+<P>
+<DT>-group <VAR>group</VAR><DD>
+	specify the group name that the queue manager should belong to.
+	When authentication is required, this option has to be specified
+	so that mutual authentication can happen.
+<P>
+<P>
+<DT>Variables used:<DD>
+<P>
+<DT><CODE>mos_qmgr_group</CODE><DD>
+specify the sec group name for the queue manager.
+</DL>
+
+
+<H3>Message Removal</H3>
+
+<P>
+<PRE>
+queue remove <VAR>queue</VAR> 
+		-mid <VAR>message_id</VAR>
+                [-group <VAR>sec_group_name</VAR>]
+</PRE>
+
+This command causes the named message to be deleted from the named queue.
+<P>
+The queue name has to be a fully qualified name.
+<P>
+
+<DL>
+<DT>Permission required:<DD> "p" bit on the queue acl to delete a message
+<P>
+<DT>	Options:<DD>
+<P>
+<DT>	-mid <VAR>message_id</VAR><DD>
+		specifies the message from the queue
+<P>
+<DT>-group <VAR>sec_group_name</VAR><DD>
+     specify the security group name which the qmgr belongs to. 
+<P>
+<DT>Variables used:<DD>
+<P>
+<DT><CODE>mos_qmgr_group</CODE><DD>
+specify the sec group name for the queue manager.
+</DL>
+
+<P> <!--EndPage-->
+<HR> <!-- __________________________________________________ -->
+<P ALIGN=CENTER>
+[
+<A HREF="dd-toc.html">Detailed Design TOC</A> |
+<A HREF="../index.html">Messaging</A>
+]
+</P>
+</BODY>
+</HTML>

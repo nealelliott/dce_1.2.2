@@ -1,0 +1,137 @@
+#!/bin/ksh
+# 
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993, 1996 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+# HISTORY
+# $Log: rcheck,v $
+# Revision 1.1.14.2  1996/03/11  02:49:29  marty
+# 	Update OSF copyright years
+# 	[1996/03/10  20:10:07  marty]
+#
+# Revision 1.1.14.1  1995/12/11  22:51:18  root
+# 	Submit OSF/DCE 1.2.1
+# 	[1995/12/11  22:23:45  root]
+# 
+# Revision 1.1.11.1  1993/10/13  21:23:06  pellis
+# 	Cleaned up logging and added PASS/FAIL to message.
+# 	[1993/10/13  21:22:49  pellis]
+# 
+# Revision 1.1.9.2  1993/07/28  19:39:50  cmckeen
+# 	HP's TET'ized version of the system tests
+# 	[1993/07/27  13:55:27  cmckeen]
+# 
+# Revision 1.1.5.3  1993/05/27  19:01:49  eheller
+# 	*** empty log message ***
+# 
+# Revision 1.1.5.2  1993/05/27  14:19:21  eheller
+# 	*** empty log message ***
+# 	[1993/05/26  18:43:59  eheller]
+# 
+# Revision 1.1.5.2  1993/04/23  15:58:35  sekhar
+# 	Merged Hp_dce1_0_1 changes
+# 	[1993/04/16  15:01:25  sekhar]
+# 
+# Revision 1.1.1.7  1993/03/11  22:16:33  osfrcs
+# 	    Loading drop DCE1_0_2B18
+# 
+# Revision 1.1.3.2  1993/02/05  19:34:28  zeliff
+# 	Embedding copyrights
+# 	[1993/02/05  19:30:17  zeliff]
+# 
+# $EndLog$
+#
+#
+#   TEST_NAME: rcheck
+#
+#   COMPONENT_NAME: dce.systest
+#
+#   ORIGINS: 27
+#
+#
+#   (C) COPYRIGHT International Business Machines Corp. 1991
+#   All Rights Reserved
+#
+#
+#  DESCRIPTION
+#
+#  rcheck is used to evaluate the success or failure of a command.
+#
+#  CHANGE ACTIVITY:
+#  DATE		AUTHOR		REASON
+#  06/29/90	Wayne Mock	Initial Draft
+#  11/06/92	Mary MacGregor	Changed /bin/sh to /bin/ksh for HPUX
+#******************************************************************************
+
+PGM=`basename $0`
+
+#******************************************************************************
+# usage()
+#
+# Prints the usage string for this command
+#******************************************************************************
+
+usage()
+{
+	echo "
+usage: $PGM [-r relop] actual_rcode expected_rcode message
+
+ -r relop       Defines how expected_return and the acutal return code are 
+                evaluated.  Possible relops:  eq, ne, lt, le, gt, ge.  
+                The relop is evaluated as follows:  expected_rcode relop 
+                actual_rcode.  The default relop is eq.
+ acutal_rcode	The return code to validate.
+ expected_rcode The expected valut returned from a command that makes the relop
+		true.
+ message        A string to print with the evaluation outcome.
+"
+	exit 1
+
+} # end usage()
+
+
+
+#******************************************************************************
+# main()
+#******************************************************************************
+
+ACTUAL_RCODE=$?			# remember the return code fron
+set -- `getopt r: $*`	# parse the command line arguments
+test $? -ne 0 && usage
+
+RELOP="-eq"
+
+while :
+do
+	case "$1" in
+	-r)
+		RELOP="-$2"
+		shift
+		;;
+	--)
+		shift 
+		break 2
+		;;
+	esac
+	shift
+done
+
+test $# -lt 2 && usage
+
+ACTUAL_RCODE=$1
+EXPECTED_RCODE=$2
+shift 2
+MESSAGE=$*
+
+test "$EXPECTED_RCODE" "$RELOP" "$ACTUAL_RCODE"
+if [ $? -eq 0 ]; then
+	xx_log  "PASS: ${MESSAGE}" 
+else
+	xx_error "FAIL: ${MESSAGE}" 
+fi
+
+exit $ACTUAL_RCODE
+

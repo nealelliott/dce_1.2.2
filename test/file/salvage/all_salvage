@@ -1,0 +1,129 @@
+#!/afs/tr/fs/dev/perl
+
+if ($ENV{"SLV_TEST_AGGRS"}) {
+    $aggrs = $ENV{"SLV_TEST_AGGRS"};
+} else {
+    $aggrs = "/afs/transarc.com/usr/ota/de/salvage-data";
+}
+if ($ENV{"SLV_TEST_OUTPUT"}) {
+    $outs = $ENV{"SLV_TEST_OUTPUT"};
+} else {
+    $outs = "/afs/transarc.com/usr/ota/de/salvage-data/salvage-output";
+}
+if ($ENV{"SLV_TEST_STAGE"}) {
+    $stage = $ENV{"SLV_TEST_STAGE"};
+} else {
+    $stage = "/tmp/salvage-data";
+}
+$tempaggr = "${stage}/all_salvage.aggr";
+
+$salvage = $ENV{"SALVAGE"};
+chop ($pathSalvage =`which salvage`);
+if (!$salvage && -x $pathSalvage) {
+    $salvage = $pathSalvage;
+}
+if (! -x $salvage) {
+    print "Can't find salvager in path or from SALVAGE environment variable\n";
+    exit (1);
+}
+print "$salvage\n";
+system("ls -lL $salvage");
+
+sub try_salvage {
+    local ($recover, $outpath) = @_;
+    local ($args) = ($recover ? "" : "-salvageonly");
+    local ($cmd) = "$salvage $args -force $tempaggr > $outpath 2>&1";
+
+    print "$cmd\n";
+    $exitcode = system ($cmd);
+    $exitcode >>= 8;
+    printf "Salvage exit code is %#x\n", $exitcode;
+    if ( $exitcode & 0x80 ) {
+	print "Core dump.\n";
+	system ("echo Core dump. >> $outpath");
+    } else {
+	if ( $exitcode > 4 && $exitcode < 8 ) {
+	    print "Resalvaging\n";
+	    $exitcode = system ("(echo Resalvaging ; $salvage $args $tempaggr) >> $outpath 2>&1");
+	    $exitcode >>= 8;
+	    printf "Re-Salvage exit code is %#x\n", $exitcode;
+	}
+    }
+    print "\n*****************\n\n";
+}
+
+foreach $aggr (<${aggrs}/*.Z>) {
+	local (@parts) = split(/\./,$aggr);
+	local (@outparts);
+	local ($recover);		# boolean if recover before salvage
+	local ($outpath);
+	local ($last);			# maybe "no_rcvr" token
+	local ($size);			# maybe blk/frag size specification
+
+	pop(@parts);			# remove ".Z"
+	$outpath = join(".", @parts);
+	@outparts = split(/\//,$outpath);
+	$outpath = "$outs/" . pop(@outparts) . ".O"; # change pathname and ext
+
+	$last = $parts[@parts-1];
+	if ($last eq "no_rcvr") {
+	    $recover = 0;
+	    $size = $parts[@parts-2];
+	} else {
+	    $recover = 1;
+	    $size = $last;
+	}
+
+	# obsolete because metamucil no longer needs the bsize/fsize
+	$bsize = $fsize = "";
+	if ($size=~/^([0-9]+)K(-([0-9]+)K)?$/) {
+		$bsize = "-b" . $1*1024;
+		if ($3) {
+			$fsize = "-f" . $3*1024;
+		}
+	}
+  
+	# clean slate...
+	unlink("$tempaggr","$tempaggr.backup");
+
+	print "zcat $aggr\n";
+	$exitcode = system ("zcat $aggr | scp - $tempaggr");
+	if ($exitcode != 0) {
+	    print "Skipping $aggr because it couldn't be uncompressed\n";
+	    next;
+	}
+	if ($recover) {
+	    $nobackup = system ("scp $tempaggr $tempaggr.backup");
+	    if ($nobackup) {
+		unlink("$tempaggr.backup");
+	    }
+
+	    &try_salvage ($recover, $outpath);
+
+	    # Also try without recovery
+	    $recover = 0;
+	    push(@parts, ("no_rcvr"));
+	    $outpath = join(".", @parts);
+	    @outparts = split(/\//,$outpath);
+	    $outpath = "$outs/" . pop(@outparts) . ".O"; # change pn and ext
+	    if ($nobackup) {
+		$exitcode = system ("zcat $aggr | scp - $tempaggr");
+	    } else {
+		$exitcode = system ("scp $tempaggr.backup $tempaggr");
+	    }
+	    if ($exitcode != 0) {
+		print "Skipping no recovery check of $aggr because it couldn't be uncompressed\n";
+		next;
+	    }
+
+	}
+	&try_salvage ($recover, $outpath);
+}
+# just to be sure everything is cleaned up...
+unlink("$tempaggr","$tempaggr.backup");
+
+# Emacs settings for this file follow.
+# Local Variables:
+# tab-width:4
+# mode: perl
+# End:

@@ -1,0 +1,106 @@
+#
+#      SCCS:  @(#)makefile	1.2 (92/09/30) 
+#
+#	UniSoft Ltd., London, England
+#
+# (C) Copyright 1992 X/Open Company Limited
+#
+# All rights reserved.  No part of this source code may be reproduced,
+# stored in a retrieval system, or transmitted, in any form or by any
+# means, electronic, mechanical, photocopying, recording or otherwise,
+# except as stated in the end-user licence agreement, without the prior
+# permission of the copyright owners.
+#
+# X/Open and the 'X' symbol are trademarks of X/Open Company Limited in
+# the UK and other countries.
+#
+#
+# ************************************************************************
+#
+# SCCS:   	@(#)makefile	1.2 92/09/30
+# NAME:		makefile
+# PRODUCT:	DTET (Distributed Test Environment Toolkit) release 1.0b
+# AUTHOR:		Andrew Dingwall, UniSoft Ltd.
+# DATE CREATED:	June 1992
+#
+# DESCRIPTION:
+#	syncd makefile
+# 
+# MODIFICATIONS:
+# 
+# ************************************************************************
+
+include ../defines.mk
+LCDEFS = $(DTET_CDEFS)
+include ../common.mk
+
+# generic syncd .o files
+OFILES_GN = syncd.o synproc.o stab.o fake.o
+
+# INET syncd .o files
+OFILES_IN = syncd_in.o syncd_bs.o
+
+OFILES = $(OFILES_GN) $(OFILES_IN)
+
+ALL = tetsyncd
+
+TARGETS = $(BIN)/tetsyncd
+
+all: $(ALL)
+
+install: $(TARGETS)
+
+$(TARGETS): $$(@F)
+	cp $(@F) $@
+
+tetsyncd: $P $(OFILES) $(LIBDAPI)
+	$(CC) $(LDFLAGS) -o $@ $(OFILES) $(LIBDAPI) $(SYSLIBS)
+	$(MCS) -c $@
+
+CFILES = $(OFILES_GN:.o=.c) $(OFILES_IN:.o=.c) \
+	../servlib/*.c ../inetlib/*.c ../dtetlib/*.c
+
+LLIBS = $(LLIB)/llib-lserv.ln $(LLIB)/llib-linet.ln $(LLIB)/llib-ldtet.ln
+
+lint:
+	lint -x $(CDEFS) $(OFILES_GN:.o=.c) $(OFILES_IN:.o=.c) \
+		lint.c lint_in.c $(LLIBS) $(LINTLIBS)
+
+tags: $(CFILES)
+	ctags $(CFILES)
+
+scope: $(CFILES)
+	ls -d $(CFILES) | sort -t/ +1 -o $@
+
+CLEAN clean:
+	rm -f $(ALL) $(OFILES)
+
+CLOBBER clobber: clean
+	rm -f $(TARGETS)
+
+FORCE FRC: clobber all
+
+
+# dependencies
+
+fake.o: $(INC)/dtmsg.h $(INC)/error.h $(INC)/ptab.h $(INC)/server.h
+
+stab.o: $(INC)/bstring.h $(INC)/dtetlib.h $(INC)/dtmac.h $(INC)/dtmsg.h \
+	$(INC)/error.h $(INC)/ftoa.h $(INC)/llist.h $(INC)/ltoa.h \
+	$(INC)/ptab.h $(INC)/synreq.h $(INC)/valmsg.h stab.h syncd.h
+
+syncd.o: $(INC)/bstring.h $(INC)/dtetlib.h $(INC)/dtmac.h $(INC)/dtmsg.h \
+	$(INC)/error.h $(INC)/ltoa.h $(INC)/ptab.h $(INC)/server.h \
+	$(INC)/servlib.h $(INC)/synreq.h stab.h syncd.h
+
+syncd_bs.o: $(INC)/dtetlib.h $(INC)/dtmac.h $(INC)/dtmsg.h \
+	$(INC)/error.h $(INC)/ptab.h $(INC)/server_bs.h $(INC)/valmsg.h
+
+syncd_in.o: $(INC)/dtmsg.h $(INC)/inetlib_in.h $(INC)/ptab.h \
+	$(INC)/server_in.h
+
+synproc.o: $(INC)/bstring.h $(INC)/dtetlib.h $(INC)/dtmac.h $(INC)/dtmsg.h \
+	$(INC)/ltoa.h $(INC)/ptab.h $(INC)/synreq.h $(INC)/valmsg.h stab.h \
+	syncd.h
+
+

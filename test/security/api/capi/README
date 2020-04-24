@@ -1,0 +1,431 @@
+
+=============
+Section 1.
+Introduction:
+=============
+
+Certification API (CAPI) is a new DCE Component (refer to OSF RFC 80.0) 
+introduced in OSF DCE R1.2.
+
+Briefly, CAPI  allows   DCE users  to retrieve, in a secure way, "Public Keys"
+(see ISO Draft 9594-8 for description on public keys/private keys, etc)
+of other users.  The current version of CAPI supports two "Retrieval" policies for
+obtaining public keys: 
+
+   (A)  Registry Retrieval Policy:  In this policy, the public key
+        of a user is stored in the user's ERA (Extended Registry Attribute)
+        in the DCE Registry.
+
+   (B)  Hierarchichal Retrieval Policy: In this policy, the public keys
+        are stored within  "X509-formatted" (See ISO Draft 9594-8) 
+        "Certificates", which, in turn, are stored
+        in  X500.
+
+This file describes how to run the tetized tests for the two retrieval policies.
+
+====================================================================
+Section 2.
+Restriction in CAPI code (due to legal reasons) and its implications 
+functional CAPI testing:
+=====================================================================
+
+Users who are interested only in running  testcase component suite
+for CAPI, can go directly to Section 7. 
+
+The following sections (Sections 2 to 6) discuss some of the 
+rationale behind some of the peculiarities of testing  CAPI.
+
+
+CAPI does not give you the ability to create arbitrary
+certificates, nor are we allowed (due to legal reasons) to
+ship  code that can create certificates. Since retrieve and
+analysis of certificates form the core of CAPI functional testing,
+we have included pre-constructed X509-formatted certificates
+in the test directory for CAPI (src/test/security/api/capi).
+
+Since certificates contain within them X500 names of principals
+(the principal who issued the certificate, and the principal
+whose   public key is contained within the certificate), it
+became  essential to  "fix"   the X500 names of principals that are
+involved in the functional CAPI test verification suite. Finally,
+since X500 names of DCE principals contain either the DCE cell-name
+(if the principal is a DCE principal) or an X500-server name
+(if the principal is in  X500), it became necessary to fix the  
+the DCE cell-name, or the X500 server name required in 
+the DCE/X500 configuration. Thus, for e.g, when  you run a particular
+functional CAPI test verification suite ( referred to as 
+"FUNCTIONAL-CAPI TS" from now on) component that tests
+CAPI with CDS as the back-end for X500, it is important
+to create a DCE Server configuration with the exact cell-name
+as noted in the instructions for the test suite.
+
+***** NOTE (10/8/96)
+Currently, functional CAPI testing has been performed with
+DCE only, and not with a true X500 service.
+***** NOTE (10/8/96)
+
+=================================================================
+Section 3.
+What does CAPI rely on? What does the the testcase driving
+code rely on?
+================================================================
+
+CAPI relies only on the X500 API and the sec_rgy_attr* DCE API to
+to "retrieve" certificates or public keys. 
+
+However, to drive the tests, it is necessary to create principals, 
+create X500 entries, store certificates, etc. Hence, the testcase driving code
+also relies on X500 API that creates X500 entries. 
+
+In special cases, when the X500 service is provided by  CDS, access to
+the X500 namespace is done using the XDS-CDS API. One 
+limitation of this API is that  X500-entries created
+can only be CDS objects, and not CDS directories. The Hierarchical
+retrieval policy assumes that certificates are stored in a
+"tree"-like hierarchy in the namespace. Clearly, creation of the
+X500 entries using the XDS-CDS API in this case, is a limitation,
+since we cannot create a hierarhcy of CDS objects. For these
+testcases, it is essential to use the internal (undocumented) CDSSPI
+to create the CDS directory entries that represent X500 names.
+Retrieval of Certificates (which are stored as Attribute-Value
+pairs) can always be done using the X500 API regardless of
+the back-end (CDS or a real X500 service). 
+
+** NOTE **
+[ We believe creation
+of a hierarchical namespace  when the back-end is a real X500 service
+is possible, but this has not been tested yet.]
+** NOTE **
+
+For this reason, the testcase driving code was designed to parse X500  names
+in the following format :
+
+{"X500/CDS":name}
+
+where the quoted string (such as "X500") represents the
+exact characters (such as X 5 0 0) and name is an X500 name.
+If the Attribute part is missing from the X500 name, it
+represents the "typeless" attribute (see the OSF DCE GDS Application
+development  documentation).
+
+For e.g., the following are valid names for the testcase engine. 
+
+CDS:/.../dceaix2_cell/a/c
+X500:/.../C=US/O=dec/dceaix2_cell/a/c
+X500:/.../dceaix2_cell/a/c
+
+The implication here is that if a name has "CDS" as a prefix,
+then, if the name is to be created, the testcase engine
+will use the CDSSPI, instead of the X500 API to create
+the entry (which will always be a directory object).
+In this case, the name part should be a string that can
+be passed to CDSSPI.
+
+Note that this does not mean that we cannot store certificates
+in CDS objects --- it is just that we cannot run a meaningful
+testcase for the hierarchical policy with a flag directory
+structure.
+ 
+etc.
+
+
+========================
+Section 4.
+Basic Test Engine:
+=======================
+
+Each FUNCTIONAL-CAPI TS component  has a series of lines aimed 
+at executing the following steps (which constitute the basic
+test driving engine of the component):
+
+   Step 1. Create X500 or CDS entries in the namespace to store
+           certificates. 
+
+   Step 2. Export the certificates specified in the component.
+
+   Steps 1 & 2 have to succeed, otherwise, the test component run will
+   fail. 
+
+   Step 3. Run the test cases specified  in the component.
+           If a test case fails to produce the expxected output,
+           goto Step 4, and return failure. Otherwise, perform
+           Step 4, and return success.
+
+   Step 4. Delete the X500 or CDS entries created in Step 1.
+
+  
+
+=====================================================
+Section 5.
+Relevant Directories in the CAPI test area
+required by each  of the testcase component:
+=====================================================
+
+The CAPI tests are driven by the files in the following three directories:
+
+"testcases", "keys", and "certs"
+
+"testcases":  This directory contains the following files
+
+   1. "principals" --- A line for every principal that
+                       is involved with one or more testcases.
+     
+                       The format for specifying a principal
+                       is the following:
+
+                       {"X500"/"CDS"}:{name}                #i
+
+                       Each principal listed in this file is implicitly 
+                       numbered by the CAPI testcase components, starting with the
+                       index 0, upto #lines-1, where #lines is the
+                       number of lines in the "principals" file.
+                       #i at the end is a convenience to lookup the principal 
+                       index associated with a principal.
+
+  2. "pci,i=1.."       These are files containing individual testcases
+                       for testing CAPI within a CDS environment (i.e.
+                       when CDS is used to provide X500 service). 
+
+                       The format of these files is specified in
+                       Section 6.
+ 
+  3. "cdsconfig", "cdscreatedir", "cdsdeletedir" & "cdsprincattr"
+
+                       See Section 6 regarding how these files are used.    
+
+"keys":   This directory contains files of the form "i_j.{pubkey/privkey}"
+          where   'i' refers to a principal index  (between 0 <= i <= #lines-1)
+          and     'j' refers to a key version  (currently j is always 0).
+     
+          For e.g., if the first line in the "principals" file
+          contains 
+
+          X500:/.../dceaix2_cell/a                #0
+ 
+          then, 0_0.pubkey contains principal "/.../dceaix2_cell/a"'s
+          public key.
+
+"revokelist":
+          This is an input file to generate revocation list items.
+          The group of files with suffix ".crl" in the "certs" directory
+          (see below) are generated from the lines in the file "revokelist".
+          Since we are unable to ship code to generate any kind of certificates,
+          pre-constructed ".crl" files required for the test runs are
+          provided in the "certs" directory.
+
+"certs":  This directory contains three types of files:
+
+           "i_j_x_y.cert"   (0 <= i,j <= #lines-1  &  x,y = 0)
+
+           Verbally, this is read as the certificate issued by 
+           principal with index 'i' (or, principal with index i
+           SIGNS) which vouches for the  public key of principal with index 'j'.
+
+
+           "i_j_x_y.crcert" (0 <= i < j <= #lines-1 & x,y = 0)
+
+          
+
+           "i_j_k.crl"      (0 <= i <= #lines-1 & j = 0, and 
+                             k is a non-negative integer indicating a line in
+                             "revokelist")
+
+           The second  group represents  cross-certificates and the 
+           third group revocation list items.
+
+           Each test case component exports to the namespace contents of
+           one or more of these files in appropriate entries in the namespace
+           during a test run.  
+
+           The full discussion of the purposes of different type of certs is 
+           outside the scope of this document. Interested readers can refer to 
+           OSF RFC 80.0
+
+==========================================================
+Section 6.
+Format for a testcase component file
+=======================================================
+
+** NOTE
+It will  be helpful to have "pc1"  available for reference 
+while reading this section.
+** NOTE
+
+An e.g. testcase component file is shown below for following
+the rest of the discussion in this section.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+cdsconfig cdscreatedir cdsdeletedir cdsprincattr
+ca:1_0_0_0.cert:X500:/.../dceaix2_cell/capi/a/b
+user:0_4_0_0.cert:X500:/.../dceaix2_cell/capi/a/c
+#
+X500:/.../dceaix2_cell/a/c 1_0.pubkey  : keycount/0/1 keydata/0/0  trustinfo/0/0/1/0/2 
+#
+#
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+The first line in a testcase component is of the form:
+
+<configfile> <createfile> <deletefile> <princattrfile>
+
+Each of the entries in the first line point to existing files
+in the "testcases" directory. The <configfile> is used to
+verify that the existing configuration of DCE or X500 required
+to run the testcase component matches the configuration specified
+in the  <configfile>. <createfile> & <deletefile>
+are used in  createing/deleting entries in namespace during
+a run of the testcase component. <princattrfile> is used
+to specify an alternate location for storing certificates for
+principals (See OSF RFC 80.0  for further information).
+
+Lines in a testcase component following the first line
+until a line with '#' as its first character are used to 
+export certificates in the namespace. The format for these
+lines is 
+
+{"ca"/"user"/"urevoke"/"carevoke"/"cross":<filename>:{"X500"/"CDS"}:<name>
+
+where <filename> refers to a file in the "certs" directory. The rest
+of the fields in-betweein the ':' are used to specify the exact namespace
+entry and attribute to export the contents of <filename>. 
+
+Lines following the first line with '#' are used to invoke testcases
+and before the next line with a '#'
+
+An e.g. line is shown below:
+
+X500:/.../dceaix2_cell/a/c 1_0.pubkey  : keycount/0/1 keydata/0/0 
+
+The first "record" in the line, "X500:/.../dceaix2_cell/a/c" specifies
+that we need to retrieve principal /.../dceaix2_cell/a/c's public key.
+The second record, 1_0.pubkey, specifies that initially we are willing
+to trust the public key of principal with index 1 (See OSF RFC 80.0 for
+further information on completing trust).   If there are more public key
+filenames mentioned before ';', then the testcase assumes it can trust
+all the public keys so mentioned. The testcase tokens following the
+second ':' refer to individual tests for the testcase component.
+Each of the individual tests excercise one or more calls to 
+the user-level CAPI (documented in pkc_api.h).
+Each such individual test requires arguments (expected status values,
+key indices, etc.) We just list below the syntax and semantics of
+these values; A full discussion is beyond the scope of this document.
+
+keycount/<expected_status>/<expected_key_count>
+
+keydata/<expected_status>/<key_index>
+
+trustinfo/<expected_status>/<key_index>/<m_crl>/<m_revoked>/<trust_type>
+
+certcount/<expected_status>/<key_index>/<expected_ca_count>
+
+certinfo/<expected_status>/<key_index>/<cert_index>/
+         <cert_start_date>/<cert_end_date>/
+         <crl_last_seen>/<crl_next_expected>/
+         <ca_expected_name>
+
+allcertcount/0
+            
+A line with a '#' marks an end to individual test-cases. 
+
+==========================================================
+Section 7.
+Running  testcase components... 
+==========================================================
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Case I:   Testing Hierachical Policy Retrieval in a DCE cell.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+The testcase components pc1,pc2,... etc test the CAPI when 
+you  are configured in a DCE environment. The exact DCE
+DCE configuration required for this testing is as follows:
+
+Configuration Details:
+%%%%%%%%%%%%%%%%%%%%%
+
+1.  The DCE cell name has to be  /.../dceaix2_cell.
+
+    This can be achieved by typing "dceaix2_cell" when
+    the dce_config script asks for a cell name.
+
+2.  The cell_admin principal name has to be "cell_admin"
+
+3.  The cell_admin password has to be "-dce-"
+
+
+Running the test suite in tet
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Then, do a 
+
+4. "cd ........obj/<platform>/test/functional/security/", where
+    .... happens to be the top of your DCE distribution, and <platform>
+    is your architecture.
+
+    Become Super user (su)
+
+    setenv TET_ROOT ........obj/<platform>/test/functional
+
+    Ensure that the tet controller, tcc is in your patch.
+
+    Run,
+
+    tcc -e security test-hierarchy
+
+    This will create a journal file (See tet documentation Test Environment Toolkit) 
+    At the end of the journal file, a summary of all tests that succeded/failed
+    will be listed.
+
+    Alternatively, you can run without the overhead of tet, by
+    doing the following
+
+    a) "cd ........obj/<platform>/test/security/api/capi"
+    b) dce_login cell_admin -dce-
+    c) trycase_a  pc1 pc2 pc3 pc4 pc5 pc6 pc7 > out.log
+
+    Lookup out.log at the end to see which of the tests failed. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Case II:   Testing Registry Policy Retrieval in a DCE cell.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+For this, the only thing required is that your cell_admin
+principal name be "cell_admin" and password for cell_admin
+be "-dce-".
+
+Then, 
+
+    Become Super user (su)
+
+    Do a "cd ........obj/<platform>/test/functional/security/", where
+    .... happens to be the top of your DCE distribution, and <platform>
+    is your architecture  
+
+    followed by
+
+    tcc -e security test-registry
+
+    This will create a journal file (See tet documentation Test Environment Toolkit) 
+    At the end of the journal file, a summary of all tests that succeded/failed
+    will be listed.
+
+    Alternatively, you can run without the overhead of tet, by
+    doing the following
+
+    a) "cd ........obj/<platform>/test/security/api/capi"
+    b) dce_login -c cell_admin -dce-  [NOTE: Important to get certified credentials]
+    c) rgy_edit < create_foo
+    d) dcecp < create_era
+    e) test_registry direct > first.log
+    f) kdestroy
+    g) dce_login  cell_admin -dce-   [Note: Credentials are not certified]
+    h) test_registry untrusted > second.log
+    i) rgy_edit < delete_foo
+
+    Check first.log & second.log for verification of test results.
+
+** NOTE 
+Currently, we don't have tests that verify  CAPI in an X500 
+environemnt other than with DCE.
+***
+

@@ -1,0 +1,111 @@
+/*
+ * @OSF_COPYRIGHT@
+ * COPYRIGHT NOTICE
+ * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1996 Open Software Foundation, Inc.
+ * ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE for
+ * the full copyright text.
+ */
+/*
+ * HISTORY
+ * $Log: rpriv_1_0.idl,v $
+ * Revision 1.1.4.2  1996/03/09  23:28:19  marty
+ * 	Update OSF copyright year
+ * 	[1996/03/09  22:43:47  marty]
+ *
+ * Revision 1.1.4.1  1995/12/08  17:33:34  root
+ * 	Submit OSF/DCE 1.2.1
+ * 	[1995/12/08  16:55:19  root]
+ * 
+ * Revision 1.1.2.2  1994/06/17  18:42:24  devsrc
+ * 	cr10872 - fix copyright
+ * 	[1994/06/17  18:09:02  devsrc]
+ * 
+ * Revision 1.1.2.1  1994/05/11  19:11:55  ahop
+ * 	hp_sec_to_osf_2 drop
+ * 	Version 1.0 rpriv  wire interface.
+ * 	[1994/04/29  21:07:02  ahop]
+ * 
+ * $EndLog$
+ */
+
+/*
+** Copyright (c) Hewlett-Packard Company 1991, 1994
+** Unpublished work. All Rights Reserved.
+**
+*/
+/* Privilege Server operations
+ *  
+ *  The basic privilege server interface simply allows the acquisition of 
+ *  privilege ticket granting tickets (PTGTs).  These tickets allow Kerberos
+ *  version 5 tickets to be transformed into privilege attribute certificates
+ *  (PACs)  The privilege server will seal the principal's privileges into the
+ *  PAC which will allow the authorization system to make access decisions
+ *  based on inbformation other than just the principal's identifier.
+ */
+
+[
+    uuid(b1e338f8-9533-11c9-a34a-08001e019c1e),
+    pointer_default(ptr),
+    version(1)
+]
+
+interface rpriv {
+
+    import "dce/prvnbase.idl";
+
+    /* r p r i v _ g e t _ p t g t        (Secure)
+     *
+     *  Get a privilege ticket granting ticket (PTGT) so that privilege tickets
+     *  can be synthesized by the KDC.  This is a secure call - the initiator
+     *  must possess a valid ticket to the privilege server in order to get
+     *  a new PTGT.  If the privilege server ticket is itself a privilege
+     *  ticket, then the privileges encoded in that ticket are transferred to
+     *  the new PTGT. 
+     *
+     *  The PTGT will include only those groups requested as part of the ptgt 
+     *  request.  If the principal is not a member of one of these groups, that
+     *  group will be omitted from the ptgt, but the operation will succeed.
+     *  The storage allocated for the "ptgt_req" parameter must be freed 
+     *  by the caller (via a call to "free") unless the value returned
+     *  is NULL (which it will be whenever the return status is bad)
+     *
+     *  rpriv_get_ptgt is authenticated using the Kerberos Client/Server 
+     *  Authentication Exchange documented in the version 5 Kerberos Network
+     *  Authentication Service RFC.  The Authentication Exchange is implemented 
+     *  by encoding the priv server request and response data as KRB_TGS_REQ
+     *  and KRB_TGS_REP messages respectively.  Thus, the KRB_AP_REQ that
+     *  authenticates the client to the priv server is transmitted to the
+     *  the priv server as the preauthentication component of a KRB_TGS_REQ.
+     *  The KRB_AP_REP that authenticates the server to the client is
+     *  piggybacked on the KRB_TGS_REP containing the privilege ticket.
+     * 
+     * Groupset info is encoded as authorization data of registered type 
+     * OSF-DCE and transmitted to the priv server in the enc-authorization-
+     * data field of KRB_TGS_REQ message.  Groupset info may be NULL.
+     *
+     * So that the client may have knowledge of the credentials sealed in the
+     * resulting privilege ticket, a copy of those credentials is placed
+     * in the padata field of the KRB_TGS_REP containing the privilege ticket.
+     * So that someone sniffing the network cannot use this data as cleartext
+     * to attack the privilege ticket itself, the returned padata is encrypted
+     * under the session key supplied by the client in the subkey field
+     * of the KRB_AP_REQ authenticator. 
+     *
+     * At DCE version 1, only authn_svc = rpc_c_authn_private, and
+     * authz_svc = rpc_c_authz_dce are supported by the priv server.
+     *
+     *  ERRORS:
+     *     sec_priv_not_member_any_groups  - principal is not a member of any
+     *                                       of the requested groups.
+     *     sec_priv_s_authn_svc_not_supported
+     *     sec_priv_s_authz_svc_not_supported
+     */
+    void rpriv_get_ptgt (
+        [in]        handle_t         handle,
+        [in]        unsigned32       authn_svc,
+        [in]        unsigned32       authz_svc,
+        [in]        rpriv_pickle_t   *ptgt_req,     
+        [out]       rpriv_pickle_t   **ptgt_rep,     
+        [out, ref]  error_status_t   *status
+    );
+}

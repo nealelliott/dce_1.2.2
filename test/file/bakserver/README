@@ -1,0 +1,116 @@
+
+
+
+This file explains how to run the tests for the DFS bakserver. 
+
+The tests currently available are present in the scripts subdirectory. They test
+the bakserver API and perform some stress testing as well. 
+
+SETTING UP TESTS:
+
+	1) You MUST be logged in as root to run this test program.
+	2) You MUST be dce_logged in as cell_admin. 
+	3) You MUST be running on a machine which runs the bakserver. 
+	This is necessary so the tests can clean up after themelves.
+	You can verify the machine running the bakserver by checking with
+	ps or by issuing an 
+		rpccp show entry /.../<cellname>/subsys/dce/dfs/bak
+
+	4) This test program assumes a single configuration.
+	5) This test program currently assumes the standard DCE configuration.
+	   That is it looks for DFS server principal names in the
+	   /.../<cellname>/hosts directory in CDS.
+	6) This test program currently assumes the standard DCE install and uses that 
+	to cleanup the backup databases. Therefore, DCE must be installed in 
+	/opt/dcelocal for this to work.
+
+
+RUNNING THE TESTS:
+
+	First change to the subdirectory test/file/bakserver in the install tree. 
+
+	Then type runtests. 
+
+Usage:
+#	runtests [-count #] [-help]  [<output_file>]
+#
+#  Defaults:
+#	-count - (number of times to cycle through test scripts) = 1
+#	-help - print a help (usage) message
+#	<output_file> - overrides default for output,  bakservtests_OUT.$$
+
+
+	If you want to send the output to another file name , change the output file
+	name in the command line. 
+
+	For output to go to the terminal, use 
+		runtests /dev/tty
+
+	You can also invoke runtests from another directory, but before doing so,
+	you need to set the environment variable DFS_TESTINSTALL to the top of the dfs 
+	file test install tree, eg. 
+
+setenv DFS_TESTINSTALL /afs/tr/proj/fs/dev/integ/dfs-103/install/rios/dcetest/dce1.0/test/file
+
+NOTE:
+	The tests will flag failures and successes. You should also see a message like this
+	"Status Verification is OFF" or "Status Verification is ON" from time to time. 
+	Ignore it. 
+
+
+DETAILS OF TESTS RUN:
+
+	runtests invokes the ITL program bakserver on a number of tests written in the
+ITL command language. These are :  
+
+1) sequential_add.itl : Performs  sequential addition and deletion of dumps, tapes 
+and filesets and then verifies the database and deletes all these entries. 
+
+All of the parameters such as dumps, tapes and filesets are configurable. 
+
+2) concurrent_add.itl : Performs  concurrent addition and deletion of dumps, tapes 
+and filesets and then verifies the database and deletes all these entries. 
+
+All of the parameters such as dumps, tapes and filesets are configurable. 
+
+3) lookup.itl : This test begins by adding dumps, tapes  and filesets and then ver-
+ifies the database. It then does lookups on all entries using a variety of API interfaces. 
+It looks up dumps based on dumpname, looks up tapes under various conditions and
+looks up filesets as well. It then deletes all entries in the database. 
+
+All of the parameters such as dumps, tapes and filesets are configurable. 
+
+4) finddump.itl : This test begins by adding dumps, tapes  and filesets and then ver-
+ifies the database. Then it proceeds to look up dumps and clones based on dumpdates
+and clone dates It then deletes all entries in the database and verifies it. 
+
+This test is not easily modifiable. This is  because the dumps and their
+dates needs to be carefully written to allow this test to be extended. 
+
+5) restore_header.itl : This test performs some single checks to make sure that
+the RestoreDbHeader and GetInstance Id functions work. 
+
+6) text_version.itl : This test verifies that the text version gets updates
+when text is added to the database. It also tests concurrent adding of text
+of all three types (dump schedules, fileset familes and dumps). 
+
+7) text_locks.itl : This test checks acquisition and release of text locks. A number
+of positive and negative tests are carried out to verify that the test does
+work. Timeouts in locks are also verified. 
+
+8) text_add.itl : This test adds large quantities of text to all the three databases
+and then retrieves it and verifies that the retrieved text was the same as the added
+text. It also verifies retrieval of random chunks of text as well as accessing
+large offsets or zero length data
+
+9) dump_db.itl : This test verifies that the DumpDB API works. This is currently 
+non-functional since it requires special ITL constructs not available yet. 
+
+
+KNOWN PROBLEMS (as of July 6th 1993) : 
+
+
+1) Adding Text Data above size  4048 bytes causes a failure.
+
+2) Adding very large dump/tape/fileset combinations causes operations to become very slow.
+

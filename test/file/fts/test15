@@ -1,0 +1,490 @@
+#!/bin/sh
+
+# @OSF_COPYRIGHT@
+# COPYRIGHT NOTICE
+# Copyright (c) 1990, 1991, 1992, 1993 Open Software Foundation, Inc.
+# ALL RIGHTS RESERVED (DCE).  See the file named COPYRIGHT.DCE in the
+# src directory for the full copyright text.
+#
+
+###############################################################################
+# Copyright (C) 1995, 1991 Transarc Corporation - All rights reserved         #
+###############################################################################
+
+# This test is applicable to DFS exporting Episode filesets (not exporting
+# UFS, and not locally-mounted Episode). The test runs a variety of DFS fts
+# commands a variable number of times. It is intended to be used as a basic
+# correctness test for the fts command (when run for only 1 iteration), and
+# as a stress test for fts (when run for many iterations).
+
+###############################################################################
+
+# Usage:   test15 [-nt number-of-iterations-to-run] \
+#                 [-noclone] [-nomove] [-norename] [-nodump] [-norestore] \
+#                 [-nostuff] \
+#                 [-cloneonly] [-moveonly] [-renameonly] [-dumponly]
+
+# The -nt argument specifies how many iterations are to be run; default is 1.
+# The first line of "-nofoo" arguments is used to omit some operations from
+# the test run. The -nostuff argument prevents the script from putting any
+# data in the fileset under test. The "-baronly" arguments cause the script to
+# run only the indicated operation. The script is naive about checking
+# consistency amongst its arguments.
+
+# Typically run via:   test15 >& test15.out or via runtests
+
+###############################################################################
+
+# Test environment:
+# This test requires full-blown DFS with exported Episode. DFS server $SERVER_1
+# must export Episode aggregate $EPI_AGGRNAME_1, and $SERVER_2 must export
+# $EPI_AGGRNAME_2. $SERVER_1 and $SERVER_2 can be the same machine. A mount
+# point will be created in $testdir.
+
+# Privilege required:
+# You must be in admin.fl, and in admin.ft on $SERVER_1 and $SERVER_2, in
+# order to run the fts commands contained in this script. You must also
+# be able to create, modify, and delete $testdir.
+
+# Highest error number is: 30.
+
+###############################################################################
+
+d=`pwd`
+hn=`hostname`
+p=`basename $0`
+dn=`dirname $0`
+rc=0
+ty=fts
+
+: ${AUTH_ARG=""}
+: ${CELL_NAME=`sed -n '/cellname/s/cellname[         ]*\/\.\.\.\///p' /opt/dcelocal/dce_cf.db`}
+: ${EPI_AGGRNAME_1=epi1}
+: ${EPI_AGGRNAME_2=epi2}
+: ${EPI_AGGRNAME_3=epi1}
+: ${SERVER_1=$hn}
+: ${SERVER_2=$hn}
+: ${VERB_ARG=""}
+
+if test "$CELL_NAME" = ""
+   then echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting."
+        exit 2
+   fi
+
+: ${dns_server_prefix=/.:/hosts/}
+: ${export_root=/.../$CELL_NAME/fs}
+
+av_arg="$AUTH_ARG $VERB_ARG"
+
+ft1=$ty.$p.$$.1
+ft2=$ty.$p.$$.2
+dumpfile=/tmp/dump.$$
+testdir=$export_root/test/tdir.$$
+
+cleanup()
+{
+#Nothing yet.
+ return 0
+}
+
+
+. $dn/ftsStatusCheck
+
+# Sets testuser and testuid
+getUserId
+echo "TESTER is $testuser, TESTER ID is $testuid"
+
+if [ "$dfs_FileSysType" = "$DFS_WORKS_ON_LFS" ]
+then
+   nr_iter=1
+   iter_flag=FALSE
+   add_stuff=TRUE
+   do_clone=TRUE
+   do_move=TRUE
+   do_rename=TRUE
+   do_dump=TRUE
+   do_restore=TRUE
+else
+   nr_iter=1
+   iter_flag=FALSE
+   add_stuff=TRUE
+   do_clone=FALSE
+   do_move=FALSE
+   do_rename=TRUE
+   do_dump=TRUE
+   do_restore=FALSE
+fi
+
+# For now, we don't execute this test on exported UFS, because of all the
+# LFS specific operations it does. We might be able to get this to work on
+# UFS later on.
+if [ "$dfs_FileSysType" = "$DFS_WORKS_ON_UFS" ]
+then
+  echo ""; echo "$p not applicable to DFS exporting UFS"; echo ""
+  echo ""; echo "All done at `date`."; echo ""
+  if test $rc -eq 0
+     then echo "$p PASSED"
+     else echo "$p FAILED ($rc errors)"
+     fi
+  exit $rc
+fi
+
+###############################################################################
+
+for a
+    do
+    if test $iter_flag = TRUE; then nr_iter=$a; iter_flag=FALSE
+    elif test $a = -nt; then iter_flag=TRUE
+    elif test $a = -noclone; then do_clone=FALSE
+    elif test $a = -nomove; then do_move=FALSE
+    elif test $a = -norename; then do_rename=FALSE
+    elif test $a = -nodump; then do_dump=FALSE
+    elif test $a = -norestore; then do_restore=FALSE
+    elif test $a = -nostuff; then add_stuff=FALSE
+    elif test $a = -cloneonly
+       then do_move=FALSE; do_rename=FALSE; do_dump=FALSE; do_restore=FALSE
+    elif test $a = -moveonly
+       then do_clone=FALSE; do_rename=FALSE; do_dump=FALSE; do_restore=FALSE
+    elif test $a = -renameonly
+       then do_clone=FALSE; do_move=FALSE; do_dump=FALSE; do_restore=FALSE
+    elif test $a = -dumponly -o $a = -restoreonly
+       then do_clone=FALSE; do_move=FALSE; do_rename=FALSE
+    else echo "Argument '$a' is unknown"; exit 2
+    fi
+    done
+
+###############################################################################
+
+echo ""
+echo "$ty/$p starting as PID $$ at `date` on $hn"
+echo "   in cell $CELL_NAME."
+echo "Aggregates are $EPI_AGGRNAME_1 on $SERVER_1 and $EPI_AGGRNAME_3 on $SERVER_2."
+echo "Will do work in directory $testdir."
+if test $nr_iter -gt 0
+   then echo "Will perform $nr_iter iterations."
+   else echo "Will attempt to run forever."
+   fi
+echo "Do clone: $do_clone; move: $do_move; rename: $do_rename; dump: $do_dump; restore: $do_restore."
+echo "Add stuff: $add_stuff."
+sleep 5
+
+if test "$CELL_NAME" = ""
+   then echo "Can't find cellname in /opt/dcelocal/dce_cf.db - aborting."
+        exit 2
+   fi
+
+###############################################################################
+# check if EPI_AGGRNAME_1 and EPI_AGGRNAME_2 are exported and known to ftserver
+
+echo ""; echo Checking $EPI_AGGRNAME_1 and $EPI_AGGRNAME_2
+
+fts lsaggr $SERVER_1 | grep $EPI_AGGRNAME_1; rf=$?
+if test $rf -ne 0
+	then echo "- aggregate $EPI_AGGRNAME_1 not exported by $SERVER_1; $p ABORTING"
+	     rc=`expr $rc + 1`; cleanup
+        fi
+fts lsaggr $SERVER_2 | grep $EPI_AGGRNAME_2; rf=$?
+if test $rf -ne 0
+   then
+	do_within_server=FALSE
+        aggr_2=""
+   else
+	do_within_server=TRUE
+        fi
+if [ "$EPI_AGGRNAME_3" = "" ]
+then
+  do_across_server=FALSE
+else
+  fts lsaggr $SERVER_2 | grep $EPI_AGGRNAME_3; rf=$?
+  if test $rf -ne 0
+     then
+ 	do_across_server=FALSE
+        aggr_3=""
+     else
+	do_across_server=TRUE
+        fi
+fi
+
+###############################################################################
+
+echo ""; echo "Creating test directory..."
+
+rm -rf $dumpfile $testdir; rf=$?
+if test $rf -ne 0
+   then echo "- rm -rf failed; $p ABORTING ($p: E1)"; rc=`expr $rc + 1`; exit $rc
+   fi
+
+mkdir $testdir; rf=$?
+if test $rf -ne 0
+   then echo "- mkdir failed; $p ABORTING ($p: E2)"; rc=`expr $rc + 1`; exit $rc
+   fi
+
+cd /tmp; cd $testdir; rf=$?
+if test $rf -ne 0 -o `pwd` != $testdir
+   then echo "- cd failed; $p ABORTING ($p: E3)"; rc=`expr $rc + 1`; exit $rc
+   fi
+
+###############################################################################
+
+echo ""; echo "Creating fileset and mount points..."
+fts create $ft1 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts create failed (errno $rf); $p ABORTING ($p: E4)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+ftid=`fts lsfldb $ft1 $AUTH_ARG | sed -n '/readWrite/s/[^,]*,,\([^ ]*\) .*/\1/p'`
+echo "Fileset ID is $ftid."
+if test $ftid -le 0
+   then echo "- fileset ID is unreasonable; $p ABORTING ($p: E30)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+fts crmount $ft1 $ft1; rf=$?
+if test $rf -ne 0
+   then echo "- fts crmount failed (errno $rf); $p ABORTING ($p: E5)"
+        rc=`expr $rc + 1`; exit $rc
+   fi
+
+setFsetRootProt $ft1 $testuid "E100"
+
+if test $do_rename = TRUE
+   then
+   fts crmount $ft2 $ft2 -fast; rf=$?
+   if test $rf -ne 0
+      then echo "- fts crmount failed (errno $rf); $p ABORTING ($p: E6)"
+           rc=`expr $rc + 1`; exit $rc
+      fi
+   fi
+
+if test $do_restore = TRUE
+   then
+   fts crmount $ft1.restore $ft1.restore -fast; rf=$?
+   if test $rf -ne 0
+      then echo "- fts crmount failed (errno $rf); $p ABORTING ($p: E7)"
+           rc=`expr $rc + 1`; exit $rc
+      fi
+   fi
+
+if test $add_stuff = TRUE
+   then
+
+   echo ""; echo "Adding stuff to the fileset..."
+
+   mkdir $ft1/d1 $ft1/d2; rf=$?
+   if test $rf -ne 0
+      then echo "- mkdir failed (errno $rf); $p ABORTING ($p: E8)"
+           rc=`expr $rc + 1`; exit $rc
+      fi
+
+   echo "This is a test" > $ft1/file_1; rf=$?
+   if test $rf -ne 0
+      then echo "- echo failed (errno $rf); $p ABORTING ($p: E9)"
+           rc=`expr $rc + 1`; exit $rc
+      fi
+
+   cp $ft1/file_1 $ft1/d1; rf=$?
+   if test $rf -ne 0
+      then echo "- cp failed (errno $rf); $p ABORTING ($p: E10)"
+           rc=`expr $rc + 1`; exit $rc
+      fi
+
+   echo "This is also a test" > $ft1/file_2; rf=$?
+   if test $rf -ne 0
+      then echo "- echo failed (errno $rf); $p ABORTING ($p: E11)"
+           rc=`expr $rc + 1`; exit $rc
+      fi
+
+   fi
+
+echo ""; echo "Checking things out..."
+
+fts lsft -fileset $ft1 $av_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts lsft failed (errno $rf) ($p: E12)"; rc=`expr $rc + 1`
+   fi
+
+if test $add_stuff = TRUE
+   then ls -CAR $testdir; rf=$?
+        if test $rf -ne 0
+           then echo "- ls failed (errno $rf) ($p: E13)"; rc=`expr $rc + 1`
+           fi
+   fi
+
+fts lsmount $testdir/$ft1; rf=$?
+if test $rf -ne 0
+   then echo "- fts lsmount failed (errno $rf) ($p: E14)"; rc=`expr $rc + 1`
+   fi
+
+###############################################################################
+
+i=1
+while test $i -le $nr_iter -o $nr_iter -eq 0
+   do
+
+   echo ""; echo "$ty/$p starting iteration $i at `date`."
+
+   if test $do_clone = TRUE
+      then
+
+      echo ""; echo "Cloning $ft1 (iteration $i)..."
+      fts clone $ft1 $av_arg; rf=$?
+      if test $rf -ne 0
+         then echo "- fts clone failed (errno $rf) ($p: E15)"; rc=`expr $rc + 1`
+         fi
+
+      fi
+
+   if test $do_move = TRUE
+      then
+
+      if [ $do_across_server = TRUE ]
+      then
+        echo ""
+        echo "Moving $ft1 from $SERVER_1/$EPI_AGGRNAME_1 to $SERVER_2/$EPI_AGGRNAME_3 (iteration $i)..."
+        fts move $ft1 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+                     $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_3 $av_arg; rf=$?
+      elif [ $do_within_server = TRUE ]
+      then
+        echo "Moving $ft1 from $SERVER_1/$EPI_AGGRNAME_1 to $SERVER_2/$EPI_AGGRNAME_2 (iteration $i)..."
+        fts move $ft1 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+                      $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_2 $av_arg; rf=$?
+      fi
+      if test $rf -ne 0
+         then echo "- fts move failed (errno $rf) ($p: E16)"; rc=`expr $rc + 1`
+         fi
+
+      if [ $do_across_server = TRUE ]
+      then
+        echo ""
+        echo "Moving $ft1 from $SERVER_2/$EPI_AGGRNAME_3 back to $SERVER_1/$EPI_AGGRNAME_1 (iteration $i)..."
+        fts move $ft1 $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_3 \
+                     $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg; rf=$?
+      elif [ $do_within_server = TRUE ]
+      then
+        echo ""
+        echo "Moving $ft1 from $SERVER_2/$EPI_AGGRNAME_2 back to $SERVER_1/$EPI_AGGRNAME_1 (iteration $i)..."
+        fts move $ft1 $dns_server_prefix$SERVER_2 $EPI_AGGRNAME_2 \
+                     $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg; rf=$?
+      fi
+      if test $rf -ne 0
+         then echo "- fts move failed (errno $rf) ($p: E17)"; rc=`expr $rc + 1`
+         fi
+      fi
+
+   if test $do_rename = TRUE
+      then
+
+      echo ""; echo "Renaming fileset from $ft1 to $ft2 (iteration $i)..."
+      fts rename $ft1 $ft2 $av_arg; rf=$?
+      if test $rf -ne 0
+         then echo "- fts rename failed (errno $rf) ($p: E18)"
+              rc=`expr $rc + 1`
+         fi
+
+      echo ""; echo "Renaming fileset from $ft2 back to $ft1 (iteration $i)..."
+      fts rename $ft2 $ft1 $av_arg; rf=$?
+      if test $rf -ne 0
+         then echo "- fts rename failed (errno $rf) ($p: E19)"
+              rc=`expr $rc + 1`
+         fi
+
+      fi
+
+   if test $do_dump = TRUE
+      then
+
+      echo ""; echo "Dumping fileset $ft1 to $dumpfile (iteration $i)..."
+      fts dump -fileset $ft1 -time 0 -file $dumpfile $av_arg; rf=$?
+      if test $rf -ne 0
+         then echo "- fts dump failed (errno $rf) ($p: E20)"; rc=`expr $rc + 1`
+         fi
+
+      if test $do_restore = TRUE
+         then
+
+         echo ""; echo "Restoring fileset $ft1 to $dumpfile (iteration $i)..."
+         fts restore $ft1.restore $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 \
+             $dumpfile -overwrite $av_arg; rf=$?
+         if test $rf -ne 0
+            then echo "- fts restore failed (errno $rf) ($p: E21)"
+                 rc=`expr $rc + 1`
+            fi
+
+         fi
+
+      fi
+
+   echo; echo "Done with iteration $i..."
+
+   fts lsft -fileset $ft1 $av_arg; rf=$?
+   if test $rf -ne 0
+      then echo "- fts lsft failed (errno $rf) ($p: E22)"; rc=`expr $rc + 1`
+      fi
+
+   if test $add_stuff = TRUE
+      then ls -CAR $testdir; rf=$?
+           if test $rf -ne 0
+              then echo "- ls failed (errno $rf) ($p: E23)"; rc=`expr $rc + 1`
+              fi
+      fi
+
+   fts lsmount $testdir/$ft1; rf=$?
+   if test $rf -ne 0
+      then echo "- fts lsmount failed (errno $rf) ($p: E24)"; rc=`expr $rc + 1`
+      fi
+
+   i=`expr $i + 1`
+   done
+
+###############################################################################
+
+cd /tmp
+
+fts delete $ft1 $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg; rf=$?
+if test $rf -ne 0
+   then echo "- fts delete failed (errno $rf) ($p: E25)"; rc=`expr $rc + 1`
+   fi
+
+fts delmount $testdir/$ft1; rf=$?
+if test $rf -ne 0
+   then echo "- fts delmount failed (errno $rf) ($p: E26)"; rc=`expr $rc + 1`
+   fi
+
+if test $do_rename = TRUE
+   then
+   fts delmount $testdir/$ft2; rf=$?
+   if test $rf -ne 0
+      then echo "- fts delmount failed (errno $rf) ($p: E27)"; rc=`expr $rc + 1`
+      fi
+   fi
+
+if test $do_restore = TRUE
+   then
+   fts delete $ft1.restore $dns_server_prefix$SERVER_1 $EPI_AGGRNAME_1 $av_arg
+   rf=$?
+   if test $rf -ne 0
+   then echo "- fts delete failed (errno $rf) ($p: E28.1)"; rc=`expr $rc + 1`
+   fi
+
+   fts delmount $testdir/$ft1.restore; rf=$?
+   if test $rf -ne 0
+    then echo "- fts delmount failed (errno $rf) ($p: E28.2)";rc=`expr $rc + 1`
+    fi
+   fi
+
+rm -rf $dumpfile $testdir
+if test $rf -ne 0
+   then echo "- rm -rf failed (errno $rf) ($p: E29)"; rc=`expr $rc + 1`
+   fi
+
+###############################################################################
+
+echo ""; echo "All done at `date`."; echo ""
+if test $rc -eq 0
+   then echo "$p PASSED"
+   else echo "$p FAILED ($rc errors)"
+   fi
+exit $rc
+
+###############################################################################
