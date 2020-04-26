@@ -353,10 +353,7 @@ static recfield_t	RecordFields[] = {
 /*
 **  Make sure that each header field is legitimate.
 */
-static void
-ValidateHeaders(
-    void
-)
+static void ValidateHeaders( void )
 {
     static char		OPTIONAL[] = "$";
     headfield_t		*hp;
@@ -435,12 +432,7 @@ ValidateHeaders(
 /*
 **  Store a header.
 */
-static void
-SetHeader(
-    int			t,
-    char		*value,
-    int			Number
-)
+static void SetHeader( int t, char *value, int Number)
 {
     headfield_t		*hp;
     char		buff[SMBUF];
@@ -463,10 +455,7 @@ SetHeader(
 /*
 **  Add a "change counter" record to the in-core array.
 */
-static void
-StoreChangeRecord(
-    int			i
-)
+static void StoreChangeRecord( int i)
 {
     record_t		*rp;
 
@@ -487,10 +476,7 @@ StoreChangeRecord(
 /*
 **  Add a "collection" record to the in-core array.
 */
-static void
-StoreCollectionRecord(
-    int			i
-)
+static void StoreCollectionRecord( int	i)
 {
     record_t		*rp;
 
@@ -511,10 +497,7 @@ StoreCollectionRecord(
 /*
 **  Turn "foo <%s|file> 3\<5" into "foo \*Lfile\*O 3<5" for documentation text.
 */
-static char *
-DocumentationFilter(
-    char	*p
-)
+static char *DocumentationFilter(char	*p)
 {
     char	*save;
     char	*dest;
@@ -566,10 +549,7 @@ DocumentationFilter(
 /*
 **  Turn "foo <%s|file> 3\<5" into "foo %s 3<5" for program text.
 */
-static char *
-ProgramFilter(
-    char	*p
-)
+static char *ProgramFilter(char	*p)
 {
     char	*save;
     char	*dest;
@@ -611,10 +591,7 @@ ProgramFilter(
 /*
 **  Add a message record to the in-core array.
 */
-static void
-StoreRecord(
-    int			Flags
-)
+static void StoreRecord(int Flags)
 {
     static record_t	nullrec;
     record_t		*rp;
@@ -710,10 +687,7 @@ StoreRecord(
 /*
 **  Validate a record, making sure each field appears exactly once.
 */
-static void
-ValidateRecord(
-    int			Flags
-)
+static void ValidateRecord( int	Flags )
 {
     recfield_t		*rp;
     msgfield_t		*f;
@@ -762,10 +736,7 @@ ValidateRecord(
 }
 
 
-static void
-CheckTextField(
-    char		*text
-)
+static void CheckTextField(char	*text)
 {
     static char		digits[] = "0123456789";
     char		buff[SMBUF];
@@ -781,19 +752,17 @@ CheckTextField(
 	return;
 
     /* Too many parameters for XPG4? */
-    if (count > NL_ARGMAX) {
-	sprintf(buff, "More then NL_ARGMAX (%d) parameters in text", NL_ARGMAX);
-	yyerror(buff);
-    }
 
     if (XPGCheck) {
 	/* For all "%" make sure it is "%d$" where "d" is a digit. */
 	for (count = 0, p = text; (p = strchr(p, '%')) != NULL; p++) {
 	    q = strchr(digits, p[1]);
+	    /*
 	    if (q == NULL || q - digits > NL_ARGMAX || p[2] != '$') {
 		yyerror("Illegal XPG/printf %d$ format.");
 		break;
 	    }
+	   */
 	}
     }
 }

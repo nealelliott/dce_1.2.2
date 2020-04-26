@@ -183,3 +183,14 @@ EXTERN char		*TableHeader;
 EXTERN int		ValueHeader;
 EXTERN int		DefaultHeader;
 extern int		CollectionSize;
+/*int		NL_ARGMAX = 255;*/
+static void ValidateHeaders(void);
+static void SetHeader(int t, char *value, int Number);
+static void StoreChangeRecord(int i);
+static void StoreCollectionRecord(int i);
+static char *DocumentationFilter(char *p);
+static char *ProgramFilter(char *p);
+static void StoreRecord(int Flags);
+static void ValidateRecord(int Flags);
+static void CheckTextField(char *text);
+

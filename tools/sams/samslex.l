@@ -50,7 +50,6 @@
 #include <sams.h>
 #include <samsgram.h>
 
-
 /*
 **  I wish that all versions of lex had more buffer space by default.
 */
